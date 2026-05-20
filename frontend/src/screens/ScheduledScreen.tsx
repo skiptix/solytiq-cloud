@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Task, List } from '../types';
 import useAppStore from '../store/useAppStore';
 import TaskDetailPopup from '../components/TaskDetailPopup';
+import { EditModal } from '../components/TaskItem';
 import Icon from '../components/Icon';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -22,10 +23,18 @@ export default function ScheduledScreen() {
   const [viewDate, setViewDate] = useState({ year: today.getFullYear(), month: today.getMonth() });
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedAnchor, setSelectedAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [search, setSearch] = useState('');
   const [dragTaskId, setDragTaskId] = useState<number | null>(null);
 
   const allTasks = getAllTasks(dashTasks, lists);
+
+  const saveTask = (id: number, updates: Partial<Task>) => {
+    const t = allTasks.find(t => t.id === id);
+    if (!t) return;
+    if (t._source === 'dash') updateDashTask(id, updates);
+    else if (t._listId) updateListTask(t._listId, id, updates);
+  };
   const scheduledTasks = allTasks.filter(t => t.deadline);
   const unscheduled = allTasks.filter(t => !t.deadline && !t.checked);
   const filteredUnscheduled = search.trim() ? unscheduled.filter(t => t.title.toLowerCase().includes(search.toLowerCase())) : unscheduled;
@@ -141,8 +150,11 @@ export default function ScheduledScreen() {
 
       {selectedTask && (
         <TaskDetailPopup task={selectedTask} anchor={selectedAnchor}
-          onEdit={() => setSelectedTask(null)}
+          onEdit={t => { setSelectedTask(null); setEditingTask(t); }}
           onClose={() => setSelectedTask(null)} />
+      )}
+      {editingTask && (
+        <EditModal task={editingTask} onSave={upd => { saveTask(editingTask.id, upd); setEditingTask(null); }} onClose={() => setEditingTask(null)} />
       )}
     </div>
   );
