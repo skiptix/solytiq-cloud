@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solytiq Cloud — UI Kit</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+  @font-face { font-family: 'Hanken Grotesk'; src: url('../../fonts/HankenGrotesk-VariableFont_wght.ttf') format('truetype'); font-weight: 100 900; font-style: normal; font-display: swap; }
+  @font-face { font-family: 'Hanken Grotesk'; src: url('../../fonts/HankenGrotesk-Italic-VariableFont_wght.ttf') format('truetype'); font-weight: 100 900; font-style: italic; font-display: swap; }
+  @font-face { font-family: 'Inter'; src: url('../../fonts/Inter-VariableFont_opsz_wght.ttf') format('truetype'); font-weight: 100 900; font-style: normal; font-display: swap; }
+  @font-face { font-family: 'Inter'; src: url('../../fonts/Inter-Italic-VariableFont_opsz_wght.ttf') format('truetype'); font-weight: 100 900; font-style: italic; font-display: swap; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body, #root { height: 100%; width: 100%; }
+  body { font-family: 'Inter', sans-serif; background: #fdf8ff; color: #1c1b22; -webkit-font-smoothing: antialiased; }
+  .material-symbols-outlined { font-family: 'Material Symbols Outlined'; font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; font-style: normal; font-size: 20px; line-height: 1; display: inline-flex; align-items: center; flex-shrink: 0; user-select: none; }
+  ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #e5e1eb; border-radius: 10px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="Icons.jsx?v=1779228463079"></script>
+<script type="text/babel" src="CalendarPicker.jsx?v=1779228463079"></script>
+<script type="text/babel" src="TopBar.jsx?v=1779228463081"></script>
+<script type="text/babel" src="TaskItem.jsx?v=1779228463080"></script>
+<script type="text/babel" src="AddListWizard.jsx?v=1779228463079"></script>
+<script type="text/babel" src="ScheduledScreen.jsx?v=1779228463080"></script>
+<script type="text/babel" src="DashboardCards.jsx?v=1779228463080"></script>
+<script type="text/babel" src="LoginScreen.jsx?v=1779228463079"></script>
+<script type="text/babel" src="SetupWizard.jsx?v=1779228463079"></script>
+<script type="text/babel" src="CompletedTrashModal.jsx?v=1779228463079"></script>
+<script type="text/babel" src="ListScreen.jsx?v=1779228463079"></script>
+
+<script type="text/babel">
+// ─── Initial Data ────────────────────────────────────────────────
+// Today, in YYYY-MM-DD (local)
+const __today = new Date();
+const __iso = (d) => { const x = new Date(d); x.setHours(0,0,0,0); return x.toISOString().slice(0,10); };
+const __addDays = (n) => { const x = new Date(__today); x.setDate(x.getDate() + n); return __iso(x); };
+
+const INIT_DASH_TASKS = [
+  { id: 1, title: 'Finalize Q3 Marketing Report', time: '2:00 PM', deadline: __iso(__today), priority: 'High', badge: 'Work', checked: false },
+  { id: 2, title: 'Review design mocks for Solytiq web', deadline: __iso(__today), badge: 'Work', checked: false },
+  { id: 3, title: 'Morning Standup', deadline: __iso(__today), checked: true },
+  { id: 4, title: 'Pack gear for Hamburg trip', deadline: __addDays(2), badge: 'Personal', checked: false },
+  { id: 5, title: 'Send sponsor follow-ups', deadline: __addDays(3), priority: 'Medium', badge: 'Work', checked: false },
+  { id: 6, title: 'Plan weekend long ride', deadline: __addDays(5), badge: 'Personal', checked: false },
+];
+
+const INIT_LISTS = [
+  {
+    id: 'backyard-2026',
+    name: 'Backyard 2026',
+    emoji: '🚴',
+    color: '#9d8dff',
+    colorBg: '#F5F3FF',
+    subtitle: "Hamburg's Backyard Ultra",
+    sections: window.INITIAL_LIST_SECTIONS,
+  }
+];
+
+// ─── Sidebar (inlined to avoid caching) ──────────────────────────
+const SIDEBAR_W = 256;
+const SIDEBAR_MINI = 60;
+
+function NavItem({ icon, label, active, onClick, collapsed, tooltip }) {
+  const [hovered, setHovered] = React.useState(false);
+  const bg = active ? '#F5F3FF' : hovered ? '#f1ecf6' : 'transparent';
+  const col = active ? '#5e4dbb' : '#787584';
+  return (
+    <div style={{ position: 'relative' }}>
+      <button title={collapsed ? label : undefined}
+        style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', transition: 'all 200ms', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: active ? 550 : 450, color: col, border: 'none', background: bg, width: '100%', textAlign: 'left' }}
+        onClick={onClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}>
+        <Icon name={icon} size={19} color={col} />
+        {!collapsed && <span>{label}</span>}
+      </button>
+      {collapsed && hovered && (
+        <div style={{ position: 'fixed', left: SIDEBAR_MINI + 8, top: 'auto', zIndex: 200, background: '#1c1b22', color: '#fff', borderRadius: 6, padding: '4px 10px', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 500, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+          {label}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Sidebar({ active = 'dashboard', onNavigate, lists = [], onOpenModal, onReorderLists, collapsed, sidebarW, onResizeStart }) {
+  const nav = (item, opts) => () => onNavigate && onNavigate(item, opts);
+  const [addHover, setAddHover] = React.useState(false);
+  const [handleHov, setHandleHov] = React.useState(false);
+
+  return (
+    <aside style={{ width: sidebarW, minWidth: sidebarW, height: '100vh', background: '#f7f2fc', borderRight: '1px solid #E5E7EB', display: 'flex', flexDirection: 'column', padding: collapsed ? '16px 6px' : '16px 12px', gap: 4, position: 'fixed', left: 0, top: 0, zIndex: 40, overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box' }}>
+
+      {/* Drag-resize handle on right edge */}
+      <div
+        onMouseDown={e => { e.preventDefault(); onResizeStart && onResizeStart(e.clientX); }}
+        onMouseEnter={() => setHandleHov(true)}
+        onMouseLeave={() => setHandleHov(false)}
+        style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: handleHov ? 'rgba(94,77,187,0.10)' : 'transparent', transition: 'background 150ms' }}>
+        {handleHov && <div style={{ width: 2, height: 48, borderRadius: 2, background: '#9d8dff', opacity: 0.7 }} />}
+      </div>
+
+      {/* Header — click logo to go to Dashboard */}
+      <button
+        type="button"
+        onClick={nav('dashboard')}
+        title={collapsed ? 'Dashboard' : undefined}
+        style={{ padding: collapsed ? '12px 0 20px' : '12px 8px 20px', display: 'flex', flexDirection: 'column', alignItems: collapsed ? 'center' : 'flex-start', gap: 4, overflow: 'hidden', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%', borderRadius: 8 }}>
+        <img src="../../assets/solytiq-todo-logo.png" alt="Solytiq Cloud — go to Dashboard" style={{ width: 44, height: 44, borderRadius: 11, objectFit: 'cover', marginBottom: 6, boxShadow: '0 1px 2px rgba(0,0,0,0.08)', flexShrink: 0 }} />
+        {!collapsed && <>
+          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 500, color: '#5e4dbb', lineHeight: 1.2, whiteSpace: 'nowrap' }}>Solytiq Cloud</div>
+          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>Your lists. Your cloud.</div>
+        </>}
+      </button>
+
+      {/* Nav group */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <NavItem icon="today"          label="Dashboard" active={active==='today'}     onClick={nav('dashboard')} collapsed={collapsed} />
+        <NavItem icon="calendar_month" label="Scheduled" active={active==='scheduled'} onClick={nav('scheduled')} collapsed={collapsed} />
+
+        <div style={{ height: 1, background: '#e8e4f0', margin: '6px 8px' }} />
+
+        {/* Add List button */}
+        <button title={collapsed ? 'Add List' : undefined}
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 500, color: '#5e4dbb', background: addHover ? '#F5F3FF' : 'transparent', border: 'none', width: '100%', textAlign: 'left', transition: 'background 200ms' }}
+          onMouseEnter={() => setAddHover(true)}
+          onMouseLeave={() => setAddHover(false)}
+          onClick={() => { onOpenModal && onOpenModal('add-list'); }}>
+          <Icon name="add" size={19} color="#5e4dbb" />
+          {!collapsed && <span>Add List</span>}
+        </button>
+
+        {/* User lists */}
+        {lists.map((list, i) => {
+          const [hov, setHov] = React.useState(false);
+          const [over, setOver] = React.useState(false);
+          const isActive = active === 'list';
+          return (
+            <div key={list.id}
+              draggable
+              onDragStart={e => { e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('listId', list.id); }}
+              onDragOver={e => { e.preventDefault(); setOver(true); }}
+              onDragLeave={() => setOver(false)}
+              onDrop={e => {
+                e.preventDefault(); setOver(false);
+                const fromId = e.dataTransfer.getData('listId');
+                if (fromId && fromId !== list.id && onReorderLists) onReorderLists(fromId, list.id);
+              }}
+              onMouseEnter={() => setHov(true)}
+              onMouseLeave={() => setHov(false)}
+              style={{ display: 'flex', alignItems: 'center', borderRadius: 8, borderTop: over ? '2px solid #9d8dff' : '2px solid transparent', transition: 'border-color 120ms' }}>
+              <button title={collapsed ? list.name : undefined}
+                onClick={nav('list', { listId: list.id })}
+                style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, background: hov ? (list.colorBg || '#f1ecf6') : 'transparent', color: isActive ? (list.color || '#5e4dbb') : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+                {list.emoji
+                  ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{list.emoji}</span>
+                  : <Icon name="format_list_bulleted" size={19} color={isActive ? (list.color || '#5e4dbb') : '#787584'} />
+                }
+                {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>}
+              </button>
+              {!collapsed && (
+                <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', padding: '0 6px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                  <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer */}
+      <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <NavItem icon="check_circle" label="Completed" active={false} onClick={() => onOpenModal && onOpenModal('completed')} collapsed={collapsed} />
+        <NavItem icon="delete"       label="Trash"     active={false} onClick={() => onOpenModal && onOpenModal('trash')} collapsed={collapsed} />
+      </div>
+    </aside>
+  );
+}
+
+
+
+// ─── App Context ─────────────────────────────────────────────────
+window.AppContext = React.createContext(null);
+const AppCtxProvider = window.AppContext.Provider;
+
+// ─── Settings Screen ─────────────────────────────────────────────
+const settingsStyles = {
+  page:    { flex: 1, height: '100%', overflowY: 'auto' },
+  inner:   { maxWidth: 680, margin: '0 auto', padding: '32px 24px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' },
+  h1:      { fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 28, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.02em' },
+  sectionLabel: { fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#b0acbe', marginBottom: 10, paddingLeft: 4 },
+  card:    { background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 14, overflow: 'hidden' },
+  row:     { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 18px' },
+  label:   { fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 500, color: '#1c1b22' },
+  sub:     { fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#787584', marginTop: 2 },
+  input:   { fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none', textAlign: 'right', minWidth: 0, flex: 1 },
+};
+
+function Avatar({ name }) {
+  const initials = (name || 'U').trim().split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase();
+  return (
+    <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'linear-gradient(135deg,#9d8dff 0%,#5e4dbb 100%)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, letterSpacing: '0.02em', flexShrink: 0, boxShadow: '0 2px 8px rgba(94,77,187,0.22)' }}>
+      {initials || 'U'}
+    </div>
+  );
+}
+
+function Toggle({ on, onChange }) {
+  return (
+    <button type="button"
+      onClick={() => onChange(!on)}
+      style={{ width: 38, height: 22, borderRadius: 9999, background: on ? '#5e4dbb' : '#d6d0e0', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 180ms', padding: 0, flexShrink: 0 }}>
+      <span style={{ position: 'absolute', top: 2, left: on ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.15)', transition: 'left 180ms cubic-bezier(0.34,1.56,0.64,1)' }} />
+    </button>
+  );
+}
+
+function SettingsField({ label, sub, value, onChange, type = 'text' }) {
+  const [focus, setFocus] = React.useState(false);
+  return (
+    <div style={settingsStyles.row}>
+      <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <span style={settingsStyles.label}>{label}</span>
+        {sub && <span style={settingsStyles.sub}>{sub}</span>}
+      </div>
+      <input
+        type={type}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onFocus={() => setFocus(true)}
+        onBlur={() => setFocus(false)}
+        style={{ ...settingsStyles.input, borderBottom: `1.5px solid ${focus ? '#5e4dbb' : 'transparent'}`, paddingBottom: 2, transition: 'border-color 180ms', maxWidth: 280 }}
+      />
+    </div>
+  );
+}
+
+function SettingsScreen({ onSignOut, onNuke }) {
+  const [name, setName]   = React.useState(() => localStorage.getItem('sc_name')  || 'Alex Mendez');
+  const [email, setEmail] = React.useState(() => localStorage.getItem('sc_email') || 'alex@solytiq.cloud');
+  React.useEffect(() => { localStorage.setItem('sc_name', name); },   [name]);
+  React.useEffect(() => { localStorage.setItem('sc_email', email); }, [email]);
+
+  const [autoSync, setAutoSync] = React.useState(() => localStorage.getItem('sc_autosync') !== '0');
+  const [lastSync, setLastSync] = React.useState(() => localStorage.getItem('sc_lastsync') || new Date().toISOString());
+  const [syncing, setSyncing]   = React.useState(false);
+  React.useEffect(() => { localStorage.setItem('sc_autosync', autoSync ? '1' : '0'); }, [autoSync]);
+
+  const formatSyncTime = (iso) => {
+    const d = new Date(iso);
+    const diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const handleSyncNow = () => {
+    if (syncing) return;
+    setSyncing(true);
+    setTimeout(() => {
+      const now = new Date().toISOString();
+      setLastSync(now);
+      localStorage.setItem('sc_lastsync', now);
+      setSyncing(false);
+    }, 1100);
+  };
+
+  const [signOutHov, setSignOutHov] = React.useState(false);
+  const [syncBtnHov, setSyncBtnHov] = React.useState(false);
+  const [nukeBtnHov, setNukeBtnHov] = React.useState(false);
+  const [nukeOpen, setNukeOpen] = React.useState(false);
+  const isAdmin = localStorage.getItem('sc_admin_registered') === '1';
+
+  return (
+    <div style={settingsStyles.page}>
+      <div style={settingsStyles.inner}>
+        <h1 style={settingsStyles.h1}>Settings</h1>
+
+        {/* PROFILE */}
+        <section>
+          <div style={settingsStyles.sectionLabel}>Profile</div>
+          <div style={settingsStyles.card}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '20px 18px', borderBottom: '1px solid #ececf3' }}>
+              <Avatar name={name} />
+              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name || 'Unnamed'}</span>
+                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email || 'no email set'}</span>
+              </div>
+            </div>
+            <SettingsField label="Full Name"     value={name}  onChange={setName} />
+            <div style={{ borderTop: '1px solid #ececf3' }} />
+            <SettingsField label="Email Address" value={email} onChange={setEmail} type="email" />
+          </div>
+        </section>
+
+        {/* SYNC */}
+        <section>
+          <div style={settingsStyles.sectionLabel}>Sync</div>
+          <div style={settingsStyles.card}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '18px' }}>
+              <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(16,185,129,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon name="cloud_sync" size={20} color="#10B981" />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981' }} />
+                  Local Storage Active
+                </div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#787584', marginTop: 2 }}>
+                  Last synced {syncing ? 'now…' : formatSyncTime(lastSync)}
+                </div>
+              </div>
+              <button onClick={handleSyncNow}
+                onMouseEnter={() => setSyncBtnHov(true)}
+                onMouseLeave={() => setSyncBtnHov(false)}
+                disabled={syncing}
+                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: syncing ? '#9d8dff' : (syncBtnHov ? '#5044aa' : '#5e4dbb'), border: 'none', borderRadius: 8, padding: '9px 16px', cursor: syncing ? 'default' : 'pointer', transition: 'all 180ms', display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, boxShadow: syncBtnHov && !syncing ? '0 4px 12px rgba(94,77,187,0.25)' : '0 1px 2px rgba(94,77,187,0.18)' }}>
+                <span style={{ display: 'inline-flex', animation: syncing ? 'syncSpin 1s linear infinite' : 'none' }}>
+                  <Icon name="refresh" size={14} color="#fff" />
+                </span>
+                {syncing ? 'Syncing…' : 'Sync Now'}
+              </button>
+              <style>{`@keyframes syncSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
+            </div>
+
+            <div style={{ ...settingsStyles.row, borderTop: '1px solid #ececf3' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={settingsStyles.label}>Automatic Sync</span>
+                <span style={settingsStyles.sub}>Save changes as you work</span>
+              </div>
+              <Toggle on={autoSync} onChange={setAutoSync} />
+            </div>
+
+            <div style={{ ...settingsStyles.row, borderTop: '1px solid #ececf3' }}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={settingsStyles.label}>Storage Location</span>
+                <span style={settingsStyles.sub}>Data lives in this browser</span>
+              </div>
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 9999, padding: '4px 12px' }}>This device</span>
+            </div>
+          </div>
+        </section>
+
+        <div style={{ marginTop: 4 }}>
+          <button
+            onClick={() => onSignOut && onSignOut()}
+            onMouseEnter={() => setSignOutHov(true)}
+            onMouseLeave={() => setSignOutHov(false)}
+            style={{ width: '100%', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#fff', background: signOutHov ? '#a01616' : '#ba1a1a', border: 'none', borderRadius: 10, padding: '12px 22px', cursor: 'pointer', transition: 'all 180ms', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: signOutHov ? '0 4px 12px rgba(186,26,26,0.25)' : '0 1px 2px rgba(186,26,26,0.18)' }}>
+            <Icon name="logout" size={15} color="#fff" />
+            Sign Out
+          </button>
+        </div>
+
+        {/* DANGER ZONE (admin only) */}
+        {isAdmin && (
+          <section style={{ marginTop: 20 }}>
+            <div style={{ ...settingsStyles.sectionLabel, color: '#ba1a1a' }}>Danger Zone — Admin Only</div>
+            <div style={{ ...settingsStyles.card, borderColor: 'rgba(186,26,26,0.22)', background: '#fff8f8' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '16px 18px' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Icon name="warning" size={20} color="#8b1414" />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22' }}>Nuke Everything</div>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 3, lineHeight: 1.5 }}>
+                    Permanently deletes all lists, tasks, and account data. You'll be returned to first-time setup. <strong style={{ color: '#8b1414' }}>This cannot be undone.</strong>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setNukeOpen(true)}
+                  onMouseEnter={() => setNukeBtnHov(true)}
+                  onMouseLeave={() => setNukeBtnHov(false)}
+                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.02em', color: '#fff', background: nukeBtnHov ? '#6b1010' : '#8b1414', border: 'none', borderRadius: 8, padding: '10px 16px', cursor: 'pointer', transition: 'all 180ms', display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, boxShadow: nukeBtnHov ? '0 4px 14px rgba(139,20,20,0.32)' : '0 1px 2px rgba(139,20,20,0.22)', textTransform: 'uppercase' }}>
+                  <Icon name="warning" size={13} color="#fff" />
+                  Nuke Everything
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+      </div>
+      {nukeOpen && <NukeModal onClose={() => setNukeOpen(false)} onConfirmed={() => { setNukeOpen(false); onNuke && onNuke(); }} />}
+    </div>
+  );
+}
+
+// ─── Nuke Confirmation Modal ─────────────────────────────────────
+function NukeModal({ onClose, onConfirmed }) {
+  const [step, setStep] = React.useState(0); // 0 warning, 1 type NUKE, 2 password, 3 nuking
+  const [typed, setTyped] = React.useState('');
+  const [pw, setPw] = React.useState('');
+  const [pwError, setPwError] = React.useState('');
+  const [pwFocus, setPwFocus] = React.useState(false);
+  const [typeFocus, setTypeFocus] = React.useState(false);
+  const [shakeNonce, setShakeNonce] = React.useState(0);
+
+  React.useEffect(() => {
+    const k = e => { if (e.key === 'Escape' && step < 3) onClose(); };
+    document.addEventListener('keydown', k);
+    return () => document.removeEventListener('keydown', k);
+  }, [step]);
+
+  const typeValid = typed === 'NUKE';
+
+  const handlePasswordConfirm = () => {
+    const stored = localStorage.getItem('sc_admin_password');
+    if (stored ? pw === stored : pw.length > 0) {
+      setStep(3);
+      setTimeout(() => onConfirmed(), 1800);
+    } else {
+      setPwError('Incorrect admin password.');
+      setShakeNonce(n => n + 1);
+    }
+  };
+
+  const overlay = { position: 'fixed', inset: 0, background: 'rgba(20,5,5,0.45)', backdropFilter: 'blur(4px)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 };
+  const card = { background: '#fff', borderRadius: 16, width: '100%', maxWidth: 460, boxShadow: '0 16px 48px rgba(139,20,20,0.32)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden', display: 'flex', flexDirection: 'column' };
+  const dot = (active, done) => ({ width: active ? 28 : 10, height: 4, borderRadius: 9999, background: done ? '#ba1a1a' : active ? '#8b1414' : '#ffdad6', transition: 'all 220ms' });
+
+  if (step === 3) {
+    return (
+      <div style={overlay}>
+        <div style={card}>
+          <style>{`@keyframes modalIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}} @keyframes pulseRed{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.08);opacity:1}}`}</style>
+          <div style={{ padding: '40px 32px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
+            <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'pulseRed 900ms ease-in-out infinite' }}>
+              <Icon name="warning" size={32} color="#8b1414" />
+            </div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#8b1414' }}>Wiping all data…</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>Returning to first-time setup.</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const titles = {
+    0: { eyebrow: 'Step 1 of 3', t: 'This is irreversible',       s: 'You are about to delete every list, task, setting, and the admin account itself. Solytiq Cloud will return to first-time setup.' },
+    1: { eyebrow: 'Step 2 of 3', t: 'Type NUKE to continue',       s: 'Type the word NUKE (uppercase) below to confirm you understand what this does.' },
+    2: { eyebrow: 'Step 3 of 3', t: 'Confirm with admin password', s: 'One last gate. Enter your admin password to permanently wipe everything.' },
+  }[step];
+
+  return (
+    <div style={overlay} onClick={() => step < 3 && onClose()}>
+      <div style={card} onClick={e => e.stopPropagation()}>
+        <style>{`@keyframes modalIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}} @keyframes nukeShake{10%,90%{transform:translateX(-1px)}20%,80%{transform:translateX(2px)}30%,50%,70%{transform:translateX(-4px)}40%,60%{transform:translateX(4px)}}`}</style>
+
+        <div style={{ padding: '20px 24px 14px', background: 'linear-gradient(180deg,#fff8f8 0%,#fff 100%)', borderBottom: '1px solid #ffdad6' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="warning" size={18} color="#8b1414" />
+              </div>
+              <div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#8b1414' }}>{titles.eyebrow}</div>
+                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', marginTop: 1 }}>{titles.t}</div>
+              </div>
+            </div>
+            <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              onMouseEnter={e => e.currentTarget.style.background = '#ffdad6'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <Icon name="close" size={16} color="#787584" />
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 5, justifyContent: 'center' }}>
+            <div style={dot(step === 0, step > 0)} />
+            <div style={dot(step === 1, step > 1)} />
+            <div style={dot(step === 2, step > 2)} />
+          </div>
+        </div>
+
+        <div style={{ padding: '20px 24px 8px' }}>
+          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#484552', lineHeight: 1.55, marginBottom: 18 }}>{titles.s}</div>
+
+          {step === 0 && (
+            <ul style={{ listStyle: 'none', padding: '12px 14px', margin: 0, display: 'flex', flexDirection: 'column', gap: 8, background: '#fff8f8', border: '1px solid #ffdad6', borderRadius: 10 }}>
+              {['All lists and their tasks', 'Dashboard tasks and history', 'Trash and completed items', 'Admin account & profile settings'].map(s => (
+                <li key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22' }}>
+                  <Icon name="delete" size={13} color="#8b1414" />
+                  {s}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {step === 1 && (
+            <div style={{ animation: shakeNonce ? `nukeShake 380ms ease both` : 'none' }} key={shakeNonce}>
+              <input
+                autoFocus
+                value={typed}
+                onChange={e => setTyped(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && typeValid) setStep(2); }}
+                onFocus={() => setTypeFocus(true)}
+                onBlur={() => setTypeFocus(false)}
+                placeholder="Type NUKE"
+                style={{ width: '100%', fontFamily: 'JetBrains Mono, ui-monospace, monospace', fontSize: 16, letterSpacing: '0.12em', color: typeValid ? '#8b1414' : '#1c1b22', background: typeValid ? '#fff8f8' : '#fafaff', border: `1.5px solid ${typeValid ? '#8b1414' : (typeFocus ? '#787584' : '#ececf3')}`, borderRadius: 10, padding: '12px 18px', outline: 'none', textTransform: 'uppercase', textAlign: 'center', fontWeight: 700, transition: 'all 180ms' }} />
+              {typed.length > 0 && !typeValid && (
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#8b1414', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Icon name="warning" size={11} color="#8b1414" />
+                  Must match “NUKE” exactly.
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 2 && (
+            <div style={{ animation: shakeNonce ? `nukeShake 380ms ease both` : 'none' }} key={shakeNonce}>
+              <input
+                autoFocus
+                type="password"
+                value={pw}
+                onChange={e => { setPw(e.target.value); setPwError(''); }}
+                onKeyDown={e => { if (e.key === 'Enter' && pw.length > 0) handlePasswordConfirm(); }}
+                onFocus={() => setPwFocus(true)}
+                onBlur={() => setPwFocus(false)}
+                placeholder="Admin password"
+                style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', background: pwError ? '#fff5f5' : '#fafaff', border: `1.5px solid ${pwError ? '#8b1414' : pwFocus ? '#8b1414' : '#ececf3'}`, borderRadius: 10, padding: '12px 18px', outline: 'none', transition: 'all 180ms' }} />
+              {pwError && (
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#8b1414', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Icon name="warning" size={11} color="#8b1414" />
+                  {pwError}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 24px 20px' }}>
+          <button
+            onClick={() => step > 0 ? setStep(s => s - 1) : onClose()}
+            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '10px 18px', cursor: 'pointer', transition: 'all 180ms' }}
+            onMouseEnter={e => e.currentTarget.style.background = '#f7f2fc'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+            {step === 0 ? 'Cancel' : 'Back'}
+          </button>
+          {step === 0 && (
+            <button onClick={() => setStep(1)}
+              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#fff', background: '#8b1414', border: 'none', borderRadius: 8, padding: '10px 18px', cursor: 'pointer', transition: 'all 180ms', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              onMouseEnter={e => e.currentTarget.style.background = '#6b1010'}
+              onMouseLeave={e => e.currentTarget.style.background = '#8b1414'}>
+              I understand, continue
+              <Icon name="arrow_forward" size={13} color="#fff" />
+            </button>
+          )}
+          {step === 1 && (
+            <button onClick={() => typeValid ? setStep(2) : setShakeNonce(n => n + 1)}
+              disabled={!typeValid}
+              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#fff', background: typeValid ? '#8b1414' : '#c9c4d5', border: 'none', borderRadius: 8, padding: '10px 18px', cursor: typeValid ? 'pointer' : 'not-allowed', transition: 'all 180ms', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              onMouseEnter={e => { if (typeValid) e.currentTarget.style.background = '#6b1010'; }}
+              onMouseLeave={e => { if (typeValid) e.currentTarget.style.background = '#8b1414'; }}>
+              Continue
+              <Icon name="arrow_forward" size={13} color="#fff" />
+            </button>
+          )}
+          {step === 2 && (
+            <button onClick={handlePasswordConfirm}
+              disabled={pw.length === 0}
+              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#fff', background: pw.length === 0 ? '#c9c4d5' : '#8b1414', border: 'none', borderRadius: 8, padding: '10px 18px', cursor: pw.length === 0 ? 'not-allowed' : 'pointer', transition: 'all 180ms', textTransform: 'uppercase', letterSpacing: '0.02em', boxShadow: pw.length > 0 ? '0 2px 8px rgba(139,20,20,0.28)' : 'none' }}
+              onMouseEnter={e => { if (pw.length > 0) e.currentTarget.style.background = '#6b1010'; }}
+              onMouseLeave={e => { if (pw.length > 0) e.currentTarget.style.background = '#8b1414'; }}>
+              Nuke Everything
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── App ─────────────────────────────────────────────────────────
+function App() {
+  const [adminRegistered, setAdminRegistered] = React.useState(() => localStorage.getItem('sc_admin_registered') === '1');
+  const [screen, setScreen] = React.useState(() => localStorage.getItem('sc_admin_registered') === '1' ? 'login' : 'setup');
+  const [currentListId, setCurrentListId] = React.useState('backyard-2026');
+
+  // ── Shared state ──
+  const [dashTasks, setDashTasks] = React.useState(INIT_DASH_TASKS);
+  const [lists, setLists] = React.useState(INIT_LISTS);
+  const [trashTasks, setTrashTasks] = React.useState([]);
+  const [modalTab, setModalTab] = React.useState(null);
+  const [wizardOpen, setWizardOpen] = React.useState(false);
+  const [sidebarW, setSidebarW] = React.useState(() => {
+    const v = parseInt(localStorage.getItem('sc_sidebar_w2'));
+    return (v && v >= 60 && v <= 480) ? v : 256;
+  });
+  const sidebarCollapsed = sidebarW <= 72; // null | 'completed' | 'trash'
+
+  const updateListTask = (listId, taskId, updates) => setLists(prev =>
+    prev.map(l => l.id !== listId ? l : {
+      ...l, sections: l.sections.map(s => ({
+        ...s, tasks: s.tasks.map(t => t.id === taskId ? { ...t, ...updates } : t)
+      }))
+    })
+  );
+
+  const deleteListTask = (listId, taskId) => setLists(prev =>
+    prev.map(l => l.id !== listId ? l : {
+      ...l, sections: l.sections.map(s => ({
+        ...s, tasks: s.tasks.filter(t => t.id !== taskId)
+      }))
+    })
+  );
+
+  const addToTrash = (task, meta) => {
+    setTrashTasks(prev => [...prev, { ...task, _deletedAt: new Date().toISOString(), _src: meta.src || 'dash', _listId: meta.listId, _listName: meta.listName }]);
+  };
+
+  const ctx = { dashTasks, setDashTasks, lists, setLists, updateListTask, deleteListTask, trashTasks, setTrashTasks, addToTrash };
+
+  const navigate = (s, opts = {}) => {
+    if (opts.listId) setCurrentListId(opts.listId);
+    setScreen(s);
+  };
+  const createList = (list) => {
+    setLists(prev => [...prev, list]);
+    navigate('list', { listId: list.id });
+  };
+
+  // Expose for ScheduledScreen cross-screen navigation
+  window.__schedNavigate = (listId) => navigate('list', { listId });
+
+  const reorderLists = (fromId, toId) => {
+    setLists(prev => {
+      const arr = [...prev];
+      const fi = arr.findIndex(l => l.id === fromId);
+      const ti = arr.findIndex(l => l.id === toId);
+      if (fi === -1 || ti === -1) return prev;
+      const [moved] = arr.splice(fi, 1);
+      arr.splice(ti, 0, moved);
+      return arr;
+    });
+  };
+
+  const AuthLayout = ({ children, activeNav }) => (
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#fdf8ff' }}>
+      <Sidebar active={activeNav} onNavigate={(s, opts) => navigate(s, opts)} lists={lists} onOpenModal={(tab) => { if (tab === "add-list") setWizardOpen(true); else setModalTab(tab); }} onReorderLists={reorderLists} collapsed={sidebarCollapsed} sidebarW={sidebarW} onResizeStart={(startX) => {
+        const startW = sidebarW;
+        const onMove = (e) => {
+          const newW = Math.max(60, Math.min(480, startW + (e.clientX - startX)));
+          setSidebarW(newW);
+        };
+        const onUp = (e) => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+          // Snap: if between 61-140 snap to mini (60), else keep
+          const finalW = (startW + (e.clientX - startX));
+          const snapped = finalW < 140 ? 60 : Math.max(160, Math.min(480, finalW));
+          setSidebarW(snapped);
+          localStorage.setItem('sc_sidebar_w2', snapped);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+      }} />
+      <div style={{ marginLeft: sidebarW, flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', transition: 'margin-left 60ms linear' }}>
+        <TopBar
+          onSettings={() => setScreen('settings')}
+          onNavigate={navigate}
+          onOpenModal={tab => { if (tab === 'add-list') setWizardOpen(true); else setModalTab(tab); }}
+        />
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+
+  if (screen === 'setup') return <SetupWizard onComplete={(admin) => {
+    localStorage.setItem('sc_admin_registered', '1');
+    localStorage.setItem('sc_admin_username', admin.username);
+    localStorage.setItem('sc_admin_email',    admin.email);
+    localStorage.setItem('sc_admin_password', admin.password);
+    localStorage.setItem('sc_name',  admin.username);
+    localStorage.setItem('sc_email', admin.email);
+    setAdminRegistered(true);
+    setScreen('dashboard');
+  }} />;
+
+  if (screen === 'login') return <LoginScreen onSignIn={() => setScreen('dashboard')} />;
+
+  return (
+    <AppCtxProvider value={ctx}>
+      {screen === 'dashboard' && (
+        <AuthLayout activeNav="today">
+          <DashboardScreen onNavigateToList={id => navigate('list', { listId: id })} />
+        </AuthLayout>
+      )}
+      {screen === 'scheduled' && (
+        <AuthLayout activeNav="scheduled">
+          <ScheduledScreen />
+        </AuthLayout>
+      )}
+      {screen === 'list' && (
+        <AuthLayout activeNav="list">
+          <ListScreen listId={currentListId} />
+        </AuthLayout>
+      )}
+      {screen === 'settings' && (
+        <AuthLayout activeNav="settings">
+          <SettingsScreen
+            onSignOut={() => { setModalTab(null); setWizardOpen(false); setScreen('login'); }}
+            onNuke={() => {
+              Object.keys(localStorage).filter(k => k.startsWith('sc_')).forEach(k => localStorage.removeItem(k));
+              location.reload();
+            }} />
+        </AuthLayout>
+      )}
+      {modalTab && <CompletedTrashModal initialTab={modalTab} onClose={() => setModalTab(null)} />}
+      {wizardOpen && <AddListWizard onClose={() => setWizardOpen(false)} onCreateList={createList} />}
+    </AppCtxProvider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+// Dev helper: reset first-time setup
+window.__resetSetup = () => {
+  ['sc_admin_registered','sc_admin_username','sc_admin_email','sc_name','sc_email'].forEach(k => localStorage.removeItem(k));
+  location.reload();
+};
+</script>
+</body>
+</html>
