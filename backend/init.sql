@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS lists (
   user_id    UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name       VARCHAR(255) NOT NULL,
   emoji      VARCHAR(10),
-  color      VARCHAR(20),
-  color_bg   VARCHAR(20),
+  color      VARCHAR(50),
+  color_bg   VARCHAR(50),
   subtitle   VARCHAR(500),
   position   INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

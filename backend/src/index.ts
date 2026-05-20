@@ -62,13 +62,17 @@ async function runMigrations() {
       user_id    UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       name       VARCHAR(255) NOT NULL,
       emoji      VARCHAR(10),
-      color      VARCHAR(20),
-      color_bg   VARCHAR(20),
+      color      VARCHAR(50),
+      color_bg   VARCHAR(50),
       subtitle   VARCHAR(500),
       position   INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+
+  // Widen color columns if they were created with the old VARCHAR(20) size
+  await pool.query(`ALTER TABLE lists ALTER COLUMN color TYPE VARCHAR(50)`);
+  await pool.query(`ALTER TABLE lists ALTER COLUMN color_bg TYPE VARCHAR(50)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sections (
