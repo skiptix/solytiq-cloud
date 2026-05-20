@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Task } from '../types';
 import useAppStore from '../store/useAppStore';
 import TaskItem, { QuickAdd, EditModal } from '../components/TaskItem';
 import TaskDetailPopup from '../components/TaskDetailPopup';
-import { apiAddListTask } from '../api/client';
+import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection } from '../api/client';
 import Icon from '../components/Icon';
 
 export default function ListScreen() {
@@ -12,11 +12,19 @@ export default function ListScreen() {
   const navigate = useNavigate();
   const { lists, updateListTask, deleteListTask, addToTrash, setLists } = useAppStore();
   const list = lists.find(l => l.id === listId);
+
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [selectedAnchor, setSelectedAnchor] = useState<{ x: number; y: number } | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
+
+  // Section management state
+  const [hoverSectionId, setHoverSectionId] = useState<string | null>(null);
+  const [editingSection, setEditingSection] = useState<{ id: string; label: string } | null>(null);
+  const [addingSection, setAddingSection] = useState(false);
+  const [newSectionLabel, setNewSectionLabel] = useState('');
+  const newSectionInputRef = useRef<HTMLInputElement>(null);
 
   if (!list) {
     return (
@@ -54,6 +62,34 @@ export default function ListScreen() {
       console.error('addListTask failed', e);
       setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: s.tasks.filter(t => t.id !== tempId) }) }));
     }
+  };
+
+  const handleAddSection = async () => {
+    const label = newSectionLabel.trim();
+    if (!label) return;
+    const sectionId = `section_${Date.now()}`;
+    setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: [...l.sections, { id: sectionId, label, tasks: [] }] }));
+    setAddingSection(false);
+    setNewSectionLabel('');
+    try {
+      await apiCreateSection(listId!, { id: sectionId, label });
+    } catch (e) {
+      console.error('createSection failed', e);
+      setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.filter(s => s.id !== sectionId) }));
+    }
+  };
+
+  const handleUpdateSection = async (sectionId: string, label: string) => {
+    const trimmed = label.trim();
+    setEditingSection(null);
+    if (!trimmed) return;
+    setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, label: trimmed }) }));
+    apiUpdateSection(sectionId, { label: trimmed }).catch(e => console.error('updateSection failed', e));
+  };
+
+  const handleDeleteSection = async (sectionId: string) => {
+    setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.filter(s => s.id !== sectionId) }));
+    apiDeleteSection(sectionId).catch(e => console.error('deleteSection failed', e));
   };
 
   const handleDrop = (sectionId: string, targetId: number) => {
@@ -102,16 +138,95 @@ export default function ListScreen() {
           </div>
         </div>
 
+        {/* Add Section button / form */}
+        {addingSection ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input
+              ref={newSectionInputRef}
+              autoFocus
+              value={newSectionLabel}
+              onChange={e => setNewSectionLabel(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddSection(); if (e.key === 'Escape') { setAddingSection(false); setNewSectionLabel(''); } }}
+              placeholder="Section name…"
+              style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #5e4dbb', borderRadius: 8, padding: '7px 12px', outline: 'none', color: '#1c1b22', background: '#fff' }}
+            />
+            <button onClick={handleAddSection} disabled={!newSectionLabel.trim()}
+              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#fff', background: newSectionLabel.trim() ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: newSectionLabel.trim() ? 'pointer' : 'default' }}>
+              Add
+            </button>
+            <button onClick={() => { setAddingSection(false); setNewSectionLabel(''); }}
+              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 500, color: '#787584', background: 'transparent', border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setAddingSection(true)}
+            style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', background: '#f1f0f4', border: '1px solid #e2dff0', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', transition: 'all 150ms' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; e.currentTarget.style.color = '#484552'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#f1f0f4'; e.currentTarget.style.color = '#787584'; }}>
+            <Icon name="add" size={14} color="#787584" />
+            Add section
+          </button>
+        )}
+
         {/* Sections */}
         {list.sections.map(section => (
           <div key={section.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px' }}>
+            {/* Section header */}
+            <div
+              onMouseEnter={() => setHoverSectionId(section.id)}
+              onMouseLeave={() => { setHoverSectionId(null); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px' }}>
               {section.emoji && <span style={{ fontSize: 14 }}>{section.emoji}</span>}
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5e5e5e' }}>{section.label}</span>
-                <div style={{ flex: 1, height: 1, background: '#E5E7EB' }} />
-              </div>
+
+              {editingSection?.id === section.id ? (
+                /* Inline edit */
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    autoFocus
+                    value={editingSection.label}
+                    onChange={e => setEditingSection(s => s ? { ...s, label: e.target.value } : null)}
+                    onBlur={() => handleUpdateSection(section.id, editingSection.label)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleUpdateSection(section.id, editingSection.label);
+                      if (e.key === 'Escape') setEditingSection(null);
+                    }}
+                    style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5e5e5e', border: 'none', borderBottom: '1.5px solid #5e4dbb', outline: 'none', background: 'transparent', padding: '0 2px 1px', minWidth: 80 }}
+                  />
+                  <div style={{ flex: 1, height: 1, background: '#E5E7EB' }} />
+                </div>
+              ) : (
+                /* Normal label */
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5e5e5e' }}>{section.label}</span>
+                  <div style={{ flex: 1, height: 1, background: '#E5E7EB' }} />
+                </div>
+              )}
+
+              {/* Edit / Delete icons — visible on hover, hidden while editing */}
+              {hoverSectionId === section.id && editingSection?.id !== section.id && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                  <button
+                    onClick={() => setEditingSection({ id: section.id, label: section.label })}
+                    title="Rename section"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'background 120ms' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#ebe6f0')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    <Icon name="edit" size={13} color="#9d8dff" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteSection(section.id)}
+                    title="Delete section"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'background 120ms' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#ffeaea')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                    <Icon name="delete" size={13} color="#ba1a1a" />
+                  </button>
+                </div>
+              )}
             </div>
+
+            {/* Tasks */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, background: '#F9FAFB', borderRadius: 12, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
               {section.tasks.length === 0 ? (
                 <div style={{ padding: '16px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', textAlign: 'center' }}>No tasks in this section.</div>
@@ -141,9 +256,9 @@ export default function ListScreen() {
           </div>
         ))}
 
-        {list.sections.length === 0 && (
+        {list.sections.length === 0 && !addingSection && (
           <div style={{ textAlign: 'center', padding: '40px 16px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>
-            No sections yet. <Icon name="add_circle" size={14} color="#9d8dff" /> Add a section via the sidebar.
+            No sections yet. Use the button above to add one.
           </div>
         )}
       </div>
