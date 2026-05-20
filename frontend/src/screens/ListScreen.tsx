@@ -203,27 +203,36 @@ export default function ListScreen() {
                 </div>
               )}
 
-              {/* Edit / Delete icons — visible on hover, hidden while editing */}
-              {hoverSectionId === section.id && editingSection?.id !== section.id && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-                  <button
-                    onClick={() => setEditingSection({ id: section.id, label: section.label })}
-                    title="Rename section"
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'background 120ms' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#ebe6f0')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                    <Icon name="edit" size={13} color="#9d8dff" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteSection(section.id)}
-                    title="Delete section"
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'background 120ms' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#ffeaea')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                    <Icon name="delete" size={13} color="#ba1a1a" />
-                  </button>
-                </div>
-              )}
+              {/* Edit / Delete icons — fade + slide in on hover */}
+              {(() => {
+                const visible = hoverSectionId === section.id && editingSection?.id !== section.id;
+                return (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0,
+                    opacity: visible ? 1 : 0,
+                    transform: visible ? 'translateX(0)' : 'translateX(6px)',
+                    pointerEvents: visible ? 'auto' : 'none',
+                    transition: 'opacity 180ms ease, transform 180ms ease',
+                  }}>
+                    <button
+                      onClick={() => setEditingSection({ id: section.id, label: section.label })}
+                      title="Rename section"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'background 120ms' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#ebe6f0')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      <Icon name="edit" size={13} color="#9d8dff" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSection(section.id)}
+                      title="Delete section"
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'background 120ms' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#ffeaea')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                      <Icon name="delete" size={13} color="#ba1a1a" />
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Tasks */}
