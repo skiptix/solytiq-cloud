@@ -43,12 +43,17 @@ export default function ListScreen() {
   };
 
   const handleAddTask = async (sectionId: string, data: Partial<Task> & { title: string }) => {
-    const tempTask: Task = { id: Date.now(), title: data.title, checked: false, deadline: data.deadline, priority: data.priority, badge: data.badge, note: data.note };
+    const tempId = Date.now();
+    const tempTask: Task = { id: tempId, title: data.title, checked: false, deadline: data.deadline, priority: data.priority, badge: data.badge, note: data.note };
     setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: [...s.tasks, tempTask] }) }));
     try {
       const res = await apiAddListTask(listId!, sectionId, data);
-      setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: s.tasks.map(t => t.id === tempTask.id ? res.task : t) }) }));
-    } catch (e) { console.error('addListTask failed', e); }
+      const savedTask: Task = { ...res.task, id: Number(res.task.id) };
+      setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: s.tasks.map(t => t.id === tempId ? savedTask : t) }) }));
+    } catch (e) {
+      console.error('addListTask failed', e);
+      setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: s.tasks.filter(t => t.id !== tempId) }) }));
+    }
   };
 
   const handleDrop = (sectionId: string, targetId: number) => {
