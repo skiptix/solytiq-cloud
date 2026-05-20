@@ -8,7 +8,7 @@
 
 ## Overview
 
-**Solytiq Cloud** is a local-first, self-hosted productivity app combining the simplicity of Apple Reminders with power-user robustness. It is a task and list manager with cloud-sync capability.
+**Solytiq Cloud** is a cloud, self-hosted productivity app combining the simplicity of Apple Reminders with power-user robustness. It is a task and list manager with cloud-sync capability.
 
 **Design language: "Luminous List"** — minimalist layouts, subtle glassmorphism, lavender-white surfaces that feel lit from within.
 
