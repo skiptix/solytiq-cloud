@@ -47,6 +47,15 @@ const useAppStore = create<AppState>()(
         }
       },
 
+      updateDashTask: (taskId, updates) => {
+        set((state) => ({
+          dashTasks: state.dashTasks.map((t) =>
+            t.id === taskId ? { ...t, ...updates } : t
+          ),
+        }));
+        apiUpdateTask(taskId, updates).catch(() => {});
+      },
+
       updateListTask: (listId, taskId, updates) => {
         set((state) => ({
           lists: state.lists.map((list) =>

@@ -60,6 +60,7 @@ export interface AppState {
   lastSynced: string | null;
   setDashTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   setLists: (lists: List[] | ((prev: List[]) => List[])) => void;
+  updateDashTask: (taskId: number, updates: Partial<Task>) => void;
   updateListTask: (listId: string, taskId: number, updates: Partial<Task>) => void;
   deleteListTask: (listId: string, taskId: number) => void;
   addToTrash: (task: Task, meta: { src: string; listId?: string; listName?: string }) => void;

@@ -17,7 +17,7 @@ function getAllTasks(dashTasks: Task[], lists: List[]): Task[] {
 }
 
 export default function ScheduledScreen() {
-  const { dashTasks, lists, updateListTask, setDashTasks } = useAppStore();
+  const { dashTasks, lists, updateDashTask, updateListTask } = useAppStore();
   const today = new Date(); today.setHours(0,0,0,0);
   const [viewDate, setViewDate] = useState({ year: today.getFullYear(), month: today.getMonth() });
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -42,7 +42,7 @@ export default function ScheduledScreen() {
   const assignDeadline = (taskId: number, iso: string) => {
     const t = allTasks.find(t => t.id === taskId);
     if (!t) return;
-    if (t._source === 'dash') setDashTasks(ts => ts.map(x => x.id === taskId ? { ...x, deadline: iso } : x));
+    if (t._source === 'dash') updateDashTask(taskId, { deadline: iso });
     else if (t._listId) updateListTask(t._listId, taskId, { deadline: iso });
   };
 

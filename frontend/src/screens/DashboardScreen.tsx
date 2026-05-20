@@ -194,7 +194,7 @@ function TasksDetailModal({ title, icon, accent, accentBg, tasks, onClose, onTog
 // ── Dashboard Screen ───────────────────────────────────────────
 export default function DashboardScreen() {
   const navigate = useNavigate();
-  const { dashTasks, setDashTasks, lists, updateListTask, deleteListTask, addToTrash } = useAppStore();
+  const { dashTasks, setDashTasks, lists, updateDashTask, updateListTask, deleteListTask, addToTrash } = useAppStore();
 
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState<string | null>(null);
@@ -220,7 +220,7 @@ export default function DashboardScreen() {
   const toggle = (id: number) => {
     const t = allTasks.find(t => t.id === id);
     if (!t) return;
-    if (t._source === 'dash') setDashTasks(ts => ts.map(x => x.id === id ? { ...x, checked: !x.checked } : x));
+    if (t._source === 'dash') updateDashTask(id, { checked: !t.checked });
     else if (t._listId) updateListTask(t._listId, id, { checked: !t.checked });
   };
 
@@ -235,7 +235,7 @@ export default function DashboardScreen() {
   const updateTask = (id: number, updates: Partial<Task>) => {
     const t = allTasks.find(t => t.id === id);
     if (!t) return;
-    if (t._source === 'dash') setDashTasks(ts => ts.map(x => x.id === id ? { ...x, ...updates } : x));
+    if (t._source === 'dash') updateDashTask(id, updates);
     else if (t._listId) updateListTask(t._listId, id, updates);
   };
 
