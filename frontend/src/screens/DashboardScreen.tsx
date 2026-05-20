@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Task, List } from '../types';
 import useAppStore from '../store/useAppStore';
+import { apiCreateTask } from '../api/client';
 import TaskItem, { QuickAdd, EditModal } from '../components/TaskItem';
 import TaskDetailPopup from '../components/TaskDetailPopup';
 import Icon from '../components/Icon';
@@ -302,7 +303,18 @@ export default function DashboardScreen() {
 
         <section>
           <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden' }}>
-            <QuickAdd onAdd={data => { const t = { id: Date.now(), checked: false, ...data }; setDashTasks(ts => [t, ...ts]); }} />
+            <QuickAdd onAdd={async data => {
+              const tempId = Date.now();
+              const tempTask: Task = { id: tempId, checked: false, ...data };
+              setDashTasks(ts => [tempTask, ...ts]);
+              try {
+                const res = await apiCreateTask(data);
+                setDashTasks(ts => ts.map(t => t.id === tempId ? { ...tempTask, id: Number(res.task.id) } : t));
+              } catch (e) {
+                console.error('createTask failed', e);
+                setDashTasks(ts => ts.filter(t => t.id !== tempId));
+              }
+            }} />
           </div>
         </section>
 

@@ -150,9 +150,20 @@ const useAppStore = create<AppState>()(
             apiGetTrash().catch(() => null),
           ]);
           const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'trashTasks' | 'synced' | 'lastSynced'>> = {};
-          if (tasksRes) update.dashTasks = tasksRes.tasks;
-          if (listsRes) update.lists = listsRes.lists;
-          if (trashRes) update.trashTasks = trashRes.trash;
+          if (tasksRes) update.dashTasks = tasksRes.tasks.map(t => ({ ...t, id: Number(t.id) }));
+          if (listsRes) update.lists = listsRes.lists.map(l => ({
+            ...l,
+            sections: l.sections.map(s => ({
+              ...s,
+              tasks: s.tasks.map(t => ({ ...t, id: Number(t.id) })),
+            })),
+          }));
+          if (trashRes) update.trashTasks = trashRes.trash.map(tr => ({
+            ...tr,
+            id: Number(tr.id),
+            taskId: Number(tr.taskId),
+            task: { ...tr.task, id: Number(tr.task.id) },
+          }));
           update.synced = true;
           update.lastSynced = new Date().toISOString();
           set(update as AppState);
