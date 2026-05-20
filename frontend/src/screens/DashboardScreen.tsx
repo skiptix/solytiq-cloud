@@ -208,7 +208,7 @@ export default function DashboardScreen() {
   const openTask = (task: Task, e: React.MouseEvent) => { setSelectedTask(task); setSelectedAnchor({ x: e.clientX, y: e.clientY }); };
 
   const allTasks = getFilteredTasks('all', dashTasks, lists);
-  const visibleTasks = sortTasks(getFilteredTasks(filter, dashTasks, lists), sort);
+  const visibleTasks = sortTasks(getFilteredTasks(filter, dashTasks, lists), sort).filter(t => !t.checked);
   const totalCount = allTasks.length;
   const completedCount = allTasks.filter(t => t.checked).length;
   const openCount = totalCount - completedCount;
