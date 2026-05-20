@@ -76,6 +76,14 @@ export const apiCreateSection = (listId: string, data: { id?: string; label: str
     `/lists/${listId}/sections`, { method: 'POST', body: JSON.stringify(data) }
   );
 
+export const apiUpdateSection = (sectionId: string, data: { label?: string; emoji?: string }) =>
+  apiFetch<{ section: { id: string; label: string; emoji?: string } }>(
+    `/lists/sections/${sectionId}`, { method: 'PUT', body: JSON.stringify(data) }
+  );
+
+export const apiDeleteSection = (sectionId: string) =>
+  apiFetch<{ success: boolean }>(`/lists/sections/${sectionId}`, { method: 'DELETE' });
+
 export const apiAddListTask = (listId: string, sectionId: string, data: Partial<Task> & { title: string }) =>
   apiFetch<{ task: Task }>(`/lists/${listId}/sections/${sectionId}/tasks`, { method: 'POST', body: JSON.stringify(data) });
 
