@@ -1,0 +1,140 @@
+import { useEffect, useState, useCallback } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import type { List } from './types';
+import useAuthStore from './store/useAuthStore';
+import useAppStore from './store/useAppStore';
+import { apiCheckSetupRequired } from './api/client';
+
+import Sidebar from './components/Sidebar';
+import TopBar from './components/TopBar';
+import AddListWizard from './modals/AddListWizard';
+import CompletedModal from './modals/CompletedModal';
+import TrashModal from './modals/TrashModal';
+
+import LoginScreen from './screens/LoginScreen';
+import SetupWizard from './screens/SetupWizard';
+import DashboardScreen from './screens/DashboardScreen';
+import ListScreen from './screens/ListScreen';
+import ScheduledScreen from './screens/ScheduledScreen';
+import SettingsScreen from './screens/SettingsScreen';
+
+// ── Protected route wrapper ────────────────────────────────────
+function Protected({ children }: { children: React.ReactNode }) {
+  const { loggedIn } = useAuthStore();
+  if (!loggedIn) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+// ── App Layout (authenticated pages) ──────────────────────────
+function AppLayout() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { dashTasks, lists, synced, lastSynced, sidebarWidth, setSidebarWidth, loadFromApi, setLists } = useAppStore();
+  const [modal, setModal] = useState<'add-list' | 'completed' | 'trash' | null>(null);
+
+  useEffect(() => { loadFromApi(); }, []);
+
+  // Sidebar resize
+  const handleResizeStart = useCallback((initialX: number) => {
+    const startW = sidebarWidth;
+    const onMove = (e: MouseEvent) => {
+      const delta = e.clientX - initialX;
+      const newW = Math.max(60, Math.min(380, startW + delta));
+      setSidebarWidth(newW < 140 ? 60 : newW);
+    };
+    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [sidebarWidth, setSidebarWidth]);
+
+  const handleReorderLists = useCallback((fromId: string, toId: string) => {
+    setLists(prev => {
+      const arr = [...prev];
+      const from = arr.findIndex(l => l.id === fromId);
+      const to = arr.findIndex(l => l.id === toId);
+      if (from === -1 || to === -1) return prev;
+      const [moved] = arr.splice(from, 1);
+      arr.splice(to, 0, moved);
+      return arr;
+    });
+  }, [setLists]);
+
+  const getActive = (): 'dashboard' | 'scheduled' | 'list' | 'settings' => {
+    if (location.pathname.startsWith('/list/')) return 'list';
+    if (location.pathname.startsWith('/scheduled')) return 'scheduled';
+    if (location.pathname.startsWith('/settings')) return 'settings';
+    return 'dashboard';
+  };
+
+  const activeListId = location.pathname.startsWith('/list/') ? location.pathname.split('/list/')[1] : undefined;
+
+  const allTasks = [
+    ...dashTasks.map(t => ({ ...t, _source: 'dash' as const, _listId: 'dashboard', _listName: 'Dashboard' })),
+    ...lists.flatMap(l => l.sections.flatMap(s => s.tasks.map(t => ({ ...t, _source: 'list' as const, _listId: l.id, _listName: l.name })))),
+  ];
+
+  return (
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      <Sidebar
+        active={getActive()}
+        activeListId={activeListId}
+        lists={lists}
+        width={sidebarWidth}
+        onNavigate={navigate}
+        onOpenModal={setModal}
+        onReorderLists={handleReorderLists}
+        onResizeStart={handleResizeStart}
+      />
+      <div style={{ marginLeft: sidebarWidth, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+        <TopBar
+          tasks={allTasks}
+          lists={lists}
+          synced={synced}
+          lastSynced={lastSynced}
+          onNavigate={navigate}
+        />
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+          <Routes>
+            <Route path="/dashboard" element={<DashboardScreen />} />
+            <Route path="/scheduled" element={<ScheduledScreen />} />
+            <Route path="/list/:listId" element={<ListScreen />} />
+            <Route path="/settings" element={<SettingsScreen />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </div>
+      </div>
+
+      {modal === 'add-list' && (
+        <AddListWizard onClose={() => setModal(null)} onCreated={(_list: List) => { setModal(null); navigate(`/list/${_list.id}`); }} />
+      )}
+      {modal === 'completed' && <CompletedModal onClose={() => setModal(null)} />}
+      {modal === 'trash' && <TrashModal onClose={() => setModal(null)} />}
+    </div>
+  );
+}
+
+// ── Root App ───────────────────────────────────────────────────
+export default function App() {
+  const { loggedIn, adminRegistered } = useAuthStore();
+  const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    apiCheckSetupRequired().then(r => setSetupRequired(r.required)).catch(() => setSetupRequired(!adminRegistered));
+  }, [adminRegistered]);
+
+  return (
+    <Routes>
+      <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : <LoginScreen />} />
+      <Route path="/setup" element={loggedIn ? <Navigate to="/dashboard" replace /> : <SetupWizard />} />
+      <Route path="/*" element={
+        <Protected>
+          <AppLayout />
+        </Protected>
+      } />
+      <Route path="/" element={
+        loggedIn ? <Navigate to="/dashboard" replace /> :
+        (setupRequired === null ? null : setupRequired ? <Navigate to="/setup" replace /> : <Navigate to="/login" replace />)
+      } />
+    </Routes>
+  );
+}
