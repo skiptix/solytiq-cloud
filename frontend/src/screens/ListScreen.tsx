@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Task } from '../types';
 import useAppStore from '../store/useAppStore';
+import useAuthStore from '../store/useAuthStore';
 import TaskItem, { QuickAdd, EditModal } from '../components/TaskItem';
 import TaskDetailPopup from '../components/TaskDetailPopup';
 import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection } from '../api/client';
@@ -10,7 +11,8 @@ import Icon from '../components/Icon';
 export default function ListScreen() {
   const { listId } = useParams<{ listId: string }>();
   const navigate = useNavigate();
-  const { lists, updateListTask, deleteListTask, addToTrash, setLists } = useAppStore();
+  const { userId: currentUserId } = useAuthStore();
+  const { lists, updateList, deleteList, updateListTask, deleteListTask, addToTrash, setLists } = useAppStore();
   const list = lists.find(l => l.id === listId);
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -22,6 +24,8 @@ export default function ListScreen() {
   // Section management state
   const [hoverSectionId, setHoverSectionId] = useState<string | null>(null);
   const [editingSection, setEditingSection] = useState<{ id: string; label: string } | null>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
   const [addingSection, setAddingSection] = useState(false);
   const [newSectionLabel, setNewSectionLabel] = useState('');
   const newSectionInputRef = useRef<HTMLInputElement>(null);
@@ -37,6 +41,7 @@ export default function ListScreen() {
     );
   }
 
+  const isOwner = list.userId === currentUserId;
   const allTasks = list.sections.flatMap(s => s.tasks);
   const totalCount = allTasks.length;
   const completedCount = allTasks.filter(t => t.checked).length;
@@ -92,6 +97,21 @@ export default function ListScreen() {
     apiDeleteSection(sectionId).catch(e => console.error('deleteSection failed', e));
   };
 
+  const handleUpdateTitle = () => {
+    const trimmed = newTitle.trim();
+    if (trimmed && trimmed !== list.name) {
+      updateList(list.id, { name: trimmed });
+    }
+    setEditingTitle(false);
+  };
+
+  const handleDeleteList = () => {
+    if (window.confirm(`Are you sure you want to delete the list "${list.name}"? This action cannot be undone.`)) {
+      deleteList(list.id);
+      navigate('/dashboard');
+    }
+  };
+
   const handleDrop = (sectionId: string, targetId: number) => {
     if (!draggedId || draggedId === targetId) return;
     setLists(prev => prev.map(l => l.id !== listId ? l : {
@@ -117,16 +137,51 @@ export default function ListScreen() {
         {/* Hero */}
         <div style={{ background: list.colorBg ?? '#F9FAFB', border: `1px solid ${list.color ?? '#E5E7EB'}40`, borderRadius: 16, padding: '20px 24px', position: 'relative', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
-            <div>
+            <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
                 {list.emoji && <span style={{ fontSize: 24 }}>{list.emoji}</span>}
-                <h1 style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.02em' }}>{list.name}</h1>
+                {editingTitle ? (
+                  <input
+                    autoFocus
+                    value={newTitle}
+                    onChange={e => setNewTitle(e.target.value)}
+                    onBlur={handleUpdateTitle}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleUpdateTitle();
+                      if (e.key === 'Escape') setEditingTitle(false);
+                    }}
+                    style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22', border: 'none', borderBottom: `2px solid ${list.color || '#5e4dbb'}`, outline: 'none', background: 'transparent', padding: '0 0 2px', width: '100%', maxWidth: 400 }}
+                  />
+                ) : (
+                  <h1
+                    onClick={() => { if (isOwner) { setEditingTitle(true); setNewTitle(list.name); } }}
+                    style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.02em', cursor: isOwner ? 'pointer' : 'default' }}>
+                    {list.name}
+                  </h1>
+                )}
+                {list.isPublic && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.05)', padding: '2px 8px', borderRadius: 6, marginLeft: 4 }}>
+                    <Icon name="public" size={12} color="#787584" />
+                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#787584', textTransform: 'uppercase' }}>Public</span>
+                  </div>
+                )}
               </div>
               {list.subtitle && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: 6 }}>{list.subtitle}</div>}
               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>{completedCount} of {totalCount} done</div>
             </div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
               <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 40, fontWeight: 700, color: list.color ?? '#5e4dbb', lineHeight: 1 }}>{pct}%</div>
+              {isOwner && (
+                <button
+                  onClick={handleDeleteList}
+                  style={{ background: 'rgba(186,26,26,0.1)', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, transition: 'all 150ms' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(186,26,26,0.2)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'rgba(186,26,26,0.1)')}
+                >
+                  <Icon name="delete" size={14} color="#ba1a1a" />
+                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#ba1a1a' }}>Delete List</span>
+                </button>
+              )}
             </div>
           </div>
           <div style={{ marginTop: 14, height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 9999, overflow: 'hidden' }}>
