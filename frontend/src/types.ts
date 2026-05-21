@@ -45,6 +45,7 @@ export interface AuthState {
   email: string;
   fullName: string;
   profileImage: string | null;
+  isAdmin: boolean;
   token: string | null;
   register: (creds: { username: string; email: string; password: string }) => Promise<void>;
   signIn: (username: string, password: string) => Promise<boolean>;

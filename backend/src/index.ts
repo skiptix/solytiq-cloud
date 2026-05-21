@@ -6,6 +6,7 @@ import authRouter  from './routes/auth';
 import tasksRouter from './routes/tasks';
 import listsRouter from './routes/lists';
 import trashRouter from './routes/trash';
+import adminRouter from './routes/admin';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -31,6 +32,7 @@ app.use('/api/auth',  authRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/lists', listsRouter);
 app.use('/api/trash', trashRouter);
+app.use('/api/admin', adminRouter);
 
 // Health check
 app.get('/health', (_req, res) => {
@@ -73,6 +75,8 @@ async function runMigrations() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_online TIMESTAMPTZ`);
 
   // Widen color columns if they were created with the old VARCHAR(20) size
   await pool.query(`ALTER TABLE lists ALTER COLUMN color TYPE VARCHAR(50)`);
