@@ -20,8 +20,6 @@ export default function SettingsScreen() {
     setSyncing(false);
   };
 
-  const handleSignOut = () => { signOut(); navigate('/login'); };
-
   const friendlyTime = (iso: string | null) => {
     if (!iso) return 'Never';
     const d = new Date(iso);
@@ -71,14 +69,6 @@ export default function SettingsScreen() {
             </div>
           </div>
         </div>
-
-        {/* Sign Out */}
-        <button onClick={handleSignOut}
-          style={{ width: '100%', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#ba1a1a', background: '#fff5f5', border: '1.5px solid #ffdad6', borderRadius: 12, padding: '14px 0', cursor: 'pointer', transition: 'all 180ms' }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#ba1a1a'; e.currentTarget.style.color = '#fff'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = '#fff5f5'; e.currentTarget.style.color = '#ba1a1a'; }}>
-          Sign Out
-        </button>
 
         {/* Danger Zone */}
         <div>
