@@ -232,8 +232,8 @@ export default function SettingsScreen() {
           </div>
         </div>
 
-        {/* Danger Zone */}
-        <div>
+        {/* Danger Zone — admin only */}
+        {isAdmin && <div>
           {sectionLabel('Danger Zone')}
           <div style={{ ...card, border: '1.5px solid #ffdad6' }}>
             <div style={{ ...row, background: '#fff5f5' }}>
@@ -247,7 +247,7 @@ export default function SettingsScreen() {
               </button>
             </div>
           </div>
-        </div>
+        </div>}
       </div>
 
       {/* Add User Modal */}
