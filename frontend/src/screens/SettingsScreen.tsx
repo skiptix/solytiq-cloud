@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import useAppStore from '../store/useAppStore';
-import { apiGetUsers, apiCreateUser } from '../api/client';
+import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser } from '../api/client';
 import Icon from '../components/Icon';
 
 interface UserEntry {
@@ -43,7 +43,7 @@ function UserAvatar({ name, username, profileImage, size = 36 }: { name: string 
 
 export default function SettingsScreen() {
   const navigate = useNavigate();
-  const { isAdmin, signOut } = useAuthStore();
+  const { isAdmin, signOut, userId } = useAuthStore();
   const { synced, lastSynced, loadFromApi } = useAppStore();
   const [autoSync, setAutoSync] = useState(true);
   const [nukeStep, setNukeStep] = useState(0);
@@ -67,6 +67,22 @@ export default function SettingsScreen() {
   const [fullNameFocus, setFullNameFocus] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [passwordCopied, setPasswordCopied] = useState(false);
+
+  // Edit user state
+  const [editUserOpen, setEditUserOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<UserEntry | null>(null);
+  const [editUsername, setEditUsername] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editUsernameFocus, setEditUsernameFocus] = useState(false);
+  const [editPasswordFocus, setEditPasswordFocus] = useState(false);
+  const [editPasswordVisible, setEditPasswordVisible] = useState(false);
+  const [editPasswordCopied, setEditPasswordCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Delete user state
+  const [deleteTarget, setDeleteTarget] = useState<UserEntry | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const loadUsers = useCallback(async () => {
     if (!isAdmin) return;
@@ -112,6 +128,76 @@ export default function SettingsScreen() {
       setPasswordCopied(true);
       setTimeout(() => setPasswordCopied(false), 2000);
     });
+  };
+
+  const openEditUser = (u: UserEntry) => {
+    setEditTarget(u);
+    setEditUsername(u.username);
+    setEditPassword('');
+    setEditError(null);
+    setEditPasswordVisible(false);
+    setEditPasswordCopied(false);
+    setEditUserOpen(true);
+  };
+
+  const closeEditUser = () => {
+    setEditUserOpen(false);
+    setEditTarget(null);
+    setEditError(null);
+  };
+
+  const generateEditPassword = () => {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    const pw = Array.from(crypto.getRandomValues(new Uint32Array(16)))
+      .map(n => chars[n % chars.length]).join('');
+    setEditPassword(pw);
+    setEditPasswordVisible(true);
+    setEditPasswordCopied(false);
+  };
+
+  const copyEditPassword = () => {
+    if (!editPassword) return;
+    navigator.clipboard.writeText(editPassword).then(() => {
+      setEditPasswordCopied(true);
+      setTimeout(() => setEditPasswordCopied(false), 2000);
+    });
+  };
+
+  const handleEditUser = async () => {
+    if (!editTarget) return;
+    const data: { username?: string; password?: string } = {};
+    if (editUsername.trim() && editUsername.trim() !== editTarget.username) data.username = editUsername.trim();
+    if (editPassword.trim()) data.password = editPassword.trim();
+    if (!data.username && !data.password) {
+      setEditError('No changes to save.');
+      return;
+    }
+    setEditing(true);
+    setEditError(null);
+    try {
+      const res = await apiUpdateUser(editTarget.id, data);
+      setUsers(prev => prev.map(u => u.id === editTarget.id ? { ...u, username: res.user.username } : u));
+      closeEditUser();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '';
+      setEditError(msg.includes('taken') || msg.includes('409') ? 'Username already taken.' : 'Failed to update user.');
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await apiDeleteUser(deleteTarget.id);
+      setUsers(prev => prev.filter(u => u.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (e) {
+      console.error('delete user failed', e);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const openAddUser = () => {
@@ -211,11 +297,33 @@ export default function SettingsScreen() {
                         </div>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: u.lastOnline && Date.now() - new Date(u.lastOnline).getTime() < 5 * 60 * 1000 ? '#10B981' : '#e8e4f0', flexShrink: 0 }} />
-                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', whiteSpace: 'nowrap' }}>
-                        {relativeTime(u.lastOnline)}
-                      </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: u.lastOnline && Date.now() - new Date(u.lastOnline).getTime() < 5 * 60 * 1000 ? '#10B981' : '#e8e4f0', flexShrink: 0 }} />
+                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', whiteSpace: 'nowrap' }}>
+                          {relativeTime(u.lastOnline)}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => openEditUser(u)}
+                        title="Edit user"
+                        style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        <Icon name="edit" size={15} color="#787584" />
+                      </button>
+                      {u.id !== userId && (
+                        <button
+                          onClick={() => setDeleteTarget(u)}
+                          title="Remove user"
+                          style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <Icon name="delete" size={15} color="#ba1a1a" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))
@@ -408,6 +516,158 @@ export default function SettingsScreen() {
                   {creating ? 'Creating…' : 'Create User'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {editUserOpen && editTarget && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={e => { if (e.target === e.currentTarget) closeEditUser(); }}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 420, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 24px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name="edit" size={18} color="#5e4dbb" />
+                </div>
+                <div>
+                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22' }}>Edit User</div>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>@{editTarget.username}</div>
+                </div>
+              </div>
+              <button
+                onClick={closeEditUser}
+                style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+              >
+                <Icon name="close" size={15} color="#484552" />
+              </button>
+            </div>
+
+            <div style={{ padding: '20px 24px' }}>
+              {/* Username */}
+              <div style={{ borderBottom: `${editUsernameFocus ? 2 : 1}px solid ${editUsernameFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
+                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Username</div>
+                <input
+                  value={editUsername}
+                  onChange={e => setEditUsername(e.target.value)}
+                  placeholder={editTarget.username}
+                  style={fi}
+                  onFocus={() => setEditUsernameFocus(true)}
+                  onBlur={() => setEditUsernameFocus(false)}
+                />
+              </div>
+              {/* New Password */}
+              <div style={{ borderBottom: `${editPasswordFocus ? 2 : 1}px solid ${editPasswordFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 20, transition: 'border-color 200ms' }}>
+                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>New Password <span style={{ color: '#b0acbe', fontWeight: 400 }}>(optional)</span></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input
+                    type={editPasswordVisible ? 'text' : 'password'}
+                    value={editPassword}
+                    onChange={e => { setEditPassword(e.target.value); setEditPasswordCopied(false); }}
+                    placeholder="Leave blank to keep current"
+                    style={{ ...fi, flex: 1 }}
+                    onFocus={() => setEditPasswordFocus(true)}
+                    onBlur={() => setEditPasswordFocus(false)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleEditUser(); }}
+                  />
+                  <button
+                    type="button"
+                    onClick={generateEditPassword}
+                    title="Generate random password"
+                    style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <Icon name="casino" size={16} color="#787584" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={copyEditPassword}
+                    disabled={!editPassword}
+                    title={editPasswordCopied ? 'Copied!' : 'Copy password'}
+                    style={{ width: 28, height: 28, borderRadius: 7, background: editPasswordCopied ? 'rgba(16,185,129,0.10)' : 'transparent', border: 'none', cursor: editPassword ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
+                    onMouseEnter={e => { if (editPassword && !editPasswordCopied) e.currentTarget.style.background = '#F5F3FF'; }}
+                    onMouseLeave={e => { if (!editPasswordCopied) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <Icon name={editPasswordCopied ? 'check' : 'content_copy'} size={15} color={editPasswordCopied ? '#10B981' : editPassword ? '#787584' : '#e8e4f0'} />
+                  </button>
+                </div>
+              </div>
+
+              {editError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: '#fff5f5', borderRadius: 8, border: '1px solid #ffdad6' }}>
+                  <Icon name="error" size={15} color="#ba1a1a" />
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a' }}>{editError}</span>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={closeEditUser}
+                  style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEditUser}
+                  disabled={editing}
+                  style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: editing ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '11px 0', cursor: editing ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}
+                  onMouseEnter={e => { if (!editing) e.currentTarget.style.background = '#4d3da8'; }}
+                  onMouseLeave={e => { if (!editing) e.currentTarget.style.background = '#5e4dbb'; }}
+                >
+                  {editing ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Confirmation Modal */}
+      {deleteTarget && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={e => { if (e.target === e.currentTarget) setDeleteTarget(null); }}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 380, padding: '28px 28px 24px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <Icon name="person_remove" size={24} color="#ba1a1a" />
+            </div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 18, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Remove user?</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.6, marginBottom: 24 }}>
+              <span style={{ fontWeight: 600, color: '#1c1b22' }}>@{deleteTarget.username}</span> will be permanently deleted along with all their data. This cannot be undone.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteUser}
+                disabled={deleting}
+                style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: deleting ? '#c9c4d5' : '#ba1a1a', border: 'none', borderRadius: 8, padding: '11px 0', cursor: deleting ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}
+                onMouseEnter={e => { if (!deleting) e.currentTarget.style.background = '#991212'; }}
+                onMouseLeave={e => { if (!deleting) e.currentTarget.style.background = '#ba1a1a'; }}
+              >
+                {deleting ? 'Removing…' : 'Remove User'}
+              </button>
             </div>
           </div>
         </div>
