@@ -40,6 +40,9 @@ export const apiLogin = (username: string, password: string) =>
 export const apiGetMe = () =>
   apiFetch<{ user: { id: string; username: string; email: string; fullName: string } }>('/auth/me');
 
+export const apiGetMembers = () =>
+  apiFetch<{ members: Array<{ id: string; username: string; email: string; fullName: string | null; profileImage: string | null; isAdmin: boolean }> }>('/auth/members');
+
 export const apiUpdateProfile = (data: { fullName?: string; email?: string }) =>
   apiFetch<{ user: { id: string; username: string; email: string; fullName: string } }>(
     '/auth/profile', { method: 'PUT', body: JSON.stringify(data) }

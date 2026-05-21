@@ -54,7 +54,7 @@ interface TaskRow {
 function sanitizeTask(task: TaskRow) {
   return {
     id:        task.id,
-    userId:    task.user_id,
+    creatorId: task.user_id,
     title:     task.title,
     note:      task.note,
     checked:   task.checked,

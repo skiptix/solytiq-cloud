@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import type { Task } from '../types';
 import Icon from './Icon';
 import CalendarPicker from './CalendarPicker';
+import CreatorBubble from './CreatorBubble';
 
 const BADGE_COLORS: Record<string, { bg: string; color: string }> = {
   Work:     { bg: '#f9e287', color: '#6e5e0d' },
@@ -231,6 +232,10 @@ export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClic
             </div>
           )}
         </div>
+
+        {task.creatorId && (
+          <CreatorBubble creatorId={task.creatorId} taskHovered={hovered} />
+        )}
 
         <div style={{ width: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: hovered || menuOpen ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab' }}>
           <Icon name="drag_indicator" size={16} color="#c9c4d5" />
