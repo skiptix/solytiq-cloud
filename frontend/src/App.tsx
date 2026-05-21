@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-
 import type { List } from './types';
 import useAuthStore from './store/useAuthStore';
 import useAppStore from './store/useAppStore';
+import useMembersStore from './store/useMembersStore';
 import { apiCheckSetupRequired } from './api/client';
 
 import Sidebar from './components/Sidebar';
@@ -33,7 +34,8 @@ function AppLayout() {
   const { dashTasks, lists, synced, lastSynced, sidebarWidth, setSidebarWidth, loadFromApi, setLists } = useAppStore();
   const [modal, setModal] = useState<'add-list' | 'completed' | 'trash' | null>(null);
 
-  useEffect(() => { loadFromApi(); }, []);
+  const loadMembers = useMembersStore(s => s.load);
+  useEffect(() => { loadFromApi(); loadMembers(); }, []);
 
   // Sidebar resize
   const handleResizeStart = useCallback((initialX: number) => {

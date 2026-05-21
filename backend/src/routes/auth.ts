@@ -193,4 +193,26 @@ router.put('/profile-image', authenticate, async (req: Request, res: Response) =
   }
 });
 
+// GET /api/auth/members  — public user info for all members (authenticated)
+router.get('/members', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const result = await query<{ id: string; username: string; email: string; full_name: string | null; profile_image: string | null; is_admin: boolean }>(
+      'SELECT id, username, email, full_name, profile_image, is_admin FROM users ORDER BY created_at ASC'
+    );
+    res.json({
+      members: result.rows.map(u => ({
+        id:           u.id,
+        username:     u.username,
+        email:        u.email,
+        fullName:     u.full_name,
+        profileImage: u.profile_image ?? null,
+        isAdmin:      u.is_admin,
+      })),
+    });
+  } catch (err) {
+    console.error('members GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

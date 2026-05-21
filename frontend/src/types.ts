@@ -1,5 +1,6 @@
 export interface Task {
   id: number;
+  creatorId?: string;
   title: string;
   checked: boolean;
   deadline?: string; // YYYY-MM-DD
