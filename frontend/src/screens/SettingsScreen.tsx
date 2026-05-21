@@ -84,6 +84,12 @@ export default function SettingsScreen() {
   const [deleteTarget, setDeleteTarget] = useState<UserEntry | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // All users dialog state
+  const [allUsersOpen, setAllUsersOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user'>('all');
+  const [searchFocus, setSearchFocus] = useState(false);
+
   const loadUsers = useCallback(async () => {
     if (!isAdmin) return;
     setUsersLoading(true);
@@ -240,6 +246,21 @@ export default function SettingsScreen() {
     }
   };
 
+  const PREVIEW_COUNT = 5;
+  const previewUsers = users.slice(0, PREVIEW_COUNT);
+  const hasMore = users.length > PREVIEW_COUNT;
+  const filteredUsers = users.filter(u => {
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = !q ||
+      u.username.toLowerCase().includes(q) ||
+      (u.fullName ?? '').toLowerCase().includes(q) ||
+      u.email.toLowerCase().includes(q);
+    const matchesRole = roleFilter === 'all' ||
+      (roleFilter === 'admin' && u.isAdmin) ||
+      (roleFilter === 'user' && !u.isAdmin);
+    return matchesSearch && matchesRole;
+  });
+
   const sectionLabel = (text: string, action?: React.ReactNode) => (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingLeft: 4 }}>
       <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: '#b0acbe' }}>{text}</div>
@@ -279,8 +300,9 @@ export default function SettingsScreen() {
                   <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>No users yet.</div>
                 </div>
               ) : (
-                users.map((u, i) => (
-                  <div key={u.id} style={{ ...row, borderBottom: i < users.length - 1 ? '1px solid #f1ecf6' : 'none' }}>
+                <>
+                {previewUsers.map((u, i) => (
+                  <div key={u.id} style={{ ...row, borderBottom: i < previewUsers.length - 1 || hasMore ? '1px solid #f1ecf6' : 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                       <UserAvatar name={u.fullName} username={u.username} profileImage={u.profileImage} size={38} />
                       <div style={{ minWidth: 0 }}>
@@ -326,7 +348,19 @@ export default function SettingsScreen() {
                       )}
                     </div>
                   </div>
-                ))
+                ))}
+                {hasMore && (
+                  <button
+                    onClick={() => { setSearchQuery(''); setRoleFilter('all'); setAllUsersOpen(true); }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px 18px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', transition: 'background 150ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <Icon name="group" size={15} color="#5e4dbb" />
+                    Show all {users.length} users
+                  </button>
+                )}
+                </>
               )}
             </div>
           </div>
@@ -382,6 +416,134 @@ export default function SettingsScreen() {
           </div>
         </div>}
       </div>
+
+      {/* All Users Dialog */}
+      {allUsersOpen && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={e => { if (e.target === e.currentTarget) setAllUsersOpen(false); }}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 580, maxHeight: '82vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ padding: '22px 24px 0', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="group" size={18} color="#5e4dbb" />
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22' }}>All Users</div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>{users.length} {users.length === 1 ? 'user' : 'users'} total</div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setAllUsersOpen(false)}
+                  style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+                >
+                  <Icon name="close" size={15} color="#484552" />
+                </button>
+              </div>
+
+              {/* Search */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F9FAFB', border: `1.5px solid ${searchFocus ? '#5e4dbb' : '#E5E7EB'}`, borderRadius: 10, padding: '8px 14px', marginBottom: 14, transition: 'border-color 200ms' }}>
+                <Icon name="search" size={16} color="#b0acbe" />
+                <input
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search by name, username or email…"
+                  style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none' }}
+                  onFocus={() => setSearchFocus(true)}
+                  onBlur={() => setSearchFocus(false)}
+                  autoFocus
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                    <Icon name="close" size={14} color="#b0acbe" />
+                  </button>
+                )}
+              </div>
+
+              {/* Role filter */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+                {(['all', 'admin', 'user'] as const).map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setRoleFilter(f)}
+                    style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 9999, border: 'none', cursor: 'pointer', transition: 'all 150ms', background: roleFilter === f ? '#5e4dbb' : '#F5F3FF', color: roleFilter === f ? '#fff' : '#5e4dbb' }}
+                    onMouseEnter={e => { if (roleFilter !== f) e.currentTarget.style.background = '#ede9ff'; }}
+                    onMouseLeave={e => { if (roleFilter !== f) e.currentTarget.style.background = '#F5F3FF'; }}
+                  >
+                    {f === 'all' ? `All (${users.length})` : f === 'admin' ? `Admins (${users.filter(u => u.isAdmin).length})` : `Users (${users.filter(u => !u.isAdmin).length})`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Scrollable list */}
+            <div style={{ overflowY: 'auto', flex: 1, borderTop: '1px solid #f1ecf6' }}>
+              {filteredUsers.length === 0 ? (
+                <div style={{ padding: '32px 24px', textAlign: 'center', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>
+                  No users match your search.
+                </div>
+              ) : (
+                filteredUsers.map((u, i) => (
+                  <div key={u.id} style={{ ...row, borderBottom: i < filteredUsers.length - 1 ? '1px solid #f1ecf6' : 'none', padding: '12px 24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                      <UserAvatar name={u.fullName} username={u.username} profileImage={u.profileImage} size={38} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {u.fullName || u.username}
+                          </div>
+                          {u.isAdmin && (
+                            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 9999, padding: '1px 7px', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>Admin</span>
+                          )}
+                        </div>
+                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          @{u.username} · {u.email}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: u.lastOnline && Date.now() - new Date(u.lastOnline).getTime() < 5 * 60 * 1000 ? '#10B981' : '#e8e4f0', flexShrink: 0 }} />
+                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', whiteSpace: 'nowrap' }}>
+                          {relativeTime(u.lastOnline)}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => { setAllUsersOpen(false); openEditUser(u); }}
+                        title="Edit user"
+                        style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        <Icon name="edit" size={15} color="#787584" />
+                      </button>
+                      {u.id !== userId && (
+                        <button
+                          onClick={() => { setAllUsersOpen(false); setDeleteTarget(u); }}
+                          title="Remove user"
+                          style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <Icon name="delete" size={15} color="#ba1a1a" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add User Modal */}
       {addUserOpen && (
