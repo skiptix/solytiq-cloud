@@ -28,14 +28,18 @@ function friendlyDate(iso?: string) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
-function flattenListTasks(lists: List[]): Task[] {
-  return lists.flatMap(l => l.sections.flatMap(s => s.tasks.map(t => ({ ...t, _source: 'list' as const, _listId: l.id, _listName: l.name }))));
-}
-
 function getFilteredTasks(filter: string, dashTasks: Task[], lists: List[]): Task[] {
-  const dash = dashTasks.map(t => ({ ...t, _source: 'dash' as const, _listId: 'dashboard', _listName: 'Dashboard' }));
-  if (filter === 'all') return [...dash, ...flattenListTasks(lists)];
-  if (filter === 'local') return dash;
+  // dashTasks from API already includes relevant list tasks
+  if (filter === 'all') return dashTasks.map(t => {
+    if (t._source === 'list') {
+      const list = lists.find(l => l.id === t._listId);
+      return { ...t, _listName: list?.name ?? t._listName };
+    }
+    return { ...t, _source: 'dash', _listId: 'dashboard', _listName: 'Dashboard' };
+  });
+
+  if (filter === 'local') return dashTasks.filter(t => t._source === 'dash' || !t._source).map(t => ({ ...t, _source: 'dash' as const, _listId: 'dashboard', _listName: 'Dashboard' }));
+
   const list = lists.find(l => l.id === filter);
   return list ? list.sections.flatMap(s => s.tasks.map(t => ({ ...t, _source: 'list' as const, _listId: list.id, _listName: list.name }))) : [];
 }

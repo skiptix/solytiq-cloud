@@ -40,6 +40,8 @@ function sanitizeTask(task: TaskRow) {
     position:  task.position,
     createdAt: task.created_at,
     updatedAt: task.updated_at,
+    _source:   task.source,
+    _listId:   task.list_id,
   };
 }
 
@@ -47,9 +49,11 @@ function sanitizeTask(task: TaskRow) {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const result = await query<TaskRow>(
-      `SELECT * FROM tasks
-       WHERE user_id = $1 AND source = 'dash'
-       ORDER BY position ASC, created_at ASC`,
+      `SELECT t.* FROM tasks t
+       LEFT JOIN lists l ON t.list_id = l.id
+       WHERE (t.user_id = $1 AND t.source = 'dash')
+          OR (t.source = 'list' AND (l.user_id = $1 OR l.is_public = true))
+       ORDER BY t.position ASC, t.created_at ASC`,
       [req.userId]
     );
     res.json({ tasks: result.rows.map(sanitizeTask) });

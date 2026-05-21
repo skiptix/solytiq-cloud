@@ -69,6 +69,8 @@ function sanitizeTask(task: TaskRow) {
     position:  task.position,
     createdAt: task.created_at,
     updatedAt: task.updated_at,
+    _source:   task.source,
+    _listId:   task.list_id,
   };
 }
 
@@ -122,7 +124,7 @@ async function buildListsForUser(userId: string) {
     query<TaskRow>(
       `SELECT t.* FROM tasks t
        JOIN lists l ON t.list_id = l.id
-       WHERE (t.user_id = $1 OR l.is_public = true) AND t.source = 'list'
+       WHERE (l.user_id = $1 OR l.is_public = true) AND t.source = 'list'
        ORDER BY t.position ASC, t.created_at ASC`,
       [userId]
     ),
@@ -205,7 +207,7 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /api/lists/:listId/reorder  — before /:listId to avoid route conflict
+// PUT /api/lists/:listId/reorder
 router.put('/:listId/reorder', async (req: Request, res: Response) => {
   try {
     const { ids } = req.body as { ids?: string[] };
@@ -247,12 +249,12 @@ router.put('/:listId', async (req: Request, res: Response) => {
 
     const result = await query<ListRow>(
       `UPDATE lists
-       SET name     = COALESCE($1, name),
-           emoji    = COALESCE($2, emoji),
-           color    = COALESCE($3, color),
-           color_bg = COALESCE($4, color_bg),
-           subtitle = COALESCE($5, subtitle),
-           position = COALESCE($6, position),
+       SET name      = COALESCE($1, name),
+           emoji     = COALESCE($2, emoji),
+           color     = COALESCE($3, color),
+           color_bg  = COALESCE($4, color_bg),
+           subtitle  = COALESCE($5, subtitle),
+           position  = COALESCE($6, position),
            is_public = COALESCE($7, is_public)
        WHERE id = $8 AND (user_id = $9 OR is_public = true)
        RETURNING *`,
@@ -282,7 +284,7 @@ router.delete('/:listId', async (req: Request, res: Response) => {
     );
 
     if (result.rowCount === 0) {
-      res.status(404).json({ error: 'List not found' });
+      res.status(404).json({ error: 'List not found or permission denied' });
       return;
     }
 
@@ -488,17 +490,17 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
 
     const result = await query<TaskRow>(
       `UPDATE tasks t
-       SET title      = COALESCE($1, title),
-           note       = COALESCE($2, note),
-           checked    = COALESCE($3, checked),
-           deadline   = COALESCE($4, deadline),
-           time_val   = COALESCE($5, time_val),
-           priority   = COALESCE($6, priority),
-           badge      = COALESCE($7, badge),
-           position   = COALESCE($8, position),
-           section_id = COALESCE($9, section_id)
+       SET title      = COALESCE($1, t.title),
+           note       = COALESCE($2, t.note),
+           checked    = COALESCE($3, t.checked),
+           deadline   = COALESCE($4, t.deadline),
+           time_val   = COALESCE($5, t.time_val),
+           priority   = COALESCE($6, t.priority),
+           badge      = COALESCE($7, t.badge),
+           position   = COALESCE($8, t.position),
+           section_id = COALESCE($9, t.section_id)
        FROM lists l
-       WHERE t.id = $10 AND t.list_id = $11 AND l.id = t.list_id AND (t.user_id = $12 OR l.is_public = true)
+       WHERE t.id = $10 AND t.list_id = $11 AND l.id = t.list_id AND (l.user_id = $12 OR l.is_public = true)
        RETURNING t.*`,
       [
         title     ?? null,
