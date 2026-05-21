@@ -12,6 +12,7 @@ const useAuthStore = create<AuthState>()(
       username: '',
       email: '',
       fullName: '',
+      profileImage: null,
       token: null,
 
       register: async ({ username, email, password }) => {
@@ -24,6 +25,7 @@ const useAuthStore = create<AuthState>()(
           username: data.user.username,
           email: data.user.email,
           fullName: data.user.fullName || '',
+          profileImage: (data.user as { profileImage?: string | null }).profileImage ?? null,
           token: data.token,
         });
       },
@@ -39,6 +41,7 @@ const useAuthStore = create<AuthState>()(
             username: data.user.username,
             email: data.user.email,
             fullName: data.user.fullName || '',
+            profileImage: (data.user as { profileImage?: string | null }).profileImage ?? null,
             token: data.token,
           });
           return true;
@@ -55,6 +58,7 @@ const useAuthStore = create<AuthState>()(
           username: '',
           email: '',
           fullName: '',
+          profileImage: null,
           token: null,
         });
       },
@@ -64,6 +68,7 @@ const useAuthStore = create<AuthState>()(
           username: data.username ?? state.username,
           email: data.email ?? state.email,
           fullName: data.fullName ?? state.fullName,
+          profileImage: data.profileImage !== undefined ? data.profileImage : state.profileImage,
         }));
       },
     }),

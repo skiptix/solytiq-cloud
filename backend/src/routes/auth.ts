@@ -12,18 +12,20 @@ interface UserRow {
   email: string;
   password_hash: string;
   full_name: string | null;
+  profile_image: string | null;
   is_admin: boolean;
   created_at: string;
 }
 
 function sanitizeUser(user: UserRow) {
   return {
-    id:        user.id,
-    username:  user.username,
-    email:     user.email,
-    fullName:  user.full_name,
-    isAdmin:   user.is_admin,
-    createdAt: user.created_at,
+    id:           user.id,
+    username:     user.username,
+    email:        user.email,
+    fullName:     user.full_name,
+    profileImage: user.profile_image ?? null,
+    isAdmin:      user.is_admin,
+    createdAt:    user.created_at,
   };
 }
 
@@ -165,6 +167,28 @@ router.put('/profile', authenticate, async (req: Request, res: Response) => {
     res.json({ user: sanitizeUser(result.rows[0]) });
   } catch (err) {
     console.error('profile update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/auth/profile-image
+router.put('/profile-image', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { imageData } = req.body as { imageData?: string | null };
+
+    const result = await query<UserRow>(
+      `UPDATE users SET profile_image = $1 WHERE id = $2 RETURNING *`,
+      [imageData ?? null, req.userId]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    res.json({ user: sanitizeUser(result.rows[0]) });
+  } catch (err) {
+    console.error('profile-image update error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
