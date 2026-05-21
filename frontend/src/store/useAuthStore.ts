@@ -13,6 +13,7 @@ const useAuthStore = create<AuthState>()(
       email: '',
       fullName: '',
       profileImage: null,
+      isAdmin: false,
       token: null,
 
       register: async ({ username, email, password }) => {
@@ -26,6 +27,7 @@ const useAuthStore = create<AuthState>()(
           email: data.user.email,
           fullName: data.user.fullName || '',
           profileImage: (data.user as { profileImage?: string | null }).profileImage ?? null,
+          isAdmin: (data.user as { isAdmin?: boolean }).isAdmin ?? false,
           token: data.token,
         });
       },
@@ -42,6 +44,7 @@ const useAuthStore = create<AuthState>()(
             email: data.user.email,
             fullName: data.user.fullName || '',
             profileImage: (data.user as { profileImage?: string | null }).profileImage ?? null,
+            isAdmin: (data.user as { isAdmin?: boolean }).isAdmin ?? false,
             token: data.token,
           });
           return true;
@@ -59,6 +62,7 @@ const useAuthStore = create<AuthState>()(
           email: '',
           fullName: '',
           profileImage: null,
+          isAdmin: false,
           token: null,
         });
       },
