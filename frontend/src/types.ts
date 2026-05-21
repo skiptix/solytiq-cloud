@@ -44,11 +44,12 @@ export interface AuthState {
   username: string;
   email: string;
   fullName: string;
+  profileImage: string | null;
   token: string | null;
   register: (creds: { username: string; email: string; password: string }) => Promise<void>;
   signIn: (username: string, password: string) => Promise<boolean>;
   signOut: () => void;
-  setProfile: (data: { username?: string; email?: string; fullName?: string }) => void;
+  setProfile: (data: { username?: string; email?: string; fullName?: string; profileImage?: string | null }) => void;
 }
 
 export interface AppState {

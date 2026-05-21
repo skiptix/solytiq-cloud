@@ -57,6 +57,10 @@ async function runMigrations() {
   `);
 
   await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image TEXT
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS lists (
       id         VARCHAR(100) PRIMARY KEY,
       user_id    UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -45,6 +45,11 @@ export const apiUpdateProfile = (data: { fullName?: string; email?: string }) =>
     '/auth/profile', { method: 'PUT', body: JSON.stringify(data) }
   );
 
+export const apiUploadProfileImage = (imageData: string | null) =>
+  apiFetch<{ user: { id: string; username: string; email: string; fullName: string; profileImage: string | null } }>(
+    '/auth/profile-image', { method: 'PUT', body: JSON.stringify({ imageData }) }
+  );
+
 // Dashboard Tasks
 export const apiGetTasks = () =>
   apiFetch<{ tasks: Task[] }>('/tasks');
