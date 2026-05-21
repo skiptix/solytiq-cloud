@@ -65,6 +65,8 @@ export default function SettingsScreen() {
   const [emailFocus, setEmailFocus] = useState(false);
   const [passwordFocus, setPasswordFocus] = useState(false);
   const [fullNameFocus, setFullNameFocus] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [passwordCopied, setPasswordCopied] = useState(false);
 
   const loadUsers = useCallback(async () => {
     if (!isAdmin) return;
@@ -95,12 +97,31 @@ export default function SettingsScreen() {
     return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
+  const generatePassword = () => {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    const pw = Array.from(crypto.getRandomValues(new Uint32Array(16)))
+      .map(n => chars[n % chars.length]).join('');
+    setNewPassword(pw);
+    setPasswordVisible(true);
+    setPasswordCopied(false);
+  };
+
+  const copyPassword = () => {
+    if (!newPassword) return;
+    navigator.clipboard.writeText(newPassword).then(() => {
+      setPasswordCopied(true);
+      setTimeout(() => setPasswordCopied(false), 2000);
+    });
+  };
+
   const openAddUser = () => {
     setNewUsername('');
     setNewEmail('');
     setNewPassword('');
     setNewFullName('');
     setCreateError(null);
+    setPasswordVisible(false);
+    setPasswordCopied(false);
     setAddUserOpen(true);
   };
 
@@ -324,16 +345,41 @@ export default function SettingsScreen() {
               {/* Password */}
               <div style={{ borderBottom: `${passwordFocus ? 2 : 1}px solid ${passwordFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 20, transition: 'border-color 200ms' }}>
                 <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Password <span style={{ color: '#ba1a1a' }}>*</span></div>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
-                  placeholder="••••••••"
-                  style={fi}
-                  onFocus={() => setPasswordFocus(true)}
-                  onBlur={() => setPasswordFocus(false)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleCreateUser(); }}
-                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input
+                    type={passwordVisible ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={e => { setNewPassword(e.target.value); setPasswordCopied(false); }}
+                    placeholder="••••••••"
+                    style={{ ...fi, flex: 1 }}
+                    onFocus={() => setPasswordFocus(true)}
+                    onBlur={() => setPasswordFocus(false)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleCreateUser(); }}
+                  />
+                  {/* Generate random password */}
+                  <button
+                    type="button"
+                    onClick={generatePassword}
+                    title="Generate random password"
+                    style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <Icon name="casino" size={16} color="#787584" />
+                  </button>
+                  {/* Copy to clipboard */}
+                  <button
+                    type="button"
+                    onClick={copyPassword}
+                    disabled={!newPassword}
+                    title={passwordCopied ? 'Copied!' : 'Copy password'}
+                    style={{ width: 28, height: 28, borderRadius: 7, background: passwordCopied ? 'rgba(16,185,129,0.10)' : 'transparent', border: 'none', cursor: newPassword ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
+                    onMouseEnter={e => { if (newPassword && !passwordCopied) e.currentTarget.style.background = '#F5F3FF'; }}
+                    onMouseLeave={e => { if (!passwordCopied) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <Icon name={passwordCopied ? 'check' : 'content_copy'} size={15} color={passwordCopied ? '#10B981' : newPassword ? '#787584' : '#e8e4f0'} />
+                  </button>
+                </div>
               </div>
 
               {createError && (
