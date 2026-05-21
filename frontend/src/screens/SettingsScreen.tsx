@@ -43,7 +43,7 @@ function UserAvatar({ name, username, profileImage, size = 36 }: { name: string 
 
 export default function SettingsScreen() {
   const navigate = useNavigate();
-  const { isAdmin, signOut, userId } = useAuthStore();
+  const { isAdmin, userId } = useAuthStore();
   const { synced, lastSynced, loadFromApi } = useAppStore();
   const [autoSync, setAutoSync] = useState(true);
   const [nukeStep, setNukeStep] = useState(0);
@@ -872,7 +872,7 @@ export default function SettingsScreen() {
                   style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '10px 12px', outline: 'none', marginBottom: 16 }} />
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={() => setNukeStep(0)} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>Cancel</button>
-                  <button onClick={() => { signOut(); navigate('/login'); }} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>Nuke Everything</button>
+                  <button onClick={() => { setNukeStep(0); navigate('/nuke', { state: { password: nukePw } }); }} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>Nuke Everything</button>
                 </div>
               </>
             )}

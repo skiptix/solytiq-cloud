@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { query } from '../db';
 import { authenticate, requireAdmin } from '../middleware';
-import { hashPassword } from '../auth';
+import { hashPassword, comparePassword } from '../auth';
 
 const router = Router();
 
@@ -131,6 +131,39 @@ router.delete('/users/:id', authenticate, requireAdmin, async (req: Request, res
     res.json({ success: true });
   } catch (err) {
     console.error('admin/users DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/admin/nuke
+router.delete('/nuke', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { password } = req.body as { password?: string };
+    if (!password) {
+      res.status(400).json({ error: 'Password is required' });
+      return;
+    }
+
+    const userResult = await query<{ password_hash: string }>(
+      'SELECT password_hash FROM users WHERE id = $1',
+      [req.userId]
+    );
+    if (userResult.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const valid = await comparePassword(password, userResult.rows[0].password_hash);
+    if (!valid) {
+      res.status(401).json({ error: 'Invalid password' });
+      return;
+    }
+
+    await query('TRUNCATE TABLE trash, tasks, sections, lists, users RESTART IDENTITY CASCADE');
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('admin/nuke DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
