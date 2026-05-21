@@ -21,7 +21,6 @@ export default function NukeScreen() {
   const password = (location.state as { password?: string } | null)?.password ?? '';
 
   const [progress, setProgress] = useState(0);
-  const [apiDone, setApiDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const apiDoneRef = useRef(false);
   const doneHandled = useRef(false);
@@ -33,7 +32,7 @@ export default function NukeScreen() {
   useEffect(() => {
     if (!password) return;
     apiNuke(password)
-      .then(() => { apiDoneRef.current = true; setApiDone(true); })
+      .then(() => { apiDoneRef.current = true; })
       .catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : '';
         setError(msg.toLowerCase().includes('invalid') ? 'Incorrect password.' : 'Nuke failed. Please try again.');
