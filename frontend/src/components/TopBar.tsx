@@ -46,7 +46,7 @@ export default function TopBar({ tasks, lists, synced, onNavigate }: TopBarProps
   const dropRef = useRef<HTMLDivElement>(null);
 
   // Profile state
-  const { username, email, fullName, profileImage, setProfile, signOut } = useAuthStore();
+  const { username, email, fullName, profileImage, isAdmin, setProfile, signOut } = useAuthStore();
   const [profileOpen, setProfileOpen] = useState(false);
   const profileDropRef = useRef<HTMLDivElement>(null);
   const [avatarHover, setAvatarHover] = useState(false);
@@ -375,7 +375,12 @@ export default function TopBar({ tasks, lists, synced, onNavigate }: TopBarProps
                     </div>
                   </div>
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22' }}>{fullName || username}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22' }}>{fullName || username}</span>
+                      {isAdmin && (
+                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 9999, padding: '2px 8px', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>Admin</span>
+                      )}
+                    </div>
                     <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>@{username}</div>
                   </div>
                 </div>

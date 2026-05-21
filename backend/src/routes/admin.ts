@@ -10,6 +10,7 @@ interface UserRow {
   username: string;
   email: string;
   full_name: string | null;
+  profile_image: string | null;
   is_admin: boolean;
   last_online: string | null;
   created_at: string;
@@ -17,13 +18,14 @@ interface UserRow {
 
 function sanitize(u: UserRow) {
   return {
-    id:         u.id,
-    username:   u.username,
-    email:      u.email,
-    fullName:   u.full_name,
-    isAdmin:    u.is_admin,
-    lastOnline: u.last_online,
-    createdAt:  u.created_at,
+    id:           u.id,
+    username:     u.username,
+    email:        u.email,
+    fullName:     u.full_name,
+    profileImage: u.profile_image ?? null,
+    isAdmin:      u.is_admin,
+    lastOnline:   u.last_online,
+    createdAt:    u.created_at,
   };
 }
 
@@ -31,7 +33,7 @@ function sanitize(u: UserRow) {
 router.get('/users', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {
     const result = await query<UserRow>(
-      `SELECT id, username, email, full_name, is_admin, last_online, created_at
+      `SELECT id, username, email, full_name, profile_image, is_admin, last_online, created_at
        FROM users ORDER BY created_at ASC`
     );
     res.json({ users: result.rows.map(sanitize) });
@@ -62,7 +64,7 @@ router.post('/users', authenticate, requireAdmin, async (req: Request, res: Resp
     const result = await query<UserRow>(
       `INSERT INTO users (username, email, password_hash, full_name, is_admin)
        VALUES ($1, $2, $3, $4, false)
-       RETURNING id, username, email, full_name, is_admin, last_online, created_at`,
+       RETURNING id, username, email, full_name, profile_image, is_admin, last_online, created_at`,
       [username.trim(), resolvedEmail, passwordHash, fullName?.trim() ?? null]
     );
 
