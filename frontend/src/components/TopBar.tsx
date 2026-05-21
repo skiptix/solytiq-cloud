@@ -46,37 +46,33 @@ export default function TopBar({ tasks, lists, synced, onNavigate }: TopBarProps
   const dropRef = useRef<HTMLDivElement>(null);
 
   // Profile state
-  const { username, email, fullName, profileImage, setProfile } = useAuthStore();
+  const { username, email, fullName, profileImage, setProfile, signOut } = useAuthStore();
   const [profileOpen, setProfileOpen] = useState(false);
   const profileDropRef = useRef<HTMLDivElement>(null);
-  const [profileName, setProfileName] = useState(fullName || username);
-  const [profileEmail, setProfileEmail] = useState(email);
-  const [nameFocus, setNameFocus] = useState(false);
-  const [, setEmailFocus] = useState(false);
   const [avatarHover, setAvatarHover] = useState(false);
+  const [uploadAvatarHover, setUploadAvatarHover] = useState(false);
+
+  // Inline field editing
+  const [editingField, setEditingField] = useState<'name' | 'email' | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
 
   // Upload wizard state
   const [uploadOpen, setUploadOpen] = useState(false);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [uploadAvatarHover, setUploadAvatarHover] = useState(false);
+  const [imgSaving, setImgSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const initials = (fullName || username || 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-
-  // Sync local inputs when store updates
-  useEffect(() => {
-    setProfileName(fullName || username);
-    setProfileEmail(email);
-  }, [fullName, username, email]);
 
   // Close profile dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (profileDropRef.current && !profileDropRef.current.contains(e.target as Node)) {
         setProfileOpen(false);
+        setEditingField(null);
       }
     };
     if (profileOpen) document.addEventListener('mousedown', handler);
@@ -118,12 +114,37 @@ export default function TopBar({ tasks, lists, synced, onNavigate }: TopBarProps
     if (e.key === 'Enter' && allResults[activeIdx]) goTo(allResults[activeIdx].path);
   };
 
-  // Profile save
-  const saveProfile = async () => {
+  // Inline edit handlers
+  const startEdit = (field: 'name' | 'email') => {
+    setEditingField(field);
+    setEditValue(field === 'name' ? (fullName || username) : email);
+  };
+
+  const cancelEdit = () => {
+    setEditingField(null);
+    setEditValue('');
+  };
+
+  const commitEdit = async () => {
+    if (!editingField || !editValue.trim()) return;
+    setEditSaving(true);
     try {
-      await apiUpdateProfile({ fullName: profileName, email: profileEmail });
-      setProfile({ fullName: profileName, email: profileEmail });
-    } catch (e) { console.error('profile save failed', e); }
+      const updates = editingField === 'name'
+        ? { fullName: editValue.trim() }
+        : { email: editValue.trim() };
+      await apiUpdateProfile(updates);
+      setProfile(updates);
+      setEditingField(null);
+    } catch (e) {
+      console.error('profile save failed', e);
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleFieldKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
+    if (e.key === 'Escape') cancelEdit();
   };
 
   // Upload wizard handlers
@@ -164,7 +185,7 @@ export default function TopBar({ tasks, lists, synced, onNavigate }: TopBarProps
 
   const handleSaveImage = async () => {
     if (!pendingImage) return;
-    setSaving(true);
+    setImgSaving(true);
     try {
       const res = await apiUploadProfileImage(pendingImage);
       setProfile({ profileImage: res.user.profileImage });
@@ -173,15 +194,73 @@ export default function TopBar({ tasks, lists, synced, onNavigate }: TopBarProps
       console.error('image upload failed', e);
       setFileError('Failed to save image. Please try again.');
     } finally {
-      setSaving(false);
+      setImgSaving(false);
     }
+  };
+
+  const handleSignOut = () => {
+    setProfileOpen(false);
+    signOut();
+    navigate('/login');
   };
 
   const GROUP_COLORS: Record<string, string> = { task: '#5e4dbb', list: '#1D4ED8', setting: '#10B981' };
   const GROUP_LABELS: Record<string, string> = { task: 'Tasks', list: 'Lists', setting: 'Settings' };
   let renderedGroups: string[] = [];
 
-  const inputStyle = { width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none', padding: '5px 0' };
+  const iconBtn = {
+    width: 26, height: 26, borderRadius: 6,
+    background: 'transparent', border: 'none', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0, transition: 'background 120ms',
+  };
+
+  const renderField = (label: string, field: 'name' | 'email', displayValue: string, inputType = 'text') => (
+    <div style={{ padding: '11px 0', borderBottom: '1px solid #f1ecf6' }}>
+      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 5 }}>{label}</div>
+      {editingField === field ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <input
+            autoFocus
+            type={inputType}
+            value={editValue}
+            onChange={e => setEditValue(e.target.value)}
+            onKeyDown={handleFieldKey}
+            style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none', padding: '1px 0', borderBottom: '1.5px solid #5e4dbb' }}
+          />
+          <button
+            onClick={commitEdit}
+            disabled={editSaving || !editValue.trim()}
+            style={{ ...iconBtn, color: '#10B981' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(16,185,129,0.10)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <Icon name="check" size={15} color={editSaving ? '#b0acbe' : '#10B981'} />
+          </button>
+          <button
+            onClick={cancelEdit}
+            style={iconBtn}
+            onMouseEnter={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <Icon name="close" size={15} color="#b0acbe" />
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayValue}</span>
+          <button
+            onClick={() => startEdit(field)}
+            style={iconBtn}
+            onMouseEnter={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <Icon name="edit" size={14} color="#b0acbe" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <>
@@ -255,7 +334,7 @@ export default function TopBar({ tasks, lists, synced, onNavigate }: TopBarProps
           {/* Profile avatar + dropdown */}
           <div ref={profileDropRef} style={{ position: 'relative' }}>
             <button
-              onClick={() => setProfileOpen(v => !v)}
+              onClick={() => { setProfileOpen(v => !v); setEditingField(null); }}
               onMouseEnter={() => setAvatarHover(true)}
               onMouseLeave={() => setAvatarHover(false)}
               style={{ width: 34, height: 34, borderRadius: '50%', border: profileOpen ? '2px solid #5e4dbb' : '2px solid transparent', cursor: 'pointer', padding: 0, background: 'none', transition: 'border-color 150ms', flexShrink: 0, position: 'relative', overflow: 'hidden' }}
@@ -268,7 +347,6 @@ export default function TopBar({ tasks, lists, synced, onNavigate }: TopBarProps
                   <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1 }}>{initials}</span>
                 )}
               </div>
-              {/* Hover ring */}
               <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.12)', opacity: avatarHover && !profileOpen ? 1 : 0, transition: 'opacity 150ms', pointerEvents: 'none' }} />
             </button>
 
@@ -304,27 +382,20 @@ export default function TopBar({ tasks, lists, synced, onNavigate }: TopBarProps
 
                 {/* Editable fields */}
                 <div style={{ padding: '0 16px' }}>
-                  <div style={{ borderBottom: `${nameFocus ? 2 : 1}px solid ${nameFocus ? '#5e4dbb' : '#e8e4f0'}`, padding: '12px 0', transition: 'border-color 200ms' }}>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>Full Name</div>
-                    <input
-                      value={profileName}
-                      onChange={e => setProfileName(e.target.value)}
-                      style={inputStyle}
-                      onFocus={() => setNameFocus(true)}
-                      onBlur={() => { setNameFocus(false); saveProfile(); }}
-                    />
-                  </div>
-                  <div style={{ padding: '12px 0' }}>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 3 }}>Email Address</div>
-                    <input
-                      type="email"
-                      value={profileEmail}
-                      onChange={e => setProfileEmail(e.target.value)}
-                      style={inputStyle}
-                      onFocus={() => setEmailFocus(true)}
-                      onBlur={() => { setEmailFocus(false); saveProfile(); }}
-                    />
-                  </div>
+                  {renderField('Full Name', 'name', fullName || username)}
+                  {renderField('Email Address', 'email', email, 'email')}
+                </div>
+
+                {/* Sign Out */}
+                <div style={{ padding: '12px 16px' }}>
+                  <button
+                    onClick={handleSignOut}
+                    style={{ width: '100%', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#ba1a1a', background: '#fff5f5', border: '1.5px solid #ffdad6', borderRadius: 8, padding: '9px 0', cursor: 'pointer', transition: 'all 150ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#ba1a1a'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#ba1a1a'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#fff5f5'; e.currentTarget.style.color = '#ba1a1a'; e.currentTarget.style.borderColor = '#ffdad6'; }}
+                  >
+                    Sign Out
+                  </button>
                 </div>
               </div>
             )}
@@ -432,12 +503,12 @@ export default function TopBar({ tasks, lists, synced, onNavigate }: TopBarProps
                     </button>
                     <button
                       onClick={handleSaveImage}
-                      disabled={saving}
-                      style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: saving ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '11px 0', cursor: saving ? 'wait' : 'pointer' }}
-                      onMouseEnter={e => { if (!saving) e.currentTarget.style.background = '#4d3da8'; }}
-                      onMouseLeave={e => { if (!saving) e.currentTarget.style.background = '#5e4dbb'; }}
+                      disabled={imgSaving}
+                      style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: imgSaving ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '11px 0', cursor: imgSaving ? 'wait' : 'pointer' }}
+                      onMouseEnter={e => { if (!imgSaving) e.currentTarget.style.background = '#4d3da8'; }}
+                      onMouseLeave={e => { if (!imgSaving) e.currentTarget.style.background = '#5e4dbb'; }}
                     >
-                      {saving ? 'Saving…' : 'Save'}
+                      {imgSaving ? 'Saving…' : 'Save'}
                     </button>
                   </div>
                 </>
