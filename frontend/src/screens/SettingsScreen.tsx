@@ -10,6 +10,7 @@ interface UserEntry {
   username: string;
   email: string;
   fullName: string | null;
+  profileImage: string | null;
   isAdmin: boolean;
   lastOnline: string | null;
   createdAt: string;
@@ -28,11 +29,14 @@ function relativeTime(iso: string | null): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function UserAvatar({ name, username, size = 36 }: { name: string | null; username: string; size?: number }) {
+function UserAvatar({ name, username, profileImage, size = 36 }: { name: string | null; username: string; profileImage?: string | null; size?: number }) {
   const initials = (name || username || 'U').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
   return (
-    <div style={{ width: size, height: size, borderRadius: '50%', background: 'linear-gradient(135deg, #9d8dff 0%, #5e4dbb 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: size * 0.36, fontWeight: 700, color: '#fff' }}>{initials}</span>
+    <div style={{ width: size, height: size, borderRadius: '50%', background: 'linear-gradient(135deg, #9d8dff 0%, #5e4dbb 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+      {profileImage
+        ? <img src={profileImage} alt={username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        : <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: size * 0.36, fontWeight: 700, color: '#fff' }}>{initials}</span>
+      }
     </div>
   );
 }
@@ -171,7 +175,7 @@ export default function SettingsScreen() {
                 users.map((u, i) => (
                   <div key={u.id} style={{ ...row, borderBottom: i < users.length - 1 ? '1px solid #f1ecf6' : 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                      <UserAvatar name={u.fullName} username={u.username} size={38} />
+                      <UserAvatar name={u.fullName} username={u.username} profileImage={u.profileImage} size={38} />
                       <div style={{ minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

@@ -116,9 +116,9 @@ export const apiEmptyTrash = () =>
 
 // Admin
 export const apiGetUsers = () =>
-  apiFetch<{ users: Array<{ id: string; username: string; email: string; fullName: string | null; isAdmin: boolean; lastOnline: string | null; createdAt: string }> }>('/admin/users');
+  apiFetch<{ users: Array<{ id: string; username: string; email: string; fullName: string | null; profileImage: string | null; isAdmin: boolean; lastOnline: string | null; createdAt: string }> }>('/admin/users');
 
 export const apiCreateUser = (data: { username: string; password: string; email?: string; fullName?: string }) =>
-  apiFetch<{ user: { id: string; username: string; email: string; fullName: string | null; isAdmin: boolean; lastOnline: string | null; createdAt: string } }>(
+  apiFetch<{ user: { id: string; username: string; email: string; fullName: string | null; profileImage: string | null; isAdmin: boolean; lastOnline: string | null; createdAt: string } }>(
     '/admin/users', { method: 'POST', body: JSON.stringify(data) }
   );
