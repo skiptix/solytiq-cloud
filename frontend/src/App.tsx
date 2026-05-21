@@ -13,6 +13,7 @@ import TrashModal from './modals/TrashModal';
 
 import LoginScreen from './screens/LoginScreen';
 import SetupWizard from './screens/SetupWizard';
+import NukeScreen from './screens/NukeScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import ListScreen from './screens/ListScreen';
 import ScheduledScreen from './screens/ScheduledScreen';
@@ -126,6 +127,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : <LoginScreen />} />
       <Route path="/setup" element={loggedIn ? <Navigate to="/dashboard" replace /> : <SetupWizard />} />
+      <Route path="/nuke" element={loggedIn ? <NukeScreen /> : <Navigate to="/login" replace />} />
       <Route path="/*" element={
         <Protected>
           <AppLayout />

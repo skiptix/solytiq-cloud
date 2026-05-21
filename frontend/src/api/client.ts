@@ -130,3 +130,6 @@ export const apiUpdateUser = (id: string, data: { username?: string; password?: 
 
 export const apiDeleteUser = (id: string) =>
   apiFetch<{ success: boolean }>(`/admin/users/${id}`, { method: 'DELETE' });
+
+export const apiNuke = (password: string) =>
+  apiFetch<{ success: boolean }>('/admin/nuke', { method: 'DELETE', body: JSON.stringify({ password }) });
