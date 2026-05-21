@@ -80,4 +80,59 @@ router.post('/users', authenticate, requireAdmin, async (req: Request, res: Resp
   }
 });
 
+// PUT /api/admin/users/:id
+router.put('/users/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { username, password } = req.body as { username?: string; password?: string };
+
+    if (!username && !password) {
+      res.status(400).json({ error: 'Nothing to update' });
+      return;
+    }
+
+    const sets: string[] = [];
+    const values: unknown[] = [];
+    let idx = 1;
+
+    if (username?.trim()) { sets.push(`username = $${idx++}`); values.push(username.trim()); }
+    if (password) { sets.push(`password_hash = $${idx++}`); values.push(await hashPassword(password)); }
+    values.push(id);
+
+    const result = await query<UserRow>(
+      `UPDATE users SET ${sets.join(', ')} WHERE id = $${idx}
+       RETURNING id, username, email, full_name, profile_image, is_admin, last_online, created_at`,
+      values
+    );
+
+    if (result.rows.length === 0) { res.status(404).json({ error: 'User not found' }); return; }
+    res.json({ user: sanitize(result.rows[0]) });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '';
+    if (msg.includes('unique') || msg.includes('duplicate')) {
+      res.status(409).json({ error: 'Username already taken' });
+      return;
+    }
+    console.error('admin/users PUT error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/admin/users/:id
+router.delete('/users/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (id === req.userId) {
+      res.status(400).json({ error: 'You cannot delete your own account' });
+      return;
+    }
+    const result = await query('DELETE FROM users WHERE id = $1 RETURNING id', [id]);
+    if (result.rows.length === 0) { res.status(404).json({ error: 'User not found' }); return; }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('admin/users DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

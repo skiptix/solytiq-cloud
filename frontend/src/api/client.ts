@@ -122,3 +122,11 @@ export const apiCreateUser = (data: { username: string; password: string; email?
   apiFetch<{ user: { id: string; username: string; email: string; fullName: string | null; profileImage: string | null; isAdmin: boolean; lastOnline: string | null; createdAt: string } }>(
     '/admin/users', { method: 'POST', body: JSON.stringify(data) }
   );
+
+export const apiUpdateUser = (id: string, data: { username?: string; password?: string }) =>
+  apiFetch<{ user: { id: string; username: string; email: string; fullName: string | null; profileImage: string | null; isAdmin: boolean; lastOnline: string | null; createdAt: string } }>(
+    `/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }
+  );
+
+export const apiDeleteUser = (id: string) =>
+  apiFetch<{ success: boolean }>(`/admin/users/${id}`, { method: 'DELETE' });
