@@ -17,6 +17,7 @@ interface ListRow {
   color: string | null;
   color_bg: string | null;
   subtitle: string | null;
+  is_public: boolean;
   position: number;
   created_at: string;
 }
@@ -94,6 +95,7 @@ function sanitizeList(
     color:     list.color,
     colorBg:   list.color_bg,
     subtitle:  list.subtitle,
+    isPublic:  list.is_public,
     position:  list.position,
     createdAt: list.created_at,
     sections,
@@ -107,19 +109,20 @@ function sanitizeList(
 async function buildListsForUser(userId: string) {
   const [listsResult, sectionsResult, tasksResult] = await Promise.all([
     query<ListRow>(
-      'SELECT * FROM lists WHERE user_id = $1 ORDER BY position ASC, created_at ASC',
+      'SELECT * FROM lists WHERE user_id = $1 OR is_public = true ORDER BY position ASC, created_at ASC',
       [userId]
     ),
     query<SectionRow>(
       `SELECT s.* FROM sections s
        JOIN lists l ON s.list_id = l.id
-       WHERE l.user_id = $1
+       WHERE l.user_id = $1 OR l.is_public = true
        ORDER BY s.position ASC`,
       [userId]
     ),
     query<TaskRow>(
       `SELECT t.* FROM tasks t
-       WHERE t.user_id = $1 AND t.source = 'list'
+       JOIN lists l ON t.list_id = l.id
+       WHERE (t.user_id = $1 OR l.is_public = true) AND t.source = 'list'
        ORDER BY t.position ASC, t.created_at ASC`,
       [userId]
     ),
@@ -163,13 +166,14 @@ router.get('/', async (req: Request, res: Response) => {
 // POST /api/lists
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { id, name, emoji, color, colorBg, subtitle } = req.body as {
+    const { id, name, emoji, color, colorBg, subtitle, isPublic } = req.body as {
       id?: string;
       name?: string;
       emoji?: string;
       color?: string;
       colorBg?: string;
       subtitle?: string;
+      isPublic?: boolean;
     };
 
     if (!name) {
@@ -188,10 +192,10 @@ router.post('/', async (req: Request, res: Response) => {
       : 0;
 
     const result = await query<ListRow>(
-      `INSERT INTO lists (id, user_id, name, emoji, color, color_bg, subtitle, position)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, nextPos]
+      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false, nextPos]
     );
 
     res.status(201).json({ list: sanitizeList(result.rows[0], []) });
@@ -231,13 +235,14 @@ router.put('/:listId/reorder', async (req: Request, res: Response) => {
 router.put('/:listId', async (req: Request, res: Response) => {
   try {
     const { listId } = req.params;
-    const { name, emoji, color, colorBg, subtitle, position } = req.body as {
+    const { name, emoji, color, colorBg, subtitle, position, isPublic } = req.body as {
       name?: string;
       emoji?: string;
       color?: string;
       colorBg?: string;
       subtitle?: string;
       position?: number;
+      isPublic?: boolean;
     };
 
     const result = await query<ListRow>(
@@ -247,10 +252,11 @@ router.put('/:listId', async (req: Request, res: Response) => {
            color    = COALESCE($3, color),
            color_bg = COALESCE($4, color_bg),
            subtitle = COALESCE($5, subtitle),
-           position = COALESCE($6, position)
-       WHERE id = $7 AND user_id = $8
+           position = COALESCE($6, position),
+           is_public = COALESCE($7, is_public)
+       WHERE id = $8 AND (user_id = $9 OR is_public = true)
        RETURNING *`,
-      [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, listId, req.userId]
+      [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, isPublic ?? null, listId, req.userId]
     );
 
     if (result.rows.length === 0) {
@@ -306,9 +312,9 @@ router.post('/:listId/sections', async (req: Request, res: Response) => {
       return;
     }
 
-    // Verify list belongs to user
+    // Verify list belongs to user or is public
     const listCheck = await query(
-      'SELECT id FROM lists WHERE id = $1 AND user_id = $2',
+      'SELECT id FROM lists WHERE id = $1 AND (user_id = $2 OR is_public = true)',
       [listId, req.userId]
     );
     if (listCheck.rows.length === 0) {
@@ -350,11 +356,11 @@ router.put('/sections/:sectionId', async (req: Request, res: Response) => {
       position?: number;
     };
 
-    // Verify section belongs to a list owned by this user
+    // Verify section belongs to a list owned by this user or public
     const ownerCheck = await query(
       `SELECT s.id FROM sections s
        JOIN lists l ON s.list_id = l.id
-       WHERE s.id = $1 AND l.user_id = $2`,
+       WHERE s.id = $1 AND (l.user_id = $2 OR l.is_public = true)`,
       [sectionId, req.userId]
     );
     if (ownerCheck.rows.length === 0) {
@@ -384,11 +390,11 @@ router.delete('/sections/:sectionId', async (req: Request, res: Response) => {
   try {
     const { sectionId } = req.params;
 
-    // Verify ownership
+    // Verify ownership or public
     const ownerCheck = await query(
       `SELECT s.id FROM sections s
        JOIN lists l ON s.list_id = l.id
-       WHERE s.id = $1 AND l.user_id = $2`,
+       WHERE s.id = $1 AND (l.user_id = $2 OR l.is_public = true)`,
       [sectionId, req.userId]
     );
     if (ownerCheck.rows.length === 0) {
@@ -427,11 +433,11 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
       return;
     }
 
-    // Verify list + section belong to user
+    // Verify list + section belong to user or public
     const ownerCheck = await query(
       `SELECT s.id FROM sections s
        JOIN lists l ON s.list_id = l.id
-       WHERE s.id = $1 AND l.id = $2 AND l.user_id = $3`,
+       WHERE s.id = $1 AND l.id = $2 AND (l.user_id = $3 OR l.is_public = true)`,
       [sectionId, listId, req.userId]
     );
     if (ownerCheck.rows.length === 0) {
@@ -481,7 +487,7 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
     };
 
     const result = await query<TaskRow>(
-      `UPDATE tasks
+      `UPDATE tasks t
        SET title      = COALESCE($1, title),
            note       = COALESCE($2, note),
            checked    = COALESCE($3, checked),
@@ -491,8 +497,9 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
            badge      = COALESCE($7, badge),
            position   = COALESCE($8, position),
            section_id = COALESCE($9, section_id)
-       WHERE id = $10 AND user_id = $11 AND list_id = $12
-       RETURNING *`,
+       FROM lists l
+       WHERE t.id = $10 AND t.list_id = $11 AND l.id = t.list_id AND (t.user_id = $12 OR l.is_public = true)
+       RETURNING t.*`,
       [
         title     ?? null,
         note      ?? null,
@@ -504,8 +511,8 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
         position  ?? null,
         sectionId ?? null,
         taskId,
-        req.userId,
         listId,
+        req.userId,
       ]
     );
 
@@ -527,8 +534,10 @@ router.delete('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
     const { listId, taskId } = req.params;
 
     const result = await query(
-      'DELETE FROM tasks WHERE id = $1 AND user_id = $2 AND list_id = $3',
-      [taskId, req.userId, listId]
+      `DELETE FROM tasks t
+       USING lists l
+       WHERE t.id = $1 AND t.list_id = $2 AND l.id = t.list_id AND (t.user_id = $3 OR l.is_public = true)`,
+      [taskId, listId, req.userId]
     );
 
     if (result.rowCount === 0) {

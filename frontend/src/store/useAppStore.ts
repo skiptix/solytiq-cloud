@@ -47,6 +47,20 @@ const useAppStore = create<AppState>()(
         }
       },
 
+      updateList: (listId, updates) => {
+        set((state) => ({
+          lists: state.lists.map((l) => (l.id === listId ? { ...l, ...updates } : l)),
+        }));
+        apiUpdateList(listId, updates).catch(() => {});
+      },
+
+      deleteList: (listId) => {
+        set((state) => ({
+          lists: state.lists.filter((l) => l.id !== listId),
+        }));
+        apiDeleteList(listId).catch(() => {});
+      },
+
       updateDashTask: (taskId, updates) => {
         set((state) => ({
           dashTasks: state.dashTasks.map((t) =>

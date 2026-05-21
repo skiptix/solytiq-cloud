@@ -21,6 +21,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
   const [name, setName] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [emoji, setEmoji] = useState('📋');
+  const [isPublic, setIsPublic] = useState(false);
   const [colorIdx, setColorIdx] = useState(0);
   const [sections, setSections] = useState<Array<{ id: string; label: string; emoji: string }>>([]);
   const [newSection, setNewSection] = useState('');
@@ -41,7 +42,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
     setLoading(true);
     try {
       const listId = `list_${Date.now()}`;
-      const res = await apiCreateList({ id: listId, name: name.trim(), emoji, color: selectedColor.color, colorBg: selectedColor.bg, subtitle: subtitle.trim() || undefined });
+      const res = await apiCreateList({ id: listId, name: name.trim(), emoji, isPublic, color: selectedColor.color, colorBg: selectedColor.bg, subtitle: subtitle.trim() || undefined });
       const createdList = res.list;
       // Add sections
       for (const sec of sections) {
@@ -63,6 +64,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
         id: `list_${Date.now()}`,
         name: name.trim(),
         emoji,
+        isPublic,
         color: selectedColor.color,
         colorBg: selectedColor.bg,
         subtitle: subtitle.trim() || undefined,
@@ -127,6 +129,25 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
                   onFocus={e => (e.target.style.borderBottomColor = '#5e4dbb')}
                   onBlur={e => (e.target.style.borderBottomColor = '#E5E7EB')} />
               </div>
+              {/* Privacy */}
+              <div>
+                <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 8 }}>Privacy</label>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setIsPublic(false)}
+                    style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${!isPublic ? '#5e4dbb' : '#E5E7EB'}`, background: !isPublic ? '#F5F3FF' : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 150ms' }}>
+                    <Icon name="lock" size={16} color={!isPublic ? '#5e4dbb' : '#787584'} />
+                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: !isPublic ? '#5e4dbb' : '#787584' }}>Private</span>
+                  </button>
+                  <button onClick={() => setIsPublic(true)}
+                    style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${isPublic ? '#5e4dbb' : '#E5E7EB'}`, background: isPublic ? '#F5F3FF' : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 150ms' }}>
+                    <Icon name="public" size={16} color={isPublic ? '#5e4dbb' : '#787584'} />
+                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: isPublic ? '#5e4dbb' : '#787584' }}>Public</span>
+                  </button>
+                </div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584', marginTop: 6 }}>
+                  {isPublic ? 'Everyone can see and edit this list and its items.' : 'Only you can see and edit this list.'}
+                </div>
+              </div>
               {/* Color */}
               <div>
                 <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 8 }}>Accent Color</label>
@@ -181,9 +202,13 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
               <div style={{ background: selectedColor.bg, border: `1px solid ${selectedColor.color}40`, borderRadius: 12, padding: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                   <span style={{ fontSize: 24 }}>{emoji}</span>
-                  <div>
+                  <div style={{ flex: 1 }}>
                     <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22' }}>{name}</div>
                     {subtitle && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>{subtitle}</div>}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.5)', padding: '4px 8px', borderRadius: 8 }}>
+                    <Icon name={isPublic ? 'public' : 'lock'} size={14} color="#787584" />
+                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', textTransform: 'uppercase' }}>{isPublic ? 'Public' : 'Private'}</span>
                   </div>
                 </div>
                 {sections.length > 0 && (

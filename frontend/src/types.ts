@@ -25,6 +25,8 @@ export interface List {
   name: string;
   emoji?: string;
   color?: string;
+  userId?: string;
+  isPublic?: boolean;
   colorBg?: string;
   subtitle?: string;
   sections: Section[];
@@ -63,6 +65,8 @@ export interface AppState {
   lastSynced: string | null;
   setDashTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   setLists: (lists: List[] | ((prev: List[]) => List[])) => void;
+  updateList: (listId: string, updates: Partial<List>) => void;
+  deleteList: (listId: string) => void;
   updateDashTask: (taskId: number, updates: Partial<Task>) => void;
   updateListTask: (listId: string, taskId: number, updates: Partial<Task>) => void;
   deleteListTask: (listId: string, taskId: number) => void;

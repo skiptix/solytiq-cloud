@@ -342,7 +342,7 @@ export default function DashboardScreen() {
               </div>
             </div>
             {visibleTasks.length === 0 ? (
-              <div style={{ padding: '16px 10px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', textAlign: 'center' }}>No tasks here yet.</div>
+              <div style={{ padding: '16px 10px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', textAlign: 'center' }}>No open tasks here yet.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {visibleTasks.slice(0, 5).map(task => (
