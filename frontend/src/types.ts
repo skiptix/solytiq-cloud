@@ -29,7 +29,17 @@ export interface List {
   isPublic?: boolean;
   colorBg?: string;
   subtitle?: string;
+  folderId?: string;
   sections: Section[];
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  emoji?: string;
+  color?: string;
+  position: number;
+  collapsed: boolean;
 }
 
 export interface TrashedTask {
@@ -59,10 +69,15 @@ export interface AuthState {
 export interface AppState {
   dashTasks: Task[];
   lists: List[];
+  folders: Folder[];
   trashTasks: TrashedTask[];
   sidebarWidth: number;
   setDashTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   setLists: (lists: List[] | ((prev: List[]) => List[])) => void;
+  setFolders: (folders: Folder[] | ((prev: Folder[]) => Folder[])) => void;
+  addFolder: (folder: Folder) => void;
+  updateFolder: (id: string, updates: Partial<Folder>) => void;
+  deleteFolder: (id: string) => void;
   updateList: (listId: string, updates: Partial<List>) => void;
   deleteList: (listId: string) => void;
   updateDashTask: (taskId: number, updates: Partial<Task>) => void;

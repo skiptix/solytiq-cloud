@@ -4,6 +4,10 @@ import type { AppState, TrashedTask } from '../types';
 import {
   apiGetTasks,
   apiGetLists,
+  apiGetFolders,
+  apiCreateFolder,
+  apiUpdateFolder,
+  apiDeleteFolder,
   apiGetTrash,
   apiCreateTask,
   apiUpdateTask,
@@ -26,6 +30,7 @@ const useAppStore = create<AppState>()(
     (set, get) => ({
       dashTasks: [],
       lists: [],
+      folders: [],
       trashTasks: [],
       sidebarWidth: 256,
 
@@ -43,6 +48,34 @@ const useAppStore = create<AppState>()(
         } else {
           set({ lists });
         }
+      },
+
+      setFolders: (folders) => {
+        if (typeof folders === 'function') {
+          set((state) => ({ folders: folders(state.folders) }));
+        } else {
+          set({ folders });
+        }
+      },
+
+      addFolder: (folder) => {
+        set((state) => ({ folders: [...state.folders, folder] }));
+        apiCreateFolder({ id: folder.id, name: folder.name, emoji: folder.emoji, color: folder.color }).catch(() => {});
+      },
+
+      updateFolder: (id, updates) => {
+        set((state) => ({
+          folders: state.folders.map((f) => (f.id === id ? { ...f, ...updates } : f)),
+        }));
+        apiUpdateFolder(id, updates).catch(() => {});
+      },
+
+      deleteFolder: (id) => {
+        set((state) => ({
+          folders: state.folders.filter((f) => f.id !== id),
+          lists: state.lists.map((l) => l.folderId === id ? { ...l, folderId: undefined } : l),
+        }));
+        apiDeleteFolder(id).catch(() => {});
       },
 
       updateList: (listId, updates) => {
@@ -161,13 +194,15 @@ const useAppStore = create<AppState>()(
 
       loadFromApi: async () => {
         try {
-          const [tasksRes, listsRes, trashRes] = await Promise.all([
+          const [tasksRes, listsRes, foldersRes, trashRes] = await Promise.all([
             apiGetTasks().catch(() => null),
             apiGetLists().catch(() => null),
+            apiGetFolders().catch(() => null),
             apiGetTrash().catch(() => null),
           ]);
-          const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'trashTasks'>> = {};
+          const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'folders' | 'trashTasks'>> = {};
           if (tasksRes) update.dashTasks = tasksRes.tasks.map(t => ({ ...t, id: Number(t.id) }));
+          if (foldersRes) update.folders = foldersRes.folders;
           if (listsRes) update.lists = listsRes.lists.map(l => ({
             ...l,
             sections: l.sections.map(s => ({

@@ -1,4 +1,4 @@
-import type { Task, List, TrashedTask } from '../types';
+import type { Task, List, Folder, TrashedTask } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -100,6 +100,19 @@ export const apiUpdateListTask = (listId: string, taskId: number, data: Partial<
 
 export const apiDeleteListTask = (listId: string, taskId: number) =>
   apiFetch<{ success: boolean }>(`/lists/${listId}/tasks/${taskId}`, { method: 'DELETE' });
+
+// Folders
+export const apiGetFolders = () =>
+  apiFetch<{ folders: Folder[] }>('/folders');
+
+export const apiCreateFolder = (data: { id: string; name: string; emoji?: string; color?: string }) =>
+  apiFetch<{ folder: Folder }>('/folders', { method: 'POST', body: JSON.stringify(data) });
+
+export const apiUpdateFolder = (id: string, data: Partial<Omit<Folder, 'id'>>) =>
+  apiFetch<{ ok: boolean }>(`/folders/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const apiDeleteFolder = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/folders/${id}`, { method: 'DELETE' });
 
 // Trash
 export const apiGetTrash = () =>
