@@ -227,6 +227,7 @@ const useAppStore = create<AppState>()(
       partialize: (state) => ({
         dashTasks: state.dashTasks,
         lists: state.lists,
+        folders: state.folders,
         trashTasks: state.trashTasks,
         sidebarWidth: state.sidebarWidth,
       }),
