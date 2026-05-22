@@ -140,6 +140,13 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
           <button title={collapsed ? list.name : undefined}
             onClick={() => onNavigate(`/list/${list.id}`)}
             style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, background: hov ? (list.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? (list.color ?? '#5e4dbb') : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+            {!collapsed && (
+              <Icon
+                name={list.isPublic ? 'public' : 'lock'}
+                size={13}
+                color="#b0acbe"
+              />
+            )}
             {list.emoji
               ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{list.emoji}</span>
               : <Icon name="format_list_bulleted" size={19} color={isActive ? (list.color ?? '#5e4dbb') : '#787584'} />
@@ -150,10 +157,6 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
 
         {!collapsed && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 4, flexShrink: 0 }}>
-            {list.isPublic
-              ? <Icon name="public" size={13} color="#b0acbe" />
-              : <Icon name="lock" size={13} color="#b0acbe" />
-            }
             <button
               ref={menuBtnRef}
               onClick={openMenu}
