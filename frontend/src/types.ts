@@ -35,11 +35,13 @@ export interface List {
 
 export interface Folder {
   id: string;
+  userId?: string;
   name: string;
   emoji?: string;
   color?: string;
   position: number;
   collapsed: boolean;
+  isPublic?: boolean;
 }
 
 export interface TrashedTask {

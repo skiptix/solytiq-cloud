@@ -59,8 +59,18 @@ const useAppStore = create<AppState>()(
       },
 
       addFolder: (folder) => {
-        set((state) => ({ folders: [...state.folders, folder] }));
-        apiCreateFolder({ id: folder.id, name: folder.name, emoji: folder.emoji, color: folder.color }).catch(() => {});
+        const folderWithDefaults = {
+          ...folder,
+          isPublic: folder.isPublic ?? true,
+        };
+        set((state) => ({ folders: [...state.folders, folderWithDefaults] }));
+        apiCreateFolder({
+          id: folderWithDefaults.id,
+          name: folderWithDefaults.name,
+          emoji: folderWithDefaults.emoji,
+          color: folderWithDefaults.color,
+          isPublic: folderWithDefaults.isPublic,
+        }).catch(() => {});
       },
 
       updateFolder: (id, updates) => {

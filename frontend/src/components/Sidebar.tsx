@@ -316,17 +316,22 @@ interface FolderRowProps {
   collapsed: boolean;
   dragOverId: string | null;
   dragOverFolderId: string | null;
+  dragOverFolderReorderId: string | null;
   allFolders: Folder[];
   onNavigate: (path: string) => void;
   onListDragStart: (listId: string, e: React.DragEvent) => void;
   onListDragOver: (listId: string, e: React.DragEvent) => void;
   onListDragLeave: () => void;
   onListDrop: (listId: string, e: React.DragEvent) => void;
+  onFolderDragStart: (folderId: string, e: React.DragEvent) => void;
   onFolderDragOver: (folderId: string, e: React.DragEvent) => void;
   onFolderDragLeave: () => void;
   onFolderDrop: (folderId: string, e: React.DragEvent) => void;
+  onFolderReorderDragOver: (folderId: string, e: React.DragEvent) => void;
+  onFolderReorderDragLeave: () => void;
+  onFolderReorderDrop: (folderId: string, e: React.DragEvent) => void;
 }
-function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId, dragOverFolderId, allFolders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop, onFolderDragOver, onFolderDragLeave, onFolderDrop }: FolderRowProps) {
+function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId, dragOverFolderId, dragOverFolderReorderId, allFolders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop, onFolderDragStart, onFolderDragOver, onFolderDragLeave, onFolderDrop, onFolderReorderDragOver, onFolderReorderDragLeave, onFolderReorderDrop }: FolderRowProps) {
   const [hov, setHov] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -335,6 +340,7 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
   const [showEmojiInput, setShowEmojiInput] = useState(false);
   const [emojiInput, setEmojiInput] = useState(folder.emoji ?? '');
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showAccessibility, setShowAccessibility] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -350,6 +356,7 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
         setMenuOpen(false);
         setShowEmojiInput(false);
         setShowColorPicker(false);
+        setShowAccessibility(false);
       }
     };
     document.addEventListener('mousedown', handler);
@@ -363,6 +370,7 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
     setMenuOpen(o => !o);
     setShowEmojiInput(false);
     setShowColorPicker(false);
+    setShowAccessibility(false);
   };
 
   const handleRename = () => {
@@ -393,12 +401,21 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
     <>
       {/* Folder header */}
       <div
-        onDragOver={e => onFolderDragOver(folder.id, e)}
-        onDragLeave={onFolderDragLeave}
-        onDrop={e => onFolderDrop(folder.id, e)}
+        onDragOver={e => {
+          onFolderDragOver(folder.id, e);
+          onFolderReorderDragOver(folder.id, e);
+        }}
+        onDragLeave={() => {
+          onFolderDragLeave();
+          onFolderReorderDragLeave();
+        }}
+        onDrop={e => {
+          onFolderDrop(folder.id, e);
+          onFolderReorderDrop(folder.id, e);
+        }}
         onMouseEnter={() => setHov(true)}
         onMouseLeave={() => setHov(false)}
-        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', transition: 'border-color 120ms', background: isDragTarget ? `${accentColor}15` : 'transparent' }}>
+        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', borderTop: dragOverFolderReorderId === folder.id ? '2px solid #9d8dff' : isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', transition: 'all 120ms', background: isDragTarget ? `${accentColor}15` : 'transparent' }}>
 
         {editingName && !collapsed ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '4px 8px' }}>
@@ -435,7 +452,7 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
         )}
 
         {!collapsed && (
-          <div style={{ display: 'flex', alignItems: 'center', paddingRight: 4, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', paddingRight: 4, flexShrink: 0, gap: 2 }}>
             <button
               ref={menuBtnRef}
               onClick={openMenu}
@@ -446,6 +463,12 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
             >
               <Icon name="more_vert" size={15} color="#9d8dff" />
             </button>
+            <div
+              draggable
+              onDragStart={e => onFolderDragStart(folder.id, e)}
+              style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
+              <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+            </div>
           </div>
         )}
       </div>
@@ -523,7 +546,7 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
           )}
 
           <button
-            onClick={() => { setShowColorPicker(c => !c); setShowEmojiInput(false); }}
+            onClick={() => { setShowColorPicker(c => !c); setShowEmojiInput(false); setShowAccessibility(false); }}
             style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: showColorPicker ? '#f5f3ff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
             onMouseLeave={e => { if (!showColorPicker) e.currentTarget.style.background = 'transparent'; }}
@@ -542,6 +565,39 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
                   title={c}
                   style={{ width: 22, height: 22, borderRadius: '50%', background: c, border: folder.color === c ? '2.5px solid #1c1b22' : '2px solid transparent', cursor: 'pointer', padding: 0, outline: 'none', transition: 'border 120ms' }} />
               ))}
+            </div>
+          )}
+
+          <button
+            onClick={() => { setShowAccessibility(a => !a); setShowEmojiInput(false); setShowColorPicker(false); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: showAccessibility ? '#f5f3ff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
+            onMouseLeave={e => { if (!showAccessibility) e.currentTarget.style.background = 'transparent'; }}
+          >
+            <Icon name={folder.isPublic ? 'public' : 'lock'} size={15} color="#787584" />
+            Accessibility
+            <span style={{ marginLeft: 'auto' }}>
+              <Icon name={showAccessibility ? 'expand_less' : 'expand_more'} size={14} color="#b0acbe" />
+            </span>
+          </button>
+
+          {showAccessibility && (
+            <div style={{ padding: '2px 8px 4px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {([{ label: 'Public', val: true }, { label: 'Private', val: false }] as const).map(opt => {
+                const selected = folder.isPublic === opt.val || (folder.isPublic === undefined && opt.val === true);
+                return (
+                  <button key={opt.label}
+                    onClick={() => { updateFolder(folder.id, { isPublic: opt.val }); setMenuOpen(false); setShowAccessibility(false); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: 'none', borderRadius: 6, background: selected ? '#f0edff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: selected ? 600 : 450, color: selected ? '#5e4dbb' : '#484552', textAlign: 'left', width: '100%' }}
+                    onMouseEnter={e => { if (!selected) e.currentTarget.style.background = '#f5f3ff'; }}
+                    onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <Icon name={opt.val ? 'public' : 'lock'} size={13} color={selected ? '#5e4dbb' : '#787584'} />
+                    {opt.label}
+                    {selected && <span style={{ marginLeft: 'auto' }}><Icon name="check" size={13} color="#5e4dbb" /></span>}
+                  </button>
+                );
+              })}
             </div>
           )}
 
@@ -604,11 +660,12 @@ export default function Sidebar({ active, activeListId, lists, width, onNavigate
   const [handleHov, setHandleHov] = useState(false);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  const [dragOverFolderReorderId, setDragOverFolderReorderId] = useState<string | null>(null);
   const [addingFolder, setAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const folderInputRef = useRef<HTMLInputElement>(null);
 
-  const { folders, addFolder, updateList } = useAppStore();
+  const { folders, addFolder, updateList, updateFolder, setFolders } = useAppStore();
 
   const handleListDrop = useCallback((toId: string, e: React.DragEvent) => {
     e.preventDefault();
@@ -621,9 +678,34 @@ export default function Sidebar({ active, activeListId, lists, width, onNavigate
     e.preventDefault();
     e.stopPropagation();
     const listId = e.dataTransfer.getData('listId');
-    if (listId) updateList(listId, { folderId });
-    setDragOverFolderId(null);
+    if (listId) {
+      updateList(listId, { folderId });
+      setDragOverFolderId(null);
+    }
   }, [updateList]);
+
+  const onFolderReorderDrop = useCallback((toId: string, e: React.DragEvent) => {
+    e.preventDefault();
+    const fromId = e.dataTransfer.getData('folderId');
+    if (fromId && fromId !== toId) {
+      const ordered = [...folders].sort((a, b) => a.position - b.position);
+      const fromIndex = ordered.findIndex(f => f.id === fromId);
+      const toIndex = ordered.findIndex(f => f.id === toId);
+      if (fromIndex >= 0 && toIndex >= 0) {
+        const [moved] = ordered.splice(fromIndex, 1);
+        ordered.splice(toIndex, 0, moved);
+
+        const normalized = ordered.map((folder, index) => ({
+          ...folder,
+          position: index,
+        }));
+
+        setFolders(normalized);
+        normalized.forEach(f => updateFolder(f.id, { position: f.position }));
+      }
+    }
+    setDragOverFolderReorderId(null);
+  }, [folders, setFolders, updateFolder]);
 
   const handleCreateFolder = () => {
     const name = newFolderName.trim();
@@ -703,7 +785,7 @@ export default function Sidebar({ active, activeListId, lists, width, onNavigate
         )}
 
         {/* Folders */}
-        {folders.map(folder => {
+        {[...folders].sort((a, b) => a.position - b.position).map(folder => {
           const folderLists = lists.filter(l => l.folderId === folder.id);
           return (
             <FolderRow
@@ -715,15 +797,32 @@ export default function Sidebar({ active, activeListId, lists, width, onNavigate
               collapsed={collapsed}
               dragOverId={dragOverId}
               dragOverFolderId={dragOverFolderId}
+              dragOverFolderReorderId={dragOverFolderReorderId}
               allFolders={folders}
               onNavigate={onNavigate}
               onListDragStart={(listId, e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('listId', listId); }}
               onListDragOver={(listId, e) => { e.preventDefault(); setDragOverId(listId); }}
               onListDragLeave={() => setDragOverId(null)}
               onListDrop={(listId, e) => handleListDrop(listId, e)}
-              onFolderDragOver={(folderId, e) => { e.preventDefault(); setDragOverFolderId(folderId); }}
+              onFolderDragStart={(folderId, e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('folderId', folderId); }}
+              onFolderDragOver={(folderId, e) => {
+                const listId = e.dataTransfer.types.includes('listid');
+                if (listId) {
+                  e.preventDefault();
+                  setDragOverFolderId(folderId);
+                }
+              }}
               onFolderDragLeave={() => setDragOverFolderId(null)}
               onFolderDrop={handleFolderDrop}
+              onFolderReorderDragOver={(folderId, e) => {
+                const isFolder = e.dataTransfer.types.includes('folderid');
+                if (isFolder) {
+                  e.preventDefault();
+                  setDragOverFolderReorderId(folderId);
+                }
+              }}
+              onFolderReorderDragLeave={() => setDragOverFolderReorderId(null)}
+              onFolderReorderDrop={onFolderReorderDrop}
             />
           );
         })}

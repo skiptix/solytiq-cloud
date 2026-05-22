@@ -105,11 +105,11 @@ export const apiDeleteListTask = (listId: string, taskId: number) =>
 export const apiGetFolders = () =>
   apiFetch<{ folders: Folder[] }>('/folders');
 
-export const apiCreateFolder = (data: { id: string; name: string; emoji?: string; color?: string }) =>
+export const apiCreateFolder = (data: { id: string; name: string; emoji?: string; color?: string; isPublic?: boolean }) =>
   apiFetch<{ folder: Folder }>('/folders', { method: 'POST', body: JSON.stringify(data) });
 
 export const apiUpdateFolder = (id: string, data: Partial<Omit<Folder, 'id'>>) =>
-  apiFetch<{ ok: boolean }>(`/folders/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+  apiFetch<{ ok: boolean; folder?: Folder }>(`/folders/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiDeleteFolder = (id: string) =>
   apiFetch<{ ok: boolean }>(`/folders/${id}`, { method: 'DELETE' });
