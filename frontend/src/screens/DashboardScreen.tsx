@@ -27,7 +27,7 @@ function isOverdue(t: Task) { return t.deadline ? t.deadline < today() && !t.che
 function friendlyDate(iso?: string) {
   if (!iso) return '';
   if (iso === today()) return 'Today';
-  const d = new Date(iso + 'T12:00:00');
+  const d = new Date(iso.slice(0, 10) + 'T12:00:00');
   const tom = new Date(); tom.setDate(tom.getDate() + 1);
   if (iso === toIso(tom)) return 'Tomorrow';
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });

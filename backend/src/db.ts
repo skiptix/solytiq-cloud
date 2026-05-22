@@ -1,4 +1,9 @@
-import { Pool, QueryResult, QueryResultRow } from 'pg';
+import { Pool, QueryResult, QueryResultRow, types } from 'pg';
+
+// Return DATE columns as plain "YYYY-MM-DD" strings, not JS Date objects.
+// Without this, pg converts DATE → Date, which res.json() serialises to a full
+// ISO timestamp ("2026-05-22T00:00:00.000Z"), breaking the frontend date parser.
+types.setTypeParser(types.builtins.DATE, (val: string) => val);
 
 export const pool = new Pool({
   host:     process.env.PGHOST     || 'localhost',

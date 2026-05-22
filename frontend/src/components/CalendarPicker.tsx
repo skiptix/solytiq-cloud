@@ -20,7 +20,8 @@ function toIso(d: Date): string {
 
 export default function CalendarPicker({ value, onChange, onClear }: CalendarPickerProps) {
   const today = new Date(); today.setHours(0,0,0,0);
-  const initDate = value ? new Date(value + 'T12:00:00') : today;
+  const parsedValue = value ? new Date(value.slice(0, 10) + 'T12:00:00') : null;
+  const initDate = (parsedValue && !isNaN(parsedValue.getTime())) ? parsedValue : today;
   const [view, setView] = useState({ year: initDate.getFullYear(), month: initDate.getMonth() });
 
   function prevMonth() {

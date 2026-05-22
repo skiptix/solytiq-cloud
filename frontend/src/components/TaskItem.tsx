@@ -25,7 +25,7 @@ function localIso(d: Date): string {
 function friendlyDate(iso?: string) {
   if (!iso) return '';
   const today = new Date(); today.setHours(0,0,0,0);
-  const d = new Date(iso + 'T12:00:00');
+  const d = new Date(iso.slice(0, 10) + 'T12:00:00');
   if (iso === localIso(today)) return 'Today';
   const tom = new Date(today); tom.setDate(tom.getDate()+1);
   if (iso === localIso(tom)) return 'Tomorrow';
@@ -84,7 +84,7 @@ export function EditModal({ task = {}, mode = 'edit', onSave, onClose }: EditMod
               style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'transparent', border: 'none', borderBottom: `1.5px solid ${showCal ? '#5e4dbb' : '#E5E7EB'}`, padding: '8px 0', cursor: 'pointer', textAlign: 'left' }}>
               <Icon name="calendar_today" size={14} color={deadline ? '#5e4dbb' : '#c9c4d5'} />
               <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: deadline ? '#1c1b22' : '#c9c4d5' }}>
-                {deadline ? new Date(deadline + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Pick a date…'}
+                {deadline ? new Date(deadline.slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Pick a date…'}
               </span>
             </button>
             {showCal && (
