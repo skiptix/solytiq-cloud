@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { query } from '../db';
+import { query, pool } from '../db';
 import { generateToken, hashPassword, comparePassword } from '../auth';
 import { authenticate } from '../middleware';
 
@@ -56,26 +56,43 @@ router.post('/register', async (req: Request, res: Response) => {
       return;
     }
 
-    // Only one admin allowed
-    const existingCount = await query<{ count: string }>('SELECT COUNT(*) AS count FROM users');
-    if (parseInt(existingCount.rows[0].count, 10) > 0) {
-      res.status(403).json({ error: 'Admin already registered' });
-      return;
+    // Use a transaction and locking to prevent race conditions during setup
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Lock the table to prevent concurrent inserts
+      await client.query('LOCK TABLE users IN EXCLUSIVE MODE');
+
+      const existingCount = await client.query<{ count: string }>(
+        'SELECT COUNT(*) AS count FROM users'
+      );
+      if (parseInt(existingCount.rows[0].count, 10) > 0) {
+        await client.query('ROLLBACK');
+        res.status(403).json({ error: 'Admin already registered' });
+        return;
+      }
+
+      const passwordHash = await hashPassword(password);
+
+      const inserted = await client.query<UserRow>(
+        `INSERT INTO users (username, email, password_hash, full_name, is_admin)
+         VALUES ($1, $2, $3, $4, true)
+         RETURNING *`,
+        [username, email, passwordHash, fullName ?? null]
+      );
+      await client.query('COMMIT');
+
+      const user = inserted.rows[0];
+      const token = generateToken(user.id);
+
+      res.status(201).json({ token, user: sanitizeUser(user) });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error('register error:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    } finally {
+      client.release();
     }
-
-    const passwordHash = await hashPassword(password);
-
-    const inserted = await query<UserRow>(
-      `INSERT INTO users (username, email, password_hash, full_name, is_admin)
-       VALUES ($1, $2, $3, $4, true)
-       RETURNING *`,
-      [username, email, passwordHash, fullName ?? null]
-    );
-
-    const user = inserted.rows[0];
-    const token = generateToken(user.id);
-
-    res.status(201).json({ token, user: sanitizeUser(user) });
   } catch (err) {
     console.error('register error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -175,6 +192,20 @@ router.put('/profile', authenticate, async (req: Request, res: Response) => {
 router.put('/profile-image', authenticate, async (req: Request, res: Response) => {
   try {
     const { imageData } = req.body as { imageData?: string | null };
+
+    if (imageData) {
+      // Basic validation for base64 images
+      if (!imageData.startsWith('data:image/')) {
+        res.status(400).json({ error: 'Invalid image format' });
+        return;
+      }
+      // Check size (base64 is ~33% larger than binary, so 4MB JSON limit is already tight)
+      // 2MB binary is approx 2.7MB base64.
+      if (imageData.length > 3 * 1024 * 1024) {
+        res.status(400).json({ error: 'Image too large (max 2MB)' });
+        return;
+      }
+    }
 
     const result = await query<UserRow>(
       `UPDATE users SET profile_image = $1 WHERE id = $2 RETURNING *`,

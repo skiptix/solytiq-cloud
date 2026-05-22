@@ -95,7 +95,7 @@ router.put('/:id', async (req: Request, res: Response) => {
            collapsed = COALESCE($5, collapsed),
            position  = COALESCE($6, position),
            is_public = COALESCE($7, is_public)
-       WHERE id = $1 AND (user_id = $8 OR is_public = true)
+       WHERE id = $1 AND user_id = $8
        RETURNING *`,
       [
         req.params.id,
@@ -123,7 +123,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const check = await query<FolderRow>(
-      'SELECT * FROM folders WHERE id = $1 AND (user_id = $2 OR is_public = true)',
+      'SELECT * FROM folders WHERE id = $1 AND user_id = $2',
       [req.params.id, req.userId]
     );
     if (check.rows.length === 0) {
@@ -136,7 +136,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
       [req.params.id]
     );
     await query(
-      'DELETE FROM folders WHERE id = $1 AND (user_id = $2 OR is_public = true)',
+      'DELETE FROM folders WHERE id = $1 AND user_id = $2',
       [req.params.id, req.userId]
     );
     res.json({ ok: true });

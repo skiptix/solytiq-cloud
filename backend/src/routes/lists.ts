@@ -263,7 +263,7 @@ router.put('/:listId', async (req: Request, res: Response) => {
            position  = COALESCE($6, position),
            is_public = COALESCE($7, is_public),
            folder_id = CASE WHEN $10 THEN $11 ELSE folder_id END
-       WHERE id = $8 AND (user_id = $9 OR is_public = true)
+       WHERE id = $8 AND user_id = $9
        RETURNING *`,
       [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, isPublic ?? null, listId, req.userId,
        updateFolderId, folderId ?? null]
