@@ -7,6 +7,7 @@ import tasksRouter from './routes/tasks';
 import listsRouter from './routes/lists';
 import trashRouter from './routes/trash';
 import adminRouter from './routes/admin';
+import foldersRouter from './routes/folders';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -28,11 +29,12 @@ app.use(express.json({ limit: '4mb' }));
 // Routes
 // ---------------------------------------------------------------------------
 
-app.use('/api/auth',  authRouter);
-app.use('/api/tasks', tasksRouter);
-app.use('/api/lists', listsRouter);
-app.use('/api/trash', trashRouter);
-app.use('/api/admin', adminRouter);
+app.use('/api/auth',    authRouter);
+app.use('/api/tasks',   tasksRouter);
+app.use('/api/lists',   listsRouter);
+app.use('/api/trash',   trashRouter);
+app.use('/api/admin',   adminRouter);
+app.use('/api/folders', foldersRouter);
 
 // Health check
 app.get('/health', (_req, res) => {
@@ -77,6 +79,21 @@ async function runMigrations() {
   `);
 
   await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS folders (
+      id         VARCHAR(100) PRIMARY KEY,
+      user_id    UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name       VARCHAR(255) NOT NULL,
+      emoji      VARCHAR(10),
+      color      VARCHAR(50),
+      position   INTEGER      NOT NULL DEFAULT 0,
+      collapsed  BOOLEAN      NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS folder_id VARCHAR(100) REFERENCES folders(id) ON DELETE SET NULL`);
 
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_online TIMESTAMPTZ`);
 

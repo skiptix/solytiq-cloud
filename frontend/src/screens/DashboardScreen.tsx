@@ -229,8 +229,14 @@ export default function DashboardScreen() {
   const toggle = (id: number) => {
     const t = allTasks.find(t => t.id === id);
     if (!t) return;
-    if (t._source === 'dash') updateDashTask(id, { checked: !t.checked });
-    else if (t._listId) updateListTask(t._listId, id, { checked: !t.checked });
+    const newChecked = !t.checked;
+    if (t._source === 'dash') {
+      updateDashTask(id, { checked: newChecked });
+    } else if (t._listId) {
+      updateListTask(t._listId, id, { checked: newChecked });
+      // Keep dashTasks in sync so the dashboard view reflects the change immediately
+      setDashTasks(ts => ts.map(x => x.id === id ? { ...x, checked: newChecked } : x));
+    }
   };
 
   const deleteTask = (id: number) => {

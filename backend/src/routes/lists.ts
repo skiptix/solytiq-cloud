@@ -18,6 +18,7 @@ interface ListRow {
   color_bg: string | null;
   subtitle: string | null;
   is_public: boolean;
+  folder_id: string | null;
   position: number;
   created_at: string;
 }
@@ -98,6 +99,7 @@ function sanitizeList(
     colorBg:   list.color_bg,
     subtitle:  list.subtitle,
     isPublic:  list.is_public,
+    folderId:  list.folder_id ?? undefined,
     position:  list.position,
     createdAt: list.created_at,
     sections,
@@ -168,7 +170,7 @@ router.get('/', async (req: Request, res: Response) => {
 // POST /api/lists
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { id, name, emoji, color, colorBg, subtitle, isPublic } = req.body as {
+    const { id, name, emoji, color, colorBg, subtitle, isPublic, folderId } = req.body as {
       id?: string;
       name?: string;
       emoji?: string;
@@ -176,6 +178,7 @@ router.post('/', async (req: Request, res: Response) => {
       colorBg?: string;
       subtitle?: string;
       isPublic?: boolean;
+      folderId?: string;
     };
 
     if (!name) {
@@ -194,10 +197,10 @@ router.post('/', async (req: Request, res: Response) => {
       : 0;
 
     const result = await query<ListRow>(
-      `INSERT INTO lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, position)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, folder_id, position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
-      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false, nextPos]
+      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false, folderId ?? null, nextPos]
     );
 
     res.status(201).json({ list: sanitizeList(result.rows[0], []) });
@@ -237,7 +240,7 @@ router.put('/:listId/reorder', async (req: Request, res: Response) => {
 router.put('/:listId', async (req: Request, res: Response) => {
   try {
     const { listId } = req.params;
-    const { name, emoji, color, colorBg, subtitle, position, isPublic } = req.body as {
+    const { name, emoji, color, colorBg, subtitle, position, isPublic, folderId } = req.body as {
       name?: string;
       emoji?: string;
       color?: string;
@@ -245,7 +248,10 @@ router.put('/:listId', async (req: Request, res: Response) => {
       subtitle?: string;
       position?: number;
       isPublic?: boolean;
+      folderId?: string | null;
     };
+
+    const updateFolderId = 'folderId' in req.body;
 
     const result = await query<ListRow>(
       `UPDATE lists
@@ -255,10 +261,12 @@ router.put('/:listId', async (req: Request, res: Response) => {
            color_bg  = COALESCE($4, color_bg),
            subtitle  = COALESCE($5, subtitle),
            position  = COALESCE($6, position),
-           is_public = COALESCE($7, is_public)
+           is_public = COALESCE($7, is_public),
+           folder_id = CASE WHEN $10 THEN $11 ELSE folder_id END
        WHERE id = $8 AND (user_id = $9 OR is_public = true)
        RETURNING *`,
-      [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, isPublic ?? null, listId, req.userId]
+      [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, isPublic ?? null, listId, req.userId,
+       updateFolderId, folderId ?? null]
     );
 
     if (result.rows.length === 0) {
