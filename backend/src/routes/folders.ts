@@ -13,17 +13,20 @@ interface FolderRow {
   color: string | null;
   position: number;
   collapsed: boolean;
+  is_public: boolean;
   created_at: string;
 }
 
 function sanitizeFolder(f: FolderRow) {
   return {
     id:        f.id,
+    userId:    f.user_id,
     name:      f.name,
     emoji:     f.emoji  ?? undefined,
     color:     f.color  ?? undefined,
     position:  f.position,
     collapsed: f.collapsed,
+    isPublic:  f.is_public,
   };
 }
 
@@ -31,7 +34,7 @@ function sanitizeFolder(f: FolderRow) {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const rows = await query<FolderRow>(
-      'SELECT * FROM folders WHERE user_id = $1 ORDER BY position ASC, created_at ASC',
+      'SELECT * FROM folders WHERE user_id = $1 OR is_public = true ORDER BY position ASC, created_at ASC',
       [req.userId]
     );
     res.json({ folders: rows.rows.map(sanitizeFolder) });
@@ -44,11 +47,12 @@ router.get('/', async (req: Request, res: Response) => {
 // POST /api/folders
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { id, name, emoji, color } = req.body as {
+    const { id, name, emoji, color, isPublic } = req.body as {
       id?: string;
       name?: string;
       emoji?: string;
       color?: string;
+      isPublic?: boolean;
     };
     if (!name) {
       res.status(400).json({ error: 'name is required' });
@@ -56,15 +60,14 @@ router.post('/', async (req: Request, res: Response) => {
     }
     const folderId = id ?? `folder_${Date.now()}`;
     const posRes = await query<{ max: string | null }>(
-      'SELECT MAX(position) AS max FROM folders WHERE user_id = $1',
-      [req.userId]
+      'SELECT MAX(position) AS max FROM folders'
     );
     const nextPos = posRes.rows[0].max !== null ? parseInt(posRes.rows[0].max, 10) + 1 : 0;
     const result = await query<FolderRow>(
-      `INSERT INTO folders (id, user_id, name, emoji, color, position)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO folders (id, user_id, name, emoji, color, position, is_public)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [folderId, req.userId, name, emoji ?? null, color ?? null, nextPos]
+      [folderId, req.userId, name, emoji ?? null, color ?? null, nextPos, isPublic ?? true]
     );
     res.status(201).json({ folder: sanitizeFolder(result.rows[0]) });
   } catch (err) {
@@ -76,21 +79,24 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT /api/folders/:id
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    const { name, emoji, color, collapsed, position } = req.body as {
+    const { name, emoji, color, collapsed, position, isPublic } = req.body as {
       name?: string;
       emoji?: string;
       color?: string;
       collapsed?: boolean;
       position?: number;
+      isPublic?: boolean;
     };
-    await query(
+    const result = await query<FolderRow>(
       `UPDATE folders
        SET name      = COALESCE($2, name),
            emoji     = COALESCE($3, emoji),
            color     = COALESCE($4, color),
            collapsed = COALESCE($5, collapsed),
-           position  = COALESCE($6, position)
-       WHERE id = $1 AND user_id = $7`,
+           position  = COALESCE($6, position),
+           is_public = COALESCE($7, is_public)
+       WHERE id = $1 AND (user_id = $8 OR is_public = true)
+       RETURNING *`,
       [
         req.params.id,
         name      ?? null,
@@ -98,10 +104,15 @@ router.put('/:id', async (req: Request, res: Response) => {
         color     ?? null,
         collapsed !== undefined ? collapsed : null,
         position  ?? null,
+        isPublic  ?? null,
         req.userId,
       ]
     );
-    res.json({ ok: true });
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Folder not found or permission denied' });
+      return;
+    }
+    res.json({ ok: true, folder: sanitizeFolder(result.rows[0]) });
   } catch (err) {
     console.error('folders PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -111,12 +122,21 @@ router.put('/:id', async (req: Request, res: Response) => {
 // DELETE /api/folders/:id
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    await query(
-      'UPDATE lists SET folder_id = NULL WHERE folder_id = $1 AND user_id = $2',
+    const check = await query<FolderRow>(
+      'SELECT * FROM folders WHERE id = $1 AND (user_id = $2 OR is_public = true)',
       [req.params.id, req.userId]
     );
+    if (check.rows.length === 0) {
+      res.status(404).json({ error: 'Folder not found or permission denied' });
+      return;
+    }
+
     await query(
-      'DELETE FROM folders WHERE id = $1 AND user_id = $2',
+      'UPDATE lists SET folder_id = NULL WHERE folder_id = $1',
+      [req.params.id]
+    );
+    await query(
+      'DELETE FROM folders WHERE id = $1 AND (user_id = $2 OR is_public = true)',
       [req.params.id, req.userId]
     );
     res.json({ ok: true });

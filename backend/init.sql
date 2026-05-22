@@ -13,6 +13,19 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Folders table
+CREATE TABLE IF NOT EXISTS folders (
+  id         VARCHAR(100) PRIMARY KEY,
+  user_id    UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name       VARCHAR(255) NOT NULL,
+  emoji      VARCHAR(10),
+  color      VARCHAR(50),
+  position   INTEGER      NOT NULL DEFAULT 0,
+  collapsed  BOOLEAN      NOT NULL DEFAULT false,
+  is_public  BOOLEAN      NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
 -- Lists table
 CREATE TABLE IF NOT EXISTS lists (
   id         VARCHAR(100) PRIMARY KEY,
@@ -23,6 +36,7 @@ CREATE TABLE IF NOT EXISTS lists (
   color_bg   VARCHAR(50),
   subtitle   VARCHAR(500),
   is_public  BOOLEAN NOT NULL DEFAULT false,
+  folder_id  VARCHAR(100) REFERENCES folders(id) ON DELETE SET NULL,
   position   INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
