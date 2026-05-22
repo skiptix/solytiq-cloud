@@ -17,7 +17,9 @@ function toIso(d: Date): string {
 }
 
 function getAllTasks(dashTasks: Task[], lists: List[]): Task[] {
-  const dash = dashTasks.map(t => ({ ...t, _source: 'dash' as const, _listId: 'dashboard', _listName: 'Dashboard' }));
+  const dash = dashTasks
+    .filter(t => (t._source ?? 'dash') === 'dash')
+    .map(t => ({ ...t, _source: 'dash' as const, _listId: 'dashboard', _listName: 'Dashboard' }));
   const listTasks = lists.flatMap(l => l.sections.flatMap(s => s.tasks.map(t => ({ ...t, _source: 'list' as const, _listId: l.id, _listName: l.name }))));
   return [...dash, ...listTasks];
 }
