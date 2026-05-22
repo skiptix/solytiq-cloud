@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { List } from '../types';
 import Icon from './Icon';
+import useAppStore from '../store/useAppStore';
 
 const MINI = 60;
 
@@ -45,35 +46,206 @@ interface ListItemRowProps {
 }
 function ListItemRow({ list, isActive, collapsed, dragOverId, onNavigate, onDragStart, onDragOver, onDragLeave, onDrop }: ListItemRowProps) {
   const [hov, setHov] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [showAccessibility, setShowAccessibility] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(list.name);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const { deleteList, updateList } = useAppStore();
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        menuBtnRef.current && !menuBtnRef.current.contains(e.target as Node)
+      ) {
+        setMenuOpen(false);
+        setShowAccessibility(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
+  const openMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const rect = menuBtnRef.current?.getBoundingClientRect();
+    if (rect) setMenuPos({ top: rect.bottom + 4, left: rect.left });
+    setMenuOpen(o => !o);
+    setShowAccessibility(false);
+  };
+
+  const handleRename = () => {
+    const trimmed = nameInput.trim();
+    if (trimmed && trimmed !== list.name) updateList(list.id, { name: trimmed });
+    setEditingName(false);
+  };
+
+  const handleDelete = () => {
+    deleteList(list.id);
+    setShowDeleteDialog(false);
+    onNavigate('/dashboard');
+  };
+
   return (
-    <div key={list.id} draggable
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ display: 'flex', alignItems: 'center', borderRadius: 8, borderTop: dragOverId === list.id ? '2px solid #9d8dff' : '2px solid transparent', transition: 'border-color 120ms' }}>
-      <button title={collapsed ? list.name : undefined}
-        onClick={() => onNavigate(`/list/${list.id}`)}
-        style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, background: hov ? (list.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? (list.color ?? '#5e4dbb') : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
-        {list.emoji
-          ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{list.emoji}</span>
-          : <Icon name="format_list_bulleted" size={19} color={isActive ? (list.color ?? '#5e4dbb') : '#787584'} />
-        }
-        {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>}
-      </button>
-      {!collapsed && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 4, flexShrink: 0 }}>
-          {list.isPublic
-            ? <Icon name="public" size={13} color="#b0acbe" />
-            : <Icon name="lock" size={13} color="#b0acbe" />
-          }
-          <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
-            <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+    <>
+      <div draggable
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, borderTop: dragOverId === list.id ? '2px solid #9d8dff' : '2px solid transparent', transition: 'border-color 120ms' }}>
+
+        {editingName && !collapsed ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '4px 8px' }}>
+            <input
+              autoFocus
+              value={nameInput}
+              onChange={e => setNameInput(e.target.value)}
+              onBlur={handleRename}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleRename();
+                if (e.key === 'Escape') { setEditingName(false); setNameInput(list.name); }
+              }}
+              style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, border: 'none', borderBottom: '1.5px solid #5e4dbb', outline: 'none', background: 'transparent', color: '#1c1b22', padding: '2px 4px' }}
+            />
+          </div>
+        ) : (
+          <button title={collapsed ? list.name : undefined}
+            onClick={() => onNavigate(`/list/${list.id}`)}
+            style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, background: hov ? (list.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? (list.color ?? '#5e4dbb') : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+            {list.emoji
+              ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{list.emoji}</span>
+              : <Icon name="format_list_bulleted" size={19} color={isActive ? (list.color ?? '#5e4dbb') : '#787584'} />
+            }
+            {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>}
+          </button>
+        )}
+
+        {!collapsed && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 4, flexShrink: 0 }}>
+            {list.isPublic
+              ? <Icon name="public" size={13} color="#b0acbe" />
+              : <Icon name="lock" size={13} color="#b0acbe" />
+            }
+            <button
+              ref={menuBtnRef}
+              onClick={openMenu}
+              title="List options"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 20, height: 20, borderRadius: 4, border: 'none',
+                background: menuOpen ? '#ebe6f0' : 'transparent',
+                cursor: 'pointer', padding: 0,
+                opacity: hov || menuOpen ? 1 : 0,
+                transition: 'opacity 150ms, background 120ms',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#ebe6f0')}
+              onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background = 'transparent'; }}
+            >
+              <Icon name="more_vert" size={15} color="#9d8dff" />
+            </button>
+            <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
+              <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Dropdown menu */}
+      {menuOpen && menuPos && (
+        <div ref={menuRef}
+          style={{
+            position: 'fixed', top: menuPos.top, left: menuPos.left,
+            zIndex: 400, background: '#fff', borderRadius: 10,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0',
+            minWidth: 170, padding: '4px 0',
+          }}>
+          <button
+            onClick={() => { setMenuOpen(false); setEditingName(true); setNameInput(list.name); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Icon name="edit" size={15} color="#787584" />
+            Edit name
+          </button>
+
+          <button
+            onClick={() => setShowAccessibility(a => !a)}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: showAccessibility ? '#f5f3ff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
+            onMouseLeave={e => { if (!showAccessibility) e.currentTarget.style.background = 'transparent'; }}
+          >
+            <Icon name={list.isPublic ? 'public' : 'lock'} size={15} color="#787584" />
+            Accessibility
+            <span style={{ marginLeft: 'auto' }}>
+              <Icon name={showAccessibility ? 'expand_less' : 'expand_more'} size={14} color="#b0acbe" />
+            </span>
+          </button>
+
+          {showAccessibility && (
+            <div style={{ padding: '2px 8px 4px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {([{ label: 'Public', val: true }, { label: 'Private', val: false }] as const).map(opt => {
+                const selected = list.isPublic === opt.val;
+                return (
+                  <button key={opt.label}
+                    onClick={() => { updateList(list.id, { isPublic: opt.val }); setMenuOpen(false); setShowAccessibility(false); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: 'none', borderRadius: 6, background: selected ? '#f0edff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: selected ? 600 : 450, color: selected ? '#5e4dbb' : '#484552', textAlign: 'left', width: '100%' }}
+                    onMouseEnter={e => { if (!selected) e.currentTarget.style.background = '#f5f3ff'; }}
+                    onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <Icon name={opt.val ? 'public' : 'lock'} size={13} color={selected ? '#5e4dbb' : '#787584'} />
+                    {opt.label}
+                    {selected && <span style={{ marginLeft: 'auto' }}><Icon name="check" size={13} color="#5e4dbb" /></span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{ height: 1, background: '#f0ecf8', margin: '3px 0' }} />
+
+          <button
+            onClick={() => { setMenuOpen(false); setShowDeleteDialog(true); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#ba1a1a', textAlign: 'left' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#fff0ef')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Icon name="delete" size={15} color="#ba1a1a" />
+            Delete list
+          </button>
+        </div>
+      )}
+
+      {/* Delete confirmation dialog */}
+      {showDeleteDialog && (
+        <div
+          onClick={() => setShowDeleteDialog(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <Icon name="delete" size={20} color="#ba1a1a" />
+            </div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Delete list?</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.5, marginBottom: 24 }}>
+              "<span style={{ color: '#1c1b22', fontWeight: 500 }}>{list.name}</span>" and all its tasks will be permanently deleted.
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleDelete} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
+            </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
