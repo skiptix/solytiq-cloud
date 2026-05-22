@@ -64,9 +64,10 @@ function ListItemRow({ list, isActive, collapsed, dragOverId, onNavigate, onDrag
       </button>
       {!collapsed && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 4, flexShrink: 0 }}>
-          {!list.isPublic && (
-            <Icon name="lock" size={13} color="#b0acbe" />
-          )}
+          {list.isPublic
+            ? <Icon name="public" size={13} color="#b0acbe" />
+            : <Icon name="lock" size={13} color="#b0acbe" />
+          }
           <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
             <Icon name="drag_indicator" size={15} color="#c9c4d5" />
           </div>

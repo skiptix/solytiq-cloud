@@ -158,12 +158,6 @@ export default function ListScreen() {
                     {list.name}
                   </h1>
                 )}
-                {list.isPublic && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.05)', padding: '2px 8px', borderRadius: 6, marginLeft: 4 }}>
-                    <Icon name="public" size={12} color="#787584" />
-                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#787584', textTransform: 'uppercase' }}>Public</span>
-                  </div>
-                )}
               </div>
               {list.subtitle && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: 6 }}>{list.subtitle}</div>}
               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>{completedCount} of {totalCount} done</div>
