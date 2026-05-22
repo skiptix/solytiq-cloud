@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type { List, Folder } from '../types';
 import Icon from './Icon';
 import useAppStore from '../store/useAppStore';
+import EmojiPicker from 'emoji-picker-react';
 
 const MINI = 60;
 
@@ -532,16 +533,19 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
           </button>
 
           {showEmojiInput && (
-            <div style={{ padding: '4px 14px 8px', display: 'flex', gap: 6 }}>
-              <input
-                autoFocus
-                value={emojiInput}
-                onChange={e => setEmojiInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleEmojiSave(); if (e.key === 'Escape') setShowEmojiInput(false); }}
-                placeholder="Emoji…"
-                style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, border: '1.5px solid #d4cfe8', borderRadius: 6, padding: '4px 8px', outline: 'none', background: '#f9f7ff', color: '#1c1b22', width: 70 }}
+            <div style={{ padding: '0 0 4px' }}>
+              <EmojiPicker
+                onEmojiClick={emojiData => {
+                  setEmojiInput(emojiData.emoji);
+                  updateFolder(folder.id, { emoji: emojiData.emoji });
+                  setShowEmojiInput(false);
+                  setMenuOpen(false);
+                }}
+                width="100%"
+                height={350}
+                searchPlaceholder="Search emoji…"
+                previewConfig={{ showPreview: false }}
               />
-              <button onClick={handleEmojiSave} style={{ padding: '4px 10px', background: '#5e4dbb', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600 }}>Set</button>
             </div>
           )}
 
