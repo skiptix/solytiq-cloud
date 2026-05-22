@@ -63,8 +63,13 @@ function ListItemRow({ list, isActive, collapsed, dragOverId, onNavigate, onDrag
         {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>}
       </button>
       {!collapsed && (
-        <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', padding: '0 6px', display: 'flex', alignItems: 'center' }}>
-          <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 4, flexShrink: 0 }}>
+          {!list.isPublic && (
+            <Icon name="lock" size={13} color="#b0acbe" />
+          )}
+          <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
+            <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+          </div>
         </div>
       )}
     </div>

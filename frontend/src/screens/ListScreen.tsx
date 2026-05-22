@@ -29,6 +29,7 @@ export default function ListScreen() {
   const [addingSection, setAddingSection] = useState(false);
   const [newSectionLabel, setNewSectionLabel] = useState('');
   const newSectionInputRef = useRef<HTMLInputElement>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   if (!list) {
     return (
@@ -106,10 +107,8 @@ export default function ListScreen() {
   };
 
   const handleDeleteList = () => {
-    if (window.confirm(`Are you sure you want to delete the list "${list.name}"? This action cannot be undone.`)) {
-      deleteList(list.id);
-      navigate('/dashboard');
-    }
+    deleteList(list.id);
+    navigate('/dashboard');
   };
 
   const handleDrop = (sectionId: string, targetId: number) => {
@@ -169,19 +168,8 @@ export default function ListScreen() {
               {list.subtitle && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: 6 }}>{list.subtitle}</div>}
               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>{completedCount} of {totalCount} done</div>
             </div>
-            <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 40, fontWeight: 700, color: list.color ?? '#5e4dbb', lineHeight: 1 }}>{pct}%</div>
-              {isOwner && (
-                <button
-                  onClick={handleDeleteList}
-                  style={{ background: 'rgba(186,26,26,0.1)', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, transition: 'all 150ms' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(186,26,26,0.2)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'rgba(186,26,26,0.1)')}
-                >
-                  <Icon name="delete" size={14} color="#ba1a1a" />
-                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#ba1a1a' }}>Delete List</span>
-                </button>
-              )}
             </div>
           </div>
           <div style={{ marginTop: 14, height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 9999, overflow: 'hidden' }}>
@@ -215,13 +203,26 @@ export default function ListScreen() {
             </button>
           </div>
         ) : (
-          <button onClick={() => setAddingSection(true)}
-            style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', background: '#f1f0f4', border: '1px solid #e2dff0', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', transition: 'all 150ms' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; e.currentTarget.style.color = '#484552'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#f1f0f4'; e.currentTarget.style.color = '#787584'; }}>
-            <Icon name="add" size={14} color="#787584" />
-            Add section
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <button onClick={() => setAddingSection(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', background: '#f1f0f4', border: '1px solid #e2dff0', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', transition: 'all 150ms' }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; e.currentTarget.style.color = '#484552'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#f1f0f4'; e.currentTarget.style.color = '#787584'; }}>
+              <Icon name="add" size={14} color="#787584" />
+              Add section
+            </button>
+            {isOwner && (
+              <button
+                onClick={() => setShowDeleteDialog(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#ba1a1a', background: 'rgba(186,26,26,0.08)', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', transition: 'all 150ms' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(186,26,26,0.16)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(186,26,26,0.08)')}
+              >
+                <Icon name="delete" size={14} color="#ba1a1a" />
+                Delete List
+              </button>
+            )}
+          </div>
         )}
 
         {/* Sections */}
@@ -335,6 +336,38 @@ export default function ListScreen() {
       )}
       {editingTask && (
         <EditModal task={editingTask} onSave={upd => { updateListTask(listId!, editingTask.id, upd); setEditingTask(null); }} onClose={() => setEditingTask(null)} />
+      )}
+
+      {showDeleteDialog && (
+        <div
+          onClick={() => setShowDeleteDialog(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 16, padding: '28px 28px 24px', width: 360, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(186,26,26,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon name="delete" size={18} color="#ba1a1a" />
+              </div>
+              <h2 style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', margin: 0 }}>Delete list?</h2>
+            </div>
+            <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#484552', margin: 0, lineHeight: 1.5 }}>
+              <strong style={{ color: '#1c1b22' }}>{list.name}</strong> and all its tasks will be permanently deleted. This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+              <button
+                onClick={() => setShowDeleteDialog(false)}
+                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#484552', background: '#f1f0f4', border: '1px solid #e2dff0', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteList}
+                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
