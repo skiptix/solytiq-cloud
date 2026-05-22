@@ -11,7 +11,7 @@ function localIso(d: Date): string {
 function friendlyDate(iso?: string) {
   if (!iso) return '';
   const today = new Date(); today.setHours(0,0,0,0);
-  const d = new Date(iso + 'T12:00:00');
+  const d = new Date(iso.slice(0, 10) + 'T12:00:00');
   if (iso === localIso(today)) return 'Today';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }

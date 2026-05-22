@@ -45,7 +45,7 @@ export default function TaskDetailPopup({ task, anchor, onEdit, onGoToList, onCl
   const friendlyDate = (iso?: string) => {
     if (!iso) return '';
     if (iso === localIso(today)) return 'Today';
-    const d = new Date(iso + 'T12:00:00');
+    const d = new Date(iso.slice(0, 10) + 'T12:00:00');
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
