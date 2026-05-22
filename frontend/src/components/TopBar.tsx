@@ -8,8 +8,6 @@ import { apiUpdateProfile, apiUploadProfileImage } from '../api/client';
 interface TopBarProps {
   tasks: Task[];
   lists: List[];
-  synced: boolean;
-  lastSynced: string | null;
   onNavigate: (path: string) => void;
 }
 
@@ -18,7 +16,6 @@ const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 const SETTINGS_RESULTS = [
   { label: 'Profile Settings', sub: 'Edit your name and email', path: '/settings', icon: 'manage_accounts' },
-  { label: 'Sync Settings', sub: 'Cloud sync preferences', path: '/settings', icon: 'cloud_sync' },
   { label: 'Sign Out', sub: 'End your session', path: '/settings', icon: 'logout' },
 ];
 
@@ -35,7 +32,7 @@ function highlight(text: string, query: string): React.ReactNode {
   );
 }
 
-export default function TopBar({ tasks, lists, synced, onNavigate }: TopBarProps) {
+export default function TopBar({ tasks, lists, onNavigate }: TopBarProps) {
   const navigate = useNavigate();
 
   // Search state
@@ -311,16 +308,6 @@ export default function TopBar({ tasks, lists, synced, onNavigate }: TopBarProps
 
         {/* Right controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
-          {synced && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ position: 'relative', width: 8, height: 8 }}>
-                <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#10B981' }} />
-                <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: '#10B981', animation: 'ping 2s ease-in-out infinite' }} />
-              </div>
-              <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#10B981', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Synced</span>
-            </div>
-          )}
-
           {/* Settings button */}
           <button
             onClick={() => { setProfileOpen(false); onNavigate('/settings'); }}

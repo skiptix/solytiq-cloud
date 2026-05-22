@@ -94,7 +94,7 @@ export default function ScheduledScreen() {
               return (
                 <div key={i}
                   onDragOver={e => { if (cell.current) e.preventDefault(); }}
-                  onDrop={e => { e.preventDefault(); if (cell.current && dragTaskId) { assignDeadline(dragTaskId, iso); setDragTaskId(null); } }}
+                  onDrop={e => { e.preventDefault(); if (!cell.current) return; const id = Number(e.dataTransfer.getData('taskId')); if (id) { assignDeadline(id, iso); setDragTaskId(null); } }}
                   style={{ minHeight: 96, border: isTodayCell ? '1.5px solid #c8bfff' : '1px solid #f1ecf6', background: isTodayCell ? '#faf8ff' : cell.current ? '#fff' : '#fafafa', borderRadius: 6, padding: 4, transition: 'background 150ms' }}>
                   <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: isTodayCell ? 700 : 400, color: isTodayCell ? '#5e4dbb' : cell.current ? '#1c1b22' : '#c9c4d5', marginBottom: 4, textAlign: 'right', padding: '0 2px' }}>
                     {cell.date.getDate()}
@@ -136,7 +136,8 @@ export default function ScheduledScreen() {
           ) : (
             filteredUnscheduled.map(t => (
               <div key={`${t._listId}-${t.id}`} draggable
-                onDragStart={() => setDragTaskId(t.id)} onDragEnd={() => setDragTaskId(null)}
+                onDragStart={e => { e.dataTransfer.setData('taskId', String(t.id)); e.dataTransfer.effectAllowed = 'move'; setDragTaskId(t.id); }}
+                onDragEnd={() => setDragTaskId(null)}
                 style={{ padding: '8px 10px', borderRadius: 8, background: '#fff', border: '1px solid #e8e4f0', marginBottom: 4, cursor: 'grab', transition: 'all 150ms', opacity: dragTaskId === t.id ? 0.4 : 1 }}
                 onMouseEnter={e => (e.currentTarget.style.borderColor = '#9d8dff')}
                 onMouseLeave={e => (e.currentTarget.style.borderColor = '#e8e4f0')}>

@@ -61,8 +61,6 @@ export interface AppState {
   lists: List[];
   trashTasks: TrashedTask[];
   sidebarWidth: number;
-  synced: boolean;
-  lastSynced: string | null;
   setDashTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   setLists: (lists: List[] | ((prev: List[]) => List[])) => void;
   updateList: (listId: string, updates: Partial<List>) => void;
@@ -74,6 +72,5 @@ export interface AppState {
   restoreFromTrash: (trashId: number) => void;
   deleteFromTrash: (trashId: number) => void;
   setSidebarWidth: (w: number) => void;
-  setSynced: (synced: boolean, time?: string) => void;
   loadFromApi: () => Promise<void>;
 }

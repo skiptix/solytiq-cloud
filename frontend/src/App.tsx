@@ -31,7 +31,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { dashTasks, lists, synced, lastSynced, sidebarWidth, setSidebarWidth, loadFromApi, setLists } = useAppStore();
+  const { dashTasks, lists, sidebarWidth, setSidebarWidth, loadFromApi, setLists } = useAppStore();
   const [modal, setModal] = useState<'add-list' | 'completed' | 'trash' | null>(null);
 
   const loadMembers = useMembersStore(s => s.load);
@@ -92,8 +92,6 @@ function AppLayout() {
         <TopBar
           tasks={allTasks}
           lists={lists}
-          synced={synced}
-          lastSynced={lastSynced}
           onNavigate={navigate}
         />
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
