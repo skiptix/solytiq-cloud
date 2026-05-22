@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { query } from '../db';
+import { query, pool } from '../db';
 import { generateToken, hashPassword, comparePassword } from '../auth';
 import { authenticate } from '../middleware';
 
@@ -56,26 +56,43 @@ router.post('/register', async (req: Request, res: Response) => {
       return;
     }
 
-    // Only one admin allowed
-    const existingCount = await query<{ count: string }>('SELECT COUNT(*) AS count FROM users');
-    if (parseInt(existingCount.rows[0].count, 10) > 0) {
-      res.status(403).json({ error: 'Admin already registered' });
-      return;
+    // Use a transaction and locking to prevent race conditions during setup
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Use an advisory lock to prevent concurrent setup attempts
+      await client.query('SELECT pg_advisory_xact_lock(123456789)');
+
+      const existingCount = await client.query<{ count: string }>(
+        'SELECT COUNT(*) AS count FROM users'
+      );
+      if (parseInt(existingCount.rows[0].count, 10) > 0) {
+        await client.query('ROLLBACK');
+        res.status(403).json({ error: 'Admin already registered' });
+        return;
+      }
+
+      const passwordHash = await hashPassword(password);
+
+      const inserted = await client.query<UserRow>(
+        `INSERT INTO users (username, email, password_hash, full_name, is_admin)
+         VALUES ($1, $2, $3, $4, true)
+         RETURNING *`,
+        [username, email, passwordHash, fullName ?? null]
+      );
+      await client.query('COMMIT');
+
+      const user = inserted.rows[0];
+      const token = generateToken(user.id);
+
+      res.status(201).json({ token, user: sanitizeUser(user) });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error('register error:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    } finally {
+      client.release();
     }
-
-    const passwordHash = await hashPassword(password);
-
-    const inserted = await query<UserRow>(
-      `INSERT INTO users (username, email, password_hash, full_name, is_admin)
-       VALUES ($1, $2, $3, $4, true)
-       RETURNING *`,
-      [username, email, passwordHash, fullName ?? null]
-    );
-
-    const user = inserted.rows[0];
-    const token = generateToken(user.id);
-
-    res.status(201).json({ token, user: sanitizeUser(user) });
   } catch (err) {
     console.error('register error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -176,6 +193,24 @@ router.put('/profile-image', authenticate, async (req: Request, res: Response) =
   try {
     const { imageData } = req.body as { imageData?: string | null };
 
+    if (imageData) {
+      // Basic validation for base64 images (PNG, JPEG, WebP only)
+      const match = imageData.match(/^data:(image\/png|image\/jpeg|image\/webp);base64,([A-Za-z0-9+/=]+)$/);
+      if (!match) {
+        res.status(400).json({ error: 'Only PNG, JPEG, or WebP base64 images are allowed' });
+        return;
+      }
+
+      // Check size (base64 is ~33% larger than binary)
+      // 512KB binary is approx 700KB base64.
+      const base64 = match[2];
+      const bytes = Buffer.from(base64, 'base64');
+      if (bytes.length > 512 * 1024) {
+        res.status(400).json({ error: 'Profile image must be 512KB or smaller' });
+        return;
+      }
+    }
+
     const result = await query<UserRow>(
       `UPDATE users SET profile_image = $1 WHERE id = $2 RETURNING *`,
       [imageData ?? null, req.userId]
@@ -194,7 +229,7 @@ router.put('/profile-image', authenticate, async (req: Request, res: Response) =
 });
 
 // GET /api/auth/members  — public user info for all members (authenticated)
-router.get('/members', authenticate, async (_req: Request, res: Response) => {
+router.get('/members', authenticate, async (req: Request, res: Response) => {
   try {
     const result = await query<{ id: string; username: string; email: string; full_name: string | null; profile_image: string | null; is_admin: boolean }>(
       'SELECT id, username, email, full_name, profile_image, is_admin FROM users ORDER BY created_at ASC'
@@ -203,7 +238,7 @@ router.get('/members', authenticate, async (_req: Request, res: Response) => {
       members: result.rows.map(u => ({
         id:           u.id,
         username:     u.username,
-        email:        u.email,
+        email:        req.user?.isAdmin ? u.email : undefined,
         fullName:     u.full_name,
         profileImage: u.profile_image ?? null,
         isAdmin:      u.is_admin,

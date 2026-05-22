@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 import { pool } from './db';
 
 import authRouter  from './routes/auth';
@@ -12,6 +14,8 @@ import foldersRouter from './routes/folders';
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
+app.set('trust proxy', 1);
+
 // ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
@@ -23,7 +27,40 @@ app.use(cors({
   credentials: Boolean(frontendUrl),
 }));
 
+app.use(helmet({
+  contentSecurityPolicy: false,
+}));
 app.use(express.json({ limit: '4mb' }));
+
+// Rate limiting
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300, // Limit each IP to 300 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 attempts per 15 mins
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts. Please try again later.' },
+});
+
+const setupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Limit each IP to 5 attempts per hour
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many setup attempts. Please try again later.' },
+});
+
+app.use('/api/', apiLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', setupLimiter);
+app.use('/api/admin/nuke', setupLimiter);
 
 // ---------------------------------------------------------------------------
 // Routes

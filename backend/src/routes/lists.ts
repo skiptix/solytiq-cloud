@@ -251,6 +251,20 @@ router.put('/:listId', async (req: Request, res: Response) => {
       folderId?: string | null;
     };
 
+    const existing = await query<ListRow>('SELECT user_id FROM lists WHERE id = $1', [listId]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'List not found' });
+      return;
+    }
+
+    const isOwner = existing.rows[0].user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
     const updateFolderId = 'folderId' in req.body;
 
     const result = await query<ListRow>(
@@ -263,16 +277,11 @@ router.put('/:listId', async (req: Request, res: Response) => {
            position  = COALESCE($6, position),
            is_public = COALESCE($7, is_public),
            folder_id = CASE WHEN $10 THEN $11 ELSE folder_id END
-       WHERE id = $8 AND (user_id = $9 OR is_public = true)
+       WHERE id = $8
        RETURNING *`,
-      [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, isPublic ?? null, listId, req.userId,
+      [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, isPublic ?? null, listId,
        updateFolderId, folderId ?? null]
     );
-
-    if (result.rows.length === 0) {
-      res.status(404).json({ error: 'List not found' });
-      return;
-    }
 
     res.json({ list: sanitizeList(result.rows[0], []) });
   } catch (err) {
@@ -286,15 +295,21 @@ router.delete('/:listId', async (req: Request, res: Response) => {
   try {
     const { listId } = req.params;
 
-    const result = await query(
-      'DELETE FROM lists WHERE id = $1 AND user_id = $2',
-      [listId, req.userId]
-    );
-
-    if (result.rowCount === 0) {
-      res.status(404).json({ error: 'List not found or permission denied' });
+    const existing = await query<ListRow>('SELECT user_id FROM lists WHERE id = $1', [listId]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'List not found' });
       return;
     }
+
+    const isOwner = existing.rows[0].user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    await query('DELETE FROM lists WHERE id = $1', [listId]);
 
     res.json({ success: true });
   } catch (err) {
