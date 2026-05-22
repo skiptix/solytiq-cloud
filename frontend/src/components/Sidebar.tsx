@@ -380,12 +380,6 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
     setEditingName(false);
   };
 
-  const handleEmojiSave = () => {
-    updateFolder(folder.id, { emoji: emojiInput.trim() || undefined });
-    setShowEmojiInput(false);
-    setMenuOpen(false);
-  };
-
   const toggleCollapsed = () => {
     updateFolder(folder.id, { collapsed: !folder.collapsed });
   };
