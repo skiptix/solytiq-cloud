@@ -19,13 +19,16 @@ function Checkmark() {
   return <svg width="11" height="9" viewBox="0 0 11 9" fill="none"><path d="M1 4.5L4 7.5L10 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 }
 
+function localIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 function friendlyDate(iso?: string) {
   if (!iso) return '';
   const today = new Date(); today.setHours(0,0,0,0);
   const d = new Date(iso + 'T12:00:00');
-  if (iso === today.toISOString().slice(0,10)) return 'Today';
+  if (iso === localIso(today)) return 'Today';
   const tom = new Date(today); tom.setDate(tom.getDate()+1);
-  if (iso === tom.toISOString().slice(0,10)) return 'Tomorrow';
+  if (iso === localIso(tom)) return 'Tomorrow';
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 

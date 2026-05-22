@@ -8,7 +8,12 @@ import TaskDetailPopup from '../components/TaskDetailPopup';
 import Icon from '../components/Icon';
 
 // ── Date helpers ─────────────────────────────────────────────────
-function toIso(d: Date): string { const x = new Date(d); x.setHours(0,0,0,0); return x.toISOString().slice(0,10); }
+function toIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 const today = () => toIso(new Date());
 function endOfWeek(): string {
   const t = new Date(); t.setHours(0,0,0,0);

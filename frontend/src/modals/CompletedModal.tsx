@@ -5,11 +5,14 @@ import Icon from '../components/Icon';
 
 const PRIORITY_COLORS: Record<string, string> = { High: '#ea580c', Medium: '#f59e0b', Low: '#787584' };
 
+function localIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 function friendlyDate(iso?: string) {
   if (!iso) return '';
   const today = new Date(); today.setHours(0,0,0,0);
   const d = new Date(iso + 'T12:00:00');
-  if (iso === today.toISOString().slice(0,10)) return 'Today';
+  if (iso === localIso(today)) return 'Today';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 

@@ -41,9 +41,10 @@ export default function TaskDetailPopup({ task, anchor, onEdit, onGoToList, onCl
   }, [onClose]);
 
   const today = new Date(); today.setHours(0,0,0,0);
+  const localIso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const friendlyDate = (iso?: string) => {
     if (!iso) return '';
-    if (iso === today.toISOString().slice(0,10)) return 'Today';
+    if (iso === localIso(today)) return 'Today';
     const d = new Date(iso + 'T12:00:00');
     return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   };
