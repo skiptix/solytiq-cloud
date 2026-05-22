@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
-import useAppStore from '../store/useAppStore';
 import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser } from '../api/client';
 import Icon from '../components/Icon';
 
@@ -44,12 +43,9 @@ function UserAvatar({ name, username, profileImage, size = 36 }: { name: string 
 export default function SettingsScreen() {
   const navigate = useNavigate();
   const { isAdmin, userId } = useAuthStore();
-  const { synced, lastSynced, loadFromApi } = useAppStore();
-  const [autoSync, setAutoSync] = useState(true);
   const [nukeStep, setNukeStep] = useState(0);
   const [nukeText, setNukeText] = useState('');
   const [nukePw, setNukePw] = useState('');
-  const [syncing, setSyncing] = useState(false);
 
   // Users state
   const [users, setUsers] = useState<UserEntry[]>([]);
@@ -106,18 +102,6 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (isAdmin) loadUsers();
   }, [isAdmin, loadUsers]);
-
-  const syncNow = async () => {
-    setSyncing(true);
-    await loadFromApi();
-    setSyncing(false);
-  };
-
-  const friendlyTime = (iso: string | null) => {
-    if (!iso) return 'Never';
-    const d = new Date(iso);
-    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  };
 
   const generatePassword = () => {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
@@ -365,39 +349,6 @@ export default function SettingsScreen() {
             </div>
           </div>
         )}
-
-        {/* Sync */}
-        <div>
-          {sectionLabel('Sync')}
-          <div style={card}>
-            <div style={{ ...row, borderBottom: '1px solid #f1ecf6' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: synced ? 'rgba(16,185,129,0.10)' : '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name="cloud_sync" size={18} color={synced ? '#10B981' : '#5e4dbb'} />
-                </div>
-                <div>
-                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Cloud Sync Active</div>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 1 }}>Last synced: {friendlyTime(lastSynced)}</div>
-                </div>
-              </div>
-              <button onClick={syncNow} disabled={syncing}
-                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '7px 16px', cursor: syncing ? 'wait' : 'pointer', transition: 'all 150ms' }}>
-                {syncing ? 'Syncing…' : 'Sync Now'}
-              </button>
-            </div>
-            <div style={{ ...row, borderBottom: '1px solid #f1ecf6' }}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 500, color: '#1c1b22' }}>Automatic Sync</div>
-              <div onClick={() => setAutoSync(v => !v)}
-                style={{ width: 44, height: 24, borderRadius: 9999, background: autoSync ? '#5e4dbb' : '#e8e4f0', position: 'relative', cursor: 'pointer', transition: 'background 200ms', flexShrink: 0 }}>
-                <div style={{ position: 'absolute', top: 2, left: autoSync ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.15)', transition: 'left 200ms' }} />
-              </div>
-            </div>
-            <div style={row}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 500, color: '#1c1b22' }}>Storage Location</div>
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', background: '#f1ecf6', borderRadius: 9999, padding: '3px 10px' }}>This device</span>
-            </div>
-          </div>
-        </div>
 
         {/* Danger Zone — admin only */}
         {isAdmin && <div>

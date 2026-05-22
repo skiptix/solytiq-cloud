@@ -28,8 +28,6 @@ const useAppStore = create<AppState>()(
       lists: [],
       trashTasks: [],
       sidebarWidth: 256,
-      synced: false,
-      lastSynced: null,
 
       setDashTasks: (tasks) => {
         if (typeof tasks === 'function') {
@@ -161,10 +159,6 @@ const useAppStore = create<AppState>()(
 
       setSidebarWidth: (w) => set({ sidebarWidth: w }),
 
-      setSynced: (synced, time) => {
-        set({ synced, lastSynced: time ?? get().lastSynced });
-      },
-
       loadFromApi: async () => {
         try {
           const [tasksRes, listsRes, trashRes] = await Promise.all([
@@ -172,7 +166,7 @@ const useAppStore = create<AppState>()(
             apiGetLists().catch(() => null),
             apiGetTrash().catch(() => null),
           ]);
-          const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'trashTasks' | 'synced' | 'lastSynced'>> = {};
+          const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'trashTasks'>> = {};
           if (tasksRes) update.dashTasks = tasksRes.tasks.map(t => ({ ...t, id: Number(t.id) }));
           if (listsRes) update.lists = listsRes.lists.map(l => ({
             ...l,
@@ -187,8 +181,6 @@ const useAppStore = create<AppState>()(
             taskId: Number(tr.taskId),
             task: { ...tr.task, id: Number(tr.task.id) },
           }));
-          update.synced = true;
-          update.lastSynced = new Date().toISOString();
           set(update as AppState);
         } catch {
           // fall back to persisted state
@@ -202,7 +194,6 @@ const useAppStore = create<AppState>()(
         lists: state.lists,
         trashTasks: state.trashTasks,
         sidebarWidth: state.sidebarWidth,
-        lastSynced: state.lastSynced,
       }),
     }
   )
