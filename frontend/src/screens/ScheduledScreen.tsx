@@ -9,7 +9,12 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const PRIORITY_COLORS: Record<string, string> = { High: '#ea580c', Medium: '#f59e0b', Low: '#787584' };
 
-function toIso(d: Date): string { const x = new Date(d); x.setHours(0,0,0,0); return x.toISOString().slice(0,10); }
+function toIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 function getAllTasks(dashTasks: Task[], lists: List[]): Task[] {
   const dash = dashTasks.map(t => ({ ...t, _source: 'dash' as const, _listId: 'dashboard', _listName: 'Dashboard' }));
@@ -94,7 +99,7 @@ export default function ScheduledScreen() {
               return (
                 <div key={i}
                   onDragOver={e => { if (cell.current) e.preventDefault(); }}
-                  onDrop={e => { e.preventDefault(); if (!cell.current) return; const id = Number(e.dataTransfer.getData('taskId')); if (id) { assignDeadline(id, iso); setDragTaskId(null); } }}
+                  onDrop={e => { e.preventDefault(); if (!cell.current) return; const id = Number(e.dataTransfer.getData('text/plain')); if (id) { assignDeadline(id, iso); setDragTaskId(null); } }}
                   style={{ minHeight: 96, border: isTodayCell ? '1.5px solid #c8bfff' : '1px solid #f1ecf6', background: isTodayCell ? '#faf8ff' : cell.current ? '#fff' : '#fafafa', borderRadius: 6, padding: 4, transition: 'background 150ms' }}>
                   <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: isTodayCell ? 700 : 400, color: isTodayCell ? '#5e4dbb' : cell.current ? '#1c1b22' : '#c9c4d5', marginBottom: 4, textAlign: 'right', padding: '0 2px' }}>
                     {cell.date.getDate()}
@@ -136,7 +141,7 @@ export default function ScheduledScreen() {
           ) : (
             filteredUnscheduled.map(t => (
               <div key={`${t._listId}-${t.id}`} draggable
-                onDragStart={e => { e.dataTransfer.setData('taskId', String(t.id)); e.dataTransfer.effectAllowed = 'move'; setDragTaskId(t.id); }}
+                onDragStart={e => { e.dataTransfer.setData('text/plain', String(t.id)); e.dataTransfer.effectAllowed = 'move'; setDragTaskId(t.id); }}
                 onDragEnd={() => setDragTaskId(null)}
                 style={{ padding: '8px 10px', borderRadius: 8, background: '#fff', border: '1px solid #e8e4f0', marginBottom: 4, cursor: 'grab', transition: 'all 150ms', opacity: dragTaskId === t.id ? 0.4 : 1 }}
                 onMouseEnter={e => (e.currentTarget.style.borderColor = '#9d8dff')}

@@ -11,7 +11,11 @@ const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function toIso(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  if (isNaN(y) || isNaN(d.getMonth()) || isNaN(d.getDate())) return '';
+  return `${y}-${m}-${day}`;
 }
 
 export default function CalendarPicker({ value, onChange, onClear }: CalendarPickerProps) {
