@@ -272,7 +272,8 @@ export default function ListScreen() {
                         onDrop={id => handleDrop(section.id, id)}
                         onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
                         isDragging={draggedId === task.id}
-                        isDragOver={dragOverId === task.id && draggedId !== task.id} />
+                        isDragOver={dragOverId === task.id && draggedId !== task.id}
+                        hideListBadge />
                     );
                   })}
                 </div>

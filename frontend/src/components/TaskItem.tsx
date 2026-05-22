@@ -3,7 +3,6 @@ import type { CSSProperties } from 'react';
 import type { Task } from '../types';
 import Icon from './Icon';
 import CalendarPicker from './CalendarPicker';
-import CreatorBubble from './CreatorBubble';
 
 const BADGE_COLORS: Record<string, { bg: string; color: string }> = {
   Work:     { bg: '#f9e287', color: '#6e5e0d' },
@@ -175,9 +174,10 @@ interface TaskItemProps {
   onDrop?: (id: number) => void;
   isDragging?: boolean;
   isDragOver?: boolean;
+  hideListBadge?: boolean;
 }
 
-export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClick, onDragStart, onDragEnd, onDragOver, onDrop, isDragging, isDragOver }: TaskItemProps) {
+export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClick, onDragStart, onDragEnd, onDragOver, onDrop, isDragging, isDragOver, hideListBadge }: TaskItemProps) {
   const [hovered, setHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
@@ -213,9 +213,9 @@ export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClic
           onClick={e => onRowClick?.(task, e)}>
           <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', lineHeight: 1.4, opacity: checked ? 0.4 : 1, textDecoration: checked ? 'line-through' : 'none' }}>{title}</div>
           {note && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{note}</div>}
-          {(deadline || time || priority || badge || task._listName) && (
+          {(deadline || time || priority || badge || (task._listName && !hideListBadge)) && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-              {task._listName && (
+              {task._listName && !hideListBadge && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, borderRadius: 9999, padding: '1px 8px', fontSize: 10, fontWeight: 600, background: task._source === 'dash' ? '#F5F3FF' : '#eef0fb', color: task._source === 'dash' ? '#5e4dbb' : '#3d4a8f' }}>
                   <Icon name={task._source === 'dash' ? 'today' : 'format_list_bulleted'} size={10} color={task._source === 'dash' ? '#5e4dbb' : '#3d4a8f'} />
                   {task._listName}
@@ -235,10 +235,6 @@ export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClic
             </div>
           )}
         </div>
-
-        {task.creatorId && (
-          <CreatorBubble creatorId={task.creatorId} taskHovered={hovered} />
-        )}
 
         <div style={{ width: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: hovered || menuOpen ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab' }}>
           <Icon name="drag_indicator" size={16} color="#c9c4d5" />
