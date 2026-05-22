@@ -6,15 +6,18 @@ declare global {
   namespace Express {
     interface Request {
       userId?: string;
+      user?: {
+        isAdmin: boolean;
+      };
     }
   }
 }
 
-export function authenticate(
+export async function authenticate(
   req: Request,
   res: Response,
   next: NextFunction
-): void {
+): Promise<void> {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -26,7 +29,20 @@ export function authenticate(
 
   try {
     const { userId } = verifyToken(token);
+
+    const userResult = await query<{ is_admin: boolean }>(
+      'SELECT is_admin FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      res.status(401).json({ error: 'User not found' });
+      return;
+    }
+
     req.userId = userId;
+    req.user = { isAdmin: userResult.rows[0].is_admin };
+
     // fire-and-forget: only update if last_online is null or older than 5 min
     query(
       `UPDATE users SET last_online = NOW() WHERE id = $1 AND (last_online IS NULL OR last_online < NOW() - INTERVAL '5 minutes')`,
@@ -38,22 +54,14 @@ export function authenticate(
   }
 }
 
-export async function requireAdmin(
+export function requireAdmin(
   req: Request,
   res: Response,
   next: NextFunction
-): Promise<void> {
-  try {
-    const result = await query<{ is_admin: boolean }>(
-      'SELECT is_admin FROM users WHERE id = $1',
-      [req.userId]
-    );
-    if (!result.rows[0]?.is_admin) {
-      res.status(403).json({ error: 'Admin access required' });
-      return;
-    }
-    next();
-  } catch {
-    res.status(500).json({ error: 'Internal server error' });
+): void {
+  if (!req.user?.isAdmin) {
+    res.status(403).json({ error: 'Admin access required' });
+    return;
   }
+  next();
 }

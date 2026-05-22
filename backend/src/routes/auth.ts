@@ -60,8 +60,8 @@ router.post('/register', async (req: Request, res: Response) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      // Lock the table to prevent concurrent inserts
-      await client.query('LOCK TABLE users IN EXCLUSIVE MODE');
+      // Use an advisory lock to prevent concurrent setup attempts
+      await client.query('SELECT pg_advisory_xact_lock(123456789)');
 
       const existingCount = await client.query<{ count: string }>(
         'SELECT COUNT(*) AS count FROM users'
@@ -194,15 +194,19 @@ router.put('/profile-image', authenticate, async (req: Request, res: Response) =
     const { imageData } = req.body as { imageData?: string | null };
 
     if (imageData) {
-      // Basic validation for base64 images
-      if (!imageData.startsWith('data:image/')) {
-        res.status(400).json({ error: 'Invalid image format' });
+      // Basic validation for base64 images (PNG, JPEG, WebP only)
+      const match = imageData.match(/^data:(image\/png|image\/jpeg|image\/webp);base64,([A-Za-z0-9+/=]+)$/);
+      if (!match) {
+        res.status(400).json({ error: 'Only PNG, JPEG, or WebP base64 images are allowed' });
         return;
       }
-      // Check size (base64 is ~33% larger than binary, so 4MB JSON limit is already tight)
-      // 2MB binary is approx 2.7MB base64.
-      if (imageData.length > 3 * 1024 * 1024) {
-        res.status(400).json({ error: 'Image too large (max 2MB)' });
+
+      // Check size (base64 is ~33% larger than binary)
+      // 512KB binary is approx 700KB base64.
+      const base64 = match[2];
+      const bytes = Buffer.from(base64, 'base64');
+      if (bytes.length > 512 * 1024) {
+        res.status(400).json({ error: 'Profile image must be 512KB or smaller' });
         return;
       }
     }
@@ -225,7 +229,7 @@ router.put('/profile-image', authenticate, async (req: Request, res: Response) =
 });
 
 // GET /api/auth/members  — public user info for all members (authenticated)
-router.get('/members', authenticate, async (_req: Request, res: Response) => {
+router.get('/members', authenticate, async (req: Request, res: Response) => {
   try {
     const result = await query<{ id: string; username: string; email: string; full_name: string | null; profile_image: string | null; is_admin: boolean }>(
       'SELECT id, username, email, full_name, profile_image, is_admin FROM users ORDER BY created_at ASC'
@@ -234,7 +238,7 @@ router.get('/members', authenticate, async (_req: Request, res: Response) => {
       members: result.rows.map(u => ({
         id:           u.id,
         username:     u.username,
-        email:        u.email,
+        email:        req.user?.isAdmin ? u.email : undefined,
         fullName:     u.full_name,
         profileImage: u.profile_image ?? null,
         isAdmin:      u.is_admin,

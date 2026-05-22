@@ -79,6 +79,7 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT /api/folders/:id
 router.put('/:id', async (req: Request, res: Response) => {
   try {
+    const { id } = req.params;
     const { name, emoji, color, collapsed, position, isPublic } = req.body as {
       name?: string;
       emoji?: string;
@@ -87,6 +88,29 @@ router.put('/:id', async (req: Request, res: Response) => {
       position?: number;
       isPublic?: boolean;
     };
+
+    const existing = await query<FolderRow>('SELECT user_id, is_public FROM folders WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'Folder not found' });
+      return;
+    }
+
+    const folder = existing.rows[0];
+    const isOwner = folder.user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+    const canAccess = isOwner || isAdmin || folder.is_public === true;
+    const wantsPrivacyChange = typeof isPublic === 'boolean';
+
+    if (!canAccess) {
+      res.status(404).json({ error: 'Folder not found' });
+      return;
+    }
+
+    if (wantsPrivacyChange && !isOwner && !isAdmin) {
+      res.status(403).json({ error: 'Only the owner or admin can change folder privacy' });
+      return;
+    }
+
     const result = await query<FolderRow>(
       `UPDATE folders
        SET name      = COALESCE($2, name),
@@ -95,23 +119,18 @@ router.put('/:id', async (req: Request, res: Response) => {
            collapsed = COALESCE($5, collapsed),
            position  = COALESCE($6, position),
            is_public = COALESCE($7, is_public)
-       WHERE id = $1 AND user_id = $8
+       WHERE id = $1
        RETURNING *`,
       [
-        req.params.id,
+        id,
         name      ?? null,
         emoji     ?? null,
         color     ?? null,
         collapsed !== undefined ? collapsed : null,
         position  ?? null,
         isPublic  ?? null,
-        req.userId,
       ]
     );
-    if (result.rows.length === 0) {
-      res.status(404).json({ error: 'Folder not found or permission denied' });
-      return;
-    }
     res.json({ ok: true, folder: sanitizeFolder(result.rows[0]) });
   } catch (err) {
     console.error('folders PUT error:', err);
@@ -122,22 +141,28 @@ router.put('/:id', async (req: Request, res: Response) => {
 // DELETE /api/folders/:id
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const check = await query<FolderRow>(
-      'SELECT * FROM folders WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.userId]
-    );
-    if (check.rows.length === 0) {
-      res.status(404).json({ error: 'Folder not found or permission denied' });
+    const { id } = req.params;
+    const existing = await query<FolderRow>('SELECT user_id FROM folders WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'Folder not found' });
+      return;
+    }
+
+    const isOwner = existing.rows[0].user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: 'Only the owner or admin can delete this folder' });
       return;
     }
 
     await query(
       'UPDATE lists SET folder_id = NULL WHERE folder_id = $1',
-      [req.params.id]
+      [id]
     );
     await query(
-      'DELETE FROM folders WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.userId]
+      'DELETE FROM folders WHERE id = $1',
+      [id]
     );
     res.json({ ok: true });
   } catch (err) {
