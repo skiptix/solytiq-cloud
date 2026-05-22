@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { Task } from '../types';
 import Icon from './Icon';
+import CreatorBubble from './CreatorBubble';
+import useMembersStore from '../store/useMembersStore';
 
 const PRIORITY_COLORS: Record<string, string> = { High: '#ea580c', Medium: '#f59e0b', Low: '#787584' };
 
@@ -14,6 +16,7 @@ interface TaskDetailPopupProps {
 
 export default function TaskDetailPopup({ task, anchor, onEdit, onGoToList, onClose }: TaskDetailPopupProps) {
   const popupRef = useRef<HTMLDivElement>(null);
+  const creator = useMembersStore(s => task.creatorId ? s.members[task.creatorId] : undefined);
   const stripeColor = task.priority ? PRIORITY_COLORS[task.priority] : '#5e4dbb';
 
   const pos = (() => {
@@ -86,6 +89,14 @@ export default function TaskDetailPopup({ task, anchor, onEdit, onGoToList, onCl
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon name="format_list_bulleted" size={13} color="#787584" />
                 <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#484552' }}>{task._listName}</span>
+              </div>
+            )}
+            {task.creatorId && creator && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CreatorBubble creatorId={task.creatorId} taskHovered={true} />
+                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#484552' }}>
+                  {creator.fullName || creator.username}
+                </span>
               </div>
             )}
             {task.note && (
