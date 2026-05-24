@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
-import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser } from '../api/client';
+import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage } from '../api/client';
 import Icon from '../components/Icon';
 
 interface UserEntry {
@@ -86,6 +86,10 @@ export default function SettingsScreen() {
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user'>('all');
   const [searchFocus, setSearchFocus] = useState(false);
 
+  // System storage state
+  const [storage, setStorage] = useState<{ total: number; used: number; available: number } | null>(null);
+  const [storageLoading, setStorageLoading] = useState(false);
+
   const loadUsers = useCallback(async () => {
     if (!isAdmin) return;
     setUsersLoading(true);
@@ -102,6 +106,15 @@ export default function SettingsScreen() {
   useEffect(() => {
     if (isAdmin) loadUsers();
   }, [isAdmin, loadUsers]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    setStorageLoading(true);
+    apiGetSystemStorage()
+      .then(setStorage)
+      .catch(() => setStorage(null))
+      .finally(() => setStorageLoading(false));
+  }, [isAdmin]);
 
   const generatePassword = () => {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
@@ -346,6 +359,59 @@ export default function SettingsScreen() {
                 )}
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* System — admin only */}
+        {isAdmin && (
+          <div>
+            {sectionLabel('System')}
+            <div style={card}>
+              {storageLoading ? (
+                <div style={{ ...row, justifyContent: 'center' }}>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading…</div>
+                </div>
+              ) : storage === null ? (
+                <div style={{ ...row, justifyContent: 'center' }}>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Unable to read disk usage.</div>
+                </div>
+              ) : (() => {
+                const fmt = (b: number) => {
+                  if (b >= 1e12) return `${(b / 1e12).toFixed(1)} TB`;
+                  if (b >= 1e9)  return `${(b / 1e9).toFixed(1)} GB`;
+                  return `${(b / 1e6).toFixed(1)} MB`;
+                };
+                const pct = Math.round((storage.used / storage.total) * 100);
+                const barColor = pct >= 90 ? '#ba1a1a' : pct >= 70 ? '#d97706' : '#5e4dbb';
+                return (
+                  <div style={{ padding: '18px 18px 16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Disk Storage</div>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: barColor, background: pct >= 90 ? '#ffdad6' : pct >= 70 ? '#fef3c7' : '#F5F3FF', borderRadius: 9999, padding: '2px 9px' }}>{pct}% used</span>
+                    </div>
+                    <div style={{ background: '#E5E7EB', borderRadius: 99, height: 8, overflow: 'hidden', marginBottom: 12 }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 99, transition: 'width 600ms ease' }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', gap: 20 }}>
+                        <div>
+                          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Used</div>
+                          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>{fmt(storage.used)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Available</div>
+                          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>{fmt(storage.available)}</div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Total</div>
+                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>{fmt(storage.total)}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
