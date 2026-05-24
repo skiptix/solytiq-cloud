@@ -276,7 +276,7 @@ router.put('/:listId', async (req: Request, res: Response) => {
            subtitle  = COALESCE($5, subtitle),
            position  = COALESCE($6, position),
            is_public = COALESCE($7, is_public),
-           folder_id = CASE WHEN $10 THEN $11 ELSE folder_id END
+           folder_id = CASE WHEN $9 THEN $10 ELSE folder_id END
        WHERE id = $8
        RETURNING *`,
       [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, isPublic ?? null, listId,
