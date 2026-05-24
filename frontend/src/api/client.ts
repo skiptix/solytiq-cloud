@@ -1,4 +1,4 @@
-import type { Task, List, Folder, TrashedTask } from '../types';
+import type { Task, List, Folder, TrashedTask, SharedFile } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -152,3 +152,42 @@ export const apiNuke = (password: string) =>
 
 export const apiGetSystemStorage = () =>
   apiFetch<{ total: number; used: number; available: number }>('/admin/system/storage');
+
+// Files
+export const apiGetFiles = () =>
+  apiFetch<{ files: SharedFile[] }>('/files');
+
+export const apiUpdateFile = (id: string, data: { name?: string; isPublic?: boolean; password?: string | null; expiresAt?: string | null }) =>
+  apiFetch<{ file: SharedFile }>(`/files/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const apiDeleteFile = (id: string) =>
+  apiFetch<{ success: boolean }>(`/files/${id}`, { method: 'DELETE' });
+
+export function apiUploadFile(
+  file: File,
+  opts: { isPublic?: boolean; password?: string; expiresAt?: string },
+  onProgress: (pct: number) => void,
+): Promise<SharedFile> {
+  return new Promise((resolve, reject) => {
+    const token = localStorage.getItem('solytiq_token');
+    const form  = new FormData();
+    form.append('file', file);
+    if (opts.isPublic !== undefined) form.append('isPublic', String(opts.isPublic));
+    if (opts.password)  form.append('password',  opts.password);
+    if (opts.expiresAt) form.append('expiresAt', opts.expiresAt);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${(import.meta.env.VITE_API_URL as string | undefined) ?? '/api'}/files`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve((JSON.parse(xhr.responseText) as { file: SharedFile }).file);
+      } else {
+        reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(form);
+  });
+}

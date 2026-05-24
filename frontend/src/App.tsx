@@ -18,6 +18,7 @@ import NukeScreen from './screens/NukeScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import ListScreen from './screens/ListScreen';
 import ScheduledScreen from './screens/ScheduledScreen';
+import FilesScreen from './screens/FilesScreen';
 import SettingsScreen from './screens/SettingsScreen';
 
 // ── Protected route wrapper ────────────────────────────────────
@@ -63,9 +64,10 @@ function AppLayout() {
     arr.filter(l => l.folderId === folderId).forEach((l, i) => updateList(l.id, { position: i }));
   }, [lists, setLists, updateList]);
 
-  const getActive = (): 'dashboard' | 'scheduled' | 'list' | 'settings' => {
+  const getActive = (): 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings' => {
     if (location.pathname.startsWith('/list/')) return 'list';
     if (location.pathname.startsWith('/scheduled')) return 'scheduled';
+    if (location.pathname.startsWith('/files')) return 'files';
     if (location.pathname.startsWith('/settings')) return 'settings';
     return 'dashboard';
   };
@@ -99,6 +101,7 @@ function AppLayout() {
           <Routes>
             <Route path="/dashboard" element={<DashboardScreen />} />
             <Route path="/scheduled" element={<ScheduledScreen />} />
+            <Route path="/files" element={<FilesScreen />} />
             <Route path="/list/:listId" element={<ListScreen />} />
             <Route path="/settings" element={<SettingsScreen />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

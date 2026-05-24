@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
+import path from 'path';
 import { pool } from './db';
 
 import authRouter  from './routes/auth';
@@ -10,6 +11,9 @@ import listsRouter from './routes/lists';
 import trashRouter from './routes/trash';
 import adminRouter from './routes/admin';
 import foldersRouter from './routes/folders';
+import filesRouter, { UPLOAD_DIR } from './routes/files';
+import { comparePassword } from './auth';
+import { query as dbQuery } from './db';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -72,6 +76,39 @@ app.use('/api/lists',   listsRouter);
 app.use('/api/trash',   trashRouter);
 app.use('/api/admin',   adminRouter);
 app.use('/api/folders', foldersRouter);
+app.use('/api/files',   filesRouter);
+
+// Public share endpoint — no auth required
+app.get('/api/share/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const pw = (req.query.password ?? '') as string;
+
+    interface FileRow { id: string; original_name: string; mime_type: string; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; }
+    const result = await dbQuery<FileRow>('SELECT * FROM shared_files WHERE share_token = $1', [token]);
+    if (result.rows.length === 0) { res.status(404).json({ error: 'File not found' }); return; }
+
+    const file = result.rows[0];
+    if (!file.is_public) { res.status(403).json({ error: 'This file is private' }); return; }
+    if (file.expires_at && new Date(file.expires_at) < new Date()) { res.status(410).json({ error: 'Share link has expired' }); return; }
+
+    if (file.password_hash) {
+      if (!pw) { res.status(401).json({ error: 'Password required', passwordRequired: true }); return; }
+      const valid = await comparePassword(pw, file.password_hash);
+      if (!valid) { res.status(401).json({ error: 'Invalid password' }); return; }
+    }
+
+    const filePath = path.join(path.resolve(UPLOAD_DIR), file.file_path);
+    if (!require('fs').existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
+
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.original_name)}"`);
+    res.setHeader('Content-Type', file.mime_type);
+    res.sendFile(filePath);
+  } catch (err) {
+    console.error('share GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Health check
 app.get('/health', (_req, res) => {
@@ -133,6 +170,22 @@ async function runMigrations() {
   await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS folder_id VARCHAR(100) REFERENCES folders(id) ON DELETE SET NULL`);
 
   await pool.query(`ALTER TABLE folders ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT true`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shared_files (
+      id            VARCHAR(100) PRIMARY KEY,
+      user_id       UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      original_name VARCHAR(500) NOT NULL,
+      mime_type     VARCHAR(100) NOT NULL DEFAULT 'application/octet-stream',
+      file_size     BIGINT       NOT NULL DEFAULT 0,
+      file_path     VARCHAR(500) NOT NULL,
+      is_public     BOOLEAN      NOT NULL DEFAULT true,
+      password_hash VARCHAR(255),
+      expires_at    TIMESTAMPTZ,
+      share_token   VARCHAR(100) UNIQUE NOT NULL,
+      created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+  `);
 
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_online TIMESTAMPTZ`);
 

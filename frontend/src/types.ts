@@ -53,6 +53,20 @@ export interface TrashedTask {
   deletedAt: string;
 }
 
+export interface SharedFile {
+  id: string;
+  userId: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  isPublic: boolean;
+  hasPassword: boolean;
+  expiresAt: string | null;
+  shareToken: string;
+  shareUrl: string;
+  createdAt: string;
+}
+
 export interface AuthState {
   adminRegistered: boolean;
   loggedIn: boolean;

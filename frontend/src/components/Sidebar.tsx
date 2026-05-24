@@ -312,7 +312,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
 interface FolderRowProps {
   folder: Folder;
   lists: List[];
-  active: 'dashboard' | 'scheduled' | 'list' | 'settings';
+  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings';
   activeListId?: string;
   collapsed: boolean;
   dragOverId: string | null;
@@ -639,7 +639,7 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
-  active: 'dashboard' | 'scheduled' | 'list' | 'settings';
+  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings';
   activeListId?: string;
   lists: List[];
   width: number;
@@ -739,6 +739,7 @@ export default function Sidebar({ active, activeListId, lists, width, onNavigate
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <NavItem icon="today" label="Dashboard" active={active === 'dashboard'} onClick={() => onNavigate('/dashboard')} collapsed={collapsed} />
         <NavItem icon="calendar_month" label="Scheduled" active={active === 'scheduled'} onClick={() => onNavigate('/scheduled')} collapsed={collapsed} />
+        <NavItem icon="folder_shared" label="Files" active={active === 'files'} onClick={() => onNavigate('/files')} collapsed={collapsed} />
 
         <div style={{ height: 1, background: '#e8e4f0', margin: '6px 8px' }} />
 
