@@ -339,7 +339,6 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(folder.name);
   const [showEmojiInput, setShowEmojiInput] = useState(false);
-  const [emojiInput, setEmojiInput] = useState(folder.emoji ?? '');
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showAccessibility, setShowAccessibility] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -530,7 +529,6 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
             <div style={{ padding: '0 0 4px' }}>
               <EmojiPicker
                 onEmojiClick={emojiData => {
-                  setEmojiInput(emojiData.emoji);
                   updateFolder(folder.id, { emoji: emojiData.emoji });
                   setShowEmojiInput(false);
                   setMenuOpen(false);
