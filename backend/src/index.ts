@@ -78,34 +78,57 @@ app.use('/api/admin',   adminRouter);
 app.use('/api/folders', foldersRouter);
 app.use('/api/files',   filesRouter);
 
-// Public share endpoint — no auth required
+// Public share endpoints — no auth required
+interface ShareFileRow { id: string; original_name: string; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; }
+
+async function resolveShareFile(token: string): Promise<ShareFileRow | null> {
+  const result = await dbQuery<ShareFileRow>('SELECT * FROM shared_files WHERE share_token = $1', [token]);
+  return result.rows[0] ?? null;
+}
+
+// GET /api/share/:token — file info (JSON, no download)
 app.get('/api/share/:token', async (req, res) => {
+  try {
+    const file = await resolveShareFile(req.params.token);
+    if (!file) { res.status(404).json({ error: 'File not found' }); return; }
+    if (!file.is_public) { res.status(403).json({ error: 'This file is private' }); return; }
+    const expired = file.expires_at && new Date(file.expires_at) < new Date();
+    res.json({
+      name: file.original_name,
+      mimeType: file.mime_type,
+      size: file.file_size,
+      hasPassword: file.password_hash !== null,
+      expiresAt: file.expires_at ?? null,
+      isExpired: Boolean(expired),
+      createdAt: file.created_at,
+    });
+  } catch (err) {
+    console.error('share info error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/share/:token/download — actual file download
+app.get('/api/share/:token/download', async (req, res) => {
   try {
     const { token } = req.params;
     const pw = (req.query.password ?? '') as string;
-
-    interface FileRow { id: string; original_name: string; mime_type: string; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; }
-    const result = await dbQuery<FileRow>('SELECT * FROM shared_files WHERE share_token = $1', [token]);
-    if (result.rows.length === 0) { res.status(404).json({ error: 'File not found' }); return; }
-
-    const file = result.rows[0];
+    const file = await resolveShareFile(token);
+    if (!file) { res.status(404).json({ error: 'File not found' }); return; }
     if (!file.is_public) { res.status(403).json({ error: 'This file is private' }); return; }
     if (file.expires_at && new Date(file.expires_at) < new Date()) { res.status(410).json({ error: 'Share link has expired' }); return; }
-
     if (file.password_hash) {
       if (!pw) { res.status(401).json({ error: 'Password required', passwordRequired: true }); return; }
       const valid = await comparePassword(pw, file.password_hash);
       if (!valid) { res.status(401).json({ error: 'Invalid password' }); return; }
     }
-
     const filePath = path.join(path.resolve(UPLOAD_DIR), file.file_path);
     if (!require('fs').existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
-
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.original_name)}"`);
     res.setHeader('Content-Type', file.mime_type);
     res.sendFile(filePath);
   } catch (err) {
-    console.error('share GET error:', err);
+    console.error('share download error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

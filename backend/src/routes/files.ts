@@ -59,7 +59,7 @@ function sanitizeFile(f: FileRow, baseUrl: string) {
     hasPassword: f.password_hash !== null,
     expiresAt:   f.expires_at ?? null,
     shareToken:  f.share_token,
-    shareUrl:    `${baseUrl}/api/share/${f.share_token}`,
+    shareUrl:    `${baseUrl}/share/${f.share_token}`,
     createdAt:   f.created_at,
   };
 }
