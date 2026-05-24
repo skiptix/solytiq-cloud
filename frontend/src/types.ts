@@ -30,6 +30,7 @@ export interface List {
   colorBg?: string;
   subtitle?: string;
   folderId?: string;
+  position?: number;
   sections: Section[];
 }
 

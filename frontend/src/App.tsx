@@ -31,7 +31,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { dashTasks, lists, sidebarWidth, setSidebarWidth, loadFromApi, setLists } = useAppStore();
+  const { dashTasks, lists, sidebarWidth, setSidebarWidth, loadFromApi, setLists, updateList } = useAppStore();
   const [modal, setModal] = useState<'add-list' | 'completed' | 'trash' | null>(null);
 
   const loadMembers = useMembersStore(s => s.load);
@@ -51,16 +51,17 @@ function AppLayout() {
   }, [sidebarWidth, setSidebarWidth]);
 
   const handleReorderLists = useCallback((fromId: string, toId: string) => {
-    setLists(prev => {
-      const arr = [...prev];
-      const from = arr.findIndex(l => l.id === fromId);
-      const to = arr.findIndex(l => l.id === toId);
-      if (from === -1 || to === -1) return prev;
-      const [moved] = arr.splice(from, 1);
-      arr.splice(to, 0, moved);
-      return arr;
-    });
-  }, [setLists]);
+    const arr = [...lists];
+    const from = arr.findIndex(l => l.id === fromId);
+    const to = arr.findIndex(l => l.id === toId);
+    if (from === -1 || to === -1) return;
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+    setLists(arr);
+    // Persist new positions for all lists in the same folder
+    const folderId = moved.folderId;
+    arr.filter(l => l.folderId === folderId).forEach((l, i) => updateList(l.id, { position: i }));
+  }, [lists, setLists, updateList]);
 
   const getActive = (): 'dashboard' | 'scheduled' | 'list' | 'settings' => {
     if (location.pathname.startsWith('/list/')) return 'list';
