@@ -3,6 +3,7 @@ import type { SharedFile } from '../types';
 import { apiGetFiles, apiUpdateFile, apiDeleteFile, apiUploadFile } from '../api/client';
 import useAuthStore from '../store/useAuthStore';
 import Icon from '../components/Icon';
+import CalendarPicker from '../components/CalendarPicker';
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true }: UploadWiz
   const [password, setPassword] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [showSettings, setShowSettings] = useState(false);
+  const [showExpiryCal, setShowExpiryCal] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const addFiles = useCallback((files: FileList | File[]) => {
@@ -84,7 +86,7 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true }: UploadWiz
 
     entries.forEach(entry => {
       setQueue(q => q.map(e => e.id === entry.id ? { ...e, status: 'uploading' } : e));
-      apiUploadFile(entry.file, { isPublic, password: password || undefined, expiresAt: expiresAt || undefined },
+      apiUploadFile(entry.file, { isPublic, password: password || undefined, expiresAt: expiresAt ? new Date(expiresAt + 'T23:59:59').toISOString() : undefined },
         (pct) => setQueue(q => q.map(e => e.id === entry.id ? { ...e, progress: pct } : e))
       ).then(result => {
         setQueue(q => q.map(e => e.id === entry.id ? { ...e, status: 'done', progress: 100, result } : e));
@@ -178,10 +180,29 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true }: UploadWiz
                   style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 12px', outline: 'none', boxSizing: 'border-box' }} />
               </div>
               {/* Expiry */}
-              <div>
+              <div style={{ position: 'relative' }}>
                 <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', marginBottom: 6 }}>Expires <span style={{ fontWeight: 400, color: '#b0acbe' }}>(optional)</span></div>
-                <input value={expiresAt} onChange={e => setExpiresAt(e.target.value)} type="datetime-local"
-                  style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 12px', outline: 'none', boxSizing: 'border-box' }} />
+                <button
+                  onClick={() => setShowExpiryCal(s => !s)}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: expiresAt ? '#1c1b22' : '#b0acbe', textAlign: 'left' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#E5E7EB'; }}
+                >
+                  <Icon name="calendar_today" size={14} color={expiresAt ? '#5e4dbb' : '#b0acbe'} />
+                  <span style={{ flex: 1 }}>{expiresAt ? new Date(expiresAt + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Pick a date…'}</span>
+                  {expiresAt && (
+                    <span onClick={e => { e.stopPropagation(); setExpiresAt(''); setShowExpiryCal(false); }} style={{ color: '#b0acbe', lineHeight: 1, cursor: 'pointer', padding: '0 2px' }}>×</span>
+                  )}
+                </button>
+                {showExpiryCal && (
+                  <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 500 }}>
+                    <CalendarPicker
+                      value={expiresAt}
+                      onChange={d => { setExpiresAt(d); setShowExpiryCal(false); }}
+                      onClear={() => { setExpiresAt(''); setShowExpiryCal(false); }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -251,7 +272,8 @@ function EditModal({ file, onClose, onSaved }: EditModalProps) {
   const [isPublic, setIsPublic] = useState(file.isPublic);
   const [password, setPassword] = useState('');
   const [clearPw, setClearPw] = useState(false);
-  const [expiresAt, setExpiresAt] = useState(file.expiresAt ? file.expiresAt.slice(0, 16) : '');
+  const [expiresAt, setExpiresAt] = useState(file.expiresAt ? file.expiresAt.slice(0, 10) : '');
+  const [showExpiryCal, setShowExpiryCal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -261,7 +283,7 @@ function EditModal({ file, onClose, onSaved }: EditModalProps) {
       const updates: Parameters<typeof apiUpdateFile>[1] = { name, isPublic };
       if (clearPw) updates.password = null;
       else if (password) updates.password = password;
-      updates.expiresAt = expiresAt ? new Date(expiresAt).toISOString() : null;
+      updates.expiresAt = expiresAt ? new Date(expiresAt + 'T23:59:59').toISOString() : null;
       const res = await apiUpdateFile(file.id, updates);
       onSaved(res.file);
       onClose();
@@ -348,10 +370,29 @@ function EditModal({ file, onClose, onSaved }: EditModalProps) {
           </div>
 
           {/* Expiry */}
-          <div>
+          <div style={{ position: 'relative' }}>
             <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }}>Expires</label>
-            <input value={expiresAt} onChange={e => setExpiresAt(e.target.value)} type="datetime-local"
-              style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 12px', outline: 'none', boxSizing: 'border-box' }} />
+            <button
+              onClick={() => setShowExpiryCal(s => !s)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 12px', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: expiresAt ? '#1c1b22' : '#b0acbe', textAlign: 'left' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#E5E7EB'; }}
+            >
+              <Icon name="calendar_today" size={14} color={expiresAt ? '#5e4dbb' : '#b0acbe'} />
+              <span style={{ flex: 1 }}>{expiresAt ? new Date(expiresAt + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Pick a date…'}</span>
+              {expiresAt && (
+                <span onClick={e => { e.stopPropagation(); setExpiresAt(''); setShowExpiryCal(false); }} style={{ color: '#b0acbe', lineHeight: 1, cursor: 'pointer', padding: '0 2px' }}>×</span>
+              )}
+            </button>
+            {showExpiryCal && (
+              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 500 }}>
+                <CalendarPicker
+                  value={expiresAt}
+                  onChange={d => { setExpiresAt(d); setShowExpiryCal(false); }}
+                  onClear={() => { setExpiresAt(''); setShowExpiryCal(false); }}
+                />
+              </div>
+            )}
           </div>
         </div>
 

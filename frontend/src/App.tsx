@@ -19,6 +19,7 @@ import DashboardScreen from './screens/DashboardScreen';
 import ListScreen from './screens/ListScreen';
 import ScheduledScreen from './screens/ScheduledScreen';
 import FilesScreen from './screens/FilesScreen';
+import SharePage from './screens/SharePage';
 import SettingsScreen from './screens/SettingsScreen';
 
 // ── Protected route wrapper ────────────────────────────────────
@@ -129,6 +130,7 @@ export default function App() {
 
   return (
     <Routes>
+      <Route path="/share/:token" element={<SharePage />} />
       <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : <LoginScreen />} />
       <Route path="/setup" element={loggedIn ? <Navigate to="/dashboard" replace /> : <SetupWizard />} />
       <Route path="/nuke" element={loggedIn ? <NukeScreen /> : <Navigate to="/login" replace />} />
