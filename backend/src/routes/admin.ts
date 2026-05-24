@@ -1,7 +1,11 @@
 import { Router, Request, Response } from 'express';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { query } from '../db';
 import { authenticate, requireAdmin } from '../middleware';
 import { hashPassword, comparePassword } from '../auth';
+
+const execAsync = promisify(exec);
 
 const router = Router();
 
@@ -165,6 +169,21 @@ router.delete('/nuke', authenticate, requireAdmin, async (req: Request, res: Res
   } catch (err) {
     console.error('admin/nuke DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/admin/system/storage
+router.get('/system/storage', authenticate, requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const { stdout } = await execAsync('df -P /');
+    const parts = stdout.trim().split('\n')[1].trim().split(/\s+/);
+    const totalBytes = parseInt(parts[1]) * 1024;
+    const usedBytes  = parseInt(parts[2]) * 1024;
+    const availBytes = parseInt(parts[3]) * 1024;
+    res.json({ total: totalBytes, used: usedBytes, available: availBytes });
+  } catch (err) {
+    console.error('admin/system/storage error:', err);
+    res.status(500).json({ error: 'Failed to read disk usage' });
   }
 });
 

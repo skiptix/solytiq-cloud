@@ -149,3 +149,6 @@ export const apiDeleteUser = (id: string) =>
 
 export const apiNuke = (password: string) =>
   apiFetch<{ success: boolean }>('/admin/nuke', { method: 'DELETE', body: JSON.stringify({ password }) });
+
+export const apiGetSystemStorage = () =>
+  apiFetch<{ total: number; used: number; available: number }>('/admin/system/storage');
