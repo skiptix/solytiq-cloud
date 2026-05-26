@@ -166,7 +166,7 @@ export const apiGetFiles = () =>
 export const apiGetStorageUsage = () =>
   apiFetch<{ used: number; quota: number | null; isAdmin: boolean }>('/files/storage');
 
-export const apiUpdateFile = (id: string, data: { name?: string; isPublic?: boolean; password?: string | null; expiresAt?: string | null }) =>
+export const apiUpdateFile = (id: string, data: { name?: string; title?: string | null; isPublic?: boolean; password?: string | null; expiresAt?: string | null }) =>
   apiFetch<{ file: SharedFile }>(`/files/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiDeleteFile = (id: string) =>
@@ -174,7 +174,7 @@ export const apiDeleteFile = (id: string) =>
 
 export function apiUploadFile(
   file: File,
-  opts: { isPublic?: boolean; password?: string; expiresAt?: string },
+  opts: { isPublic?: boolean; password?: string; expiresAt?: string; title?: string },
   onProgress: (pct: number) => void,
 ): Promise<SharedFile> {
   return new Promise((resolve, reject) => {
@@ -184,6 +184,7 @@ export function apiUploadFile(
     if (opts.isPublic !== undefined) form.append('isPublic', String(opts.isPublic));
     if (opts.password)  form.append('password',  opts.password);
     if (opts.expiresAt) form.append('expiresAt', opts.expiresAt);
+    if (opts.title)     form.append('title',     opts.title);
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${(import.meta.env.VITE_API_URL as string | undefined) ?? '/api'}/files`);

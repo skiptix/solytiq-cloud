@@ -57,6 +57,7 @@ export interface SharedFile {
   id: string;
   userId: string;
   name: string;
+  title?: string | null;
   mimeType: string;
   size: number;
   isPublic: boolean;

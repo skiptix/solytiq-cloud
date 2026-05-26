@@ -69,6 +69,7 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true }: UploadWiz
   const [queue, setQueue] = useState<UploadEntry[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [isPublic, setIsPublic] = useState(defaultIsPublic);
+  const [title, setTitle] = useState('');
   const [password, setPassword] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [showSettings, setShowSettings] = useState(false);
@@ -86,7 +87,7 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true }: UploadWiz
 
     entries.forEach(entry => {
       setQueue(q => q.map(e => e.id === entry.id ? { ...e, status: 'uploading' } : e));
-      apiUploadFile(entry.file, { isPublic, password: password || undefined, expiresAt: expiresAt ? new Date(expiresAt + 'T23:59:59').toISOString() : undefined },
+      apiUploadFile(entry.file, { isPublic, title: title || undefined, password: password || undefined, expiresAt: expiresAt ? new Date(expiresAt + 'T23:59:59').toISOString() : undefined },
         (pct) => setQueue(q => q.map(e => e.id === entry.id ? { ...e, progress: pct } : e))
       ).then(result => {
         setQueue(q => q.map(e => e.id === entry.id ? { ...e, status: 'done', progress: 100, result } : e));
@@ -95,7 +96,7 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true }: UploadWiz
         setQueue(q => q.map(e => e.id === entry.id ? { ...e, status: 'error', error: String(err) } : e));
       });
     });
-  }, [isPublic, password, expiresAt, onUploaded]);
+  }, [isPublic, title, password, expiresAt, onUploaded]);
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -158,6 +159,12 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true }: UploadWiz
 
           {showSettings && (
             <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Title */}
+              <div>
+                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', marginBottom: 6 }}>Share title <span style={{ fontWeight: 400, color: '#b0acbe' }}>(optional)</span></div>
+                <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Give this share a title…"
+                  style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 12px', outline: 'none', boxSizing: 'border-box' }} />
+              </div>
               {/* Public / Private */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
@@ -269,6 +276,7 @@ interface EditModalProps {
 
 function EditModal({ file, onClose, onSaved }: EditModalProps) {
   const [name, setName] = useState(file.name);
+  const [title, setTitle] = useState(file.title ?? '');
   const [isPublic, setIsPublic] = useState(file.isPublic);
   const [password, setPassword] = useState('');
   const [clearPw, setClearPw] = useState(false);
@@ -280,7 +288,7 @@ function EditModal({ file, onClose, onSaved }: EditModalProps) {
   const save = async () => {
     setSaving(true);
     try {
-      const updates: Parameters<typeof apiUpdateFile>[1] = { name, isPublic };
+      const updates: Parameters<typeof apiUpdateFile>[1] = { name, title: title || null, isPublic };
       if (clearPw) updates.password = null;
       else if (password) updates.password = password;
       updates.expiresAt = expiresAt ? new Date(expiresAt + 'T23:59:59').toISOString() : null;
@@ -315,6 +323,15 @@ function EditModal({ file, onClose, onSaved }: EditModalProps) {
         </div>
 
         <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Title */}
+          <div>
+            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }}>
+              Share title <span style={{ fontWeight: 400, color: '#b0acbe', textTransform: 'none', letterSpacing: 0 }}>(optional)</span>
+            </label>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Give this share a title…"
+              style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 12px', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+
           {/* Name */}
           <div>
             <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }}>File name</label>

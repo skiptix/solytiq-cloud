@@ -32,6 +32,7 @@ interface FileRow {
   id: string;
   user_id: string;
   original_name: string;
+  title: string | null;
   mime_type: string;
   file_size: number;
   file_path: string;
@@ -53,6 +54,7 @@ function sanitizeFile(f: FileRow, baseUrl: string) {
     id:          f.id,
     userId:      f.user_id,
     name:        f.original_name,
+    title:       f.title ?? null,
     mimeType:    f.mime_type,
     size:        f.file_size,
     isPublic:    f.is_public,
@@ -120,10 +122,11 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
       return;
     }
 
-    const { isPublic, password, expiresAt } = req.body as {
+    const { isPublic, password, expiresAt, title } = req.body as {
       isPublic?: string;
       password?: string;
       expiresAt?: string;
+      title?: string;
     };
 
     // Enforce per-user storage quota (admins are exempt)
@@ -150,10 +153,10 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
 
     const result = await query<FileRow>(
       `INSERT INTO shared_files
-         (id, user_id, original_name, mime_type, file_size, file_path, is_public, password_hash, expires_at, share_token)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         (id, user_id, original_name, title, mime_type, file_size, file_path, is_public, password_hash, expires_at, share_token)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING *`,
-      [id, req.userId, req.file.originalname, req.file.mimetype, req.file.size, req.file.filename, pub, pwHash, expiry, shareToken]
+      [id, req.userId, req.file.originalname, title ?? null, req.file.mimetype, req.file.size, req.file.filename, pub, pwHash, expiry, shareToken]
     );
 
     const base = getBaseUrl(req);
@@ -172,8 +175,9 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, isPublic, password, expiresAt } = req.body as {
+    const { name, title, isPublic, password, expiresAt } = req.body as {
       name?: string;
+      title?: string | null;
       isPublic?: boolean;
       password?: string | null;
       expiresAt?: string | null;
@@ -188,8 +192,9 @@ router.put('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const updatePw  = 'password'  in req.body;
-    const updateExp = 'expiresAt' in req.body;
+    const updatePw    = 'password'  in req.body;
+    const updateExp   = 'expiresAt' in req.body;
+    const updateTitle = 'title'     in req.body;
     let pwHash: string | null = null;
     if (updatePw && typeof password === 'string' && password.length > 0) {
       pwHash = await hashPassword(password);
@@ -198,12 +203,13 @@ router.put('/:id', async (req: Request, res: Response) => {
     const result = await query<FileRow>(
       `UPDATE shared_files
        SET original_name = COALESCE($2, original_name),
+           title         = CASE WHEN $8 THEN $9 ELSE title         END,
            is_public     = COALESCE($3, is_public),
            password_hash = CASE WHEN $4 THEN $5 ELSE password_hash END,
            expires_at    = CASE WHEN $6 THEN $7 ELSE expires_at    END
        WHERE id = $1
        RETURNING *`,
-      [id, name ?? null, isPublic ?? null, updatePw, pwHash, updateExp, expiresAt ?? null]
+      [id, name ?? null, isPublic ?? null, updatePw, pwHash, updateExp, expiresAt ?? null, updateTitle, title ?? null]
     );
 
     const base = getBaseUrl(req);

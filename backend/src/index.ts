@@ -79,10 +79,15 @@ app.use('/api/folders', foldersRouter);
 app.use('/api/files',   filesRouter);
 
 // Public share endpoints — no auth required
-interface ShareFileRow { id: string; original_name: string; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; }
+interface ShareFileRow { id: string; original_name: string; title: string | null; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; shared_by_name: string | null; shared_by_username: string; }
 
 async function resolveShareFile(token: string): Promise<ShareFileRow | null> {
-  const result = await dbQuery<ShareFileRow>('SELECT * FROM shared_files WHERE share_token = $1', [token]);
+  const result = await dbQuery<ShareFileRow>(
+    `SELECT sf.*, u.full_name AS shared_by_name, u.username AS shared_by_username
+     FROM shared_files sf JOIN users u ON sf.user_id = u.id
+     WHERE sf.share_token = $1`,
+    [token]
+  );
   return result.rows[0] ?? null;
 }
 
@@ -95,12 +100,14 @@ app.get('/api/share/:token', async (req, res) => {
     const expired = file.expires_at && new Date(file.expires_at) < new Date();
     res.json({
       name: file.original_name,
+      title: file.title ?? null,
       mimeType: file.mime_type,
       size: file.file_size,
       hasPassword: file.password_hash !== null,
       expiresAt: file.expires_at ?? null,
       isExpired: Boolean(expired),
       createdAt: file.created_at,
+      sharedBy: file.shared_by_name || file.shared_by_username,
     });
   } catch (err) {
     console.error('share info error:', err);
@@ -209,6 +216,8 @@ async function runMigrations() {
       created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
   `);
+
+  await pool.query(`ALTER TABLE shared_files ADD COLUMN IF NOT EXISTS title VARCHAR(500)`);
 
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_online TIMESTAMPTZ`);
 
