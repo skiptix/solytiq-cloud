@@ -308,15 +308,18 @@ export default function TopBar({ tasks, lists, onNavigate }: TopBarProps) {
 
         {/* Right controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
-          {/* Settings button */}
-          <button
-            onClick={() => { setProfileOpen(false); onNavigate('/settings'); }}
-            style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid #e8e4f0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-          >
-            <Icon name="settings" size={16} color="#787584" />
-          </button>
+          {/* Admin settings button — admins only */}
+          {isAdmin && (
+            <button
+              onClick={() => { setProfileOpen(false); onNavigate('/settings'); }}
+              title="Admin Settings"
+              style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid #e8e4f0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms' }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.borderColor = '#c4b8f0'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#e8e4f0'; }}
+            >
+              <Icon name="admin_panel_settings" size={17} color="#787584" />
+            </button>
+          )}
 
           {/* Profile avatar + dropdown */}
           <div ref={profileDropRef} style={{ position: 'relative' }}>
