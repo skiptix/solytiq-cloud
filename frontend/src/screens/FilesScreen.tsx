@@ -471,7 +471,7 @@ function RecentCard({ file, onEdit, onDelete }: { file: SharedFile; onEdit: () =
 // ── Main Screen ───────────────────────────────────────────────────
 
 export default function FilesScreen() {
-  const { userId, isAdmin } = useAuthStore();
+  const { userId } = useAuthStore();
   const [files, setFiles] = useState<SharedFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
