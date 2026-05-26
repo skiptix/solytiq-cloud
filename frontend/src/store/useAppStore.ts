@@ -17,6 +17,7 @@ import {
   apiDeleteList,
   apiUpdateListTask,
   apiDeleteListTask,
+  apiAddListTask,
   apiAddToTrash,
   apiRestoreFromTrash,
   apiDeleteFromTrash,
@@ -254,6 +255,7 @@ export {
   apiUpdateList,
   apiDeleteList,
   apiEmptyTrash,
+  apiAddListTask,
 };
 
 export default useAppStore;
