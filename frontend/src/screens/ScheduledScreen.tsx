@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Task, List } from '../types';
-import useAppStore from '../store/useAppStore';
+import useAppStore, { apiCreateTask, apiAddListTask } from '../store/useAppStore';
 import TaskDetailPopup from '../components/TaskDetailPopup';
 import { EditModal } from '../components/TaskItem';
 import Icon from '../components/Icon';
@@ -24,8 +24,104 @@ function getAllTasks(dashTasks: Task[], lists: List[]): Task[] {
   return [...dash, ...listTasks];
 }
 
+// ── Add-to-date modal ─────────────────────────────────────────────
+interface AddToDateModalProps {
+  date: string;
+  lists: List[];
+  onAdd: (title: string, destination: { type: 'dash' } | { type: 'list'; listId: string; sectionId: string }) => void;
+  onClose: () => void;
+}
+
+function AddToDateModal({ date, lists, onAdd, onClose }: AddToDateModalProps) {
+  const [title, setTitle] = useState('');
+  const [dest, setDest] = useState<'dash' | string>('dash');
+  const friendly = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const canSubmit = title.trim().length > 0;
+
+  const handleAdd = () => {
+    if (!canSubmit) return;
+    if (dest === 'dash') {
+      onAdd(title.trim(), { type: 'dash' });
+    } else {
+      const list = lists.find(l => l.id === dest);
+      const sectionId = list?.sections[0]?.id;
+      if (!sectionId) return;
+      onAdd(title.trim(), { type: 'list', listId: dest, sectionId });
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+      onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 420, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 14px', borderBottom: '1px solid #F5F3FF' }}>
+          <div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>Add Task</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{friendly}</div>
+          </div>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="close" size={16} color="#787584" />
+          </button>
+        </div>
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div>
+            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', marginBottom: 5, display: 'block' }}>Task Name</label>
+            <input
+              autoFocus
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && canSubmit) handleAdd(); }}
+              placeholder="What needs to be done?"
+              style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', background: 'transparent', border: 'none', borderBottom: '1.5px solid #E5E7EB', padding: '7px 0', outline: 'none', boxSizing: 'border-box', transition: 'border-color 200ms' }}
+              onFocus={e => (e.target.style.borderBottomColor = '#5e4dbb')}
+              onBlur={e => (e.target.style.borderBottomColor = '#E5E7EB')}
+            />
+          </div>
+          <div>
+            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', marginBottom: 8, display: 'block' }}>Add to</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
+              {/* Dashboard option */}
+              <button
+                onClick={() => setDest('dash')}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${dest === 'dash' ? '#5e4dbb' : '#E5E7EB'}`, background: dest === 'dash' ? '#F5F3FF' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}>
+                <div style={{ width: 20, height: 20, borderRadius: '50%', background: dest === 'dash' ? '#5e4dbb' : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 150ms' }}>
+                  {dest === 'dash' && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />}
+                </div>
+                <Icon name="today" size={15} color={dest === 'dash' ? '#5e4dbb' : '#787584'} />
+                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: dest === 'dash' ? '#5e4dbb' : '#484552' }}>Dashboard</span>
+              </button>
+              {/* List options */}
+              {lists.map(list => (
+                <button key={list.id}
+                  onClick={() => setDest(list.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${dest === list.id ? '#5e4dbb' : '#E5E7EB'}`, background: dest === list.id ? '#F5F3FF' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', background: dest === list.id ? '#5e4dbb' : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 150ms' }}>
+                    {dest === list.id && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />}
+                  </div>
+                  {list.emoji
+                    ? <span style={{ fontSize: 15, lineHeight: 1 }}>{list.emoji}</span>
+                    : <Icon name="format_list_bulleted" size={15} color={dest === list.id ? '#5e4dbb' : '#787584'} />}
+                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: dest === list.id ? '#5e4dbb' : '#484552', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '14px 24px 20px', borderTop: '1px solid #F5F3FF' }}>
+          <button onClick={onClose} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>Cancel</button>
+          <button onClick={handleAdd} disabled={!canSubmit}
+            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: canSubmit ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 8, padding: '9px 20px', cursor: canSubmit ? 'pointer' : 'not-allowed', transition: 'all 180ms' }}>
+            Add Task
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ScheduledScreen() {
-  const { dashTasks, lists, updateDashTask, updateListTask } = useAppStore();
+  const { dashTasks, lists, updateDashTask, updateListTask, setDashTasks, setLists } = useAppStore();
   const today = new Date(); today.setHours(0,0,0,0);
   const [viewDate, setViewDate] = useState({ year: today.getFullYear(), month: today.getMonth() });
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -33,6 +129,7 @@ export default function ScheduledScreen() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [search, setSearch] = useState('');
   const [dragTaskId, setDragTaskId] = useState<number | null>(null);
+  const [addingToDate, setAddingToDate] = useState<string | null>(null);
 
   const allTasks = getAllTasks(dashTasks, lists);
 
@@ -60,6 +157,34 @@ export default function ScheduledScreen() {
     if (!t) return;
     if (t._source === 'dash') updateDashTask(taskId, { deadline: iso });
     else if (t._listId) updateListTask(t._listId, taskId, { deadline: iso });
+  };
+
+  const handleAddToDate = async (title: string, destination: { type: 'dash' } | { type: 'list'; listId: string; sectionId: string }) => {
+    const deadline = addingToDate ?? undefined;
+    setAddingToDate(null);
+    if (destination.type === 'dash') {
+      const tempId = Date.now();
+      const tempTask: Task = { id: tempId, title, checked: false, deadline };
+      setDashTasks(ts => [...ts, tempTask]);
+      try {
+        const res = await apiCreateTask({ title, deadline });
+        setDashTasks(ts => ts.map(t => t.id === tempId ? { ...tempTask, id: Number(res.task.id) } : t));
+      } catch {
+        setDashTasks(ts => ts.filter(t => t.id !== tempId));
+      }
+    } else {
+      const { listId, sectionId } = destination;
+      const tempId = Date.now();
+      const tempTask: Task = { id: tempId, title, checked: false, deadline };
+      setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: [...s.tasks, tempTask] }) }));
+      try {
+        const res = await apiAddListTask(listId, sectionId, { title, deadline });
+        const saved: Task = { ...res.task, id: Number(res.task.id) };
+        setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: s.tasks.map(t => t.id === tempId ? saved : t) }) }));
+      } catch {
+        setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: s.tasks.filter(t => t.id !== tempId) }) }));
+      }
+    }
   };
 
   const prevMonth = () => setViewDate(v => v.month === 0 ? { year: v.year - 1, month: 11 } : { year: v.year, month: v.month - 1 });
@@ -102,13 +227,22 @@ export default function ScheduledScreen() {
                 <div key={i}
                   onDragOver={e => { if (cell.current) e.preventDefault(); }}
                   onDrop={e => { e.preventDefault(); if (!cell.current) return; const id = Number(e.dataTransfer.getData('text/plain')); if (id) { assignDeadline(id, iso); setDragTaskId(null); } }}
-                  style={{ minHeight: 96, border: isTodayCell ? '1.5px solid #c8bfff' : '1px solid #f1ecf6', background: isTodayCell ? '#faf8ff' : cell.current ? '#fff' : '#fafafa', borderRadius: 6, padding: 4, transition: 'background 150ms' }}>
-                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: isTodayCell ? 700 : 400, color: isTodayCell ? '#5e4dbb' : cell.current ? '#1c1b22' : '#c9c4d5', marginBottom: 4, textAlign: 'right', padding: '0 2px' }}>
-                    {cell.date.getDate()}
+                  onClick={() => { if (cell.current) setAddingToDate(iso); }}
+                  style={{ minHeight: 96, border: isTodayCell ? '1.5px solid #c8bfff' : '1px solid #f1ecf6', background: isTodayCell ? '#faf8ff' : cell.current ? '#fff' : '#fafafa', borderRadius: 6, padding: 4, transition: 'background 150ms', cursor: cell.current ? 'pointer' : 'default', position: 'relative' }}
+                  className="cal-cell">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, padding: '0 2px' }}>
+                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: isTodayCell ? 700 : 400, color: isTodayCell ? '#5e4dbb' : cell.current ? '#1c1b22' : '#c9c4d5' }}>
+                      {cell.date.getDate()}
+                    </div>
+                    {cell.current && (
+                      <div className="cal-add-btn" style={{ width: 16, height: 16, borderRadius: '50%', background: '#5e4dbb', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 150ms', flexShrink: 0 }}>
+                        <Icon name="add" size={11} color="#fff" />
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {visible.map(t => (
-                      <div key={t.id} onClick={e => { setSelectedTask(t); setSelectedAnchor({ x: e.clientX, y: e.clientY }); }}
+                      <div key={t.id} onClick={e => { e.stopPropagation(); setSelectedTask(t); setSelectedAnchor({ x: e.clientX, y: e.clientY }); }}
                         style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#F5F3FF', borderRadius: 4, padding: '2px 5px', cursor: 'pointer', transition: 'background 120ms' }}
                         onMouseEnter={e => (e.currentTarget.style.background = '#ede9ff')}
                         onMouseLeave={e => (e.currentTarget.style.background = '#F5F3FF')}>
@@ -164,6 +298,12 @@ export default function ScheduledScreen() {
       {editingTask && (
         <EditModal task={editingTask} onSave={upd => { saveTask(editingTask.id, upd); setEditingTask(null); }} onClose={() => setEditingTask(null)} />
       )}
+      {addingToDate && (
+        <AddToDateModal date={addingToDate} lists={lists} onAdd={handleAddToDate} onClose={() => setAddingToDate(null)} />
+      )}
+      <style>{`
+        .cal-cell:hover .cal-add-btn { opacity: 1 !important; }
+      `}</style>
     </div>
   );
 }
