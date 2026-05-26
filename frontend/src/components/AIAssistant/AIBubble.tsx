@@ -3,17 +3,33 @@ import { useEffect, useRef, useState } from 'react';
 interface Props {
   isOpen: boolean;
   isThinking: boolean;
+  contextView: string;
   onClick: () => void;
 }
 
-export default function AIBubble({ isOpen, isThinking, onClick }: Props) {
+const VIEW_EMOJI: Record<string, string> = {
+  dashboard: '📊',
+  list:      '📝',
+  scheduled: '📅',
+  files:     '📁',
+  settings:  '⚙️',
+};
+
+export default function AIBubble({ isOpen, isThinking, contextView, onClick }: Props) {
   const bubbleRef = useRef<HTMLButtonElement>(null);
-  // Pupil offset from eye center (max ±3px)
   const [pupil, setPupil] = useState({ x: 0, y: 0 });
   const [blink, setBlink] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [badgeKey, setBadgeKey] = useState(0); // bump to replay badge animation on view change
 
-  // Track mouse and compute pupil direction
+  const emoji = VIEW_EMOJI[contextView] ?? '✨';
+
+  // Re-animate badge when view changes
+  useEffect(() => {
+    setBadgeKey((k) => k + 1);
+  }, [contextView]);
+
+  // Track mouse → pupil direction
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       const el = bubbleRef.current;
@@ -32,7 +48,7 @@ export default function AIBubble({ isOpen, isThinking, onClick }: Props) {
     return () => window.removeEventListener('mousemove', onMove);
   }, []);
 
-  // Idle blink every 3–5 seconds
+  // Idle blink every 3–5 s
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const scheduleBlink = () => {
@@ -48,6 +64,13 @@ export default function AIBubble({ isOpen, isThinking, onClick }: Props) {
   }, []);
 
   const eyeScaleY = blink ? 0.05 : 1;
+
+  // Glow shadow layers
+  const shadow = isOpen
+    ? '0 0 0 5px rgba(157,141,255,0.25), 0 0 22px rgba(94,77,187,0.5), 0 8px 24px rgba(94,77,187,0.4)'
+    : hovered
+    ? '0 0 0 6px rgba(157,141,255,0.22), 0 0 20px rgba(94,77,187,0.45), 0 6px 20px rgba(94,77,187,0.35)'
+    : '0 4px 16px rgba(94,77,187,0.28)';
 
   return (
     <button
@@ -65,14 +88,10 @@ export default function AIBubble({ isOpen, isThinking, onClick }: Props) {
         padding: 0,
         background: 'none',
         position: 'relative',
-        transition: 'transform 200ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 200ms',
+        transition: 'transform 220ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 300ms ease',
         transform: hovered ? 'scale(1.1)' : isOpen ? 'scale(1.05)' : 'scale(1)',
-        boxShadow: isOpen
-          ? '0 0 0 3px rgba(94,77,187,0.35), 0 8px 24px rgba(94,77,187,0.45)'
-          : hovered
-          ? '0 6px 20px rgba(94,77,187,0.4)'
-          : '0 4px 16px rgba(94,77,187,0.3)',
-        animation: !isOpen && !isThinking ? 'aiBubbleFloat 4s ease-in-out infinite' : undefined,
+        boxShadow: shadow,
+        animation: !isOpen && !isThinking ? 'aiBubbleFloat 7s ease-in-out infinite' : undefined,
       }}
     >
       <svg viewBox="0 0 52 52" width="52" height="52" style={{ display: 'block' }}>
@@ -89,97 +108,65 @@ export default function AIBubble({ isOpen, isThinking, onClick }: Props) {
           </clipPath>
         </defs>
 
-        {/* Bubble body */}
         <circle cx="26" cy="26" r="26" fill="url(#bubbleGrad)" />
-
-        {/* Subtle shine */}
         <ellipse cx="20" cy="14" rx="9" ry="5" fill="rgba(255,255,255,0.18)" />
 
-        {/* Left eye white */}
+        {/* Left eye */}
         <ellipse
-          cx="18"
-          cy="22"
-          rx="7"
-          ry="8"
-          fill="white"
+          cx="18" cy="22" rx="7" ry="8" fill="white"
           style={{ transformOrigin: '18px 22px', transform: `scaleY(${eyeScaleY})`, transition: 'transform 80ms' }}
         />
-        {/* Left pupil */}
-        {!blink && (
-          <circle
-            cx={18 + pupil.x}
-            cy={22 + pupil.y}
-            r="3.5"
-            fill="#2a1f6e"
-            clipPath="url(#leftEyeClip)"
-          />
-        )}
-        {/* Left pupil highlight */}
-        {!blink && (
-          <circle
-            cx={18 + pupil.x + 1.2}
-            cy={22 + pupil.y - 1.2}
-            r="1"
-            fill="rgba(255,255,255,0.7)"
-            clipPath="url(#leftEyeClip)"
-          />
-        )}
+        {!blink && <circle cx={18 + pupil.x} cy={22 + pupil.y} r="3.5" fill="#2a1f6e" clipPath="url(#leftEyeClip)" />}
+        {!blink && <circle cx={18 + pupil.x + 1.2} cy={22 + pupil.y - 1.2} r="1" fill="rgba(255,255,255,0.7)" clipPath="url(#leftEyeClip)" />}
 
-        {/* Right eye white */}
+        {/* Right eye */}
         <ellipse
-          cx="34"
-          cy="22"
-          rx="7"
-          ry="8"
-          fill="white"
+          cx="34" cy="22" rx="7" ry="8" fill="white"
           style={{ transformOrigin: '34px 22px', transform: `scaleY(${eyeScaleY})`, transition: 'transform 80ms' }}
         />
-        {/* Right pupil */}
-        {!blink && (
-          <circle
-            cx={34 + pupil.x}
-            cy={22 + pupil.y}
-            r="3.5"
-            fill="#2a1f6e"
-            clipPath="url(#rightEyeClip)"
-          />
-        )}
-        {/* Right pupil highlight */}
-        {!blink && (
-          <circle
-            cx={34 + pupil.x + 1.2}
-            cy={22 + pupil.y - 1.2}
-            r="1"
-            fill="rgba(255,255,255,0.7)"
-            clipPath="url(#rightEyeClip)"
-          />
-        )}
+        {!blink && <circle cx={34 + pupil.x} cy={22 + pupil.y} r="3.5" fill="#2a1f6e" clipPath="url(#rightEyeClip)" />}
+        {!blink && <circle cx={34 + pupil.x + 1.2} cy={22 + pupil.y - 1.2} r="1" fill="rgba(255,255,255,0.7)" clipPath="url(#rightEyeClip)" />}
 
         {/* Smile */}
-        <path
-          d="M 19 32 Q 26 38 33 32"
-          fill="none"
-          stroke="rgba(255,255,255,0.85)"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
+        <path d="M 19 32 Q 26 38 33 32" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2" strokeLinecap="round" />
       </svg>
 
-      {/* Thinking / activity indicator dot */}
+      {/* Thinking dot */}
       {isThinking && (
+        <span style={{
+          position: 'absolute', top: 2, right: 2,
+          width: 12, height: 12, borderRadius: '50%',
+          background: '#10B981', border: '2px solid #fff',
+          animation: 'aiPulse 1s ease-in-out infinite',
+        }} />
+      )}
+
+      {/* Page-context emoji badge */}
+      {!isThinking && (
         <span
+          key={badgeKey}
           style={{
             position: 'absolute',
-            top: 2,
-            right: 2,
-            width: 12,
-            height: 12,
-            borderRadius: '50%',
-            background: '#10B981',
-            border: '2px solid #fff',
-            animation: 'aiPulse 1s ease-in-out infinite',
+            bottom: -6,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 22,
+            height: 22,
+            borderRadius: 7,
+            background: '#fff',
+            border: '1.5px solid rgba(94,77,187,0.18)',
+            boxShadow: '0 2px 6px rgba(94,77,187,0.15)',
+            fontSize: 12,
+            lineHeight: 1,
+            animation: 'aiBadgeIn 300ms cubic-bezier(0.34,1.56,0.64,1) both',
+            pointerEvents: 'none',
           }}
-        />
+        >
+          {emoji}
+        </span>
       )}
     </button>
   );
