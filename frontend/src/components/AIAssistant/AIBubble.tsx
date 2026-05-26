@@ -3,31 +3,14 @@ import { useEffect, useRef, useState } from 'react';
 interface Props {
   isOpen: boolean;
   isThinking: boolean;
-  contextView: string;
   onClick: () => void;
 }
 
-const VIEW_EMOJI: Record<string, string> = {
-  dashboard: '📊',
-  list:      '📝',
-  scheduled: '📅',
-  files:     '📁',
-  settings:  '⚙️',
-};
-
-export default function AIBubble({ isOpen, isThinking, contextView, onClick }: Props) {
+export default function AIBubble({ isOpen, isThinking, onClick }: Props) {
   const bubbleRef = useRef<HTMLButtonElement>(null);
   const [pupil, setPupil] = useState({ x: 0, y: 0 });
   const [blink, setBlink] = useState(false);
   const [hovered, setHovered] = useState(false);
-  const [badgeKey, setBadgeKey] = useState(0); // bump to replay badge animation on view change
-
-  const emoji = VIEW_EMOJI[contextView] ?? '✨';
-
-  // Re-animate badge when view changes
-  useEffect(() => {
-    setBadgeKey((k) => k + 1);
-  }, [contextView]);
 
   // Track mouse → pupil direction
   useEffect(() => {
@@ -141,33 +124,6 @@ export default function AIBubble({ isOpen, isThinking, contextView, onClick }: P
         }} />
       )}
 
-      {/* Page-context emoji badge */}
-      {!isThinking && (
-        <span
-          key={badgeKey}
-          style={{
-            position: 'absolute',
-            bottom: -6,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 22,
-            height: 22,
-            borderRadius: 7,
-            background: '#fff',
-            border: '1.5px solid rgba(94,77,187,0.18)',
-            boxShadow: '0 2px 6px rgba(94,77,187,0.15)',
-            fontSize: 12,
-            lineHeight: 1,
-            animation: 'aiBadgeIn 300ms cubic-bezier(0.34,1.56,0.64,1) both',
-            pointerEvents: 'none',
-          }}
-        >
-          {emoji}
-        </span>
-      )}
     </button>
   );
 }
