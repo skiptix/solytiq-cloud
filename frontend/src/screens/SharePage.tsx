@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import Icon from '../components/Icon';
 
@@ -32,6 +32,42 @@ function mimeBadgeColor(mime: string): string {
   return '#5e4dbb';
 }
 
+type PreviewKind = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'font' | 'none';
+
+function getPreviewKind(mime: string): PreviewKind {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('audio/')) return 'audio';
+  if (mime.includes('/pdf')) return 'pdf';
+  if (
+    mime.startsWith('text/') ||
+    mime === 'application/json' ||
+    mime.includes('xml') ||
+    mime.includes('yaml') ||
+    mime.includes('javascript') ||
+    mime.includes('x-sh') ||
+    mime.includes('x-python') ||
+    mime.includes('x-php') ||
+    mime.includes('x-ruby') ||
+    mime.includes('x-java') ||
+    mime.includes('x-c') ||
+    mime.includes('x-go') ||
+    mime.includes('x-rust') ||
+    mime.includes('geo+json') ||
+    mime.includes('calendar') ||
+    mime.includes('vcard') ||
+    mime === 'message/rfc822'
+  ) return 'text';
+  if (
+    mime.startsWith('font/') ||
+    mime.includes('font-woff') ||
+    mime.includes('font-ttf') ||
+    mime.includes('font-opentype') ||
+    mime.includes('font-sfnt')
+  ) return 'font';
+  return 'none';
+}
+
 interface FileInfo {
   name: string;
   mimeType: string;
@@ -52,6 +88,16 @@ export default function SharePage() {
   const [pwError, setPwError] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
+  const [previewKind, setPreviewKind] = useState<PreviewKind>('none');
+  const [previewMediaUrl, setPreviewMediaUrl] = useState<string | null>(null);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [previewFontFamily, setPreviewFontFamily] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState(false);
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const fontBlobRef = useRef<string | null>(null);
+  const fontCounterRef = useRef(0);
+
   useEffect(() => {
     if (!token) { setState('notfound'); return; }
     fetch(`${BASE_URL}/share/${token}`)
@@ -66,9 +112,80 @@ export default function SharePage() {
       .catch(() => setState('error'));
   }, [token]);
 
+  useEffect(() => {
+    if (state === 'ready' && info && !info.hasPassword) {
+      const kind = getPreviewKind(info.mimeType);
+      if (kind !== 'none') {
+        setPreviewKind(kind);
+        triggerPreviewLoad(kind, undefined);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, info]);
+
+  useEffect(() => {
+    return () => {
+      if (fontBlobRef.current) URL.revokeObjectURL(fontBlobRef.current);
+    };
+  }, []);
+
   const downloadUrl = (pw?: string) => {
     const url = `${BASE_URL}/share/${token}/download`;
     return pw ? `${url}?password=${encodeURIComponent(pw)}` : url;
+  };
+
+  const triggerPreviewLoad = async (kind: PreviewKind, pw: string | undefined) => {
+    setPreviewLoading(true);
+    setPreviewError(false);
+    setPreviewVisible(false);
+    setPreviewMediaUrl(null);
+    setPreviewText(null);
+    setPreviewFontFamily(null);
+
+    const url = downloadUrl(pw);
+
+    try {
+      if (kind === 'text') {
+        const res = await fetch(url);
+        if (res.status === 401) { setPwError(true); setPreviewLoading(false); return; }
+        if (!res.ok) { setPreviewError(true); setPreviewLoading(false); return; }
+        const text = await res.text();
+        setPreviewText(text.slice(0, 200_000));
+        setPreviewVisible(true);
+      } else if (kind === 'font') {
+        const res = await fetch(url);
+        if (res.status === 401) { setPwError(true); setPreviewLoading(false); return; }
+        if (!res.ok) { setPreviewError(true); setPreviewLoading(false); return; }
+        const blob = await res.blob();
+        if (fontBlobRef.current) URL.revokeObjectURL(fontBlobRef.current);
+        const blobUrl = URL.createObjectURL(blob);
+        fontBlobRef.current = blobUrl;
+        fontCounterRef.current += 1;
+        const familyName = `preview-font-${fontCounterRef.current}`;
+        const fontFace = new FontFace(familyName, `url(${blobUrl})`);
+        await fontFace.load();
+        document.fonts.add(fontFace);
+        setPreviewFontFamily(familyName);
+        setPreviewVisible(true);
+      } else {
+        // image, video, audio, pdf — use URL as src directly
+        setPreviewMediaUrl(url);
+        setPreviewVisible(true);
+      }
+    } catch {
+      setPreviewError(true);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handlePreview = async () => {
+    if (!info) return;
+    if (info.hasPassword && !password) { setPwError(true); return; }
+    const kind = getPreviewKind(info.mimeType);
+    if (kind === 'none') return;
+    setPreviewKind(kind);
+    await triggerPreviewLoad(kind, info.hasPassword ? password : undefined);
   };
 
   const handleDownload = async () => {
@@ -99,6 +216,13 @@ export default function SharePage() {
 
   const label = mimeLabel(info?.mimeType ?? '');
   const badgeColor = mimeBadgeColor(info?.mimeType ?? '');
+  const hasPreviewSupport = info ? getPreviewKind(info.mimeType) !== 'none' : false;
+
+  const showingPreview = previewLoading || previewVisible || previewError;
+  const isWideKind = previewKind === 'image' || previewKind === 'video' || previewKind === 'pdf';
+  const cardMaxWidth = showingPreview && isWideKind ? 720
+    : showingPreview && previewKind === 'text' ? 680
+    : 440;
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8f7fc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -107,7 +231,7 @@ export default function SharePage() {
         solytiq
       </div>
 
-      <div style={{ background: '#fff', borderRadius: 20, boxShadow: '0 8px 40px rgba(94,77,187,0.10)', padding: '40px 40px 36px', width: '100%', maxWidth: 440, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
+      <div style={{ background: '#fff', borderRadius: 20, boxShadow: '0 8px 40px rgba(94,77,187,0.10)', padding: '40px 40px 36px', width: '100%', maxWidth: cardMaxWidth, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, transition: 'max-width 300ms ease' }}>
 
         {/* Loading */}
         {state === 'loading' && (
@@ -149,7 +273,7 @@ export default function SharePage() {
             </div>
 
             {/* File name */}
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', textAlign: 'center', letterSpacing: '-0.01em', marginBottom: 8, wordBreak: 'break-word' }}>{info.name}</div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', textAlign: 'center', letterSpacing: '-0.01em', marginBottom: 8, wordBreak: 'break-word', width: '100%' }}>{info.name}</div>
 
             {/* Meta */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28, flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -164,6 +288,92 @@ export default function SharePage() {
               )}
             </div>
 
+            {/* Preview area */}
+            {previewLoading && (
+              <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '28px 0', marginBottom: 20, borderRadius: 14, border: '1.5px solid #E5E7EB', background: '#F9FAFB' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 28, height: 28, border: '3px solid #e8e4f0', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading preview…</span>
+                </div>
+              </div>
+            )}
+
+            {previewVisible && !previewLoading && (
+              <div style={{ width: '100%', marginBottom: 24, borderRadius: 14, overflow: 'hidden', border: '1.5px solid #E5E7EB', background: '#F9FAFB' }}>
+
+                {/* Image */}
+                {previewKind === 'image' && previewMediaUrl && (
+                  <img
+                    src={previewMediaUrl}
+                    alt={info.name}
+                    style={{ display: 'block', width: '100%', maxHeight: 500, objectFit: 'contain', background: '#F9FAFB' }}
+                    onError={() => { setPreviewVisible(false); setPreviewError(true); }}
+                  />
+                )}
+
+                {/* Video */}
+                {previewKind === 'video' && previewMediaUrl && (
+                  <video
+                    src={previewMediaUrl}
+                    controls
+                    style={{ display: 'block', width: '100%', maxHeight: 440, background: '#000', outline: 'none' }}
+                    onError={() => { setPreviewVisible(false); setPreviewError(true); }}
+                  />
+                )}
+
+                {/* Audio */}
+                {previewKind === 'audio' && previewMediaUrl && (
+                  <div style={{ padding: '20px', background: '#F9FAFB' }}>
+                    <audio
+                      src={previewMediaUrl}
+                      controls
+                      style={{ width: '100%', display: 'block' }}
+                      onError={() => { setPreviewVisible(false); setPreviewError(true); }}
+                    />
+                  </div>
+                )}
+
+                {/* PDF */}
+                {previewKind === 'pdf' && previewMediaUrl && (
+                  <iframe
+                    src={previewMediaUrl}
+                    title={info.name}
+                    style={{ display: 'block', width: '100%', height: 600, border: 'none' }}
+                  />
+                )}
+
+                {/* Text / Code */}
+                {previewKind === 'text' && previewText !== null && (
+                  <pre style={{ margin: 0, padding: '16px 20px', fontFamily: "'Fira Mono', 'Cascadia Code', 'Consolas', monospace", fontSize: 12.5, lineHeight: 1.65, color: '#1c1b22', background: '#F9FAFB', maxHeight: 460, overflowY: 'auto', overflowX: 'auto', whiteSpace: 'pre', wordBreak: 'normal' }}>
+                    {previewText}
+                  </pre>
+                )}
+
+                {/* Font */}
+                {previewKind === 'font' && previewFontFamily && (
+                  <div style={{ padding: '28px 24px', background: '#F9FAFB' }}>
+                    <div style={{ fontFamily: `'${previewFontFamily}', sans-serif`, fontSize: 30, color: '#1c1b22', marginBottom: 14, lineHeight: 1.25 }}>
+                      The quick brown fox jumps over the lazy dog
+                    </div>
+                    <div style={{ fontFamily: `'${previewFontFamily}', sans-serif`, fontSize: 15, color: '#787584', letterSpacing: '0.02em', marginBottom: 8 }}>
+                      ABCDEFGHIJKLMNOPQRSTUVWXYZ
+                    </div>
+                    <div style={{ fontFamily: `'${previewFontFamily}', sans-serif`, fontSize: 15, color: '#787584', letterSpacing: '0.02em' }}>
+                      abcdefghijklmnopqrstuvwxyz 0123456789
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Preview error placeholder */}
+            {previewError && !previewLoading && (
+              <div style={{ width: '100%', marginBottom: 24, borderRadius: 14, border: '1.5px solid #E5E7EB', background: '#F9FAFB', padding: '20px', display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
+                <Icon name="visibility_off" size={18} color="#b0acbe" />
+                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Preview not available</span>
+              </div>
+            )}
+
             {/* Password field */}
             {info.hasPassword && (
               <div style={{ width: '100%', marginBottom: 16 }}>
@@ -175,7 +385,7 @@ export default function SharePage() {
                   value={password}
                   onChange={e => { setPassword(e.target.value); setPwError(false); }}
                   onKeyDown={e => { if (e.key === 'Enter') handleDownload(); }}
-                  placeholder="Enter password to download"
+                  placeholder="Enter password to access"
                   style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', background: '#F9FAFB', border: `1.5px solid ${pwError ? '#ba1a1a' : '#E5E7EB'}`, borderRadius: 10, padding: '11px 14px', outline: 'none', boxSizing: 'border-box' }}
                   autoFocus
                 />
@@ -183,6 +393,19 @@ export default function SharePage() {
                   <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a', marginTop: 5 }}>Incorrect password, please try again.</div>
                 )}
               </div>
+            )}
+
+            {/* Preview button — password-protected files only, before preview is shown */}
+            {info.hasPassword && hasPreviewSupport && !previewVisible && !previewLoading && !previewError && (
+              <button
+                onClick={handlePreview}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: '1.5px solid #ebe6ff', borderRadius: 12, padding: '13px', cursor: 'pointer', marginBottom: 10, transition: 'background 150ms' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#ede8ff'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+              >
+                <Icon name="visibility" size={18} color="#5e4dbb" />
+                Preview
+              </button>
             )}
 
             {/* Download button */}
