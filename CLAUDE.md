@@ -1,0 +1,302 @@
+# CLAUDE.md — Solytiq Cloud
+
+Solytiq Cloud is a self-hosted, full-stack task manager with file sharing and an AI assistant. The stack is React 19 + Vite (frontend), Express + TypeScript (backend), PostgreSQL 16, and Nginx — orchestrated with Docker Compose.
+
+---
+
+## Repository Layout
+
+```
+solytiq-cloud/
+├── backend/          # Express REST API (Node.js / TypeScript)
+│   ├── src/
+│   │   ├── index.ts          # App entry, middleware, migrations, startup
+│   │   ├── db.ts             # PostgreSQL pool
+│   │   ├── auth.ts           # JWT helpers, bcrypt
+│   │   ├── middleware.ts     # Auth middleware (verifyToken)
+│   │   └── routes/           # One file per resource
+│   │       ├── auth.ts       # /api/auth — register, login, profile
+│   │       ├── tasks.ts      # /api/tasks — CRUD, reorder
+│   │       ├── lists.ts      # /api/lists — CRUD, sections, share
+│   │       ├── folders.ts    # /api/folders — CRUD
+│   │       ├── trash.ts      # /api/trash — soft delete, restore
+│   │       ├── files.ts      # /api/files — upload/download (multer)
+│   │       ├── admin.ts      # /api/admin — roles, nuke, setup
+│   │       └── ai.ts         # /api/ai — OpenRouter chat
+│   ├── init.sql              # (legacy) initial schema — migrations now in index.ts
+│   ├── tsconfig.json
+│   └── package.json
+├── frontend/         # React SPA (Vite + TypeScript)
+│   ├── src/
+│   │   ├── main.tsx          # React DOM entry
+│   │   ├── App.tsx           # Router, layout shell, modal state
+│   │   ├── types.ts          # All shared TypeScript interfaces
+│   │   ├── index.css         # Tailwind v4 base styles
+│   │   ├── api/client.ts     # All HTTP calls (fetch wrappers)
+│   │   ├── store/            # Zustand stores
+│   │   │   ├── useAppStore.ts      # tasks, lists, folders, trash, sidebar
+│   │   │   ├── useAuthStore.ts     # user, token, login state
+│   │   │   ├── useAIStore.ts       # AI chat history
+│   │   │   └── useMembersStore.ts  # members list
+│   │   ├── components/       # Reusable UI components
+│   │   ├── screens/          # Full-page views (one per route)
+│   │   └── modals/           # Modal overlays
+│   ├── tsconfig.json / tsconfig.app.json
+│   ├── vite.config.ts
+│   ├── eslint.config.js
+│   └── package.json
+├── nginx/
+│   └── nginx.conf            # Reverse proxy, SPA fallback, gzip, headers
+├── docker-compose.yml        # Three services: postgres, backend, frontend
+├── .env.example              # Required environment variable template
+└── security_report.md        # Prior security audit findings and fixes
+```
+
+---
+
+## Development Setup
+
+### Prerequisites
+
+- Docker + Docker Compose (recommended for full stack)
+- Node.js 22+ (for local frontend/backend development)
+- PostgreSQL 16 (if running backend without Docker)
+
+### Running with Docker Compose (recommended)
+
+```bash
+cp .env.example .env          # fill in POSTGRES_PASSWORD, JWT_SECRET
+docker compose up --build
+```
+
+Frontend is served at `http://localhost` (port 80 via Nginx).
+
+### Running locally without Docker
+
+**Backend:**
+```bash
+cd backend
+npm install
+# Ensure PostgreSQL is running and PGHOST/PGUSER/PGPASSWORD/PGDATABASE env vars are set
+npm run dev        # ts-node-dev with --respawn, port 3001
+```
+
+**Frontend:**
+```bash
+cd frontend
+npm install
+npm run dev        # Vite dev server, port 5173 with HMR
+```
+
+The Vite dev server proxies `/api/*` to `http://localhost:3001` (configure in `vite.config.ts` if not already present).
+
+---
+
+## Environment Variables
+
+Copy `.env.example` to `.env` at the repository root. Docker Compose reads this file automatically.
+
+| Variable | Required | Description |
+|---|---|---|
+| `POSTGRES_DB` | Yes | Database name (default: `solytiq`) |
+| `POSTGRES_USER` | Yes | DB username (default: `solytiq`) |
+| `POSTGRES_PASSWORD` | Yes | DB password — must be changed in production |
+| `JWT_SECRET` | Yes | Long random string for signing JWTs — **fails startup if default** |
+| `FRONTEND_URL` | Yes | Origin allowed by CORS (e.g. `http://localhost`) |
+| `PORT` | No | Host port for the frontend container (default: `80`) |
+| `OPENROUTER_API_KEY` | No | Enables the AI assistant via OpenRouter |
+| `OPENROUTER_MODEL` | No | Model name (default: `openai/gpt-4o-mini`) |
+
+The backend refuses to start in `NODE_ENV=production` if `JWT_SECRET` is the default placeholder.
+
+---
+
+## Backend Conventions
+
+### Database
+
+- **No ORM.** All queries use raw SQL via the `pg` client (`pool.query` / `query` helper from `db.ts`).
+- **Schema migrations** run automatically at startup inside `runMigrations()` in `index.ts`. New columns use `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` so they are additive and safe to re-run.
+- **Never add a separate migration file** — append `pool.query(...)` calls to `runMigrations()` in `index.ts`.
+- Task IDs are `BIGINT` (numeric, not UUID). All other entity IDs are `VARCHAR(100)` strings (generated with `uuid` package on the backend or timestamp-based IDs).
+- User IDs are `UUID` generated by `pgcrypto`'s `gen_random_uuid()`.
+
+### Authentication
+
+- JWT tokens are generated in `auth.ts` (`generateToken`) and verified via the `verifyToken` middleware in `middleware.ts`.
+- Passwords are hashed with `bcryptjs`. Never store or log plaintext passwords.
+- All routes except `/api/auth/login`, `/api/auth/register`, `/api/share/*`, and `/health` require `verifyToken`.
+
+### Rate Limiting
+
+Three tiers defined in `index.ts`:
+- `apiLimiter` — 300 req / 15 min (all `/api/*`)
+- `authLimiter` — 10 req / 15 min (login)
+- `setupLimiter` — 5 req / 1 hour (register, nuke)
+
+### Route Patterns
+
+Each route file follows this pattern:
+```ts
+import { Router } from 'express';
+import { verifyToken } from '../middleware';
+import { query } from '../db';
+
+const router = Router();
+router.use(verifyToken);   // applied to all routes in the file, or per-route
+
+router.get('/', async (req, res) => {
+  const userId = (req as any).userId;   // set by verifyToken
+  // ...
+  res.json(result);
+});
+
+export default router;
+```
+
+### File Uploads
+
+- Handled by `multer` in `routes/files.ts`. Files saved to disk under `UPLOAD_DIR`.
+- Max upload size: 200 MB (multer config). Nginx proxy limit: 210 MB.
+- Each user has a 15 GB storage quota enforced server-side (configurable via `app_settings` table).
+- File sharing uses opaque `share_token` (UUID). Public file info and download are at `/api/share/:token` and `/api/share/:token/download`.
+
+### AI Assistant
+
+- Calls OpenRouter API (`/api/ai`). Requires `OPENROUTER_API_KEY` env var.
+- Chat history persisted in `ai_chats` table (role, content, tool_calls, metadata).
+- AI settings (`ai_assistant_enabled`, `ai_model`) stored in `app_settings` table and configurable by admins via Settings screen.
+
+---
+
+## Frontend Conventions
+
+### State Management
+
+All state lives in **Zustand stores** under `src/store/`. Do not use React `useState` for data that needs to be shared across components.
+
+| Store | Contains |
+|---|---|
+| `useAppStore` | Dashboard tasks, lists, folders, trash, sidebar width |
+| `useAuthStore` | Current user, JWT token, auth actions (persisted to localStorage) |
+| `useAIStore` | AI chat window open state, conversation history |
+| `useMembersStore` | Members list for shared spaces |
+
+`useAppStore.loadFromApi()` is the main data loader — called on mount in `App.tsx`. It fetches tasks, lists, and folders in parallel.
+
+### API Calls
+
+All HTTP calls go through `src/api/client.ts`. Do not call `fetch` directly in components or stores. The client automatically reads the token from `useAuthStore` and attaches the `Authorization: Bearer <token>` header.
+
+### Types
+
+All shared interfaces are in `src/types.ts`. Key types:
+
+- `Task` — `id: number`, `_source: 'dash' | 'list'`, `_listId?`, `deadline: YYYY-MM-DD`
+- `List` — contains `sections: Section[]`, each with `tasks: Task[]`
+- `Folder` — groups lists, has `collapsed` state
+- `TrashedTask` — wraps a `Task` with `meta` for restoration context
+- `SharedFile` — file sharing metadata
+
+### Routing
+
+Routes are defined in `App.tsx` using React Router v7. Protected routes are wrapped with a `<Protected>` component that redirects to `/login` if `useAuthStore.loggedIn` is false.
+
+Key routes:
+- `/` → `DashboardScreen` (due today + priority tasks)
+- `/list/:id` → `ListScreen`
+- `/scheduled` → `ScheduledScreen` (calendar view)
+- `/files` → `FilesScreen`
+- `/settings` → `SettingsScreen`
+- `/share/:id` → `SharePage` (public, no auth)
+- `/nuke` → `NukeScreen` (account deletion)
+
+### Modal State
+
+Top-level modal visibility is managed by a single `modal` string state in `App.tsx`:
+- `'add-list'` → `AddListWizard`
+- `'completed'` → `CompletedModal`
+- `'trash'` → `TrashModal`
+- `null` → no modal
+
+### Styling
+
+- Tailwind CSS v4 (utility classes in JSX). Base styles in `src/index.css`.
+- Component-scoped styles in `src/App.css` for complex animations/overrides.
+- Design aesthetic: glassmorphism, soft colors ("Luminous List" design system).
+- Icons: Material Symbols via the `<Icon>` component (`src/components/Icon.tsx`).
+
+### Task Source Duality
+
+Tasks belong to one of two sources:
+- `'dash'` — created from the Dashboard, not inside a list
+- `'list'` — created inside a specific list/section
+
+This affects which store actions to call: use `updateDashTask`/`deleteDashTask` for dash tasks and `updateListTask`/`deleteListTask` for list tasks. Always check `task._source` before dispatching.
+
+---
+
+## Build & Scripts
+
+### Frontend
+
+```bash
+cd frontend
+npm run dev       # Vite HMR dev server (localhost:5173)
+npm run build     # tsc -b && vite build → dist/
+npm run lint      # ESLint (flat config, TypeScript + React hooks)
+npm run preview   # Serve the built dist/
+```
+
+### Backend
+
+```bash
+cd backend
+npm run dev       # ts-node-dev --respawn src/index.ts (port 3001)
+npm run build     # tsc → dist/
+npm run start     # node dist/index.js (production)
+```
+
+### Docker
+
+```bash
+docker compose up --build       # Full stack
+docker compose up --build backend  # Rebuild only backend
+docker compose logs -f backend  # Stream backend logs
+```
+
+---
+
+## No Test Suite
+
+There are currently **no automated tests** (no Jest, Vitest, or similar). Verification is done manually:
+- Backend: use `curl` or a REST client against `http://localhost:3001`
+- Frontend: run the dev server and test in browser
+
+When adding tests in the future, the recommended setup is **Vitest** for both frontend and backend (compatible with the existing TypeScript + Vite toolchain).
+
+---
+
+## Security Notes
+
+These issues were identified and fixed (see `security_report.md`). Do not regress them:
+
+1. **IDOR** — All DB queries must filter by `user_id = $userId` extracted from the verified JWT, never from request body/params alone.
+2. **JWT_SECRET** — Must be a strong random secret. Backend exits in production if it is the placeholder default.
+3. **Rate limiting** — Auth and destructive endpoints have tighter limits. Do not remove these.
+4. **File path traversal** — Use `path.resolve` / `path.join` carefully when serving files. Validate that the resolved path stays within `UPLOAD_DIR`.
+5. **Profile image uploads** — Validate MIME type and file extension server-side before saving.
+6. **Password hashing** — Always use `bcryptjs`. Never log or return password hashes.
+7. **Race conditions** — Storage quota checks must be done inside a transaction or with `SELECT ... FOR UPDATE` to prevent over-quota uploads under concurrent load.
+
+---
+
+## Key Architectural Decisions
+
+- **Migrations in code, not files** — `runMigrations()` in `index.ts` uses `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` guards. Always append new migrations there.
+- **No ORM** — Raw SQL keeps queries explicit and avoids N+1 pitfalls; use `JOIN` freely.
+- **Zustand over Redux** — Minimal boilerplate; each store is a standalone module. Stores call the API client directly; components call store actions.
+- **Soft delete for tasks** — Deleted tasks go to `trash` table (JSONB payload) with a 30-day `expires_at`. The `tasks` table has no `deleted_at` column.
+- **Task IDs are BIGINT** — Generated client-side as `Date.now()` (milliseconds). Collisions across users are prevented by the `user_id` FK, but avoid relying on global uniqueness.
+- **Public sharing** — Lists and folders have an `is_public` flag. Files use opaque `share_token` UUIDs for sharing, with optional password and expiry.
+- **AI via OpenRouter** — The AI endpoint is a thin proxy to OpenRouter. Model and enabled state are stored in `app_settings` so admins can change them without redeployment.
