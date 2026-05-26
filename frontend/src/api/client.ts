@@ -172,6 +172,39 @@ export const apiUpdateFile = (id: string, data: { name?: string; title?: string 
 export const apiDeleteFile = (id: string) =>
   apiFetch<{ success: boolean }>(`/files/${id}`, { method: 'DELETE' });
 
+// AI Assistant
+export const apiGetAISettings = () =>
+  apiFetch<{ enabled: boolean; model: string }>('/ai/settings');
+
+export const apiAIChat = (messages: unknown[], tools?: unknown[]) =>
+  apiFetch<{
+    choices: Array<{
+      message: {
+        role: string;
+        content: string | null;
+        tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }>;
+      };
+    }>;
+  }>('/ai/chat', { method: 'POST', body: JSON.stringify({ messages, tools }) });
+
+export const apiGetAIHistory = () =>
+  apiFetch<{ messages: Array<{ id: number; role: string; content: string; toolCalls: unknown; metadata: unknown; createdAt: string }> }>('/ai/history');
+
+export const apiSaveAIMessage = (role: string, content: string, metadata?: Record<string, unknown>) =>
+  apiFetch<{ id: number; createdAt: string }>('/ai/history', {
+    method: 'POST',
+    body: JSON.stringify({ role, content, metadata }),
+  });
+
+export const apiClearAIHistory = () =>
+  apiFetch<{ success: boolean }>('/ai/history', { method: 'DELETE' });
+
+export const apiUpdateAppSettingsAI = (data: { aiAssistantEnabled?: boolean; aiModel?: string }) =>
+  apiFetch<{ settings: Record<string, string> }>('/admin/settings', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+
 export function apiUploadFile(
   file: File,
   opts: { isPublic?: boolean; password?: string; expiresAt?: string; title?: string },
