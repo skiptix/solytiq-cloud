@@ -12,60 +12,67 @@
 
 ---
 
-## 🌟 Overview
+## Overview
 
 **Solytiq Cloud** is a self-hosted productivity application that combines the elegance of Apple Reminders with the robustness of a power-user task manager. Designed with the **"Luminous List"** aesthetic, it features minimalist layouts, subtle glassmorphism, and lavender-white surfaces that feel lit from within.
 
-### ✨ Key Features
+### Key Features
 
-- 📊 **Dashboard:** A bird's-eye view of your productivity with real-time stats and "Due Today" focus.
-- 📅 **Scheduled View:** A full-featured calendar to manage deadlines and drag-to-schedule unscheduled tasks.
-- 📝 **Smart Lists:** Create custom lists with emojis, sections, and progress tracking.
-- 🔍 **Global Search:** Lightning-fast search (⌘K) for tasks, lists, and settings.
-- ♻️ **Trash & Restore:** Accidentally deleted a task? No problem, restore it from the trash within 30 days.
-- 🔒 **Self-Hosted:** You own your data. Deploy easily with Docker.
-
----
-
-## 🎨 Design Philosophy: "Luminous List"
-
-Solytiq Cloud isn't just a tool; it's an experience.
-- **Glassmorphism:** Subtle blurs and translucent layers.
-- **Typography:** Using *Hanken Grotesk* for headings and *Inter* for body text.
-- **Palette:** Soft lavender (`#5e4dbb`), crisp whites, and gentle grays.
+- **Dashboard** — Bird's-eye view of your productivity with "Due Today" focus and priority tasks.
+- **Scheduled View** — Full calendar with drag-to-schedule for unscheduled tasks.
+- **Smart Lists** — Custom lists with emojis, colors, sections, subtitles, and progress tracking.
+- **Folders** — Group related lists into collapsible, shareable folders.
+- **Global Search** — Lightning-fast search (⌘K) across tasks, lists, and settings.
+- **File Sharing** — Upload files up to 200 MB with optional password protection, expiry dates, and public share links.
+- **AI Assistant** — Floating AI chat powered by OpenRouter for task suggestions and productivity help.
+- **Trash & Restore** — Accidentally deleted a task? Restore it within 30 days.
+- **Public Sharing** — Share individual lists or folders publicly via a read-only link.
+- **Multi-User** — Admin-controlled member management with per-user 15 GB storage quota.
+- **Self-Hosted** — You own your data. Deploy with a single Docker Compose command.
 
 ---
 
-## 🛠️ Tech Stack
+## Design Philosophy: "Luminous List"
+
+- **Glassmorphism** — Subtle blurs and translucent layers throughout the UI.
+- **Typography** — *Hanken Grotesk* for headings, *Inter* for body text.
+- **Palette** — Soft lavender (`#5e4dbb`), crisp whites, and gentle grays.
+- **Icons** — Material Symbols Outlined via a lightweight wrapper component.
+
+---
+
+## Tech Stack
 
 ### Frontend
 - **Framework:** [React 19](https://react.dev/) + [Vite](https://vitejs.dev/)
 - **State Management:** [Zustand](https://github.com/pmndrs/zustand)
 - **Styling:** [Tailwind CSS v4](https://tailwindcss.com/)
 - **Routing:** [React Router v7](https://reactrouter.com/)
+- **Markdown:** [react-markdown](https://github.com/remarkjs/react-markdown)
 - **Icons:** [Material Symbols Outlined](https://fonts.google.com/icons)
 
 ### Backend
-- **Runtime:** [Node.js](https://nodejs.org/)
-- **Framework:** [Express](https://expressjs.com/)
-- **Database:** [PostgreSQL](https://www.postgresql.org/)
-- **Authentication:** JWT + Bcrypt
+- **Runtime:** [Node.js 22](https://nodejs.org/)
+- **Framework:** [Express 4](https://expressjs.com/)
+- **Database:** [PostgreSQL 16](https://www.postgresql.org/) (raw SQL via `pg`)
+- **Authentication:** JWT + bcryptjs
+- **File Uploads:** multer (200 MB limit, disk storage)
+- **AI Integration:** [OpenRouter](https://openrouter.ai/) (configurable model)
 - **Language:** [TypeScript](https://www.typescriptlang.org/)
 
 ### Infrastructure
 - **Containerization:** [Docker](https://www.docker.com/) & [Docker Compose](https://docs.docker.com/compose/)
-- **Web Server:** [Nginx](https://www.nginx.com/)
+- **Web Server:** [Nginx](https://www.nginx.com/) (reverse proxy, gzip, SPA fallback, 210 MB upload limit)
 
 ---
 
-## 🚀 Quick Start
-
-Deploying Solytiq Cloud is straightforward using Docker.
+## Quick Start
 
 ### Prerequisites
+
 - Docker and Docker Compose installed on your system.
 
-### Installation Steps
+### Installation
 
 1. **Clone the repository:**
    ```bash
@@ -77,52 +84,73 @@ Deploying Solytiq Cloud is straightforward using Docker.
    ```bash
    cp .env.example .env
    ```
-   *Edit the `.env` file to set your `JWT_SECRET` and database passwords.*
+   Edit `.env` and set at minimum `POSTGRES_PASSWORD` and `JWT_SECRET` (see [Configuration](#configuration)).
 
-3. **Spin up the containers:**
+3. **Start the stack:**
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
-4. **Access the application:**
-   Open your browser and navigate to `http://localhost`.
+4. **Open the app:**
+   Navigate to `http://localhost` in your browser. The first user to register becomes the admin.
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
-The following environment variables can be configured in your `.env` file:
+All variables are set in your `.env` file (copied from `.env.example`).
 
 | Variable | Description | Default |
-|----------|-------------|---------|
-| `POSTGRES_USER` | PostgreSQL username | `solytiq` |
-| `POSTGRES_PASSWORD` | PostgreSQL password | `solytiq_secret` |
+|---|---|---|
 | `POSTGRES_DB` | PostgreSQL database name | `solytiq` |
-| `JWT_SECRET` | Secret key for JWT signing | `change_me` |
-| `PORT` | Host port for the frontend | `80` |
+| `POSTGRES_USER` | PostgreSQL username | `solytiq` |
+| `POSTGRES_PASSWORD` | PostgreSQL password — **change this** | `change_me_in_production` |
+| `JWT_SECRET` | Secret key for JWT signing — **change this** | `change_this_to_a_long_random_secret` |
+| `FRONTEND_URL` | Origin allowed by CORS | `http://localhost` |
+| `PORT` | Host port for the frontend container | `80` |
+| `OPENROUTER_API_KEY` | Enables the AI assistant (optional) | — |
+| `OPENROUTER_MODEL` | AI model via OpenRouter (optional) | `openai/gpt-4o-mini` |
+
+> **Production note:** The backend will refuse to start if `NODE_ENV=production` and `JWT_SECRET` is still set to the placeholder default.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
-```text
-├── backend/            # Express API with TypeScript
-├── frontend/           # Vite + React application
-├── nginx/              # Nginx configuration for reverse proxy
-├── design_handoff_solytiq_cloud/  # Original design specs and interactive prototype
-├── docker-compose.yml  # Orchestration for the entire stack
-└── public/             # Static assets (logos, icons)
+```
+solytiq-cloud/
+├── backend/            # Express REST API (TypeScript)
+│   ├── src/
+│   │   ├── index.ts        # Entry point, middleware, DB migrations
+│   │   ├── db.ts           # PostgreSQL connection pool
+│   │   ├── auth.ts         # JWT + bcrypt helpers
+│   │   ├── middleware.ts   # Auth middleware
+│   │   └── routes/         # auth, tasks, lists, folders, trash, files, admin, ai
+│   └── package.json
+├── frontend/           # React 19 + Vite SPA (TypeScript)
+│   ├── src/
+│   │   ├── api/client.ts   # Centralised HTTP client
+│   │   ├── store/          # Zustand stores (app, auth, AI, members)
+│   │   ├── components/     # Reusable UI components
+│   │   ├── screens/        # Full-page views
+│   │   ├── modals/         # Modal overlays
+│   │   └── types.ts        # Shared TypeScript interfaces
+│   └── package.json
+├── nginx/              # Nginx reverse proxy configuration
+├── docker-compose.yml  # Full-stack orchestration (postgres, backend, frontend)
+├── .env.example        # Environment variable template
+└── public/             # Static assets (logos)
 ```
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please submit a Pull Request.
 
 ---
 
-## 📜 License
+## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
