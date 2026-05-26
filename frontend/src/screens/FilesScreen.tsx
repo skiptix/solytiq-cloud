@@ -195,7 +195,7 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true }: UploadWiz
                   )}
                 </button>
                 {showExpiryCal && (
-                  <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 500 }}>
+                  <div style={{ position: 'absolute', bottom: 'calc(100% + 4px)', left: 0, zIndex: 500 }}>
                     <CalendarPicker
                       value={expiresAt}
                       onChange={d => { setExpiresAt(d); setShowExpiryCal(false); }}
@@ -385,7 +385,7 @@ function EditModal({ file, onClose, onSaved }: EditModalProps) {
               )}
             </button>
             {showExpiryCal && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 500 }}>
+              <div style={{ position: 'absolute', bottom: 'calc(100% + 4px)', left: 0, zIndex: 500 }}>
                 <CalendarPicker
                   value={expiresAt}
                   onChange={d => { setExpiresAt(d); setShowExpiryCal(false); }}
