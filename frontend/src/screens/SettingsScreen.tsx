@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
-import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings } from '../api/client';
+import useAIStore from '../store/useAIStore';
+import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings } from '../api/client';
 import Icon from '../components/Icon';
 
 interface UserEntry {
@@ -96,6 +97,14 @@ export default function SettingsScreen() {
   const [quotaSaving, setQuotaSaving] = useState(false);
   const [quotaSaved, setQuotaSaved] = useState(false);
 
+  // AI assistant settings
+  const { setSettings: setAISettings } = useAIStore();
+  const [aiEnabled, setAiEnabled] = useState(true);
+  const [aiModel, setAiModel] = useState('openai/gpt-4o-mini');
+  const [aiSaving, setAiSaving] = useState(false);
+  const [aiSaved, setAiSaved] = useState(false);
+  const [aiLoaded, setAiLoaded] = useState(false);
+
   const loadUsers = useCallback(async () => {
     if (!isAdmin) return;
     setUsersLoading(true);
@@ -128,6 +137,17 @@ export default function SettingsScreen() {
       .catch(() => setQuotaGb('15'));
   }, [isAdmin]);
 
+  useEffect(() => {
+    if (!isAdmin || aiLoaded) return;
+    apiGetAISettings()
+      .then(res => {
+        setAiEnabled(res.enabled);
+        setAiModel(res.model);
+        setAiLoaded(true);
+      })
+      .catch(() => setAiLoaded(true));
+  }, [isAdmin, aiLoaded]);
+
   const handleSaveQuota = async () => {
     const gb = parseFloat(quotaGb);
     if (!gb || gb <= 0 || isNaN(gb)) return;
@@ -143,6 +163,30 @@ export default function SettingsScreen() {
       setQuotaSaving(false);
     }
   };
+
+  const handleSaveAI = async () => {
+    setAiSaving(true);
+    setAiSaved(false);
+    try {
+      await apiUpdateAppSettingsAI({ aiAssistantEnabled: aiEnabled, aiModel });
+      setAISettings({ enabled: aiEnabled, model: aiModel });
+      setAiSaved(true);
+      setTimeout(() => setAiSaved(false), 2500);
+    } catch (e) {
+      console.error('Failed to save AI settings', e);
+    } finally {
+      setAiSaving(false);
+    }
+  };
+
+  const AI_MODELS = [
+    { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini', sub: 'Fast · Affordable' },
+    { value: 'openai/gpt-4o', label: 'GPT-4o', sub: 'Powerful · Slower' },
+    { value: 'anthropic/claude-3-5-haiku', label: 'Claude 3.5 Haiku', sub: 'Fast · Smart' },
+    { value: 'anthropic/claude-3-5-sonnet', label: 'Claude 3.5 Sonnet', sub: 'Very Smart · Slower' },
+    { value: 'google/gemini-flash-1.5', label: 'Gemini Flash 1.5', sub: 'Fast · Free tier' },
+    { value: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B', sub: 'Open-source · Free' },
+  ];
 
   const generatePassword = () => {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
@@ -481,6 +525,111 @@ export default function SettingsScreen() {
                       {quotaSaved ? 'Saved' : quotaSaving ? 'Saving…' : 'Save'}
                     </button>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* AI Assistant — admin only */}
+        {isAdmin && (
+          <div>
+            {sectionLabel('AI Assistant')}
+            <div style={card}>
+              <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {/* Enable toggle */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Enable AI Assistant</div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Show the AI assistant bubble for all users on this instance.</div>
+                  </div>
+                  <button
+                    onClick={() => setAiEnabled(v => !v)}
+                    style={{
+                      width: 44,
+                      height: 24,
+                      borderRadius: 12,
+                      background: aiEnabled ? '#5e4dbb' : '#e8e4f0',
+                      border: 'none',
+                      cursor: 'pointer',
+                      position: 'relative',
+                      flexShrink: 0,
+                      transition: 'background 200ms',
+                    }}
+                  >
+                    <span style={{
+                      position: 'absolute',
+                      top: 2,
+                      left: aiEnabled ? 22 : 2,
+                      width: 20,
+                      height: 20,
+                      borderRadius: '50%',
+                      background: '#fff',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                      transition: 'left 200ms',
+                    }} />
+                  </button>
+                </div>
+                {/* Model picker */}
+                <div>
+                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 8 }}>AI Model</div>
+                  <select
+                    value={aiModel}
+                    onChange={e => setAiModel(e.target.value)}
+                    style={{
+                      width: '100%',
+                      fontFamily: 'Inter, sans-serif',
+                      fontSize: 13,
+                      color: '#1c1b22',
+                      background: '#fff',
+                      border: '1.5px solid #E5E7EB',
+                      borderRadius: 10,
+                      padding: '8px 12px',
+                      outline: 'none',
+                      cursor: 'pointer',
+                      appearance: 'none',
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23787584' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 10px center',
+                      paddingRight: 32,
+                    }}
+                    onFocus={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
+                    onBlur={e => { e.currentTarget.style.borderColor = '#E5E7EB'; }}
+                  >
+                    {AI_MODELS.map(m => (
+                      <option key={m.value} value={m.value}>{m.label} — {m.sub}</option>
+                    ))}
+                  </select>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', marginTop: 6 }}>
+                    Requires <code style={{ background: '#f1ecf6', padding: '1px 5px', borderRadius: 4 }}>OPENROUTER_API_KEY</code> set in your environment.
+                  </div>
+                </div>
+                {/* Save button */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={handleSaveAI}
+                    disabled={aiSaving}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontFamily: 'Hanken Grotesk, sans-serif',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: aiSaved ? '#10B981' : '#fff',
+                      background: aiSaved ? 'rgba(16,185,129,0.12)' : aiSaving ? '#c9c4d5' : '#5e4dbb',
+                      border: aiSaved ? '1.5px solid rgba(16,185,129,0.3)' : 'none',
+                      borderRadius: 10,
+                      padding: '8px 16px',
+                      cursor: aiSaving ? 'not-allowed' : 'pointer',
+                      transition: 'all 150ms',
+                    }}
+                    onMouseEnter={e => { if (!aiSaving && !aiSaved) e.currentTarget.style.background = '#4f3fa8'; }}
+                    onMouseLeave={e => { if (!aiSaving && !aiSaved) e.currentTarget.style.background = '#5e4dbb'; }}
+                  >
+                    <Icon name={aiSaved ? 'check' : 'save'} size={14} color={aiSaved ? '#10B981' : '#fff'} />
+                    {aiSaved ? 'Saved' : aiSaving ? 'Saving…' : 'Save'}
+                  </button>
                 </div>
               </div>
             </div>

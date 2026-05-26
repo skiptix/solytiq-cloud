@@ -12,6 +12,7 @@ import trashRouter from './routes/trash';
 import adminRouter from './routes/admin';
 import foldersRouter from './routes/folders';
 import filesRouter, { UPLOAD_DIR } from './routes/files';
+import aiRouter from './routes/ai';
 import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
 
@@ -77,6 +78,7 @@ app.use('/api/trash',   trashRouter);
 app.use('/api/admin',   adminRouter);
 app.use('/api/folders', foldersRouter);
 app.use('/api/files',   filesRouter);
+app.use('/api/ai',      aiRouter);
 
 // Public share endpoints — no auth required
 interface ShareFileRow { id: string; original_name: string; title: string | null; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null; }
@@ -234,6 +236,29 @@ async function runMigrations() {
     INSERT INTO app_settings (key, value)
     VALUES ('storage_quota_per_user', '${15 * 1024 * 1024 * 1024}')
     ON CONFLICT (key) DO NOTHING
+  `);
+
+  // AI assistant defaults
+  await pool.query(`
+    INSERT INTO app_settings (key, value) VALUES ('ai_assistant_enabled', 'true')
+    ON CONFLICT (key) DO NOTHING
+  `);
+  await pool.query(`
+    INSERT INTO app_settings (key, value) VALUES ('ai_model', 'openai/gpt-4o-mini')
+    ON CONFLICT (key) DO NOTHING
+  `);
+
+  // AI chat history table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_chats (
+      id         SERIAL PRIMARY KEY,
+      user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role       VARCHAR(20) NOT NULL,
+      content    TEXT NOT NULL,
+      tool_calls JSONB,
+      metadata   JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
   `);
 
   // Widen color columns if they were created with the old VARCHAR(20) size

@@ -11,6 +11,7 @@ import TopBar from './components/TopBar';
 import AddListWizard from './modals/AddListWizard';
 import CompletedModal from './modals/CompletedModal';
 import TrashModal from './modals/TrashModal';
+import AIAssistant from './components/AIAssistant';
 
 import LoginScreen from './screens/LoginScreen';
 import SetupWizard from './screens/SetupWizard';
@@ -115,6 +116,7 @@ function AppLayout() {
       )}
       {modal === 'completed' && <CompletedModal onClose={() => setModal(null)} />}
       {modal === 'trash' && <TrashModal onClose={() => setModal(null)} />}
+      <AIAssistant />
     </div>
   );
 }
