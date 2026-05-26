@@ -212,6 +212,20 @@ async function runMigrations() {
 
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_online TIMESTAMPTZ`);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
+
+  // Default storage quota: 15 GB per user
+  await pool.query(`
+    INSERT INTO app_settings (key, value)
+    VALUES ('storage_quota_per_user', '${15 * 1024 * 1024 * 1024}')
+    ON CONFLICT (key) DO NOTHING
+  `);
+
   // Widen color columns if they were created with the old VARCHAR(20) size
   await pool.query(`ALTER TABLE lists ALTER COLUMN color TYPE VARCHAR(50)`);
   await pool.query(`ALTER TABLE lists ALTER COLUMN color_bg TYPE VARCHAR(50)`);

@@ -23,7 +23,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: 200 * 1024 * 1024 },
 });
 
 const router = Router();
@@ -64,8 +64,38 @@ function sanitizeFile(f: FileRow, baseUrl: string) {
   };
 }
 
+const DEFAULT_QUOTA = 15 * 1024 * 1024 * 1024; // 15 GB
+
+async function getUserQuota(): Promise<number> {
+  const r = await query<{ value: string }>(
+    "SELECT value FROM app_settings WHERE key = 'storage_quota_per_user'"
+  );
+  return r.rows[0] ? parseInt(r.rows[0].value, 10) : DEFAULT_QUOTA;
+}
+
 // ── Authenticated routes ──────────────────────────────────────────
 router.use(authenticate);
+
+// GET /api/files/storage
+router.get('/storage', async (req: Request, res: Response) => {
+  try {
+    const isAdmin = (req as Request & { user?: { isAdmin: boolean } }).user?.isAdmin ?? false;
+    const usageRes = await query<{ used: string }>(
+      'SELECT COALESCE(SUM(file_size), 0) AS used FROM shared_files WHERE user_id = $1',
+      [req.userId]
+    );
+    const used = parseInt(usageRes.rows[0].used, 10);
+    if (isAdmin) {
+      res.json({ used, quota: null, isAdmin: true });
+      return;
+    }
+    const quota = await getUserQuota();
+    res.json({ used, quota, isAdmin: false });
+  } catch (err) {
+    console.error('files/storage error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // GET /api/files
 router.get('/', async (req: Request, res: Response) => {
@@ -95,6 +125,22 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
       password?: string;
       expiresAt?: string;
     };
+
+    // Enforce per-user storage quota (admins are exempt)
+    const isAdmin = (req as Request & { user?: { isAdmin: boolean } }).user?.isAdmin ?? false;
+    if (!isAdmin) {
+      const quota = await getUserQuota();
+      const usageRes = await query<{ used: string }>(
+        'SELECT COALESCE(SUM(file_size), 0) AS used FROM shared_files WHERE user_id = $1',
+        [req.userId]
+      );
+      const used = parseInt(usageRes.rows[0].used, 10);
+      if (used + req.file!.size > quota) {
+        fs.unlinkSync(path.join(UPLOAD_DIR, req.file!.filename));
+        res.status(413).json({ error: 'Storage quota exceeded. Please delete some files to free up space.' });
+        return;
+      }
+    }
 
     const id          = crypto.randomUUID();
     const shareToken  = crypto.randomBytes(24).toString('hex');

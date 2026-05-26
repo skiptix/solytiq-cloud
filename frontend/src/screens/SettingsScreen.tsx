@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
-import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage } from '../api/client';
+import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings } from '../api/client';
 import Icon from '../components/Icon';
 
 interface UserEntry {
@@ -90,6 +90,12 @@ export default function SettingsScreen() {
   const [storage, setStorage] = useState<{ total: number; used: number; available: number } | null>(null);
   const [storageLoading, setStorageLoading] = useState(false);
 
+  // Storage quota settings
+  const [quotaGb, setQuotaGb] = useState('');
+  const [quotaInputFocus, setQuotaInputFocus] = useState(false);
+  const [quotaSaving, setQuotaSaving] = useState(false);
+  const [quotaSaved, setQuotaSaved] = useState(false);
+
   const loadUsers = useCallback(async () => {
     if (!isAdmin) return;
     setUsersLoading(true);
@@ -114,7 +120,29 @@ export default function SettingsScreen() {
       .then(setStorage)
       .catch(() => setStorage(null))
       .finally(() => setStorageLoading(false));
+    apiGetAppSettings()
+      .then(res => {
+        const bytes = parseInt(res.settings['storage_quota_per_user'] ?? '0', 10);
+        setQuotaGb(bytes > 0 ? (bytes / (1024 ** 3)).toFixed(0) : '15');
+      })
+      .catch(() => setQuotaGb('15'));
   }, [isAdmin]);
+
+  const handleSaveQuota = async () => {
+    const gb = parseFloat(quotaGb);
+    if (!gb || gb <= 0 || isNaN(gb)) return;
+    setQuotaSaving(true);
+    setQuotaSaved(false);
+    try {
+      await apiUpdateAppSettings({ storageQuotaPerUser: Math.round(gb * 1024 ** 3) });
+      setQuotaSaved(true);
+      setTimeout(() => setQuotaSaved(false), 2500);
+    } catch (e) {
+      console.error('Failed to save quota', e);
+    } finally {
+      setQuotaSaving(false);
+    }
+  };
 
   const generatePassword = () => {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
@@ -412,6 +440,49 @@ export default function SettingsScreen() {
                   </div>
                 );
               })()}
+            </div>
+          </div>
+        )}
+
+        {/* Storage quota — admin only */}
+        {isAdmin && (
+          <div>
+            {sectionLabel('User Storage Quota')}
+            <div style={card}>
+              <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                  <div>
+                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Storage limit per user</div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Admins are exempt and always have unlimited storage.</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', background: '#fff', border: `1.5px solid ${quotaInputFocus ? '#5e4dbb' : '#E5E7EB'}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color 200ms' }}>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={quotaGb}
+                        onChange={e => { setQuotaGb(e.target.value); setQuotaSaved(false); }}
+                        onFocus={() => setQuotaInputFocus(true)}
+                        onBlur={() => setQuotaInputFocus(false)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleSaveQuota(); }}
+                        style={{ width: 64, fontFamily: 'Inter, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none', padding: '8px 10px', textAlign: 'right' }}
+                      />
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', paddingRight: 10, paddingLeft: 2, userSelect: 'none' }}>GB</span>
+                    </div>
+                    <button
+                      onClick={handleSaveQuota}
+                      disabled={quotaSaving || !quotaGb || parseFloat(quotaGb) <= 0}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: quotaSaved ? '#10B981' : '#fff', background: quotaSaved ? 'rgba(16,185,129,0.12)' : quotaSaving || !quotaGb || parseFloat(quotaGb) <= 0 ? '#c9c4d5' : '#5e4dbb', border: quotaSaved ? '1.5px solid rgba(16,185,129,0.3)' : 'none', borderRadius: 10, padding: '8px 14px', cursor: quotaSaving || !quotaGb || parseFloat(quotaGb) <= 0 ? 'not-allowed' : 'pointer', transition: 'all 150ms', whiteSpace: 'nowrap' }}
+                      onMouseEnter={e => { if (!quotaSaving && !quotaSaved && quotaGb && parseFloat(quotaGb) > 0) e.currentTarget.style.background = '#4f3fa8'; }}
+                      onMouseLeave={e => { if (!quotaSaving && !quotaSaved) e.currentTarget.style.background = '#5e4dbb'; }}
+                    >
+                      <Icon name={quotaSaved ? 'check' : 'save'} size={14} color={quotaSaved ? '#10B981' : '#fff'} />
+                      {quotaSaved ? 'Saved' : quotaSaving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
