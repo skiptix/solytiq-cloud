@@ -79,11 +79,11 @@ app.use('/api/folders', foldersRouter);
 app.use('/api/files',   filesRouter);
 
 // Public share endpoints — no auth required
-interface ShareFileRow { id: string; original_name: string; title: string | null; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; shared_by_name: string | null; shared_by_username: string; }
+interface ShareFileRow { id: string; original_name: string; title: string | null; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null; }
 
 async function resolveShareFile(token: string): Promise<ShareFileRow | null> {
   const result = await dbQuery<ShareFileRow>(
-    `SELECT sf.*, u.full_name AS shared_by_name, u.username AS shared_by_username
+    `SELECT sf.*, u.full_name AS shared_by_name, u.username AS shared_by_username, u.profile_image AS shared_by_image
      FROM shared_files sf JOIN users u ON sf.user_id = u.id
      WHERE sf.share_token = $1`,
     [token]
@@ -108,6 +108,7 @@ app.get('/api/share/:token', async (req, res) => {
       isExpired: Boolean(expired),
       createdAt: file.created_at,
       sharedBy: file.shared_by_name || file.shared_by_username,
+      sharedByImage: file.shared_by_image ?? null,
     });
   } catch (err) {
     console.error('share info error:', err);
