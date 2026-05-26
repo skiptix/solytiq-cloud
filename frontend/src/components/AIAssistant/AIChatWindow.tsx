@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import type { AIChatMessage } from '../../store/useAIStore';
 import Icon from '../Icon';
 
@@ -143,10 +144,36 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
               lineHeight: 1.6,
               color: msg.error ? '#ba1a1a' : '#1c1b22',
               wordBreak: 'break-word',
-              whiteSpace: 'pre-wrap',
             }}
           >
-            {msg.content}
+            <ReactMarkdown
+              components={{
+                p: ({ children }) => <p style={{ margin: '0 0 6px', lineHeight: 1.6 }}>{children}</p>,
+                ul: ({ children }) => <ul style={{ margin: '4px 0 6px', paddingLeft: 18 }}>{children}</ul>,
+                ol: ({ children }) => <ol style={{ margin: '4px 0 6px', paddingLeft: 18 }}>{children}</ol>,
+                li: ({ children }) => <li style={{ marginBottom: 3, lineHeight: 1.5 }}>{children}</li>,
+                strong: ({ children }) => <strong style={{ fontWeight: 700, color: 'inherit' }}>{children}</strong>,
+                em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
+                code: ({ children, className }) => {
+                  const isBlock = className?.includes('language-');
+                  return isBlock ? (
+                    <pre style={{ background: 'rgba(0,0,0,0.06)', borderRadius: 6, padding: '8px 10px', overflow: 'auto', margin: '6px 0', fontSize: 12 }}>
+                      <code style={{ fontFamily: 'monospace', fontSize: 12 }}>{children}</code>
+                    </pre>
+                  ) : (
+                    <code style={{ background: 'rgba(0,0,0,0.07)', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace', fontSize: 12.5 }}>{children}</code>
+                  );
+                },
+                h1: ({ children }) => <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 700, fontSize: 15, margin: '6px 0 4px' }}>{children}</div>,
+                h2: ({ children }) => <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 700, fontSize: 14, margin: '6px 0 4px' }}>{children}</div>,
+                h3: ({ children }) => <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 600, fontSize: 13.5, margin: '4px 0 4px' }}>{children}</div>,
+                a: ({ children, href }) => <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: '#5e4dbb', textDecoration: 'underline' }}>{children}</a>,
+                blockquote: ({ children }) => <blockquote style={{ borderLeft: '3px solid #c9c4d5', paddingLeft: 10, margin: '6px 0', color: '#787584', fontStyle: 'italic' }}>{children}</blockquote>,
+                hr: () => <hr style={{ border: 'none', borderTop: '1px solid #e8e4f0', margin: '8px 0' }} />,
+              }}
+            >
+              {msg.content}
+            </ReactMarkdown>
           </div>
         )}
       </div>
