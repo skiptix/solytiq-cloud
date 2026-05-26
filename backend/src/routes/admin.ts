@@ -172,6 +172,41 @@ router.delete('/nuke', authenticate, requireAdmin, async (req: Request, res: Res
   }
 });
 
+// GET /api/admin/settings
+router.get('/settings', authenticate, requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const result = await query<{ key: string; value: string }>('SELECT key, value FROM app_settings');
+    const settings: Record<string, string> = {};
+    for (const row of result.rows) settings[row.key] = row.value;
+    res.json({ settings });
+  } catch (err) {
+    console.error('admin/settings GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/admin/settings
+router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { storageQuotaPerUser } = req.body as { storageQuotaPerUser?: number };
+    if (storageQuotaPerUser !== undefined) {
+      const bytes = Math.max(0, Math.round(Number(storageQuotaPerUser)));
+      await query(
+        `INSERT INTO app_settings (key, value) VALUES ('storage_quota_per_user', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [String(bytes)]
+      );
+    }
+    const result = await query<{ key: string; value: string }>('SELECT key, value FROM app_settings');
+    const settings: Record<string, string> = {};
+    for (const row of result.rows) settings[row.key] = row.value;
+    res.json({ settings });
+  } catch (err) {
+    console.error('admin/settings PUT error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/admin/system/storage
 router.get('/system/storage', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {

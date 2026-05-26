@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SharedFile } from '../types';
-import { apiGetFiles, apiUpdateFile, apiDeleteFile, apiUploadFile } from '../api/client';
+import { apiGetFiles, apiUpdateFile, apiDeleteFile, apiUploadFile, apiGetStorageUsage } from '../api/client';
 import useAuthStore from '../store/useAuthStore';
 import Icon from '../components/Icon';
 import CalendarPicker from '../components/CalendarPicker';
@@ -136,7 +136,7 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true }: UploadWiz
           >
             <Icon name="cloud_upload" size={36} color={dragOver ? '#5e4dbb' : '#9ca3af'} />
             <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22', textAlign: 'center' }}>Choose a file or drag & drop it here.</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#9ca3af', textAlign: 'center' }}>JPEG, PNG, PDF, MP4 and more, up to 50 MB.</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#9ca3af', textAlign: 'center' }}>JPEG, PNG, PDF, MP4 and more, up to 200 MB.</div>
             <button
               onClick={e => { e.stopPropagation(); inputRef.current?.click(); }}
               style={{ marginTop: 4, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', background: 'transparent', border: '1.5px solid #E5E7EB', borderRadius: 99, padding: '7px 20px', cursor: 'pointer' }}
@@ -471,7 +471,7 @@ function RecentCard({ file, onEdit, onDelete }: { file: SharedFile; onEdit: () =
 // ── Main Screen ───────────────────────────────────────────────────
 
 export default function FilesScreen() {
-  const { userId } = useAuthStore();
+  const { userId, isAdmin } = useAuthStore();
   const [files, setFiles] = useState<SharedFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -480,6 +480,16 @@ export default function FilesScreen() {
   const [deleting, setDeleting] = useState(false);
   const [pageDragOver, setPageDragOver] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [storageInfo, setStorageInfo] = useState<{ used: number; quota: number | null; isAdmin: boolean } | null>(null);
+
+  const loadStorage = useCallback(async () => {
+    try {
+      const info = await apiGetStorageUsage();
+      setStorageInfo(info);
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -493,10 +503,11 @@ export default function FilesScreen() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); loadStorage(); }, [load, loadStorage]);
 
   const handleUploaded = (f: SharedFile) => {
     setFiles(prev => [f, ...prev]);
+    loadStorage();
   };
 
   const handleSaved = (f: SharedFile) => {
@@ -510,6 +521,7 @@ export default function FilesScreen() {
       await apiDeleteFile(deleteTarget.id);
       setFiles(prev => prev.filter(f => f.id !== deleteTarget.id));
       setDeleteTarget(null);
+      loadStorage();
     } catch (e) {
       console.error(e);
     } finally {
@@ -555,6 +567,47 @@ export default function FilesScreen() {
             Upload
           </button>
         </div>
+
+        {/* Storage usage */}
+        {storageInfo && (() => {
+          const fmtBytes = (b: number) => {
+            if (b >= 1e12) return `${(b / 1e12).toFixed(2)} TB`;
+            if (b >= 1e9)  return `${(b / 1e9).toFixed(2)} GB`;
+            if (b >= 1e6)  return `${(b / 1e6).toFixed(1)} MB`;
+            return `${Math.round(b / 1e3)} KB`;
+          };
+          const unlimited = storageInfo.isAdmin || storageInfo.quota === null;
+          const pct = unlimited ? 0 : Math.min(100, Math.round((storageInfo.used / storageInfo.quota!) * 100));
+          const barColor = pct >= 90 ? '#ba1a1a' : pct >= 75 ? '#d97706' : '#5e4dbb';
+          return (
+            <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 14, padding: '14px 18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: unlimited ? 0 : 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Icon name="storage" size={16} color="#787584" />
+                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22' }}>Storage</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#484552', fontWeight: 500 }}>
+                    {fmtBytes(storageInfo.used)}
+                  </span>
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>/</span>
+                  {unlimited
+                    ? <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 15, color: '#5e4dbb', fontWeight: 700, lineHeight: 1 }}>∞</span>
+                    : <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>{fmtBytes(storageInfo.quota!)}</span>
+                  }
+                  {!unlimited && (
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600, color: barColor, background: pct >= 90 ? '#ffdad6' : pct >= 75 ? '#fef3c7' : '#F5F3FF', borderRadius: 99, padding: '2px 8px', marginLeft: 4 }}>{pct}%</span>
+                  )}
+                </div>
+              </div>
+              {!unlimited && (
+                <div style={{ background: '#E5E7EB', borderRadius: 99, height: 6, overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 99, transition: 'width 500ms ease' }} />
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Recent files */}
         {!loading && recent.length > 0 && (

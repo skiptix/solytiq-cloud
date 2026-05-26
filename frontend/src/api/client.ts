@@ -153,9 +153,18 @@ export const apiNuke = (password: string) =>
 export const apiGetSystemStorage = () =>
   apiFetch<{ total: number; used: number; available: number }>('/admin/system/storage');
 
+export const apiGetAppSettings = () =>
+  apiFetch<{ settings: Record<string, string> }>('/admin/settings');
+
+export const apiUpdateAppSettings = (data: { storageQuotaPerUser?: number }) =>
+  apiFetch<{ settings: Record<string, string> }>('/admin/settings', { method: 'PUT', body: JSON.stringify(data) });
+
 // Files
 export const apiGetFiles = () =>
   apiFetch<{ files: SharedFile[] }>('/files');
+
+export const apiGetStorageUsage = () =>
+  apiFetch<{ used: number; quota: number | null; isAdmin: boolean }>('/files/storage');
 
 export const apiUpdateFile = (id: string, data: { name?: string; isPublic?: boolean; password?: string | null; expiresAt?: string | null }) =>
   apiFetch<{ file: SharedFile }>(`/files/${id}`, { method: 'PUT', body: JSON.stringify(data) });
