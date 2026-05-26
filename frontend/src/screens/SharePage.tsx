@@ -70,12 +70,14 @@ function getPreviewKind(mime: string): PreviewKind {
 
 interface FileInfo {
   name: string;
+  title: string | null;
   mimeType: string;
   size: number;
   hasPassword: boolean;
   expiresAt: string | null;
   isExpired: boolean;
   createdAt: string;
+  sharedBy: string | null;
 }
 
 type PageState = 'loading' | 'password' | 'ready' | 'expired' | 'private' | 'notfound' | 'error';
@@ -224,12 +226,27 @@ export default function SharePage() {
     : showingPreview && previewKind === 'text' ? 680
     : 440;
 
+  function sharedByInitials(name: string): string {
+    return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: '#f8f7fc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      {/* Brand */}
-      <div style={{ position: 'absolute', top: 24, left: 32, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 18, fontWeight: 800, color: '#5e4dbb', letterSpacing: '-0.02em' }}>
-        solytiq
+      {/* Logo */}
+      <div style={{ position: 'absolute', top: 20, left: 24, display: 'flex', alignItems: 'center', gap: 9 }}>
+        <img src="/solytiq-todo-logo.svg" alt="Solytiq" style={{ width: 36, height: 36, borderRadius: 9, objectFit: 'cover', flexShrink: 0 }} />
+        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 800, color: '#1c1b22', letterSpacing: '-0.02em' }}>solytiq</span>
       </div>
+
+      {/* Shared-by bubble */}
+      {info?.sharedBy && (
+        <div style={{ position: 'absolute', top: 20, right: 24, display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid #E5E7EB', borderRadius: 99, padding: '6px 12px 6px 6px', boxShadow: '0 2px 8px rgba(94,77,187,0.07)' }}>
+          <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'linear-gradient(135deg, #9d8dff 0%, #5e4dbb 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 9, fontWeight: 700, color: '#fff', letterSpacing: '0.02em' }}>{sharedByInitials(info.sharedBy)}</span>
+          </div>
+          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>Shared by <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 600, color: '#1c1b22' }}>{info.sharedBy}</span></span>
+        </div>
+      )}
 
       <div style={{ background: '#fff', borderRadius: 20, boxShadow: '0 8px 40px rgba(94,77,187,0.10)', padding: '40px 40px 36px', width: '100%', maxWidth: cardMaxWidth, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, transition: 'max-width 300ms ease' }}>
 
@@ -272,8 +289,13 @@ export default function SharePage() {
               <div style={{ position: 'absolute', bottom: 5, left: '50%', transform: 'translateX(-50%)', background: badgeColor, color: '#fff', fontFamily: 'Inter, sans-serif', fontSize: 8, fontWeight: 800, letterSpacing: '0.04em', padding: '2px 5px', borderRadius: 4 }}>{label}</div>
             </div>
 
+            {/* Title */}
+            {info.title && (
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 24, fontWeight: 800, color: '#1c1b22', textAlign: 'center', letterSpacing: '-0.02em', marginBottom: 6, wordBreak: 'break-word', width: '100%', lineHeight: 1.25 }}>{info.title}</div>
+            )}
+
             {/* File name */}
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', textAlign: 'center', letterSpacing: '-0.01em', marginBottom: 8, wordBreak: 'break-word', width: '100%' }}>{info.name}</div>
+            <div style={{ fontFamily: info.title ? 'Inter, sans-serif' : 'Hanken Grotesk, sans-serif', fontSize: info.title ? 13 : 20, fontWeight: info.title ? 400 : 700, color: info.title ? '#787584' : '#1c1b22', textAlign: 'center', letterSpacing: info.title ? 0 : '-0.01em', marginBottom: 8, wordBreak: 'break-word', width: '100%' }}>{info.name}</div>
 
             {/* Meta */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28, flexWrap: 'wrap', justifyContent: 'center' }}>
