@@ -409,7 +409,7 @@ export default function AIAssistant() {
           onClearHistory={handleClearHistory}
         />
       )}
-      <AIBubble isOpen={isOpen} isThinking={isThinking} contextView={ctx.view} onClick={toggle} />
+      <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={toggle} />
     </div>
   );
 }
