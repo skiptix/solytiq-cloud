@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiLogin, apiRegister } from '../api/client';
-import type { AuthState } from '../types';
+import type { AuthState, AuthUser } from '../types';
 
 const useAuthStore = create<AuthState>()(
   persist(
@@ -15,6 +15,7 @@ const useAuthStore = create<AuthState>()(
       profileImage: null,
       isAdmin: false,
       token: null,
+      totpEnabled: false,
 
       register: async ({ username, email, password }) => {
         const data = await apiRegister(username, email, password);
@@ -28,6 +29,7 @@ const useAuthStore = create<AuthState>()(
           fullName: data.user.fullName || '',
           profileImage: (data.user as { profileImage?: string | null }).profileImage ?? null,
           isAdmin: (data.user as { isAdmin?: boolean }).isAdmin ?? false,
+          totpEnabled: false,
           token: data.token,
         });
       },
@@ -35,6 +37,7 @@ const useAuthStore = create<AuthState>()(
       signIn: async (username, password) => {
         try {
           const data = await apiLogin(username, password);
+          if (data.requires2FA || !data.token || !data.user) return false;
           localStorage.setItem('solytiq_token', data.token);
           set({
             adminRegistered: true,
@@ -43,14 +46,35 @@ const useAuthStore = create<AuthState>()(
             username: data.user.username,
             email: data.user.email,
             fullName: data.user.fullName || '',
-            profileImage: (data.user as { profileImage?: string | null }).profileImage ?? null,
-            isAdmin: (data.user as { isAdmin?: boolean }).isAdmin ?? false,
+            profileImage: data.user.profileImage ?? null,
+            isAdmin: data.user.isAdmin ?? false,
+            totpEnabled: data.user.totpEnabled ?? false,
             token: data.token,
           });
           return true;
         } catch {
           return false;
         }
+      },
+
+      setAuthFromToken: (token: string, user: AuthUser) => {
+        localStorage.setItem('solytiq_token', token);
+        set({
+          adminRegistered: true,
+          loggedIn: true,
+          userId: user.id,
+          username: user.username,
+          email: user.email,
+          fullName: user.fullName || '',
+          profileImage: user.profileImage ?? null,
+          isAdmin: user.isAdmin ?? false,
+          totpEnabled: user.totpEnabled ?? false,
+          token,
+        });
+      },
+
+      setTotpEnabled: (enabled: boolean) => {
+        set({ totpEnabled: enabled });
       },
 
       signOut: () => {
@@ -63,6 +87,7 @@ const useAuthStore = create<AuthState>()(
           fullName: '',
           profileImage: null,
           isAdmin: false,
+          totpEnabled: false,
           token: null,
         });
       },

@@ -92,6 +92,16 @@ export interface SharedFile {
   createdAt: string;
 }
 
+export interface AuthUser {
+  id: string;
+  username: string;
+  email: string;
+  fullName: string;
+  isAdmin?: boolean;
+  profileImage?: string | null;
+  totpEnabled?: boolean;
+}
+
 export interface AuthState {
   adminRegistered: boolean;
   loggedIn: boolean;
@@ -102,10 +112,13 @@ export interface AuthState {
   profileImage: string | null;
   isAdmin: boolean;
   token: string | null;
+  totpEnabled: boolean;
   register: (creds: { username: string; email: string; password: string }) => Promise<void>;
   signIn: (username: string, password: string) => Promise<boolean>;
   signOut: () => void;
   setProfile: (data: { username?: string; email?: string; fullName?: string; profileImage?: string | null }) => void;
+  setAuthFromToken: (token: string, user: AuthUser) => void;
+  setTotpEnabled: (enabled: boolean) => void;
 }
 
 export interface AppState {

@@ -18,6 +18,16 @@ export function verifyToken(token: string): { userId: string } {
   return { userId: payload.userId };
 }
 
+export function generatePendingToken(userId: string): string {
+  return jwt.sign({ userId, p2fa: true }, JWT_SECRET, { expiresIn: '5m' });
+}
+
+export function verifyPendingToken(token: string): { userId: string } {
+  const payload = jwt.verify(token, JWT_SECRET) as { userId: string; p2fa?: boolean };
+  if (!payload.p2fa) throw new Error('Not a 2FA pending token');
+  return { userId: payload.userId };
+}
+
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }
