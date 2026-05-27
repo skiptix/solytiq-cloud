@@ -177,21 +177,25 @@ export default function SlashCommandInput({
 
       {menu.kind === 'slash-menu' && (
         <div style={dropdownStyle}>
-          {(['list', 'link'] as const).map((opt, idx) => (
+          <div style={{ padding: '7px 14px 5px', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            Commands
+          </div>
+          {([
+            { opt: 'list', icon: 'format_list_bulleted', label: 'New sublist', hint: '{new list name}', desc: 'Create a nested sublist' },
+            { opt: 'link', icon: 'link', label: 'Link list', hint: '{list name}', desc: 'Link an existing list' },
+          ] as const).map(({ opt, icon, hint, desc }, idx) => (
             <button
               key={opt}
-              style={{ ...itemBase, background: highlightIdx === idx ? '#F5F3FF' : 'transparent' }}
+              style={{ ...itemBase, background: highlightIdx === idx ? '#F5F3FF' : 'transparent', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '8px 14px' }}
               onMouseEnter={() => setHighlightIdx(idx)}
               onMouseDown={e => { e.preventDefault(); selectSlashOption(opt); }}
             >
-              <Icon name={opt === 'list' ? 'format_list_bulleted' : 'link'} size={16} color="#5e4dbb" />
-              <span>
-                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 600, color: '#5e4dbb' }}>/{opt}</span>
-                {'  '}
-                <span style={{ color: '#787584', fontSize: 12 }}>
-                  {opt === 'list' ? 'Create new sublist' : 'Link existing list'}
-                </span>
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon name={icon} size={15} color="#5e4dbb" />
+                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 700, fontSize: 13, color: '#5e4dbb' }}>/{opt}</span>
+                <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: 13, color: '#b0acbe' }}>{hint}</span>
+              </div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584', paddingLeft: 23 }}>{desc}</div>
             </button>
           ))}
         </div>
