@@ -89,6 +89,19 @@ function toIso(d: Date) {
 export function buildContext(pathname: string, appStore: AppState): AIContext {
   const today = toIso(new Date());
 
+  // Always include lists & folders so Sol can manage them from any view
+  const listsSnapshot = appStore.lists.map((l) => ({
+    id: l.id,
+    name: l.name,
+    emoji: l.emoji ?? null,
+    folder_id: l.folderId ?? null,
+  }));
+  const foldersSnapshot = appStore.folders.map((f) => ({
+    id: f.id,
+    name: f.name,
+    emoji: f.emoji ?? null,
+  }));
+
   if (pathname.startsWith('/list/')) {
     const listId = pathname.split('/list/')[1];
     const list = appStore.lists.find((l) => l.id === listId);
@@ -112,6 +125,8 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
               note: t.note ?? null,
             })),
           })),
+          available_lists: listsSnapshot,
+          available_folders: foldersSnapshot,
         },
       };
     }
@@ -133,7 +148,7 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
       .map((t) => ({ id: t.id, title: t.title, priority: t.priority ?? null, list_name: t.list_name, list_id: t.list_id }));
     return {
       view: 'scheduled',
-      data: { today, scheduled_tasks: scheduled, unscheduled_tasks: unscheduled },
+      data: { today, scheduled_tasks: scheduled, unscheduled_tasks: unscheduled, available_lists: listsSnapshot, available_folders: foldersSnapshot },
     };
   }
 
@@ -155,7 +170,7 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
 
   return {
     view: 'dashboard',
-    data: { today, overdue_tasks: overdue, due_today_tasks: dueToday, upcoming_tasks: upcoming, no_deadline_tasks: noDeadline },
+    data: { today, overdue_tasks: overdue, due_today_tasks: dueToday, upcoming_tasks: upcoming, no_deadline_tasks: noDeadline, available_lists: listsSnapshot, available_folders: foldersSnapshot },
   };
 }
 
@@ -181,10 +196,11 @@ ${contextJson}
 Guidelines:
 - Be concise, friendly, and helpful
 - When you execute an action using a tool, briefly confirm what you did in your final response
-- Only perform actions the current user can do — you act on their behalf
+- SECURITY: You may only act on data that belongs to the current user (${username}). Never touch lists, folders, tasks, or sections belonging to other users. The available_lists and available_folders in the context are the only ones you are allowed to modify.
 - For delete operations, confirm with the user first before executing unless they explicitly said to delete
 - Format dates as YYYY-MM-DD in tool parameters
-- Refer to tasks and sections by their titles, not their IDs, when talking to the user
+- Refer to tasks, lists, sections, and folders by their names, not their IDs, when talking to the user
+- When creating a list you can optionally assign it to a folder from available_folders
 - If the user asks something outside your capabilities, explain politely what you can do instead`;
 }
 
@@ -392,6 +408,75 @@ export function buildTools(ctx: AIContext): ToolDef[] {
       },
     });
   }
+
+  // List & folder management — available in every view
+  const folderList = (ctx.data.available_folders as Array<{ id: string; name: string }> ?? [])
+    .map((f) => `"${f.name}" (id: ${f.id})`).join(', ') || 'none';
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'create_list',
+      description: 'Create a new list for the current user. Optionally place it in a folder.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'List name' },
+          emoji: { type: 'string', description: 'Optional emoji icon' },
+          folder_id: { type: 'string', description: `Optional folder ID to place the list in. Available folders: ${folderList}` },
+        },
+        required: ['name'],
+      },
+    },
+  });
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'update_list',
+      description: "Rename a list or change its emoji. Only works on the current user's own lists.",
+      parameters: {
+        type: 'object',
+        properties: {
+          list_id: { type: 'string', description: 'List ID from available_lists' },
+          name: { type: 'string', description: 'New name' },
+          emoji: { type: 'string', description: 'New emoji icon' },
+        },
+        required: ['list_id'],
+      },
+    },
+  });
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'delete_list',
+      description: "Permanently delete a list and all its tasks. Only works on the current user's own lists.",
+      parameters: {
+        type: 'object',
+        properties: {
+          list_id: { type: 'string', description: 'List ID from available_lists' },
+        },
+        required: ['list_id'],
+      },
+    },
+  });
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'move_list_to_folder',
+      description: `Move a list into a folder, or remove it from its current folder. Available folders: ${folderList}`,
+      parameters: {
+        type: 'object',
+        properties: {
+          list_id: { type: 'string', description: 'List ID from available_lists' },
+          folder_id: { type: 'string', description: 'Folder ID to move into, or null to remove from any folder' },
+        },
+        required: ['list_id'],
+      },
+    },
+  });
 
   return tools;
 }

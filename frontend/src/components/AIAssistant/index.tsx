@@ -27,6 +27,9 @@ import {
   apiGetAISessions,
   apiGetAISessionMessages,
   apiDeleteAISession,
+  apiCreateList,
+  apiUpdateList,
+  apiDeleteList,
 } from '../../api/client';
 import AIBubble from './AIBubble';
 import AIChatWindow from './AIChatWindow';
@@ -260,6 +263,53 @@ export default function AIAssistant() {
           return { id: call.id, name, result: summary, summary };
         }
 
+        // ── List & folder management ──────────────────────────────
+        if (name === 'create_list') {
+          const listId = `list_${Date.now()}`;
+          const res = await apiCreateList({
+            id: listId,
+            name: args.name as string,
+            emoji: (args.emoji as string) || undefined,
+            folderId: (args.folder_id as string) || undefined,
+            sections: [],
+          });
+          appStore.setLists((prev) => [...prev, { ...res.list, sections: [] }]);
+          return { id: call.id, name, result: `Created list "${res.list.name}"`, summary: `Created list "${res.list.name}"` };
+        }
+
+        if (name === 'update_list') {
+          const listId = args.list_id as string;
+          const updates: Record<string, unknown> = {};
+          if (args.name !== undefined) updates.name = args.name;
+          if (args.emoji !== undefined) updates.emoji = args.emoji;
+          await apiUpdateList(listId, updates);
+          appStore.updateList(listId, updates);
+          const listName = appStore.lists.find((l) => l.id === listId)?.name;
+          return { id: call.id, name, result: `Updated list ${listId}`, summary: `Updated list "${args.name ?? listName}"` };
+        }
+
+        if (name === 'delete_list') {
+          const listId = args.list_id as string;
+          const list = appStore.lists.find((l) => l.id === listId);
+          await apiDeleteList(listId);
+          appStore.deleteList(listId);
+          return { id: call.id, name, result: `Deleted list "${list?.name ?? listId}"`, summary: `Deleted list "${list?.name ?? listId}"` };
+        }
+
+        if (name === 'move_list_to_folder') {
+          const listId = args.list_id as string;
+          const folderId = (args.folder_id as string | null | undefined) ?? null;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await apiUpdateList(listId, { folderId } as any);
+          appStore.updateList(listId, { folderId: folderId ?? undefined });
+          const list = appStore.lists.find((l) => l.id === listId);
+          const folder = folderId ? appStore.folders.find((f) => f.id === folderId) : null;
+          const summary = folder
+            ? `Moved "${list?.name}" to "${folder.name}"`
+            : `Removed "${list?.name}" from folder`;
+          return { id: call.id, name, result: summary, summary };
+        }
+
         return { id: call.id, name, result: `Unknown tool: ${name}` };
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -430,8 +480,8 @@ export default function AIAssistant() {
     <div
       style={{
         position: 'fixed',
-        bottom: 20,
-        right: 20,
+        bottom: 30,
+        right: 30,
         zIndex: 9000,
         display: 'flex',
         flexDirection: 'column',
