@@ -415,6 +415,58 @@ export function buildTools(ctx: AIContext): ToolDef[] {
   const folderList = (ctx.data.available_folders as Array<{ id: string; name: string }> ?? [])
     .map((f) => `"${f.name}" (id: ${f.id})`).join(', ') || 'none';
 
+  // ── Folder tools ─────────────────────────────────────────────────
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'create_folder',
+      description: 'Create a new folder to organise lists.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Folder name' },
+          emoji: { type: 'string', description: 'Optional emoji icon' },
+          is_public: { type: 'boolean', description: 'true = public, false = private (default: true)' },
+        },
+        required: ['name'],
+      },
+    },
+  });
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'update_folder',
+      description: "Rename a folder, change its emoji, or toggle its visibility. Only works on the current user's own folders.",
+      parameters: {
+        type: 'object',
+        properties: {
+          folder_id: { type: 'string', description: `Folder ID from available_folders: ${folderList}` },
+          name: { type: 'string', description: 'New folder name' },
+          emoji: { type: 'string', description: 'New emoji icon' },
+          is_public: { type: 'boolean', description: 'true = public, false = private' },
+        },
+        required: ['folder_id'],
+      },
+    },
+  });
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'delete_folder',
+      description: "Delete a folder. Lists inside it are moved out but not deleted. Only works on the current user's own folders.",
+      parameters: {
+        type: 'object',
+        properties: {
+          folder_id: { type: 'string', description: `Folder ID from available_folders: ${folderList}` },
+        },
+        required: ['folder_id'],
+      },
+    },
+  });
+
+  // ── List tools ────────────────────────────────────────────────────
   tools.push({
     type: 'function',
     function: {

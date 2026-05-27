@@ -30,6 +30,7 @@ import {
   apiCreateList,
   apiUpdateList,
   apiDeleteList,
+  apiCreateFolder,
 } from '../../api/client';
 import AIBubble from './AIBubble';
 import AIChatWindow from './AIChatWindow';
@@ -263,7 +264,39 @@ export default function AIAssistant() {
           return { id: call.id, name, result: summary, summary };
         }
 
-        // ── List & folder management ──────────────────────────────
+        // ── Folder management ─────────────────────────────────────
+        if (name === 'create_folder') {
+          const folderId = `folder_${Date.now()}`;
+          const res = await apiCreateFolder({
+            id: folderId,
+            name: args.name as string,
+            emoji: (args.emoji as string) || undefined,
+            isPublic: args.is_public !== undefined ? (args.is_public as boolean) : true,
+          });
+          appStore.setFolders((prev) => [...prev, { ...res.folder, collapsed: false }]);
+          return { id: call.id, name, result: `Created folder "${res.folder.name}"`, summary: `Created folder "${res.folder.name}"` };
+        }
+
+        if (name === 'update_folder') {
+          const folderId = args.folder_id as string;
+          const updates: Record<string, unknown> = {};
+          if (args.name !== undefined) updates.name = args.name;
+          if (args.emoji !== undefined) updates.emoji = args.emoji;
+          if (args.is_public !== undefined) updates.isPublic = args.is_public;
+          appStore.updateFolder(folderId, updates as Parameters<typeof appStore.updateFolder>[1]);
+          const folderName = appStore.folders.find((f) => f.id === folderId)?.name ?? folderId;
+          const visNote = args.is_public !== undefined ? ` (${args.is_public ? 'public' : 'private'})` : '';
+          return { id: call.id, name, result: `Updated folder "${folderName}"`, summary: `Updated folder "${args.name ?? folderName}"${visNote}` };
+        }
+
+        if (name === 'delete_folder') {
+          const folderId = args.folder_id as string;
+          const folder = appStore.folders.find((f) => f.id === folderId);
+          appStore.deleteFolder(folderId);
+          return { id: call.id, name, result: `Deleted folder "${folder?.name ?? folderId}"`, summary: `Deleted folder "${folder?.name ?? folderId}"` };
+        }
+
+        // ── List management ───────────────────────────────────────
         if (name === 'create_list') {
           const listId = `list_${Date.now()}`;
           const res = await apiCreateList({
