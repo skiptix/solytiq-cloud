@@ -276,7 +276,7 @@ export default function AIAssistant() {
             isPublic: args.is_public !== undefined ? (args.is_public as boolean) : true,
           });
           appStore.setFolders((prev) => [...prev, { ...res.folder, collapsed: false }]);
-          return { id: call.id, name, result: `Created folder "${res.folder.name}"`, summary: `Created folder "${res.folder.name}"` };
+          return { id: call.id, name, result: `Created folder "${res.folder.name}" (folder_id: ${res.folder.id})`, summary: `Created folder "${res.folder.name}"` };
         }
 
         if (name === 'update_folder') {
@@ -309,7 +309,7 @@ export default function AIAssistant() {
             sections: [],
           });
           appStore.setLists((prev) => [...prev, { ...res.list, sections: [] }]);
-          return { id: call.id, name, result: `Created list "${res.list.name}"`, summary: `Created list "${res.list.name}"` };
+          return { id: call.id, name, result: `Created list "${res.list.name}" (list_id: ${res.list.id})`, summary: `Created list "${res.list.name}"` };
         }
 
         if (name === 'update_list') {
@@ -426,8 +426,8 @@ export default function AIAssistant() {
       setThinking(true);
 
       try {
-        const ctx = buildContext(location.pathname, appStore);
-        const tools = buildTools(ctx);
+        let ctx = buildContext(location.pathname, appStore);
+        let tools = buildTools(ctx);
         const systemPrompt = buildSystemPrompt(ctx, username || 'User');
 
         // Build API messages from history (last 20 + current)
@@ -437,62 +437,45 @@ export default function AIAssistant() {
           .slice(-20)
           .map((m) => ({ role: m.role, content: m.content }));
 
-        const apiMessages = [{ role: 'system', content: systemPrompt }, ...history];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const messages: any[] = [{ role: 'system', content: systemPrompt }, ...history];
+        const allResults: Array<{ id: string; name: string; result: string; summary?: string }> = [];
+        let finalContent = '';
+        const MAX_ROUNDS = 5;
 
-        const response = await apiAIChat(apiMessages, tools.length ? tools : undefined);
-        const choice = response.choices[0];
-        const msg = choice.message;
+        for (let round = 0; round < MAX_ROUNDS; round++) {
+          const response = await apiAIChat(messages, tools.length ? tools : undefined);
+          const msg = response.choices[0].message;
 
-        if (msg.tool_calls?.length) {
-          // Execute all tool calls
-          const results = await Promise.all(msg.tool_calls.map((tc) => executeTool(tc, ctx)));
+          if (!msg.tool_calls?.length) {
+            finalContent = msg.content ?? '';
+            break;
+          }
 
-          // Build tool result messages for follow-up
-          const toolMessages = [
-            { role: 'assistant', content: msg.content, tool_calls: msg.tool_calls },
-            ...results.map((r) => ({
-              role: 'tool',
-              tool_call_id: r.id,
-              name: r.name,
-              content: r.result,
-            })),
-          ];
+          const results = await Promise.all(msg.tool_calls.map((tc: ToolCall) => executeTool(tc, ctx)));
+          allResults.push(...results);
 
-          // Update thinking indicator
-          replaceMessage(thinkingId, {
-            id: thinkingId,
-            role: 'assistant',
-            content: '',
-            isThinking: true,
-            createdAt: new Date().toISOString(),
-          });
+          messages.push({ role: 'assistant', content: msg.content ?? '', tool_calls: msg.tool_calls });
+          results.forEach((r) =>
+            messages.push({ role: 'tool', tool_call_id: r.id, name: r.name, content: r.result })
+          );
 
-          const followUp = await apiAIChat([...apiMessages, ...toolMessages], []);
-          const finalContent = followUp.choices[0].message.content ?? '';
-          const actionSummary = results.map((r) => r.summary).filter(Boolean).join(' · ');
-
-          const finalMsg: AIChatMessage = {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: finalContent,
-            actionSummary: actionSummary || undefined,
-            createdAt: new Date().toISOString(),
-          };
-          removeMessage(thinkingId);
-          addMessage(finalMsg);
-          apiSaveAIMessage('assistant', finalContent, sessionId, actionSummary ? { actionSummary } : undefined).catch(() => {});
-        } else {
-          const content = msg.content ?? '';
-          const finalMsg: AIChatMessage = {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content,
-            createdAt: new Date().toISOString(),
-          };
-          removeMessage(thinkingId);
-          addMessage(finalMsg);
-          apiSaveAIMessage('assistant', content, sessionId).catch(() => {});
+          // Rebuild context with updated store state so newly created folders/lists are available
+          ctx = buildContext(location.pathname, appStore);
+          tools = buildTools(ctx);
         }
+
+        const actionSummary = allResults.map((r) => r.summary).filter(Boolean).join(' · ');
+        const finalMsg: AIChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: finalContent,
+          actionSummary: actionSummary || undefined,
+          createdAt: new Date().toISOString(),
+        };
+        removeMessage(thinkingId);
+        addMessage(finalMsg);
+        apiSaveAIMessage('assistant', finalContent, sessionId, actionSummary ? { actionSummary } : undefined).catch(() => {});
       } catch (err) {
         removeMessage(thinkingIdRef.current ?? thinkingId);
         const errContent = err instanceof Error && err.message.includes('disabled')
