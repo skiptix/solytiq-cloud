@@ -483,7 +483,7 @@ export default function AIChatWindow({
         <div
           style={{
             display: 'flex',
-            alignItems: 'flex-end',
+            alignItems: 'center',
             gap: 8,
             background: '#F9FAFB',
             border: '1.5px solid #e8e4f0',
