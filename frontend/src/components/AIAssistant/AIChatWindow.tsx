@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import type { AIChatMessage } from '../../store/useAIStore';
+import type { AIChatMessage, AISession } from '../../store/useAIStore';
 import Icon from '../Icon';
+import AIRecentChats from './AIRecentChats';
 
 interface Props {
   messages: AIChatMessage[];
@@ -11,6 +12,11 @@ interface Props {
   onClose: () => void;
   onClearHistory: () => void;
   onShowRecentChats: () => void;
+  showRecentChats: boolean;
+  recentSessions: AISession[];
+  onSelectSession: (sessionId: string) => void;
+  onDeleteSession: (sessionId: string) => void;
+  onCloseRecentChats: () => void;
 }
 
 const VIEW_LABELS: Record<string, string> = {
@@ -56,6 +62,7 @@ function UserMessage({ msg }: { msg: AIChatMessage }) {
           fontSize: 13.5,
           lineHeight: 1.5,
           wordBreak: 'break-word',
+          boxShadow: '0 2px 8px rgba(107,91,204,0.25)',
         }}
       >
         {msg.content}
@@ -78,6 +85,7 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            boxShadow: '0 2px 6px rgba(157,141,255,0.4)',
           }}
         >
           <span style={{ fontSize: 14 }}>✦</span>
@@ -108,6 +116,7 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
           alignItems: 'center',
           justifyContent: 'center',
           marginTop: 2,
+          boxShadow: '0 2px 6px rgba(157,141,255,0.4)',
         }}
       >
         <span style={{ fontSize: 14 }}>✦</span>
@@ -127,6 +136,7 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
               fontSize: 11.5,
               fontWeight: 600,
               color: '#059669',
+              animation: 'aiFadeIn 300ms ease both',
             }}
           >
             <Icon name="check_circle" size={13} color="#059669" />
@@ -145,6 +155,7 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
               lineHeight: 1.6,
               color: msg.error ? '#ba1a1a' : '#1c1b22',
               wordBreak: 'break-word',
+              animation: 'aiFadeIn 200ms ease both',
             }}
           >
             <ReactMarkdown
@@ -182,7 +193,20 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
   );
 }
 
-export default function AIChatWindow({ messages, isThinking, contextView, onSend, onClose, onClearHistory, onShowRecentChats }: Props) {
+export default function AIChatWindow({
+  messages,
+  isThinking,
+  contextView,
+  onSend,
+  onClose,
+  onClearHistory,
+  onShowRecentChats,
+  showRecentChats,
+  recentSessions,
+  onSelectSession,
+  onDeleteSession,
+  onCloseRecentChats,
+}: Props) {
   const [input, setInput] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -223,12 +247,12 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
         height: 500,
         background: '#fff',
         borderRadius: 20,
-        boxShadow: '0 16px 48px rgba(30,20,80,0.22), 0 2px 8px rgba(94,77,187,0.12)',
+        boxShadow: '0 20px 60px rgba(30,20,80,0.2), 0 4px 16px rgba(94,77,187,0.1)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        animation: 'aiWindowIn 250ms cubic-bezier(0.34,1.56,0.64,1) both',
-        border: '1px solid rgba(94,77,187,0.15)',
+        animation: 'aiWindowIn 300ms cubic-bezier(0.34,1.56,0.64,1) both',
+        border: '1px solid rgba(94,77,187,0.12)',
       }}
       onClick={(e) => e.stopPropagation()}
     >
@@ -248,12 +272,13 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
             width: 32,
             height: 32,
             borderRadius: '50%',
-            background: 'rgba(255,255,255,0.2)',
+            background: 'rgba(255,255,255,0.18)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: 16,
             flexShrink: 0,
+            boxShadow: '0 0 0 1px rgba(255,255,255,0.15)',
           }}
         >
           ✦
@@ -266,6 +291,7 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
               fontWeight: 700,
               color: '#fff',
               lineHeight: 1.2,
+              letterSpacing: '-0.01em',
             }}
           >
             Sol
@@ -274,73 +300,72 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
             style={{
               fontFamily: 'Inter, sans-serif',
               fontSize: 11,
-              color: 'rgba(255,255,255,0.65)',
+              color: 'rgba(255,255,255,0.6)',
               marginTop: 1,
             }}
           >
             {viewLabel} context
           </div>
         </div>
-        {/* Recent chats */}
         <button
           onClick={onShowRecentChats}
           title="Recent chats"
           style={{
-            width: 28,
-            height: 28,
-            borderRadius: 7,
+            width: 30,
+            height: 30,
+            borderRadius: 8,
             background: 'rgba(255,255,255,0.12)',
             border: 'none',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'background 120ms',
+            transition: 'background 180ms ease, transform 150ms ease',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.22)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.24)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.transform = 'scale(1)'; }}
         >
-          <Icon name="history" size={15} color="rgba(255,255,255,0.8)" />
+          <Icon name="history" size={15} color="rgba(255,255,255,0.85)" />
         </button>
-        {/* Clear */}
         <button
           onClick={() => setShowClearConfirm(true)}
-          title="Clear chat history"
+          title="Clear chat"
           style={{
-            width: 28,
-            height: 28,
-            borderRadius: 7,
+            width: 30,
+            height: 30,
+            borderRadius: 8,
             background: 'rgba(255,255,255,0.12)',
             border: 'none',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'background 120ms',
+            transition: 'background 180ms ease, transform 150ms ease',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.22)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.24)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.transform = 'scale(1)'; }}
         >
-          <Icon name="delete_sweep" size={15} color="rgba(255,255,255,0.8)" />
+          <Icon name="delete_sweep" size={15} color="rgba(255,255,255,0.85)" />
         </button>
         <button
           onClick={onClose}
+          title="Close"
           style={{
-            width: 28,
-            height: 28,
-            borderRadius: 7,
+            width: 30,
+            height: 30,
+            borderRadius: 8,
             background: 'rgba(255,255,255,0.12)',
             border: 'none',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'background 120ms',
+            transition: 'background 180ms ease, transform 150ms ease',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.22)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.24)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.transform = 'scale(1)'; }}
         >
-          <Icon name="close" size={15} color="rgba(255,255,255,0.8)" />
+          <Icon name="close" size={15} color="rgba(255,255,255,0.85)" />
         </button>
       </div>
 
@@ -365,6 +390,7 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
               justifyContent: 'center',
               gap: 10,
               padding: '20px 10px',
+              animation: 'aiFadeIn 300ms ease both',
             }}
           >
             <div
@@ -372,11 +398,12 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
                 width: 56,
                 height: 56,
                 borderRadius: '50%',
-                background: '#F5F3FF',
+                background: 'linear-gradient(135deg, #ede9ff 0%, #f5f3ff 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: 28,
+                fontSize: 26,
+                boxShadow: '0 4px 16px rgba(107,91,204,0.15)',
               }}
             >
               ✦
@@ -388,6 +415,7 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
                 fontWeight: 600,
                 color: '#1c1b22',
                 textAlign: 'center',
+                letterSpacing: '-0.01em',
               }}
             >
               Hi, I'm Sol — how can I help?
@@ -409,7 +437,7 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
                 contextView === 'list' ? 'Add a task to the first section' : 'Add a task called "Weekly review"',
                 contextView === 'scheduled' ? 'Schedule the top priority task for tomorrow' : 'Mark all overdue tasks as done',
                 contextView === 'list' ? 'Create a section called "In Review"' : 'What tasks are due today?',
-              ].map((hint) => (
+              ].map((hint, i) => (
                 <button
                   key={hint}
                   onClick={() => { setInput(hint); inputRef.current?.focus(); }}
@@ -418,15 +446,16 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
                     fontSize: 12,
                     color: '#5e4dbb',
                     background: '#F5F3FF',
-                    border: '1px solid #e8e4f0',
+                    border: '1px solid rgba(94,77,187,0.12)',
                     borderRadius: 10,
-                    padding: '7px 12px',
+                    padding: '8px 12px',
                     cursor: 'pointer',
                     textAlign: 'left',
-                    transition: 'background 120ms',
+                    transition: 'background 180ms ease, transform 150ms ease, box-shadow 180ms ease',
+                    animation: `aiItemIn 300ms ease ${i * 60}ms both`,
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = '#ede9ff'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = '#F5F3FF'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#ede9ff'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(94,77,187,0.12)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
                 >
                   {hint}
                 </button>
@@ -447,7 +476,7 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
       <div
         style={{
           padding: '10px 12px 14px',
-          borderTop: '1px solid #f1ecf6',
+          borderTop: '1px solid rgba(94,77,187,0.08)',
           flexShrink: 0,
         }}
       >
@@ -460,8 +489,10 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
             border: '1.5px solid #e8e4f0',
             borderRadius: 14,
             padding: '8px 8px 8px 12px',
-            transition: 'border-color 200ms',
+            transition: 'border-color 200ms ease, box-shadow 200ms ease',
           }}
+          onFocusCapture={(e) => { e.currentTarget.style.borderColor = 'rgba(94,77,187,0.35)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(94,77,187,0.06)'; }}
+          onBlurCapture={(e) => { e.currentTarget.style.borderColor = '#e8e4f0'; e.currentTarget.style.boxShadow = 'none'; }}
         >
           <textarea
             ref={inputRef}
@@ -484,6 +515,7 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
               maxHeight: 96,
               overflowY: 'auto',
               opacity: isThinking ? 0.5 : 1,
+              transition: 'opacity 200ms ease',
             }}
             onInput={(e) => {
               const t = e.currentTarget;
@@ -508,7 +540,9 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
-              transition: 'all 150ms',
+              transition: 'all 200ms ease',
+              transform: !input.trim() || isThinking ? 'scale(0.95)' : 'scale(1)',
+              boxShadow: !input.trim() || isThinking ? 'none' : '0 2px 8px rgba(107,91,204,0.35)',
             }}
           >
             <Icon
@@ -522,7 +556,7 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
           style={{
             fontFamily: 'Inter, sans-serif',
             fontSize: 10.5,
-            color: '#b0acbe',
+            color: '#c4bfd4',
             marginTop: 5,
             textAlign: 'center',
           }}
@@ -531,6 +565,16 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
         </div>
       </div>
 
+      {/* Recent chats overlay — slides in from the right inside the window */}
+      {showRecentChats && (
+        <AIRecentChats
+          sessions={recentSessions}
+          onSelect={onSelectSession}
+          onDelete={onDeleteSession}
+          onClose={onCloseRecentChats}
+        />
+      )}
+
       {/* Clear history confirmation */}
       {showClearConfirm && (
         <div
@@ -538,7 +582,7 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
             position: 'absolute',
             inset: 0,
             background: 'rgba(255,255,255,0.92)',
-            backdropFilter: 'blur(4px)',
+            backdropFilter: 'blur(6px)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -546,18 +590,20 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
             gap: 14,
             padding: 24,
             borderRadius: 20,
-            zIndex: 10,
+            zIndex: 20,
+            animation: 'aiFadeIn 180ms ease both',
           }}
         >
           <div
             style={{
-              width: 44,
-              height: 44,
+              width: 48,
+              height: 48,
               borderRadius: '50%',
               background: '#fff5f5',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              boxShadow: '0 4px 16px rgba(186,26,26,0.12)',
             }}
           >
             <Icon name="delete_sweep" size={22} color="#ba1a1a" />
@@ -570,6 +616,7 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
                 fontWeight: 700,
                 color: '#1c1b22',
                 marginBottom: 6,
+                letterSpacing: '-0.01em',
               }}
             >
               Clear this chat?
@@ -599,9 +646,10 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
                 borderRadius: 10,
                 padding: '10px 0',
                 cursor: 'pointer',
+                transition: 'background 180ms ease, transform 150ms ease',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#e8e4f0'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = '#f1ecf6'; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#e8e4f0'; e.currentTarget.style.transform = 'scale(1.02)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = '#f1ecf6'; e.currentTarget.style.transform = 'scale(1)'; }}
             >
               Cancel
             </button>
@@ -618,9 +666,10 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
                 borderRadius: 10,
                 padding: '10px 0',
                 cursor: 'pointer',
+                transition: 'background 180ms ease, transform 150ms ease',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#991212'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = '#ba1a1a'; }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#991212'; e.currentTarget.style.transform = 'scale(1.02)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = '#ba1a1a'; e.currentTarget.style.transform = 'scale(1)'; }}
             >
               Clear
             </button>

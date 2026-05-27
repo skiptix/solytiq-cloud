@@ -30,7 +30,6 @@ import {
 } from '../../api/client';
 import AIBubble from './AIBubble';
 import AIChatWindow from './AIChatWindow';
-import AIRecentChats from './AIRecentChats';
 
 interface ToolCall {
   id: string;
@@ -440,35 +439,20 @@ export default function AIAssistant() {
       }}
     >
       {isOpen && (
-        <div style={{ position: 'relative' }}>
-          <AIChatWindow
-            messages={messages}
-            isThinking={isThinking}
-            contextView={ctx.view}
-            onSend={handleSend}
-            onClose={() => setOpen(false)}
-            onClearHistory={handleClearHistory}
-            onShowRecentChats={handleShowRecentChats}
-          />
-          {showRecentChats && (
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 0,
-                right: 0,
-                width: 360,
-                height: 500,
-              }}
-            >
-              <AIRecentChats
-                sessions={recentSessions}
-                onSelect={handleSelectSession}
-                onDelete={handleDeleteSession}
-                onClose={() => setShowRecentChats(false)}
-              />
-            </div>
-          )}
-        </div>
+        <AIChatWindow
+          messages={messages}
+          isThinking={isThinking}
+          contextView={ctx.view}
+          onSend={handleSend}
+          onClose={() => setOpen(false)}
+          onClearHistory={handleClearHistory}
+          onShowRecentChats={handleShowRecentChats}
+          showRecentChats={showRecentChats}
+          recentSessions={recentSessions}
+          onSelectSession={handleSelectSession}
+          onDeleteSession={handleDeleteSession}
+          onCloseRecentChats={() => setShowRecentChats(false)}
+        />
       )}
       <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} />
     </div>
