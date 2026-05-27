@@ -1,0 +1,290 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, Navigate } from 'react-router-dom';
+import type { Task, List } from '../types';
+import useAppStore from '../store/useAppStore';
+import Icon from '../components/Icon';
+
+// ── Date helpers ────────────────────────────────────────────────
+function toIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const todayStr = () => toIso(new Date());
+function nextWeekStr(): string { const t = new Date(); t.setDate(t.getDate() + 7); return toIso(t); }
+function isDueToday(t: Task) { return t.deadline === todayStr(); }
+function isDueThisWeek(t: Task) { const d = t.deadline; return d ? d > todayStr() && d <= nextWeekStr() : false; }
+function friendlyDate(iso?: string) {
+  if (!iso) return '';
+  const td = todayStr();
+  if (iso === td) return 'Today';
+  const d = new Date(iso.slice(0, 10) + 'T12:00:00');
+  const tom = new Date(); tom.setDate(tom.getDate() + 1);
+  if (iso === toIso(tom)) return 'Tomorrow';
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+// ── Animated progress bar ───────────────────────────────────────
+function AnimatedBar({ pct, color, height = 8, delay = 150 }: { pct: number; color: string; height?: number; delay?: number }) {
+  const [w, setW] = useState(0);
+  useEffect(() => { const t = setTimeout(() => setW(pct), delay); return () => clearTimeout(t); }, [pct, delay]);
+  return (
+    <div style={{ background: '#f0ecf8', borderRadius: 9999, height, overflow: 'hidden' }}>
+      <div style={{ height: '100%', width: `${w}%`, background: color, borderRadius: 9999, transition: 'width 900ms cubic-bezier(0.34,1.56,0.64,1)' }} />
+    </div>
+  );
+}
+
+// ── Stat card ───────────────────────────────────────────────────
+function StatCard({ num, label, sub, icon, iconBg, iconColor, accent }: { num: number; label: string; sub: string; icon: string; iconBg: string; iconColor: string; accent?: string }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{ background: '#F9FAFB', border: `1px solid ${hov ? '#d8d0eb' : '#E5E7EB'}`, borderRadius: 12, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'all 180ms', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ width: 34, height: 34, borderRadius: 10, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name={icon} size={17} color={iconColor} />
+        </div>
+        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, fontWeight: 600, color: accent ?? '#787584', background: accent ? `${accent}14` : '#f1ecf6', borderRadius: 9999, padding: '2px 8px', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>{sub}</span>
+      </div>
+      <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 700, color: '#1c1b22', fontSize: 30, lineHeight: 1, letterSpacing: '-0.02em' }}>{num}</span>
+      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552' }}>{label}</div>
+    </div>
+  );
+}
+
+// ── Mini task row ───────────────────────────────────────────────
+function MiniTask({ task, onGo }: { task: Task; onGo: () => void }) {
+  const [hov, setHov] = useState(false);
+  const PCOLS: Record<string, string> = { High: '#ea580c', Medium: '#f59e0b', Low: '#787584' };
+  return (
+    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={onGo}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: hov ? '#F5F3FF' : 'transparent', cursor: 'pointer', transition: 'background 150ms' }}>
+      <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#c9c4d5', flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</div>
+        {task._listName && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#787584', marginTop: 1 }}>in {task._listName}</div>}
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+        {task.priority && <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Inter, sans-serif', color: PCOLS[task.priority] }}>{task.priority}</span>}
+        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe' }}>{friendlyDate(task.deadline)}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Task panel (today / week) ───────────────────────────────────
+function TaskPanel({ title, icon, accent, accentBg, tasks, emptyText, onGo }: {
+  title: string; icon: string; accent: string; accentBg: string; tasks: Task[]; emptyText: string; onGo: (listId: string) => void;
+}) {
+  const visible = tasks.slice(0, 6);
+  const more = tasks.length - visible.length;
+  return (
+    <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 14, padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px 6px' }}>
+        <div style={{ width: 28, height: 28, borderRadius: 8, background: accentBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name={icon} size={15} color={accent} />
+        </div>
+        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22' }}>{title}</span>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: accent, background: accentBg, borderRadius: 9999, padding: '2px 9px' }}>{tasks.length}</span>
+      </div>
+      {tasks.length === 0
+        ? <div style={{ padding: '24px 12px', textAlign: 'center', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>{emptyText}</div>
+        : <>
+            {visible.map(t => <MiniTask key={`${t._listId}-${t.id}`} task={t} onGo={() => t._listId && onGo(t._listId)} />)}
+            {more > 0 && <div style={{ padding: '6px 10px', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, color: '#b0acbe', textAlign: 'center' }}>+{more} more</div>}
+          </>
+      }
+    </div>
+  );
+}
+
+// ── List card ───────────────────────────────────────────────────
+function ListCard({ list, onClick, index, folderColor }: { list: List; onClick: () => void; index: number; folderColor: string }) {
+  const [hov, setHov] = useState(false);
+  const tasks = list.sections.flatMap(s => s.tasks);
+  const total = tasks.length;
+  const done = tasks.filter(t => t.checked).length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const color = list.color ?? folderColor;
+  const [barW, setBarW] = useState(0);
+  useEffect(() => { const t = setTimeout(() => setBarW(pct), 350 + index * 70); return () => clearTimeout(t); }, [pct, index]);
+
+  return (
+    <div
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      onClick={onClick} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && onClick()}
+      aria-label={`Open ${list.name} list`}
+      style={{
+        background: hov ? (list.colorBg ?? `${color}12`) : '#F9FAFB',
+        border: `1px solid ${hov ? color + '55' : '#E5E7EB'}`,
+        borderRadius: 14, padding: '18px 16px', cursor: 'pointer',
+        transition: 'all 220ms cubic-bezier(0.34,1.56,0.64,1)',
+        transform: hov ? 'translateY(-3px)' : 'none',
+        boxShadow: hov ? `0 8px 24px ${color}1a` : 'none',
+        animation: `cardIn 380ms cubic-bezier(0.34,1.56,0.64,1) ${index * 60}ms both`,
+        display: 'flex', flexDirection: 'column', gap: 12, outline: 'none',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ flexShrink: 0, paddingTop: 2 }}>
+          {list.emoji
+            ? <span style={{ fontSize: 22, lineHeight: 1 }}>{list.emoji}</span>
+            : <div style={{ width: 32, height: 32, borderRadius: 8, background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="format_list_bulleted" size={16} color={color} />
+              </div>
+          }
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</div>
+          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584', marginTop: 3 }}>{done}/{total} done</div>
+        </div>
+        <Icon name={list.isPublic !== false ? 'public' : 'lock'} size={12} color="#c9c4d5" />
+      </div>
+
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+          <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color }}>{pct}%</span>
+          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe' }}>{total - done} left</span>
+        </div>
+        <div style={{ background: '#f0ecf8', borderRadius: 9999, height: 5, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${barW}%`, background: color, borderRadius: 9999, transition: 'width 900ms cubic-bezier(0.34,1.56,0.64,1)' }} />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: hov ? color : '#b0acbe', display: 'flex', alignItems: 'center', gap: 4, transition: 'color 200ms' }}>
+          Open list <Icon name="arrow_forward" size={13} color={hov ? color : '#b0acbe'} />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Folder Dashboard Screen ─────────────────────────────────────
+export default function FolderDashboardScreen() {
+  const { folderId } = useParams<{ folderId: string }>();
+  const navigate = useNavigate();
+  const { folders, lists } = useAppStore();
+
+  const folder = folders.find(f => f.id === folderId);
+  if (!folder) return <Navigate to="/dashboard" replace />;
+
+  const ac = folder.color ?? '#5e4dbb';
+  const acBg = `${ac}15`;
+
+  const folderLists = lists
+    .filter(l => l.folderId === folderId)
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
+  const allTasks = folderLists.flatMap(l =>
+    l.sections.flatMap(s => s.tasks.map(t => ({ ...t, _source: 'list' as const, _listId: l.id, _listName: l.name })))
+  );
+
+  const total = allTasks.length;
+  const done = allTasks.filter(t => t.checked).length;
+  const open = total - done;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const todayTasks = allTasks.filter(t => isDueToday(t) && !t.checked);
+  const weekTasks = allTasks.filter(t => isDueThisWeek(t) && !t.checked);
+
+  return (
+    <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
+
+        {/* ── Header ─────────────────────────────────────────── */}
+        <header style={{ animation: 'folderDashIn 420ms ease both' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+            {folder.emoji
+              ? <span style={{ fontSize: 40, lineHeight: 1, filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.10))' }}>{folder.emoji}</span>
+              : <div style={{ width: 52, height: 52, borderRadius: 14, background: acBg, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 14px ${ac}22` }}>
+                  <Icon name="folder" size={28} color={ac} />
+                </div>
+            }
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <h1 style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 28, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                  {folder.name}
+                </h1>
+                <span style={{
+                  fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600,
+                  color: folder.isPublic !== false ? '#15803d' : '#787584',
+                  background: folder.isPublic !== false ? 'rgba(21,128,61,0.09)' : '#f1ecf6',
+                  borderRadius: 9999, padding: '3px 10px',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}>
+                  <Icon name={folder.isPublic !== false ? 'public' : 'lock'} size={11} color={folder.isPublic !== false ? '#15803d' : '#787584'} />
+                  {folder.isPublic !== false ? 'Public' : 'Private'}
+                </span>
+              </div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#787584', marginTop: 5 }}>
+                {folderLists.length} list{folderLists.length !== 1 ? 's' : ''} · {total} task{total !== 1 ? 's' : ''}
+              </div>
+            </div>
+          </div>
+
+          {/* Overall progress card */}
+          <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 14, padding: '20px 22px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div>
+                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#484552', marginBottom: 3 }}>Overall Progress</div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>{done} of {total} tasks complete</div>
+              </div>
+              <div>
+                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 34, fontWeight: 700, color: ac, letterSpacing: '-0.03em', lineHeight: 1 }}>{pct}</span>
+                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 18, fontWeight: 600, color: ac }}>%</span>
+              </div>
+            </div>
+            <AnimatedBar pct={pct} color={ac} height={10} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#10B981', fontWeight: 600 }}>✓ {done} done</span>
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe' }}>{open} remaining</span>
+            </div>
+          </div>
+        </header>
+
+        {/* ── Stat cards ─────────────────────────────────────── */}
+        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, animation: 'folderDashIn 420ms 80ms ease both' }}>
+          <StatCard num={open} label="Open Tasks" sub="remaining" icon="inventory_2" iconBg="#F5F3FF" iconColor="#5e4dbb" />
+          <StatCard num={done} label="Completed" sub={total > 0 ? `${pct}%` : 'none yet'} icon="check_circle" iconBg="rgba(16,185,129,0.10)" iconColor="#10B981" accent="#10B981" />
+          <StatCard num={todayTasks.length} label="Due Today" sub="urgent" icon="today" iconBg="rgba(234,88,12,0.10)" iconColor="#ea580c" accent="#ea580c" />
+          <StatCard num={folderLists.length} label="Lists" sub="in folder" icon="folder_open" iconBg={acBg} iconColor={ac} accent={ac} />
+        </section>
+
+        {/* ── Task panels ─────────────────────────────────────── */}
+        <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, animation: 'folderDashIn 420ms 160ms ease both' }}>
+          <TaskPanel
+            title="Due Today" icon="today" accent="#ea580c" accentBg="rgba(234,88,12,0.08)"
+            tasks={todayTasks} emptyText="Nothing due today — you're on track!"
+            onGo={id => navigate(`/list/${id}`)}
+          />
+          <TaskPanel
+            title="This Week" icon="calendar_month" accent={ac} accentBg={acBg}
+            tasks={weekTasks} emptyText="No tasks scheduled for this week."
+            onGo={id => navigate(`/list/${id}`)}
+          />
+        </section>
+
+        {/* ── Lists grid ─────────────────────────────────────── */}
+        <section style={{ animation: 'folderDashIn 420ms 240ms ease both' }}>
+          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name="folder_open" size={18} color={ac} />
+            Lists in {folder.name}
+          </div>
+          {folderLists.length === 0 ? (
+            <div style={{ background: '#F9FAFB', border: '1px dashed #E5E7EB', borderRadius: 14, padding: '56px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <Icon name="playlist_add" size={36} color="#b0acbe" />
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 600, color: '#b0acbe' }}>No lists yet</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Move or add a list to this folder from the sidebar</div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
+              {folderLists.map((list, i) => (
+                <ListCard key={list.id} list={list} onClick={() => navigate(`/list/${list.id}`)} index={i} folderColor={ac} />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}

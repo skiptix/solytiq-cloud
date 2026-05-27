@@ -22,6 +22,7 @@ import ScheduledScreen from './screens/ScheduledScreen';
 import FilesScreen from './screens/FilesScreen';
 import SharePage from './screens/SharePage';
 import SettingsScreen from './screens/SettingsScreen';
+import FolderDashboardScreen from './screens/FolderDashboardScreen';
 
 // ── Protected route wrapper ────────────────────────────────────
 function Protected({ children }: { children: React.ReactNode }) {
@@ -66,7 +67,8 @@ function AppLayout() {
     arr.filter(l => l.folderId === folderId).forEach((l, i) => updateList(l.id, { position: i }));
   }, [lists, setLists, updateList]);
 
-  const getActive = (): 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings' => {
+  const getActive = (): 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings' | 'folder' => {
+    if (location.pathname.startsWith('/folder/')) return 'folder';
     if (location.pathname.startsWith('/list/')) return 'list';
     if (location.pathname.startsWith('/scheduled')) return 'scheduled';
     if (location.pathname.startsWith('/files')) return 'files';
@@ -75,6 +77,7 @@ function AppLayout() {
   };
 
   const activeListId = location.pathname.startsWith('/list/') ? location.pathname.split('/list/')[1] : undefined;
+  const activeFolderId = location.pathname.startsWith('/folder/') ? location.pathname.split('/folder/')[1] : undefined;
 
   const allTasks = [
     ...dashTasks.map(t => ({ ...t, _source: 'dash' as const, _listId: 'dashboard', _listName: 'Dashboard' })),
@@ -86,6 +89,7 @@ function AppLayout() {
       <Sidebar
         active={getActive()}
         activeListId={activeListId}
+        activeFolderId={activeFolderId}
         lists={lists}
         width={sidebarWidth}
         onNavigate={navigate}
@@ -103,6 +107,7 @@ function AppLayout() {
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
           <Routes>
             <Route path="/dashboard" element={<DashboardScreen />} />
+            <Route path="/folder/:folderId" element={<FolderDashboardScreen />} />
             <Route path="/scheduled" element={<ScheduledScreen />} />
             <Route path="/files" element={<FilesScreen />} />
             <Route path="/list/:listId" element={<ListScreen />} />
