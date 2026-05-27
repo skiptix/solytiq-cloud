@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 interface RingProgressProps {
   total: number;
@@ -7,7 +7,8 @@ interface RingProgressProps {
 }
 
 export default function RingProgress({ total, completed, color = '#5e4dbb' }: RingProgressProps) {
-  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const pct = total === 0 ? 0 : completed / total;
   const R = 8;
   const CIRC = 2 * Math.PI * R;
@@ -17,9 +18,13 @@ export default function RingProgress({ total, completed, color = '#5e4dbb' }: Ri
 
   return (
     <div
-      style={{ position: 'relative', width: 20, height: 20, flexShrink: 0, cursor: 'default' }}
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
+      ref={containerRef}
+      style={{ width: 20, height: 20, flexShrink: 0, cursor: 'default' }}
+      onMouseEnter={() => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (rect) setTooltipPos({ top: rect.top - 28, left: rect.left + rect.width / 2 });
+      }}
+      onMouseLeave={() => setTooltipPos(null)}
     >
       <svg width="20" height="20" viewBox="0 0 20 20">
         <circle cx="10" cy="10" r={R} fill="none" stroke="#e8e4f0" strokeWidth="2.5" />
@@ -34,11 +39,11 @@ export default function RingProgress({ total, completed, color = '#5e4dbb' }: Ri
           style={{ transform: 'rotate(-90deg)', transformOrigin: 'center', transition: 'stroke-dashoffset 300ms ease' }}
         />
       </svg>
-      {showTooltip && (
+      {tooltipPos && (
         <div style={{
-          position: 'absolute',
-          bottom: 'calc(100% + 4px)',
-          left: '50%',
+          position: 'fixed',
+          top: tooltipPos.top,
+          left: tooltipPos.left,
           transform: 'translateX(-50%)',
           background: '#1c1b22',
           color: '#fff',
@@ -49,7 +54,7 @@ export default function RingProgress({ total, completed, color = '#5e4dbb' }: Ri
           fontWeight: 500,
           whiteSpace: 'nowrap',
           pointerEvents: 'none',
-          zIndex: 100,
+          zIndex: 1000,
         }}>
           {completed}/{total} done
         </div>

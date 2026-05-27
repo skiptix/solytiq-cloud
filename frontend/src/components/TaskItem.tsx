@@ -406,6 +406,7 @@ export function QuickAdd({ placeholder = 'Add a new task…', onAdd, availableLi
           placeholder={placeholder}
           availableLists={availableLists}
           currentListId={currentListId}
+          autoFocus
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onKeyDown={e => { if (e.key === 'Enter' && hasText && !val.startsWith('/')) { e.preventDefault(); submit(); } }}
