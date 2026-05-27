@@ -322,6 +322,28 @@ async function runMigrations() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS trash_lists (
+      id          SERIAL PRIMARY KEY,
+      list_id     VARCHAR(100) NOT NULL,
+      user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      list_data   JSONB NOT NULL,
+      deleted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at  TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS trash_folders (
+      id           SERIAL PRIMARY KEY,
+      folder_id    VARCHAR(100) NOT NULL,
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      folder_data  JSONB NOT NULL,
+      deleted_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at   TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
+    )
+  `);
+
+  await pool.query(`
     CREATE OR REPLACE FUNCTION update_tasks_updated_at()
     RETURNS TRIGGER AS $$
     BEGIN

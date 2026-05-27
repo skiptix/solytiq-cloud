@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AppState, TrashedTask } from '../types';
+import type { AppState, TrashedTask, TrashedList, TrashedFolder } from '../types';
 import {
   apiGetTasks,
   apiGetLists,
@@ -9,6 +9,8 @@ import {
   apiUpdateFolder,
   apiDeleteFolder,
   apiGetTrash,
+  apiGetTrashLists,
+  apiGetTrashFolders,
   apiCreateTask,
   apiUpdateTask,
   apiDeleteTask,
@@ -21,6 +23,10 @@ import {
   apiAddToTrash,
   apiRestoreFromTrash,
   apiDeleteFromTrash,
+  apiRestoreListFromTrash,
+  apiDeleteListFromTrash,
+  apiRestoreFolderFromTrash,
+  apiDeleteFolderFromTrash,
   apiEmptyTrash,
 } from '../api/client';
 
@@ -33,6 +39,8 @@ const useAppStore = create<AppState>()(
       lists: [],
       folders: [],
       trashTasks: [],
+      trashLists: [],
+      trashFolders: [],
       sidebarWidth: 256,
 
       setDashTasks: (tasks) => {
@@ -82,10 +90,27 @@ const useAppStore = create<AppState>()(
       },
 
       deleteFolder: (id) => {
-        set((state) => ({
-          folders: state.folders.filter((f) => f.id !== id),
-          lists: state.lists.map((l) => l.folderId === id ? { ...l, folderId: undefined } : l),
+        const state = get();
+        const folder = state.folders.find((f) => f.id === id);
+        const listIds = state.lists.filter((l) => l.folderId === id).map((l) => l.id);
+
+        set((s) => ({
+          folders: s.folders.filter((f) => f.id !== id),
+          lists: s.lists.map((l) => l.folderId === id ? { ...l, folderId: undefined } : l),
         }));
+
+        if (folder) {
+          const trashId = ++trashCounter;
+          const trashEntry: TrashedFolder = {
+            id: trashId,
+            folderId: folder.id,
+            folder: { ...folder, listIds },
+            deletedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          };
+          set((s) => ({ trashFolders: [...s.trashFolders, trashEntry] }));
+        }
+
         apiDeleteFolder(id).catch(() => {});
       },
 
@@ -97,9 +122,23 @@ const useAppStore = create<AppState>()(
       },
 
       deleteList: (listId) => {
-        set((state) => ({
-          lists: state.lists.filter((l) => l.id !== listId),
-        }));
+        const state = get();
+        const list = state.lists.find((l) => l.id === listId);
+
+        set((s) => ({ lists: s.lists.filter((l) => l.id !== listId) }));
+
+        if (list) {
+          const trashId = ++trashCounter;
+          const trashEntry: TrashedList = {
+            id: trashId,
+            listId: list.id,
+            list,
+            deletedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          };
+          set((s) => ({ trashLists: [...s.trashLists, trashEntry] }));
+        }
+
         apiDeleteList(listId).catch(() => {});
       },
 
@@ -201,17 +240,55 @@ const useAppStore = create<AppState>()(
         apiDeleteFromTrash(trashId).catch(() => {});
       },
 
+      restoreListFromTrash: (trashId) => {
+        const state = get();
+        const entry = state.trashLists.find((t) => t.id === trashId);
+        if (!entry) return;
+        set((s) => ({
+          lists: [...s.lists, entry.list],
+          trashLists: s.trashLists.filter((t) => t.id !== trashId),
+        }));
+        apiRestoreListFromTrash(trashId).catch(() => {});
+      },
+
+      deleteListFromTrash: (trashId) => {
+        set((s) => ({ trashLists: s.trashLists.filter((t) => t.id !== trashId) }));
+        apiDeleteListFromTrash(trashId).catch(() => {});
+      },
+
+      restoreFolderFromTrash: (trashId) => {
+        const state = get();
+        const entry = state.trashFolders.find((t) => t.id === trashId);
+        if (!entry) return;
+        const { listIds, ...folderData } = entry.folder;
+        set((s) => ({
+          folders: [...s.folders, folderData],
+          lists: s.lists.map((l) =>
+            (listIds ?? []).includes(l.id) ? { ...l, folderId: entry.folderId } : l
+          ),
+          trashFolders: s.trashFolders.filter((t) => t.id !== trashId),
+        }));
+        apiRestoreFolderFromTrash(trashId).catch(() => {});
+      },
+
+      deleteFolderFromTrash: (trashId) => {
+        set((s) => ({ trashFolders: s.trashFolders.filter((t) => t.id !== trashId) }));
+        apiDeleteFolderFromTrash(trashId).catch(() => {});
+      },
+
       setSidebarWidth: (w) => set({ sidebarWidth: w }),
 
       loadFromApi: async () => {
         try {
-          const [tasksRes, listsRes, foldersRes, trashRes] = await Promise.all([
+          const [tasksRes, listsRes, foldersRes, trashRes, trashListsRes, trashFoldersRes] = await Promise.all([
             apiGetTasks().catch(() => null),
             apiGetLists().catch(() => null),
             apiGetFolders().catch(() => null),
             apiGetTrash().catch(() => null),
+            apiGetTrashLists().catch(() => null),
+            apiGetTrashFolders().catch(() => null),
           ]);
-          const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'folders' | 'trashTasks'>> = {};
+          const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'folders' | 'trashTasks' | 'trashLists' | 'trashFolders'>> = {};
           if (tasksRes) update.dashTasks = tasksRes.tasks.map(t => ({ ...t, id: Number(t.id) }));
           if (foldersRes) update.folders = foldersRes.folders;
           if (listsRes) update.lists = listsRes.lists.map(l => ({
@@ -227,6 +304,20 @@ const useAppStore = create<AppState>()(
             taskId: Number(tr.taskId),
             task: { ...tr.task, id: Number(tr.task.id) },
           }));
+          if (trashListsRes) update.trashLists = trashListsRes.trash.map(tr => ({
+            id: Number(tr.id),
+            listId: tr.listId,
+            list: tr.listData,
+            deletedAt: tr.deletedAt,
+            expiresAt: tr.expiresAt,
+          }));
+          if (trashFoldersRes) update.trashFolders = trashFoldersRes.trash.map(tr => ({
+            id: Number(tr.id),
+            folderId: tr.folderId,
+            folder: tr.folderData,
+            deletedAt: tr.deletedAt,
+            expiresAt: tr.expiresAt,
+          }));
           set(update as AppState);
         } catch {
           // fall back to persisted state
@@ -240,6 +331,8 @@ const useAppStore = create<AppState>()(
         lists: state.lists,
         folders: state.folders,
         trashTasks: state.trashTasks,
+        trashLists: state.trashLists,
+        trashFolders: state.trashFolders,
         sidebarWidth: state.sidebarWidth,
       }),
     }

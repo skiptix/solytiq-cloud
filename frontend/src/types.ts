@@ -53,6 +53,22 @@ export interface TrashedTask {
   deletedAt: string;
 }
 
+export interface TrashedList {
+  id: number;
+  listId: string;
+  list: List;
+  deletedAt: string;
+  expiresAt: string;
+}
+
+export interface TrashedFolder {
+  id: number;
+  folderId: string;
+  folder: Folder & { listIds?: string[] };
+  deletedAt: string;
+  expiresAt: string;
+}
+
 export interface SharedFile {
   id: string;
   userId: string;
@@ -89,6 +105,8 @@ export interface AppState {
   lists: List[];
   folders: Folder[];
   trashTasks: TrashedTask[];
+  trashLists: TrashedList[];
+  trashFolders: TrashedFolder[];
   sidebarWidth: number;
   setDashTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   setLists: (lists: List[] | ((prev: List[]) => List[])) => void;
@@ -104,6 +122,10 @@ export interface AppState {
   addToTrash: (task: Task, meta: { src: string; listId?: string; listName?: string }) => void;
   restoreFromTrash: (trashId: number) => void;
   deleteFromTrash: (trashId: number) => void;
+  restoreListFromTrash: (trashId: number) => void;
+  deleteListFromTrash: (trashId: number) => void;
+  restoreFolderFromTrash: (trashId: number) => void;
+  deleteFolderFromTrash: (trashId: number) => void;
   setSidebarWidth: (w: number) => void;
   loadFromApi: () => Promise<void>;
 }

@@ -296,7 +296,7 @@ router.delete('/:listId', async (req: Request, res: Response) => {
   try {
     const { listId } = req.params;
 
-    const existing = await query<ListRow>('SELECT user_id FROM lists WHERE id = $1', [listId]);
+    const existing = await query<ListRow>('SELECT * FROM lists WHERE id = $1', [listId]);
     if (existing.rows.length === 0) {
       res.status(404).json({ error: 'List not found' });
       return;
@@ -309,6 +309,39 @@ router.delete('/:listId', async (req: Request, res: Response) => {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }
+
+    const listRow = existing.rows[0];
+
+    // Snapshot sections and tasks before deletion for trash
+    const sectionsRes = await query<SectionRow>(
+      'SELECT * FROM sections WHERE list_id = $1 ORDER BY position ASC',
+      [listId]
+    );
+    let tasksRows: TaskRow[] = [];
+    if (sectionsRes.rows.length > 0) {
+      const sectionIds = sectionsRes.rows.map(s => s.id);
+      const tasksRes = await query<TaskRow>(
+        'SELECT * FROM tasks WHERE section_id = ANY($1::varchar[]) ORDER BY position ASC',
+        [sectionIds]
+      );
+      tasksRows = tasksRes.rows;
+    }
+
+    const tasksBySection: Record<string, ReturnType<typeof sanitizeTask>[]> = {};
+    for (const task of tasksRows) {
+      const key = task.section_id ?? '__none__';
+      if (!tasksBySection[key]) tasksBySection[key] = [];
+      tasksBySection[key].push(sanitizeTask(task));
+    }
+    const sections = sectionsRes.rows.map(s =>
+      sanitizeSection(s, tasksBySection[s.id] ?? [])
+    );
+    const listData = sanitizeList(listRow, sections);
+
+    await query(
+      `INSERT INTO trash_lists (list_id, user_id, list_data) VALUES ($1, $2, $3)`,
+      [listId, req.userId, JSON.stringify(listData)]
+    );
 
     await query('DELETE FROM lists WHERE id = $1', [listId]);
 
