@@ -34,7 +34,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { dashTasks, lists, sidebarWidth, setSidebarWidth, loadFromApi, setLists, updateList } = useAppStore();
+  const { dashTasks, lists, sidebarWidth, setSidebarWidth, loadFromApi, setLists, updateList, moveTaskToList } = useAppStore();
   const [modal, setModal] = useState<'add-list' | 'completed' | 'trash' | null>(null);
 
   const loadMembers = useMembersStore(s => s.load);
@@ -92,6 +92,7 @@ function AppLayout() {
         onOpenModal={setModal}
         onReorderLists={handleReorderLists}
         onResizeStart={handleResizeStart}
+        onTaskDropToList={moveTaskToList}
       />
       <div style={{ marginLeft: sidebarWidth, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <TopBar

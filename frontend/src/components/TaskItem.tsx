@@ -190,7 +190,13 @@ export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClic
     <>
       <div
         draggable={!!(onDragStart)}
-        onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; onDragStart?.(task.id); }}
+        onDragStart={e => {
+          e.dataTransfer.effectAllowed = 'move';
+          if (!task._source || task._source === 'dash') {
+            e.dataTransfer.setData('dashtaskid', task.id.toString());
+          }
+          onDragStart?.(task.id);
+        }}
         onDragOver={e => { e.preventDefault(); onDragOver?.(task.id); }}
         onDrop={e => { e.preventDefault(); onDrop?.(task.id); }}
         onDragEnd={() => onDragEnd?.()}

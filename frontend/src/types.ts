@@ -127,5 +127,6 @@ export interface AppState {
   restoreFolderFromTrash: (trashId: number) => void;
   deleteFolderFromTrash: (trashId: number) => void;
   setSidebarWidth: (w: number) => void;
+  moveTaskToList: (taskId: number, targetListId: string) => void;
   loadFromApi: () => Promise<void>;
 }

@@ -278,6 +278,65 @@ const useAppStore = create<AppState>()(
 
       setSidebarWidth: (w) => set({ sidebarWidth: w }),
 
+      moveTaskToList: (taskId, targetListId) => {
+        const state = get();
+        const task = state.dashTasks.find(t => t.id === taskId);
+        if (!task) return;
+        const targetList = state.lists.find(l => l.id === targetListId);
+        if (!targetList || !targetList.sections.length) return;
+        const firstSection = targetList.sections[0];
+        const tempTask = { ...task, _source: 'list' as const, _listId: targetListId, _listName: targetList.name };
+
+        set(s => ({
+          dashTasks: s.dashTasks.filter(t => t.id !== taskId),
+          lists: s.lists.map(l =>
+            l.id !== targetListId ? l : {
+              ...l,
+              sections: l.sections.map((sec, i) =>
+                i === 0 ? { ...sec, tasks: [...sec.tasks, tempTask] } : sec
+              ),
+            }
+          ),
+        }));
+
+        (async () => {
+          try {
+            await apiDeleteTask(taskId);
+            const res = await apiAddListTask(targetListId, firstSection.id, {
+              title: task.title,
+              note: task.note,
+              deadline: task.deadline,
+              priority: task.priority,
+              badge: task.badge,
+            });
+            const realId = Number(res.task.id);
+            set(s => ({
+              lists: s.lists.map(l =>
+                l.id !== targetListId ? l : {
+                  ...l,
+                  sections: l.sections.map(sec => ({
+                    ...sec,
+                    tasks: sec.tasks.map(t => t.id === taskId ? { ...t, id: realId } : t),
+                  })),
+                }
+              ),
+            }));
+          } catch {
+            set(s => ({
+              dashTasks: [...s.dashTasks, task],
+              lists: s.lists.map(l =>
+                l.id !== targetListId ? l : {
+                  ...l,
+                  sections: l.sections.map((sec, i) =>
+                    i === 0 ? { ...sec, tasks: sec.tasks.filter(t => t.id !== taskId) } : sec
+                  ),
+                }
+              ),
+            }));
+          }
+        })();
+      },
+
       loadFromApi: async () => {
         try {
           const [tasksRes, listsRes, foldersRes, trashRes, trashListsRes, trashFoldersRes] = await Promise.all([

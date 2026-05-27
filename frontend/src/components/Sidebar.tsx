@@ -48,13 +48,15 @@ interface ListItemRowProps {
   indented?: boolean;
   dragOverId: string | null;
   folders: Folder[];
+  isTaskDropTarget?: boolean;
+  wasRecentlyDropped?: boolean;
   onNavigate: (path: string) => void;
   onDragStart: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent) => void;
 }
-function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders, onNavigate, onDragStart, onDragOver, onDragLeave, onDrop }: ListItemRowProps) {
+function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders, isTaskDropTarget, wasRecentlyDropped, onNavigate, onDragStart, onDragOver, onDragLeave, onDrop }: ListItemRowProps) {
   const [hov, setHov] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -121,7 +123,14 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, borderTop: dragOverId === list.id ? '2px solid #9d8dff' : '2px solid transparent', transition: 'border-color 120ms', paddingLeft: indented ? 8 : 0 }}>
+        style={{
+          display: 'flex', alignItems: 'center', borderRadius: 8,
+          borderTop: dragOverId === list.id ? '2px solid #9d8dff' : '2px solid transparent',
+          position: 'relative',
+          animation: isTaskDropTarget ? 'taskDropPulse 1.2s ease-in-out infinite' : (wasRecentlyDropped ? 'taskDropSuccess 550ms ease-out forwards' : undefined),
+          transition: isTaskDropTarget || wasRecentlyDropped ? 'none' : 'border-color 120ms',
+          paddingLeft: indented ? 8 : 0,
+        }}>
 
         {editingName && !collapsed ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '4px 8px' }}>
@@ -156,7 +165,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
           </button>
         )}
 
-        {!collapsed && (
+        {!collapsed && !isTaskDropTarget && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 4, flexShrink: 0 }}>
             <button
               ref={menuBtnRef}
@@ -171,6 +180,32 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
             <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
               <Icon name="drag_indicator" size={15} color="#c9c4d5" />
             </div>
+          </div>
+        )}
+
+        {isTaskDropTarget && (
+          <div style={{
+            position: 'absolute',
+            right: collapsed ? '50%' : 6,
+            top: '50%',
+            transform: collapsed ? 'translate(50%, -50%)' : 'translateY(-50%)',
+            pointerEvents: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 3,
+            background: '#5e4dbb',
+            borderRadius: 9999,
+            padding: collapsed ? '3px 5px' : '3px 9px',
+            boxShadow: '0 2px 10px rgba(94,77,187,0.4)',
+            animation: 'moveHerePill 180ms cubic-bezier(0.34,1.56,0.64,1) both',
+            zIndex: 10,
+          }}>
+            {!collapsed && (
+              <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#fff', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
+                Move here
+              </span>
+            )}
+            <Icon name="arrow_right_alt" size={collapsed ? 13 : 12} color="#fff" />
           </div>
         )}
       </div>
@@ -318,6 +353,8 @@ interface FolderRowProps {
   dragOverId: string | null;
   dragOverFolderId: string | null;
   dragOverFolderReorderId: string | null;
+  dragOverTaskListId: string | null;
+  recentlyDroppedListId: string | null;
   allFolders: Folder[];
   onNavigate: (path: string) => void;
   onListDragStart: (listId: string, e: React.DragEvent) => void;
@@ -332,7 +369,7 @@ interface FolderRowProps {
   onFolderReorderDragLeave: () => void;
   onFolderReorderDrop: (folderId: string, e: React.DragEvent) => void;
 }
-function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId, dragOverFolderId, dragOverFolderReorderId, allFolders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop, onFolderDragStart, onFolderDragOver, onFolderDragLeave, onFolderDrop, onFolderReorderDragOver, onFolderReorderDragLeave, onFolderReorderDrop }: FolderRowProps) {
+function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId, dragOverFolderId, dragOverFolderReorderId, dragOverTaskListId, recentlyDroppedListId, allFolders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop, onFolderDragStart, onFolderDragOver, onFolderDragLeave, onFolderDrop, onFolderReorderDragOver, onFolderReorderDragLeave, onFolderReorderDrop }: FolderRowProps) {
   const [hov, setHov] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -481,6 +518,8 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
                 indented
                 dragOverId={dragOverId}
                 folders={allFolders}
+                isTaskDropTarget={dragOverTaskListId === list.id}
+                wasRecentlyDropped={recentlyDroppedListId === list.id}
                 onNavigate={onNavigate}
                 onDragStart={e => onListDragStart(list.id, e)}
                 onDragOver={e => onListDragOver(list.id, e)}
@@ -647,9 +686,10 @@ interface SidebarProps {
   onOpenModal: (modal: 'add-list' | 'completed' | 'trash') => void;
   onReorderLists: (fromId: string, toId: string) => void;
   onResizeStart: (startX: number) => void;
+  onTaskDropToList: (taskId: number, listId: string) => void;
 }
 
-export default function Sidebar({ active, activeListId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart }: SidebarProps) {
+export default function Sidebar({ active, activeListId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList }: SidebarProps) {
   const collapsed = width <= 72;
   const [addHov, setAddHov] = useState(false);
   const [folderHov, setFolderHov] = useState(false);
@@ -657,18 +697,39 @@ export default function Sidebar({ active, activeListId, lists, width, onNavigate
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [dragOverFolderReorderId, setDragOverFolderReorderId] = useState<string | null>(null);
+  const [dragOverTaskListId, setDragOverTaskListId] = useState<string | null>(null);
+  const [recentlyDroppedListId, setRecentlyDroppedListId] = useState<string | null>(null);
   const [addingFolder, setAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const folderInputRef = useRef<HTMLInputElement>(null);
 
   const { folders, addFolder, updateList, updateFolder, setFolders } = useAppStore();
 
+  useEffect(() => {
+    const clearTaskDrag = () => setDragOverTaskListId(null);
+    document.addEventListener('dragend', clearTaskDrag);
+    return () => document.removeEventListener('dragend', clearTaskDrag);
+  }, []);
+
+  const handleTaskDrop = useCallback((listId: string, taskId: number) => {
+    onTaskDropToList(taskId, listId);
+    setDragOverTaskListId(null);
+    setRecentlyDroppedListId(listId);
+    setTimeout(() => setRecentlyDroppedListId(null), 600);
+  }, [onTaskDropToList]);
+
   const handleListDrop = useCallback((toId: string, e: React.DragEvent) => {
     e.preventDefault();
+    const taskId = e.dataTransfer.getData('dashtaskid');
+    if (taskId) {
+      const id = parseInt(taskId, 10);
+      if (!isNaN(id)) handleTaskDrop(toId, id);
+      return;
+    }
     const fromId = e.dataTransfer.getData('listId');
     if (fromId && fromId !== toId) onReorderLists(fromId, toId);
     setDragOverId(null);
-  }, [onReorderLists]);
+  }, [onReorderLists, handleTaskDrop]);
 
   const handleFolderDrop = useCallback((folderId: string, e: React.DragEvent) => {
     e.preventDefault();
@@ -795,11 +856,23 @@ export default function Sidebar({ active, activeListId, lists, width, onNavigate
               dragOverId={dragOverId}
               dragOverFolderId={dragOverFolderId}
               dragOverFolderReorderId={dragOverFolderReorderId}
+              dragOverTaskListId={dragOverTaskListId}
+              recentlyDroppedListId={recentlyDroppedListId}
               allFolders={folders}
               onNavigate={onNavigate}
               onListDragStart={(listId, e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('listId', listId); }}
-              onListDragOver={(listId, e) => { e.preventDefault(); setDragOverId(listId); }}
-              onListDragLeave={() => setDragOverId(null)}
+              onListDragOver={(listId, e) => {
+                if (e.dataTransfer.types.includes('dashtaskid')) {
+                  e.preventDefault();
+                  setDragOverTaskListId(listId);
+                  setDragOverId(null);
+                } else if (e.dataTransfer.types.includes('listid')) {
+                  e.preventDefault();
+                  setDragOverId(listId);
+                  setDragOverTaskListId(null);
+                }
+              }}
+              onListDragLeave={() => { setDragOverId(null); setDragOverTaskListId(null); }}
               onListDrop={(listId, e) => handleListDrop(listId, e)}
               onFolderDragStart={(folderId, e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('folderId', folderId); }}
               onFolderDragOver={(folderId, e) => {
@@ -835,10 +908,22 @@ export default function Sidebar({ active, activeListId, lists, width, onNavigate
               collapsed={collapsed}
               dragOverId={dragOverId}
               folders={folders}
+              isTaskDropTarget={dragOverTaskListId === list.id}
+              wasRecentlyDropped={recentlyDroppedListId === list.id}
               onNavigate={onNavigate}
               onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('listId', list.id); }}
-              onDragOver={e => { e.preventDefault(); setDragOverId(list.id); }}
-              onDragLeave={() => setDragOverId(null)}
+              onDragOver={e => {
+                if (e.dataTransfer.types.includes('dashtaskid')) {
+                  e.preventDefault();
+                  setDragOverTaskListId(list.id);
+                  setDragOverId(null);
+                } else if (e.dataTransfer.types.includes('listid')) {
+                  e.preventDefault();
+                  setDragOverId(list.id);
+                  setDragOverTaskListId(null);
+                }
+              }}
+              onDragLeave={() => { setDragOverId(null); setDragOverTaskListId(null); }}
               onDrop={e => handleListDrop(list.id, e)}
             />
           );
