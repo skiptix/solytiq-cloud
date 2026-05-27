@@ -282,10 +282,14 @@ export default function AIAssistant() {
           const updates: Record<string, unknown> = {};
           if (args.name !== undefined) updates.name = args.name;
           if (args.emoji !== undefined) updates.emoji = args.emoji;
-          await apiUpdateList(listId, updates);
-          appStore.updateList(listId, updates);
-          const listName = appStore.lists.find((l) => l.id === listId)?.name;
-          return { id: call.id, name, result: `Updated list ${listId}`, summary: `Updated list "${args.name ?? listName}"` };
+          if (args.is_public !== undefined) updates.isPublic = args.is_public;
+          await apiUpdateList(listId, updates as Parameters<typeof apiUpdateList>[1]);
+          appStore.updateList(listId, updates as Parameters<typeof appStore.updateList>[1]);
+          const listName = appStore.lists.find((l) => l.id === listId)?.name ?? listId;
+          const visibilityNote = args.is_public !== undefined
+            ? ` (${args.is_public ? 'public' : 'private'})`
+            : '';
+          return { id: call.id, name, result: `Updated list "${listName}"`, summary: `Updated "${args.name ?? listName}"${visibilityNote}` };
         }
 
         if (name === 'delete_list') {

@@ -177,6 +177,7 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
 // ── System prompt ──────────────────────────────────────────────────
 
 export function buildSystemPrompt(ctx: AIContext, username: string): string {
+  const today = toIso(new Date());
   const viewDescriptions: Record<string, string> = {
     dashboard: 'Dashboard — personal quick-add task list with deadlines and priorities',
     list: `List — "${(ctx.data.list_name as string) ?? 'unknown'}" with multiple sections containing tasks`,
@@ -198,7 +199,8 @@ Guidelines:
 - When you execute an action using a tool, briefly confirm what you did in your final response
 - SECURITY: You may only act on data that belongs to the current user (${username}). Never touch lists, folders, tasks, or sections belonging to other users. The available_lists and available_folders in the context are the only ones you are allowed to modify.
 - For delete operations, confirm with the user first before executing unless they explicitly said to delete
-- Format dates as YYYY-MM-DD in tool parameters
+- DATE PARSING: Always convert dates to YYYY-MM-DD before using them in tool parameters. Accept any format the user writes: DD.MM.YY (e.g. 11.5.26 → 2026-05-11), DD.MM.YYYY, MM/DD/YYYY, natural language like "tomorrow", "next Monday", "end of month". Use today (${today}) as the reference point for relative dates.
+- INTENT: Words like "terminate", "deadline", "due", "schedule for", "set to", "end by" all mean the user wants to set a task deadline.
 - Refer to tasks, lists, sections, and folders by their names, not their IDs, when talking to the user
 - When creating a list you can optionally assign it to a folder from available_folders
 - If the user asks something outside your capabilities, explain politely what you can do instead`;
@@ -434,13 +436,14 @@ export function buildTools(ctx: AIContext): ToolDef[] {
     type: 'function',
     function: {
       name: 'update_list',
-      description: "Rename a list or change its emoji. Only works on the current user's own lists.",
+      description: "Rename a list, change its emoji, or toggle its visibility. Only works on the current user's own lists.",
       parameters: {
         type: 'object',
         properties: {
           list_id: { type: 'string', description: 'List ID from available_lists' },
           name: { type: 'string', description: 'New name' },
           emoji: { type: 'string', description: 'New emoji icon' },
+          is_public: { type: 'boolean', description: 'true = public (anyone with the link can view), false = private (only you)' },
         },
         required: ['list_id'],
       },
