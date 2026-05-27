@@ -66,6 +66,7 @@ const setupLimiter = rateLimit({
 
 app.use('/api/', apiLimiter);
 app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/2fa/verify', authLimiter);
 app.use('/api/auth/register', setupLimiter);
 app.use('/api/admin/nuke', setupLimiter);
 
@@ -405,6 +406,10 @@ async function runMigrations() {
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS linked_list_type VARCHAR(10) CHECK (linked_list_type IN ('sublist', 'link'))`);
   await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS parent_task_id BIGINT REFERENCES tasks(id) ON DELETE CASCADE`);
   await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS depth INTEGER NOT NULL DEFAULT 0`);
+
+  // TOTP 2FA
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret VARCHAR(100)`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT false`);
 
   console.log('Database migrations applied.');
 }

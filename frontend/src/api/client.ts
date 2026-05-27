@@ -33,8 +33,25 @@ export const apiRegister = (username: string, email: string, password: string) =
   );
 
 export const apiLogin = (username: string, password: string) =>
-  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string } }>(
-    '/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }
+  apiFetch<{
+    token?: string;
+    user?: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean };
+    requires2FA?: boolean;
+    pendingToken?: string;
+  }>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
+
+export const api2FASetup = () =>
+  apiFetch<{ secret: string; qrCode: string }>('/auth/2fa/setup', { method: 'POST', body: JSON.stringify({}) });
+
+export const api2FAEnable = (code: string) =>
+  apiFetch<{ success: boolean }>('/auth/2fa/enable', { method: 'POST', body: JSON.stringify({ code }) });
+
+export const api2FADisable = (code: string) =>
+  apiFetch<{ success: boolean }>('/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ code }) });
+
+export const api2FAVerify = (pendingToken: string, code: string) =>
+  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean } }>(
+    '/auth/2fa/verify', { method: 'POST', body: JSON.stringify({ pendingToken, code }) }
   );
 
 export const apiGetMe = () =>
