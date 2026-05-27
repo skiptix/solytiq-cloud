@@ -208,6 +208,7 @@ Guidelines:
 - INTENT: Words like "terminate", "deadline", "due", "schedule for", "set to", "end by" all mean the user wants to set a task deadline.
 - Refer to tasks, lists, sections, and folders by their names, not their IDs, when talking to the user
 - When creating a list you can optionally assign it to a folder from available_folders
+- FOLDER IDs: Always use the exact folder ID (e.g. "folder_abc123"), never the folder name. When creating lists inside a NEW folder that doesn't exist yet, you MUST call create_folder first, then use the folder_id returned in the tool result for subsequent create_list calls — never guess or fabricate a folder_id
 - If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}`;
 }
 
