@@ -16,13 +16,21 @@ export interface AISettings {
   model: string;
 }
 
+export interface AISession {
+  id: string;
+  title: string | null;
+  created_at: string;
+}
+
 interface AIStore {
   isOpen: boolean;
   settings: AISettings;
   messages: AIChatMessage[];
   isThinking: boolean;
   settingsLoaded: boolean;
-  historyLoaded: boolean;
+  currentSessionId: string | null;
+  recentSessions: AISession[];
+  showRecentChats: boolean;
 
   setOpen: (open: boolean) => void;
   toggle: () => void;
@@ -33,8 +41,10 @@ interface AIStore {
   removeMessage: (id: string) => void;
   setThinking: (v: boolean) => void;
   setSettingsLoaded: (v: boolean) => void;
-  setHistoryLoaded: (v: boolean) => void;
   clearHistory: () => void;
+  setCurrentSessionId: (id: string | null) => void;
+  setRecentSessions: (sessions: AISession[]) => void;
+  setShowRecentChats: (v: boolean) => void;
 }
 
 const useAIStore = create<AIStore>()((set) => ({
@@ -43,7 +53,9 @@ const useAIStore = create<AIStore>()((set) => ({
   messages: [],
   isThinking: false,
   settingsLoaded: false,
-  historyLoaded: false,
+  currentSessionId: null,
+  recentSessions: [],
+  showRecentChats: false,
 
   setOpen: (open) => set({ isOpen: open }),
   toggle: () => set((s) => ({ isOpen: !s.isOpen })),
@@ -56,8 +68,10 @@ const useAIStore = create<AIStore>()((set) => ({
     set((s) => ({ messages: s.messages.filter((m) => m.id !== id) })),
   setThinking: (v) => set({ isThinking: v }),
   setSettingsLoaded: (v) => set({ settingsLoaded: v }),
-  setHistoryLoaded: (v) => set({ historyLoaded: v }),
   clearHistory: () => set({ messages: [] }),
+  setCurrentSessionId: (id) => set({ currentSessionId: id }),
+  setRecentSessions: (sessions) => set({ recentSessions: sessions }),
+  setShowRecentChats: (v) => set({ showRecentChats: v }),
 }));
 
 // ── Context building ──────────────────────────────────────────────
@@ -156,7 +170,7 @@ export function buildSystemPrompt(ctx: AIContext, username: string): string {
 
   const contextJson = JSON.stringify(ctx.data, null, 2);
 
-  return `You are a helpful AI assistant embedded in Solytiq, a personal productivity and task management app.
+  return `You are Sol, a helpful AI assistant embedded in Solytiq Cloud, a personal productivity and task management app.
 
 Current user: ${username}
 Current view: ${viewDescriptions[ctx.view] ?? ctx.view}

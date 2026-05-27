@@ -248,6 +248,17 @@ async function runMigrations() {
     ON CONFLICT (key) DO NOTHING
   `);
 
+  // AI chat sessions (one per conversation, expires after 30 days)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_chat_sessions (
+      id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title      VARCHAR(200),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
+    )
+  `);
+
   // AI chat history table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS ai_chats (
@@ -260,6 +271,9 @@ async function runMigrations() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+
+  // Link ai_chats to sessions
+  await pool.query(`ALTER TABLE ai_chats ADD COLUMN IF NOT EXISTS session_id UUID REFERENCES ai_chat_sessions(id) ON DELETE CASCADE`);
 
   // Widen color columns if they were created with the old VARCHAR(20) size
   await pool.query(`ALTER TABLE lists ALTER COLUMN color TYPE VARCHAR(50)`);

@@ -187,17 +187,30 @@ export const apiAIChat = (messages: unknown[], tools?: unknown[]) =>
     }>;
   }>('/ai/chat', { method: 'POST', body: JSON.stringify({ messages, tools }) });
 
-export const apiGetAIHistory = () =>
-  apiFetch<{ messages: Array<{ id: number; role: string; content: string; toolCalls: unknown; metadata: unknown; createdAt: string }> }>('/ai/history');
-
-export const apiSaveAIMessage = (role: string, content: string, metadata?: Record<string, unknown>) =>
+export const apiSaveAIMessage = (role: string, content: string, sessionId?: string | null, metadata?: Record<string, unknown>) =>
   apiFetch<{ id: number; createdAt: string }>('/ai/history', {
     method: 'POST',
-    body: JSON.stringify({ role, content, metadata }),
+    body: JSON.stringify({ role, content, sessionId, metadata }),
   });
 
 export const apiClearAIHistory = () =>
   apiFetch<{ success: boolean }>('/ai/history', { method: 'DELETE' });
+
+// AI Chat Sessions
+export const apiCreateAISession = () =>
+  apiFetch<{ session: { id: string; created_at: string; expires_at: string } }>('/ai/sessions', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+
+export const apiGetAISessions = () =>
+  apiFetch<{ sessions: Array<{ id: string; title: string | null; created_at: string }> }>('/ai/sessions');
+
+export const apiGetAISessionMessages = (sessionId: string) =>
+  apiFetch<{ messages: Array<{ id: number; role: string; content: string; toolCalls: unknown; metadata: unknown; createdAt: string }> }>(`/ai/sessions/${sessionId}`);
+
+export const apiDeleteAISession = (sessionId: string) =>
+  apiFetch<{ success: boolean }>(`/ai/sessions/${sessionId}`, { method: 'DELETE' });
 
 export const apiUpdateAppSettingsAI = (data: { aiAssistantEnabled?: boolean; aiModel?: string }) =>
   apiFetch<{ settings: Record<string, string> }>('/admin/settings', {

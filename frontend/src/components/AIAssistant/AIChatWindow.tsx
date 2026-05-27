@@ -10,6 +10,7 @@ interface Props {
   onSend: (text: string) => void;
   onClose: () => void;
   onClearHistory: () => void;
+  onShowRecentChats: () => void;
 }
 
 const VIEW_LABELS: Record<string, string> = {
@@ -181,7 +182,7 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
   );
 }
 
-export default function AIChatWindow({ messages, isThinking, contextView, onSend, onClose, onClearHistory }: Props) {
+export default function AIChatWindow({ messages, isThinking, contextView, onSend, onClose, onClearHistory, onShowRecentChats }: Props) {
   const [input, setInput] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -267,7 +268,7 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
               lineHeight: 1.2,
             }}
           >
-            AI Assistant
+            Sol
           </div>
           <div
             style={{
@@ -280,6 +281,28 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
             {viewLabel} context
           </div>
         </div>
+        {/* Recent chats */}
+        <button
+          onClick={onShowRecentChats}
+          title="Recent chats"
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: 7,
+            background: 'rgba(255,255,255,0.12)',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'background 120ms',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.22)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
+        >
+          <Icon name="history" size={15} color="rgba(255,255,255,0.8)" />
+        </button>
+        {/* Clear */}
         <button
           onClick={() => setShowClearConfirm(true)}
           title="Clear chat history"
@@ -367,7 +390,7 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
                 textAlign: 'center',
               }}
             >
-              How can I help?
+              Hi, I'm Sol — how can I help?
             </div>
             <div
               style={{
@@ -439,14 +462,13 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
             padding: '8px 8px 8px 12px',
             transition: 'border-color 200ms',
           }}
-          onFocus={() => {}}
         >
           <textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Message AI Assistant…"
+            placeholder="Message Sol…"
             rows={1}
             disabled={isThinking}
             style={{
@@ -550,7 +572,7 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
                 marginBottom: 6,
               }}
             >
-              Clear chat history?
+              Clear this chat?
             </div>
             <div
               style={{
@@ -560,7 +582,7 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
                 lineHeight: 1.5,
               }}
             >
-              All messages will be permanently deleted.
+              Messages will be permanently deleted.
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, width: '100%' }}>
@@ -600,7 +622,7 @@ export default function AIChatWindow({ messages, isThinking, contextView, onSend
               onMouseEnter={(e) => { e.currentTarget.style.background = '#991212'; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = '#ba1a1a'; }}
             >
-              Clear All
+              Clear
             </button>
           </div>
         </div>

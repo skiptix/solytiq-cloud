@@ -16,7 +16,6 @@ import useAuthStore from '../../store/useAuthStore';
 import {
   apiGetAISettings,
   apiAIChat,
-  apiGetAIHistory,
   apiSaveAIMessage,
   apiClearAIHistory,
   apiCreateSection,
@@ -24,9 +23,14 @@ import {
   apiDeleteSection,
   apiUpdateListTask,
   apiDeleteListTask,
+  apiCreateAISession,
+  apiGetAISessions,
+  apiGetAISessionMessages,
+  apiDeleteAISession,
 } from '../../api/client';
 import AIBubble from './AIBubble';
 import AIChatWindow from './AIChatWindow';
+import AIRecentChats from './AIRecentChats';
 
 interface ToolCall {
   id: string;
@@ -42,9 +46,9 @@ export default function AIAssistant() {
     messages,
     isThinking,
     settingsLoaded,
-    historyLoaded,
+    recentSessions,
+    showRecentChats,
     setOpen,
-    toggle,
     setSettings,
     setMessages,
     addMessage,
@@ -52,15 +56,17 @@ export default function AIAssistant() {
     removeMessage,
     setThinking,
     setSettingsLoaded,
-    setHistoryLoaded,
     clearHistory,
+    setCurrentSessionId,
+    setRecentSessions,
+    setShowRecentChats,
   } = useAIStore();
 
   const appStore = useAppStore();
   const { username, userId } = useAuthStore();
   const thinkingIdRef = useRef<string | null>(null);
 
-  // Load AI settings on mount
+  // Load AI settings once
   useEffect(() => {
     if (settingsLoaded) return;
     apiGetAISettings()
@@ -68,25 +74,23 @@ export default function AIAssistant() {
       .catch(() => setSettingsLoaded(true));
   }, [settingsLoaded, setSettings, setSettingsLoaded]);
 
-  // Load chat history once settings are loaded and AI is enabled
-  useEffect(() => {
-    if (!settingsLoaded || !settings.enabled || historyLoaded || !userId) return;
-    apiGetAIHistory()
-      .then((data) => {
-        const msgs: AIChatMessage[] = data.messages
-          .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .map((m) => ({
-            id: String(m.id),
-            role: m.role as 'user' | 'assistant',
-            content: m.content,
-            createdAt: m.createdAt,
-            actionSummary: (m.metadata as { actionSummary?: string } | null)?.actionSummary,
-          }));
-        setMessages(msgs);
-        setHistoryLoaded(true);
-      })
-      .catch(() => setHistoryLoaded(true));
-  }, [settingsLoaded, settings.enabled, historyLoaded, userId, setMessages, setHistoryLoaded]);
+  // Create a new session every time the chat opens
+  const handleToggle = useCallback(async () => {
+    if (isOpen) {
+      setOpen(false);
+      return;
+    }
+    // Start fresh
+    clearHistory();
+    setCurrentSessionId(null);
+    setOpen(true);
+
+    if (settings.enabled && userId) {
+      apiCreateAISession()
+        .then((data) => setCurrentSessionId(data.session.id))
+        .catch(() => {});
+    }
+  }, [isOpen, settings.enabled, userId, setOpen, clearHistory, setCurrentSessionId]);
 
   // ── Tool execution ────────────────────────────────────────────
   const executeTool = useCallback(
@@ -272,6 +276,8 @@ export default function AIAssistant() {
     async (text: string) => {
       if (!settings.enabled) return;
 
+      const sessionId = useAIStore.getState().currentSessionId;
+
       const userMsg: AIChatMessage = {
         id: crypto.randomUUID(),
         role: 'user',
@@ -279,7 +285,7 @@ export default function AIAssistant() {
         createdAt: new Date().toISOString(),
       };
       addMessage(userMsg);
-      apiSaveAIMessage('user', text).catch(() => {});
+      apiSaveAIMessage('user', text, sessionId).catch(() => {});
 
       const thinkingId = crypto.randomUUID();
       thinkingIdRef.current = thinkingId;
@@ -341,7 +347,7 @@ export default function AIAssistant() {
           };
           removeMessage(thinkingId);
           addMessage(finalMsg);
-          apiSaveAIMessage('assistant', finalContent, actionSummary ? { actionSummary } : undefined).catch(() => {});
+          apiSaveAIMessage('assistant', finalContent, sessionId, actionSummary ? { actionSummary } : undefined).catch(() => {});
         } else {
           const content = msg.content ?? '';
           const finalMsg: AIChatMessage = {
@@ -352,7 +358,7 @@ export default function AIAssistant() {
           };
           removeMessage(thinkingId);
           addMessage(finalMsg);
-          apiSaveAIMessage('assistant', content).catch(() => {});
+          apiSaveAIMessage('assistant', content, sessionId).catch(() => {});
         }
       } catch (err) {
         removeMessage(thinkingIdRef.current ?? thinkingId);
@@ -382,6 +388,40 @@ export default function AIAssistant() {
     await apiClearAIHistory().catch(() => {});
   }, [clearHistory]);
 
+  // Load recent sessions when the panel is opened
+  const handleShowRecentChats = useCallback(async () => {
+    setShowRecentChats(true);
+    apiGetAISessions()
+      .then((data) => setRecentSessions(data.sessions))
+      .catch(() => {});
+  }, [setShowRecentChats, setRecentSessions]);
+
+  // Load messages from a past session
+  const handleSelectSession = useCallback(async (sessionId: string) => {
+    setShowRecentChats(false);
+    clearHistory();
+    setCurrentSessionId(sessionId);
+    apiGetAISessionMessages(sessionId)
+      .then((data) => {
+        const msgs: AIChatMessage[] = data.messages
+          .filter((m) => m.role === 'user' || m.role === 'assistant')
+          .map((m) => ({
+            id: String(m.id),
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+            createdAt: m.createdAt,
+            actionSummary: (m.metadata as { actionSummary?: string } | null)?.actionSummary,
+          }));
+        setMessages(msgs);
+      })
+      .catch(() => {});
+  }, [setShowRecentChats, clearHistory, setCurrentSessionId, setMessages]);
+
+  const handleDeleteSession = useCallback(async (sessionId: string) => {
+    setRecentSessions(recentSessions.filter((s) => s.id !== sessionId));
+    await apiDeleteAISession(sessionId).catch(() => {});
+  }, [recentSessions, setRecentSessions]);
+
   // Don't render if AI is disabled
   if (!settings.enabled) return null;
 
@@ -400,16 +440,37 @@ export default function AIAssistant() {
       }}
     >
       {isOpen && (
-        <AIChatWindow
-          messages={messages}
-          isThinking={isThinking}
-          contextView={ctx.view}
-          onSend={handleSend}
-          onClose={() => setOpen(false)}
-          onClearHistory={handleClearHistory}
-        />
+        <div style={{ position: 'relative' }}>
+          <AIChatWindow
+            messages={messages}
+            isThinking={isThinking}
+            contextView={ctx.view}
+            onSend={handleSend}
+            onClose={() => setOpen(false)}
+            onClearHistory={handleClearHistory}
+            onShowRecentChats={handleShowRecentChats}
+          />
+          {showRecentChats && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                right: 0,
+                width: 360,
+                height: 500,
+              }}
+            >
+              <AIRecentChats
+                sessions={recentSessions}
+                onSelect={handleSelectSession}
+                onDelete={handleDeleteSession}
+                onClose={() => setShowRecentChats(false)}
+              />
+            </div>
+          )}
+        </div>
       )}
-      <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={toggle} />
+      <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} />
     </div>
   );
 }
