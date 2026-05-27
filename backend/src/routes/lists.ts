@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../db';
 import { authenticate } from '../middleware';
+import { broadcastToUser } from '../sse';
 
 const router = Router();
 router.use(authenticate);
@@ -226,6 +227,7 @@ router.post('/', async (req: Request, res: Response) => {
     );
 
     res.status(201).json({ list: sanitizeList(result.rows[0], []) });
+    broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     console.error('lists POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -252,6 +254,7 @@ router.put('/:listId/reorder', async (req: Request, res: Response) => {
     );
 
     res.json({ success: true });
+    broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     console.error('lists reorder error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -306,6 +309,7 @@ router.put('/:listId', async (req: Request, res: Response) => {
     );
 
     res.json({ list: sanitizeList(result.rows[0], []) });
+    broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     console.error('lists PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -367,6 +371,7 @@ router.delete('/:listId', async (req: Request, res: Response) => {
     await query('DELETE FROM lists WHERE id = $1', [listId]);
 
     res.json({ success: true });
+    broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     console.error('lists DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -420,6 +425,7 @@ router.post('/:listId/sections', async (req: Request, res: Response) => {
     );
 
     res.status(201).json({ section: sanitizeSection(result.rows[0], []) });
+    broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     console.error('sections POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -459,6 +465,7 @@ router.put('/sections/:sectionId', async (req: Request, res: Response) => {
     );
 
     res.json({ section: sanitizeSection(result.rows[0], []) });
+    broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     console.error('sections PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -485,6 +492,7 @@ router.delete('/sections/:sectionId', async (req: Request, res: Response) => {
     await query('DELETE FROM sections WHERE id = $1', [sectionId]);
 
     res.json({ success: true });
+    broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     console.error('sections DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -546,6 +554,7 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
     );
 
     res.status(201).json({ task: sanitizeTask(result.rows[0]) });
+    broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     console.error('list task POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -613,6 +622,7 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
     }
 
     res.json({ task: sanitizeTask(result.rows[0]) });
+    broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     console.error('list task PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -637,6 +647,7 @@ router.delete('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
     }
 
     res.json({ success: true });
+    broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     console.error('list task DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -741,6 +752,7 @@ router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, r
     newList.rows[0].parent_task_id = String(taskId);
 
     res.status(201).json({ task: sanitizeTask(newTask.rows[0]), list: sanitizeList(newList.rows[0], []) });
+    broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     console.error('sublist task POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -786,6 +798,7 @@ router.post('/:listId/sections/:sectionId/tasks/link', async (req: Request, res:
     );
 
     res.status(201).json({ task: sanitizeTask(newTask.rows[0]) });
+    broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     console.error('link task POST error:', err);
     res.status(500).json({ error: 'Internal server error' });

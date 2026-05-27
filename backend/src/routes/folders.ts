@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../db';
 import { authenticate } from '../middleware';
+import { broadcastToUser } from '../sse';
 
 const router = Router();
 router.use(authenticate);
@@ -71,6 +72,7 @@ router.post('/', async (req: Request, res: Response) => {
       [folderId, req.userId, name, emoji ?? null, color ?? null, nextPos, isPublic ?? true]
     );
     res.status(201).json({ folder: sanitizeFolder(result.rows[0]) });
+    broadcastToUser(req.userId!, 'folders');
   } catch (err) {
     console.error('folders POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -133,6 +135,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       ]
     );
     res.json({ ok: true, folder: sanitizeFolder(result.rows[0]) });
+    broadcastToUser(req.userId!, 'folders');
   } catch (err) {
     console.error('folders PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -176,6 +179,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     await query('DELETE FROM folders WHERE id = $1', [id]);
 
     res.json({ ok: true });
+    broadcastToUser(req.userId!, 'folders');
   } catch (err) {
     console.error('folders DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { query } from '../db';
 import { authenticate } from '../middleware';
+import { broadcastToUser } from '../sse';
 
 const router = Router();
 router.use(authenticate);
@@ -117,6 +118,7 @@ router.post('/', async (req: Request, res: Response) => {
     );
 
     res.status(201).json({ task: sanitizeTask(result.rows[0]) });
+    broadcastToUser(req.userId!, 'tasks');
   } catch (err) {
     console.error('tasks POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -143,6 +145,7 @@ router.put('/reorder', async (req: Request, res: Response) => {
     );
 
     res.json({ success: true });
+    broadcastToUser(req.userId!, 'tasks');
   } catch (err) {
     console.error('tasks reorder error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -216,6 +219,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
 
     res.json({ task: sanitizeTask(result.rows[0]) });
+    broadcastToUser(req.userId!, 'tasks');
   } catch (err) {
     console.error('tasks PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -238,6 +242,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     }
 
     res.json({ success: true });
+    broadcastToUser(req.userId!, 'tasks');
   } catch (err) {
     console.error('tasks DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
