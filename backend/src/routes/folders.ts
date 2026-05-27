@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { query } from '../db';
 import { authenticate } from '../middleware';
 
@@ -58,7 +59,7 @@ router.post('/', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'name is required' });
       return;
     }
-    const folderId = id ?? `folder_${Date.now()}`;
+    const folderId = id ?? `folder_${uuidv4()}`;
     const posRes = await query<{ max: string | null }>(
       'SELECT MAX(position) AS max FROM folders'
     );

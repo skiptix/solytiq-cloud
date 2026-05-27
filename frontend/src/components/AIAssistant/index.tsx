@@ -266,7 +266,7 @@ export default function AIAssistant() {
 
         // ── Folder management ─────────────────────────────────────
         if (name === 'create_folder') {
-          const folderId = `folder_${Date.now()}`;
+          const folderId = `folder_${crypto.randomUUID()}`;
           const res = await apiCreateFolder({
             id: folderId,
             name: args.name as string,
@@ -298,7 +298,7 @@ export default function AIAssistant() {
 
         // ── List management ───────────────────────────────────────
         if (name === 'create_list') {
-          const listId = `list_${Date.now()}`;
+          const listId = `list_${crypto.randomUUID()}`;
           const res = await apiCreateList({
             id: listId,
             name: args.name as string,

@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { query } from '../db';
 import { authenticate } from '../middleware';
 
@@ -186,7 +187,7 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const listId = id ?? `list_${Date.now()}`;
+    const listId = id ?? `list_${uuidv4()}`;
 
     const posResult = await query<{ max: string | null }>(
       'SELECT MAX(position) AS max FROM lists WHERE user_id = $1',
@@ -347,7 +348,7 @@ router.post('/:listId/sections', async (req: Request, res: Response) => {
       return;
     }
 
-    const sectionId = id ?? `section_${Date.now()}`;
+    const sectionId = id ?? `section_${uuidv4()}`;
 
     const posResult = await query<{ max: string | null }>(
       'SELECT MAX(position) AS max FROM sections WHERE list_id = $1',
