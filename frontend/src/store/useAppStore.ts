@@ -153,19 +153,24 @@ const useAppStore = create<AppState>()(
 
       updateListTask: (listId, taskId, updates) => {
         set((state) => ({
-          lists: state.lists.map((list) =>
-            list.id !== listId
-              ? list
-              : {
-                  ...list,
-                  sections: list.sections.map((sec) => ({
-                    ...sec,
-                    tasks: sec.tasks.map((t) =>
-                      t.id === taskId ? { ...t, ...updates } : t
-                    ),
-                  })),
-                }
-          ),
+          lists: state.lists.map((list) => {
+            if (list.id !== listId) return list;
+            const updatedSections = list.sections.map((sec) => ({
+              ...sec,
+              tasks: sec.tasks.map((t) =>
+                t.id === taskId ? { ...t, ...updates } : t
+              ),
+            }));
+            const allTasks = updatedSections.flatMap((s) => s.tasks);
+            return {
+              ...list,
+              sections: updatedSections,
+              linkedProgress: {
+                total: allTasks.length,
+                completed: allTasks.filter((t) => t.checked).length,
+              },
+            };
+          }),
         }));
         apiUpdateListTask(listId, taskId, updates).catch(() => {});
       },
