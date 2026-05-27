@@ -1,4 +1,4 @@
-import type { Task, List, Folder, TrashedTask, SharedFile } from '../types';
+import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -129,6 +129,24 @@ export const apiDeleteFromTrash = (trashId: number) =>
 
 export const apiEmptyTrash = () =>
   apiFetch<{ success: boolean }>('/trash/empty', { method: 'DELETE' });
+
+export const apiGetTrashLists = () =>
+  apiFetch<{ trash: Array<{ id: number; listId: string; listData: List; deletedAt: string; expiresAt: string }> }>('/trash/lists');
+
+export const apiRestoreListFromTrash = (trashId: number) =>
+  apiFetch<{ success: boolean }>(`/trash/lists/${trashId}/restore`, { method: 'POST' });
+
+export const apiDeleteListFromTrash = (trashId: number) =>
+  apiFetch<{ success: boolean }>(`/trash/lists/${trashId}`, { method: 'DELETE' });
+
+export const apiGetTrashFolders = () =>
+  apiFetch<{ trash: Array<{ id: number; folderId: string; folderData: TrashedFolder['folder']; deletedAt: string; expiresAt: string }> }>('/trash/folders');
+
+export const apiRestoreFolderFromTrash = (trashId: number) =>
+  apiFetch<{ success: boolean }>(`/trash/folders/${trashId}/restore`, { method: 'POST' });
+
+export const apiDeleteFolderFromTrash = (trashId: number) =>
+  apiFetch<{ success: boolean }>(`/trash/folders/${trashId}`, { method: 'DELETE' });
 
 // Admin
 export const apiGetUsers = () =>

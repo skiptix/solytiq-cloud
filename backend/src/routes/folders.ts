@@ -143,7 +143,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const existing = await query<FolderRow>('SELECT user_id FROM folders WHERE id = $1', [id]);
+    const existing = await query<FolderRow>('SELECT * FROM folders WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
       res.status(404).json({ error: 'Folder not found' });
       return;
@@ -157,14 +157,24 @@ router.delete('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    await query(
-      'UPDATE lists SET folder_id = NULL WHERE folder_id = $1',
+    const folderRow = existing.rows[0];
+
+    // Snapshot the list IDs that belong to this folder
+    const listsInFolder = await query<{ id: string }>(
+      'SELECT id FROM lists WHERE folder_id = $1',
       [id]
     );
+    const listIds = listsInFolder.rows.map(l => l.id);
+
+    const folderData = { ...sanitizeFolder(folderRow), listIds };
     await query(
-      'DELETE FROM folders WHERE id = $1',
-      [id]
+      `INSERT INTO trash_folders (folder_id, user_id, folder_data) VALUES ($1, $2, $3)`,
+      [id, req.userId, JSON.stringify(folderData)]
     );
+
+    await query('UPDATE lists SET folder_id = NULL WHERE folder_id = $1', [id]);
+    await query('DELETE FROM folders WHERE id = $1', [id]);
+
     res.json({ ok: true });
   } catch (err) {
     console.error('folders DELETE error:', err);
