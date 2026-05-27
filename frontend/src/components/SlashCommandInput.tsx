@@ -44,7 +44,12 @@ export default function SlashCommandInput({
   onBlur,
   onKeyDown,
 }: SlashCommandInputProps) {
-  const [menu, setMenu] = useState<MenuState>({ kind: 'none' });
+  const [menu, setMenu] = useState<MenuState>(() => {
+    if (value === '/') return { kind: 'slash-menu' };
+    if (value.startsWith('/list')) return { kind: 'list-name', name: value.slice(5).trimStart() };
+    if (value.startsWith('/link')) return { kind: 'link-search', query: value.slice(5).trimStart() };
+    return { kind: 'none' };
+  });
   const [highlightIdx, setHighlightIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);

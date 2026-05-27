@@ -352,6 +352,7 @@ const useAppStore = create<AppState>()(
           if (foldersRes) update.folders = foldersRes.folders;
           if (listsRes) update.lists = listsRes.lists.map(l => ({
             ...l,
+            parentTaskId: l.parentTaskId != null ? Number(l.parentTaskId) : null,
             sections: l.sections.map(s => ({
               ...s,
               tasks: s.tasks.map(t => ({ ...t, id: Number(t.id) })),

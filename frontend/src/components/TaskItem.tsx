@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Task, List } from '../types';
@@ -210,8 +210,10 @@ interface TaskItemProps {
 export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClick, onDragStart, onDragEnd, onDragOver, onDrop, isDragging, isDragOver, hideListBadge, availableLists = [], currentListId }: TaskItemProps) {
   const [hovered, setHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const [showDelete, setShowDelete] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const { title, note, priority, badge, checked, deadline, time, linkedListId } = task;
   const bc = badge ? (BADGE_COLORS[badge] ?? { bg: '#F5F3FF', color: '#484552' }) : null;
@@ -293,13 +295,20 @@ export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClic
           <Icon name="drag_indicator" size={16} color="#c9c4d5" />
         </div>
 
-        <div style={{ position: 'relative', flexShrink: 0 }}>
-          <button onClick={e => { e.stopPropagation(); setMenuOpen(m => !m); }}
+        <div style={{ flexShrink: 0 }}>
+          <button ref={menuBtnRef} onClick={e => {
+            e.stopPropagation();
+            if (!menuOpen) {
+              const rect = menuBtnRef.current?.getBoundingClientRect();
+              if (rect) setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+            }
+            setMenuOpen(m => !m);
+          }}
             style={{ display: 'flex', alignItems: 'center', padding: 4, borderRadius: 4, background: menuOpen ? '#f1ecf6' : 'transparent', border: 'none', cursor: 'pointer', opacity: hovered || menuOpen ? 1 : 0, transition: 'opacity 200ms' }}>
             <Icon name="more_vert" size={18} color="#787584" />
           </button>
-          {menuOpen && (
-            <div style={{ position: 'absolute', right: 0, top: 32, zIndex: 200, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.10)', minWidth: 128, overflow: 'hidden', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+          {menuOpen && menuPos && (
+            <div style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 1000, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.10)', minWidth: 128, overflow: 'hidden', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
               onClick={e => e.stopPropagation()}>
               <ContextMenuItems
                 onEdit={() => { setMenuOpen(false); setShowEdit(true); }}
