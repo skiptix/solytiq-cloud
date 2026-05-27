@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./public/solytiq-todo-logo.svg" alt="Solytiq Cloud Logo" width="120" height="120" />
+  <img src="./public/solytiq-cloud.svg" alt="Solytiq Cloud Logo" width="120" height="120" />
   <h1>Solytiq Cloud</h1>
   <p><strong>Your lists. Your cloud. Simple, powerful, and self-hosted.</strong></p>
 
