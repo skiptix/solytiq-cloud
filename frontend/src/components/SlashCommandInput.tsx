@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import type { List } from '../types';
 import Icon from './Icon';
 
@@ -58,8 +58,25 @@ export default function SlashCommandInput({
 }: SlashCommandInputProps) {
   const [menu, setMenu] = useState<MenuState>(() => initMenu(value));
   const [highlightIdx, setHighlightIdx] = useState(0);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const updatePos = useCallback(() => {
+    const rect = inputRef.current?.getBoundingClientRect();
+    if (rect) setDropdownPos({ top: rect.bottom + 6, left: rect.left, width: rect.width });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (menu.kind === 'none') { setDropdownPos(null); return; }
+    updatePos();
+    window.addEventListener('scroll', updatePos, true);
+    window.addEventListener('resize', updatePos);
+    return () => {
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
+  }, [menu.kind, updatePos]);
 
   const excluded = new Set([currentListId, ...excludeListIds].filter(Boolean) as string[]);
   const filteredLists = availableLists.filter(l => !excluded.has(l.id));
@@ -145,18 +162,19 @@ export default function SlashCommandInput({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const dropdownBase: React.CSSProperties = {
-    position: 'absolute',
-    top: 'calc(100% + 6px)',
-    left: 0,
-    zIndex: 500,
+  const dropdownBase: React.CSSProperties = dropdownPos ? {
+    position: 'fixed',
+    top: dropdownPos.top,
+    left: dropdownPos.left,
+    minWidth: Math.max(dropdownPos.width, 290),
+    zIndex: 9000,
     background: '#fff',
     border: '1px solid #e8e4f0',
     borderRadius: 12,
     boxShadow: '0 8px 24px rgba(94,77,187,0.12), 0 2px 8px rgba(0,0,0,0.06)',
     overflow: 'hidden',
     animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both',
-  };
+  } : { display: 'none' };
 
   const itemBase: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
@@ -166,7 +184,7 @@ export default function SlashCommandInput({
   };
 
   return (
-    <div ref={containerRef} style={{ position: 'relative' }}>
+    <div ref={containerRef}>
       <input
         ref={inputRef}
         value={value}
@@ -180,8 +198,8 @@ export default function SlashCommandInput({
       />
 
       {/* ── Slash command picker ── */}
-      {menu.kind === 'slash-menu' && (
-        <div style={{ ...dropdownBase, minWidth: 290 }}>
+      {menu.kind === 'slash-menu' && dropdownPos && (
+        <div style={dropdownBase}>
           {/* Header */}
           <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid #F5F3FF', display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#5e4dbb' }}>
@@ -233,8 +251,8 @@ export default function SlashCommandInput({
       )}
 
       {/* ── Link search ── */}
-      {menu.kind === 'link-search' && (
-        <div style={{ ...dropdownBase, minWidth: 260 }}>
+      {menu.kind === 'link-search' && dropdownPos && (
+        <div style={dropdownBase}>
           {searchResults.length === 0 ? (
             <div style={{ padding: '10px 14px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#c9c4d5' }}>
               No lists found
