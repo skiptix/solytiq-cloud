@@ -42,7 +42,7 @@ export default function LoginScreen() {
 
   return (
     <div style={s.wrap}>
-      <img src="/solytiq-todo-logo.png" alt="Solytiq Cloud" style={{ width: 80, height: 80, borderRadius: 20, objectFit: 'cover', boxShadow: '0 4px 20px rgba(94,77,187,0.18)' }} />
+      <img src="/solytiq-cloud.png" alt="Solytiq Cloud" style={{ width: 80, height: 80, borderRadius: 20, objectFit: 'cover', boxShadow: '0 4px 20px rgba(94,77,187,0.18)' }} />
       <div style={{ ...s.card, animation: shake ? 'shake 400ms ease-in-out' : undefined }}>
         <div style={{ textAlign: 'center' }}>
           <div style={s.title}>Welcome Back</div>

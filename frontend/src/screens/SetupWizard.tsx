@@ -156,7 +156,7 @@ export default function SetupWizard() {
   return (
     <div style={w.wrap}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-        <img src="/solytiq-todo-logo.png" alt="Solytiq Cloud" style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'cover', boxShadow: '0 4px 20px rgba(94,77,187,0.18)' }} />
+        <img src="/solytiq-cloud.png" alt="Solytiq Cloud" style={{ width: 64, height: 64, borderRadius: 16, objectFit: 'cover', boxShadow: '0 4px 20px rgba(94,77,187,0.18)' }} />
         <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#5e4dbb' }}>Solytiq Cloud · Admin Setup</div>
       </div>
 
