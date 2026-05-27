@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { query } from '../db';
 import { authenticate } from '../middleware';
+import { broadcastToUser } from '../sse';
 
 const router = Router();
 router.use(authenticate);
@@ -144,6 +145,7 @@ router.post('/add', async (req: Request, res: Response) => {
     );
 
     res.status(201).json({ trash: sanitizeTrash(result.rows[0]) });
+    broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     console.error('trash add error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -200,6 +202,7 @@ router.post('/:trashId/restore', async (req: Request, res: Response) => {
 
     const restored = taskResult.rows[0] ?? null;
     res.json({ success: true, task: restored });
+    broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     console.error('trash restore error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -215,6 +218,7 @@ router.delete('/empty', async (req: Request, res: Response) => {
       query('DELETE FROM trash_folders WHERE user_id = $1', [req.userId]),
     ]);
     res.json({ success: true });
+    broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     console.error('trash empty error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -241,6 +245,7 @@ router.delete('/:trashId', async (req: Request, res: Response) => {
     }
 
     res.json({ success: true });
+    broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     console.error('trash delete error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -322,6 +327,7 @@ router.post('/lists/:trashId/restore', async (req: Request, res: Response) => {
 
     await query('DELETE FROM trash_lists WHERE id = $1', [trashId]);
     res.json({ success: true });
+    broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     console.error('trash lists restore error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -348,6 +354,7 @@ router.delete('/lists/:trashId', async (req: Request, res: Response) => {
     }
 
     res.json({ success: true });
+    broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     console.error('trash lists delete error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -413,6 +420,7 @@ router.post('/folders/:trashId/restore', async (req: Request, res: Response) => 
 
     await query('DELETE FROM trash_folders WHERE id = $1', [trashId]);
     res.json({ success: true });
+    broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     console.error('trash folders restore error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -439,6 +447,7 @@ router.delete('/folders/:trashId', async (req: Request, res: Response) => {
     }
 
     res.json({ success: true });
+    broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     console.error('trash folders delete error:', err);
     res.status(500).json({ error: 'Internal server error' });

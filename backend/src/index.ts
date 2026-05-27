@@ -15,6 +15,8 @@ import filesRouter, { UPLOAD_DIR } from './routes/files';
 import aiRouter from './routes/ai';
 import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
+import { addSseClient, removeSseClient } from './sse';
+import { verifyToken } from './auth';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -141,6 +143,40 @@ app.get('/api/share/:token/download', async (req, res) => {
     console.error('share download error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
+});
+
+// SSE — real-time sync endpoint
+app.get('/api/events', async (req, res) => {
+  const token =
+    (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null) ??
+    (req.query.token as string | undefined) ?? '';
+
+  let userId: string;
+  try {
+    ({ userId } = verifyToken(token));
+  } catch {
+    res.status(401).json({ error: 'Invalid or expired token' });
+    return;
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  res.write(': connected\n\n');
+
+  addSseClient(userId, res);
+
+  const heartbeat = setInterval(() => {
+    try { res.write(': ping\n\n'); } catch { clearInterval(heartbeat); }
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    removeSseClient(userId, res);
+  });
 });
 
 // Health check

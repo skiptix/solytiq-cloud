@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { query } from '../db';
 import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
+import { broadcastToUser } from '../sse';
 
 export const UPLOAD_DIR = process.env.UPLOAD_DIR ?? '/app/uploads';
 
@@ -161,6 +162,7 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
 
     const base = getBaseUrl(req);
     res.status(201).json({ file: sanitizeFile(result.rows[0], base) });
+    broadcastToUser(req.userId!, 'files');
   } catch (err) {
     if (req.file) {
       const p = path.join(UPLOAD_DIR, req.file.filename);
@@ -214,6 +216,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     const base = getBaseUrl(req);
     res.json({ file: sanitizeFile(result.rows[0], base) });
+    broadcastToUser(req.userId!, 'files');
   } catch (err) {
     console.error('files PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -239,6 +242,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 
     res.json({ success: true });
+    broadcastToUser(req.userId!, 'files');
   } catch (err) {
     console.error('files DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });

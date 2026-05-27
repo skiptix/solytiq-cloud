@@ -262,6 +262,34 @@ export const apiUpdateAppSettingsAI = (data: { aiAssistantEnabled?: boolean; aiM
     body: JSON.stringify(data),
   });
 
+// SSE — real-time sync
+let sseSource: EventSource | null = null;
+
+export function connectSSE(onSync: (type: string) => void): void {
+  if (sseSource) return;
+  const token = getToken();
+  if (!token) return;
+  const url = `${BASE_URL}/events?token=${encodeURIComponent(token)}`;
+  sseSource = new EventSource(url);
+  sseSource.addEventListener('sync', (e: MessageEvent) => {
+    try {
+      const { type } = JSON.parse(e.data) as { type: string };
+      onSync(type);
+    } catch { /* ignore malformed */ }
+  });
+  sseSource.onerror = () => {
+    sseSource?.close();
+    sseSource = null;
+    // Browser's EventSource auto-reconnects; we clear our ref so it re-creates cleanly
+    setTimeout(() => connectSSE(onSync), 5000);
+  };
+}
+
+export function disconnectSSE(): void {
+  sseSource?.close();
+  sseSource = null;
+}
+
 export function apiUploadFile(
   file: File,
   opts: { isPublic?: boolean; password?: string; expiresAt?: string; title?: string },

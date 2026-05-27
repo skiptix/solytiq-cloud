@@ -4,7 +4,7 @@ import type { List } from './types';
 import useAuthStore from './store/useAuthStore';
 import useAppStore from './store/useAppStore';
 import useMembersStore from './store/useMembersStore';
-import { apiCheckSetupRequired } from './api/client';
+import { apiCheckSetupRequired, connectSSE, disconnectSSE } from './api/client';
 
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
@@ -39,7 +39,22 @@ function AppLayout() {
   const [modal, setModal] = useState<'add-list' | 'completed' | 'trash' | null>(null);
 
   const loadMembers = useMembersStore(s => s.load);
-  useEffect(() => { loadFromApi(); loadMembers(); }, []);
+
+  useEffect(() => {
+    loadFromApi();
+    loadMembers();
+
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    connectSSE(() => {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => { loadFromApi(); }, 800);
+    });
+
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      disconnectSSE();
+    };
+  }, []);
 
   // Sidebar resize
   const handleResizeStart = useCallback((initialX: number) => {
