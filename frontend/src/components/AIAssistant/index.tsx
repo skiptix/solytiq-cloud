@@ -57,7 +57,6 @@ export default function AIAssistant() {
     setSettings,
     setMessages,
     addMessage,
-    replaceMessage,
     removeMessage,
     setThinking,
     setSettingsLoaded,
