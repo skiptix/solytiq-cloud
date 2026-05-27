@@ -5,7 +5,7 @@ import useAppStore from '../store/useAppStore';
 import useAuthStore from '../store/useAuthStore';
 import TaskItem, { QuickAdd, EditModal } from '../components/TaskItem';
 import TaskDetailPopup from '../components/TaskDetailPopup';
-import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection } from '../api/client';
+import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, apiCreateSublistTask, apiLinkListAsTask } from '../api/client';
 import Icon from '../components/Icon';
 
 export default function ListScreen() {
@@ -72,6 +72,38 @@ export default function ListScreen() {
   };
 
   const handleAddTask = async (sectionId: string, data: Partial<Task> & { title: string }) => {
+    // Handle sublist creation via /list command
+    if (data.linkedListType === 'sublist' && data.linkedListId === '__pending__' && (data as Record<string,unknown>).__sublistName) {
+      const sublistName = (data as Record<string,unknown>).__sublistName as string;
+      const parentDepth = list.depth ?? 0;
+      try {
+        const res = await apiCreateSublistTask(listId!, sectionId, data.title, sublistName, parentDepth + 1);
+        const savedTask: Task = { ...res.task, id: Number(res.task.id) };
+        setLists(prev => [
+          ...prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: [...s.tasks, savedTask] }) }),
+        ]);
+        // Add the new sublist to the store
+        if (res.list) {
+          setLists(prev => [...prev, { ...res.list, sections: [] }]);
+        }
+      } catch (e) {
+        console.error('createSublistTask failed', e);
+      }
+      return;
+    }
+
+    // Handle link to existing list via /link command
+    if (data.linkedListType === 'link' && data.linkedListId) {
+      try {
+        const res = await apiLinkListAsTask(listId!, sectionId, data.title, data.linkedListId);
+        const savedTask: Task = { ...res.task, id: Number(res.task.id) };
+        setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: [...s.tasks, savedTask] }) }));
+      } catch (e) {
+        console.error('linkListAsTask failed', e);
+      }
+      return;
+    }
+
     const tempId = Date.now();
     const tempTask: Task = { id: tempId, title: data.title, checked: false, deadline: data.deadline, priority: data.priority, badge: data.badge, note: data.note };
     setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: [...s.tasks, tempTask] }) }));
@@ -273,13 +305,15 @@ export default function ListScreen() {
                         onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
                         isDragging={draggedId === task.id}
                         isDragOver={dragOverId === task.id && draggedId !== task.id}
-                        hideListBadge />
+                        hideListBadge
+                        availableLists={lists}
+                        currentListId={listId} />
                     );
                   })}
                 </div>
               )}
               <div style={{ borderTop: section.tasks.length > 0 ? '1px solid #f1ecf6' : 'none' }}>
-                <QuickAdd placeholder="Add new item…" onAdd={data => handleAddTask(section.id, data)} />
+                <QuickAdd placeholder="Add new item… (type / for commands)" onAdd={data => handleAddTask(section.id, data)} availableLists={lists} currentListId={listId} />
               </div>
             </div>
           </div>

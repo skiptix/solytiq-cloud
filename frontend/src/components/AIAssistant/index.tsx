@@ -31,6 +31,8 @@ import {
   apiUpdateList,
   apiDeleteList,
   apiCreateFolder,
+  apiCreateSublistTask,
+  apiLinkListAsTask,
 } from '../../api/client';
 import AIBubble from './AIBubble';
 import AIChatWindow from './AIChatWindow';
@@ -345,6 +347,51 @@ export default function AIAssistant() {
             ? `Moved "${list?.name}" to "${folder.name}"`
             : `Removed "${list?.name}" from folder`;
           return { id: call.id, name, result: summary, summary };
+        }
+
+        if (name === 'create_sublist') {
+          const listId = ctx.listId!;
+          const sectionId = args.section_id as string;
+          const taskTitle = args.task_title as string;
+          const sublistName = args.sublist_name as string;
+          const parentList = appStore.lists.find(l => l.id === listId);
+          const parentDepth = parentList?.depth ?? 0;
+          const res = await apiCreateSublistTask(listId, sectionId, taskTitle, sublistName, parentDepth + 1);
+          const savedTask = { ...res.task, id: Number(res.task.id) };
+          appStore.setLists(prev => {
+            const withTask = prev.map(l =>
+              l.id !== listId ? l : {
+                ...l,
+                sections: l.sections.map(s =>
+                  s.id !== sectionId ? s : { ...s, tasks: [...s.tasks, savedTask] }
+                ),
+              }
+            );
+            if (res.list) return [...withTask, { ...res.list, sections: [] }];
+            return withTask;
+          });
+          return { id: call.id, name, result: `Created sublist "${sublistName}" linked as "${taskTitle}"`, summary: `Created sublist "${sublistName}"` };
+        }
+
+        if (name === 'link_list_as_task') {
+          const listId = ctx.listId!;
+          const sectionId = args.section_id as string;
+          const taskTitle = args.task_title as string;
+          const linkedListId = args.linked_list_id as string;
+          const res = await apiLinkListAsTask(listId, sectionId, taskTitle, linkedListId);
+          const savedTask = { ...res.task, id: Number(res.task.id) };
+          appStore.setLists(prev =>
+            prev.map(l =>
+              l.id !== listId ? l : {
+                ...l,
+                sections: l.sections.map(s =>
+                  s.id !== sectionId ? s : { ...s, tasks: [...s.tasks, savedTask] }
+                ),
+              }
+            )
+          );
+          const linkedList = appStore.lists.find(l => l.id === linkedListId);
+          return { id: call.id, name, result: `Linked "${linkedList?.name ?? linkedListId}" as task "${taskTitle}"`, summary: `Linked "${linkedList?.name ?? linkedListId}"` };
         }
 
         return { id: call.id, name, result: `Unknown tool: ${name}` };

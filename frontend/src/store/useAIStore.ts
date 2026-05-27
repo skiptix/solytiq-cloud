@@ -186,6 +186,10 @@ export function buildSystemPrompt(ctx: AIContext, username: string): string {
 
   const contextJson = JSON.stringify(ctx.data, null, 2);
 
+  const sublistNote = ctx.view === 'list'
+    ? '\n- SUBLISTS: You can create sublists (nested lists) or link existing lists as task items using create_sublist and link_list_as_task tools.'
+    : '';
+
   return `You are Sol, a helpful AI assistant embedded in Solytiq Cloud, a personal productivity and task management app.
 
 Current user: ${username}
@@ -204,7 +208,7 @@ Guidelines:
 - INTENT: Words like "terminate", "deadline", "due", "schedule for", "set to", "end by" all mean the user wants to set a task deadline.
 - Refer to tasks, lists, sections, and folders by their names, not their IDs, when talking to the user
 - When creating a list you can optionally assign it to a folder from available_folders
-- If the user asks something outside your capabilities, explain politely what you can do instead`;
+- If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}`;
 }
 
 // ── Tool definitions ────────────────────────────────────────────────
@@ -533,6 +537,47 @@ export function buildTools(ctx: AIContext): ToolDef[] {
       },
     },
   });
+
+  // Sublist tools — available in list view
+  if (ctx.view === 'list' && ctx.listId) {
+    const sectionList = (ctx.data.sections as Array<{ section_id: string; label: string }> ?? [])
+      .map((s) => `"${s.label}" (id: ${s.section_id})`)
+      .join(', ');
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'create_sublist',
+        description: 'Create a new sublist task under a section in the current list',
+        parameters: {
+          type: 'object',
+          properties: {
+            section_id: { type: 'string', description: `Section ID. Available: ${sectionList}` },
+            task_title: { type: 'string', description: 'Title shown in the parent list for this sublist item' },
+            sublist_name: { type: 'string', description: 'Name of the new sublist to create' },
+          },
+          required: ['section_id', 'task_title', 'sublist_name'],
+        },
+      },
+    });
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'link_list_as_task',
+        description: 'Link an existing list as a task item in a section of the current list',
+        parameters: {
+          type: 'object',
+          properties: {
+            section_id: { type: 'string', description: `Section ID. Available: ${sectionList}` },
+            task_title: { type: 'string', description: 'Title shown for the linked list task' },
+            linked_list_id: { type: 'string', description: 'ID of the existing list to link' },
+          },
+          required: ['section_id', 'task_title', 'linked_list_id'],
+        },
+      },
+    });
+  }
 
   return tools;
 }
