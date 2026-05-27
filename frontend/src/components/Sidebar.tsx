@@ -347,8 +347,9 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
 interface FolderRowProps {
   folder: Folder;
   lists: List[];
-  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings';
+  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings' | 'folder';
   activeListId?: string;
+  activeFolderId?: string;
   collapsed: boolean;
   dragOverId: string | null;
   dragOverFolderId: string | null;
@@ -369,7 +370,7 @@ interface FolderRowProps {
   onFolderReorderDragLeave: () => void;
   onFolderReorderDrop: (folderId: string, e: React.DragEvent) => void;
 }
-function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId, dragOverFolderId, dragOverFolderReorderId, dragOverTaskListId, recentlyDroppedListId, allFolders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop, onFolderDragStart, onFolderDragOver, onFolderDragLeave, onFolderDrop, onFolderReorderDragOver, onFolderReorderDragLeave, onFolderReorderDrop }: FolderRowProps) {
+function FolderRow({ folder, lists, active, activeListId, activeFolderId, collapsed, dragOverId, dragOverFolderId, dragOverFolderReorderId, dragOverTaskListId, recentlyDroppedListId, allFolders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop, onFolderDragStart, onFolderDragOver, onFolderDragLeave, onFolderDrop, onFolderReorderDragOver, onFolderReorderDragLeave, onFolderReorderDrop }: FolderRowProps) {
   const [hov, setHov] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -427,6 +428,7 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
 
   const accentColor = folder.color ?? '#787584';
   const isDragTarget = dragOverFolderId === folder.id;
+  const isActiveDash = active === 'folder' && activeFolderId === folder.id;
 
   return (
     <>
@@ -463,23 +465,34 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
             />
           </div>
         ) : (
-          <button
-            onClick={collapsed ? undefined : toggleCollapsed}
-            title={collapsed ? folder.name : undefined}
-            style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '6px 8px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, background: 'transparent', borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%', color: accentColor }}>
+          <div style={{ display: 'flex', alignItems: 'center', flex: 1, borderRadius: 8, background: isActiveDash ? `${accentColor}18` : 'transparent', transition: 'background 150ms' }}>
+            {/* Chevron — toggles collapse */}
             {!collapsed && (
-              <Icon name={folder.collapsed ? 'chevron_right' : 'expand_more'} size={14} color={accentColor} />
+              <button
+                onClick={e => { e.stopPropagation(); toggleCollapsed(); }}
+                title={folder.collapsed ? 'Expand' : 'Collapse'}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px 3px 6px 6px', border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0, borderRadius: 4 }}
+              >
+                <Icon name={folder.collapsed ? 'chevron_right' : 'expand_more'} size={14} color={accentColor} />
+              </button>
             )}
-            {folder.emoji
-              ? <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{folder.emoji}</span>
-              : <Icon name="folder" size={17} color={accentColor} />
-            }
-            {!collapsed && (
-              <span style={{ fontWeight: 600, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>
-                {folder.name}
-              </span>
-            )}
-          </button>
+            {/* Folder name — navigates to folder dashboard */}
+            <button
+              onClick={() => onNavigate(`/folder/${folder.id}`)}
+              title={collapsed ? folder.name : `Open ${folder.name} overview`}
+              style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '5px 8px 5px 4px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, background: 'transparent', borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%', color: accentColor }}
+            >
+              {folder.emoji
+                ? <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{folder.emoji}</span>
+                : <Icon name="folder" size={17} color={accentColor} />
+              }
+              {!collapsed && (
+                <span style={{ fontWeight: isActiveDash ? 700 : 600, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>
+                  {folder.name}
+                </span>
+              )}
+            </button>
+          </div>
         )}
 
         {!collapsed && (
@@ -680,7 +693,7 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
 interface StandaloneListWithSublistsProps {
   list: List;
   sublists: List[];
-  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings';
+  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings' | 'folder';
   activeListId?: string;
   collapsed: boolean;
   dragOverId: string | null;
@@ -751,8 +764,9 @@ function StandaloneListWithSublists({ list, sublists, active, activeListId, coll
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
-  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings';
+  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings' | 'folder';
   activeListId?: string;
+  activeFolderId?: string;
   lists: List[];
   width: number;
   onNavigate: (path: string) => void;
@@ -762,7 +776,7 @@ interface SidebarProps {
   onTaskDropToList: (taskId: number, listId: string) => void;
 }
 
-export default function Sidebar({ active, activeListId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList }: SidebarProps) {
+export default function Sidebar({ active, activeListId, activeFolderId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList }: SidebarProps) {
   const collapsed = width <= 72;
   const [addHov, setAddHov] = useState(false);
   const [folderHov, setFolderHov] = useState(false);
@@ -925,6 +939,7 @@ export default function Sidebar({ active, activeListId, lists, width, onNavigate
               lists={folderLists}
               active={active}
               activeListId={activeListId}
+              activeFolderId={activeFolderId}
               collapsed={collapsed}
               dragOverId={dragOverId}
               dragOverFolderId={dragOverFolderId}
