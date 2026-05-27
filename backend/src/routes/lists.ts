@@ -22,6 +22,8 @@ interface ListRow {
   folder_id: string | null;
   position: number;
   created_at: string;
+  parent_task_id: string | null;
+  depth: number;
 }
 
 interface SectionRow {
@@ -48,6 +50,8 @@ interface TaskRow {
   position: number;
   created_at: string;
   updated_at: string;
+  linked_list_id: string | null;
+  linked_list_type: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -56,23 +60,25 @@ interface TaskRow {
 
 function sanitizeTask(task: TaskRow) {
   return {
-    id:        task.id,
-    creatorId: task.user_id,
-    title:     task.title,
-    note:      task.note,
-    checked:   task.checked,
-    deadline:  task.deadline,
-    time:      task.time_val,
-    priority:  task.priority,
-    badge:     task.badge,
-    source:    task.source,
-    listId:    task.list_id,
-    sectionId: task.section_id,
-    position:  task.position,
-    createdAt: task.created_at,
-    updatedAt: task.updated_at,
-    _source:   task.source,
-    _listId:   task.list_id,
+    id:             task.id,
+    creatorId:      task.user_id,
+    title:          task.title,
+    note:           task.note,
+    checked:        task.checked,
+    deadline:       task.deadline,
+    time:           task.time_val,
+    priority:       task.priority,
+    badge:          task.badge,
+    source:         task.source,
+    listId:         task.list_id,
+    sectionId:      task.section_id,
+    position:       task.position,
+    createdAt:      task.created_at,
+    updatedAt:      task.updated_at,
+    _source:        task.source,
+    _listId:        task.list_id,
+    linkedListId:   task.linked_list_id ?? null,
+    linkedListType: task.linked_list_type ?? null,
   };
 }
 
@@ -89,21 +95,25 @@ function sanitizeSection(section: SectionRow, tasks: ReturnType<typeof sanitizeT
 
 function sanitizeList(
   list: ListRow,
-  sections: ReturnType<typeof sanitizeSection>[]
+  sections: ReturnType<typeof sanitizeSection>[],
+  linkedProgress?: { total: number; completed: number }
 ) {
   return {
-    id:        list.id,
-    userId:    list.user_id,
-    name:      list.name,
-    emoji:     list.emoji,
-    color:     list.color,
-    colorBg:   list.color_bg,
-    subtitle:  list.subtitle,
-    isPublic:  list.is_public,
-    folderId:  list.folder_id ?? undefined,
-    position:  list.position,
-    createdAt: list.created_at,
+    id:           list.id,
+    userId:       list.user_id,
+    name:         list.name,
+    emoji:        list.emoji,
+    color:        list.color,
+    colorBg:      list.color_bg,
+    subtitle:     list.subtitle,
+    isPublic:     list.is_public,
+    folderId:     list.folder_id ?? undefined,
+    position:     list.position,
+    createdAt:    list.created_at,
+    parentTaskId: list.parent_task_id ?? null,
+    depth:        list.depth ?? 0,
     sections,
+    ...(linkedProgress !== undefined ? { linkedProgress } : {}),
   };
 }
 
@@ -148,8 +158,17 @@ async function buildListsForUser(userId: string) {
     );
   }
 
-  return listsResult.rows.map(list =>
-    sanitizeList(list, sectionsByList[list.id] ?? [])
+  // Build a map from list id → all direct task counts for linkedProgress
+  const taskCountByList: Record<string, { total: number; completed: number }> = {};
+  for (const task of tasksResult.rows) {
+    if (!task.list_id) continue;
+    if (!taskCountByList[task.list_id]) taskCountByList[task.list_id] = { total: 0, completed: 0 };
+    taskCountByList[task.list_id].total++;
+    if (task.checked) taskCountByList[task.list_id].completed++;
+  }
+
+  return listsResult.rows.map((list: ListRow) =>
+    sanitizeList(list, sectionsByList[list.id] ?? [], taskCountByList[list.id] ?? { total: 0, completed: 0 })
   );
 }
 
@@ -171,7 +190,7 @@ router.get('/', async (req: Request, res: Response) => {
 // POST /api/lists
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { id, name, emoji, color, colorBg, subtitle, isPublic, folderId } = req.body as {
+    const { id, name, emoji, color, colorBg, subtitle, isPublic, folderId, parentTaskId, depth } = req.body as {
       id?: string;
       name?: string;
       emoji?: string;
@@ -180,6 +199,8 @@ router.post('/', async (req: Request, res: Response) => {
       subtitle?: string;
       isPublic?: boolean;
       folderId?: string;
+      parentTaskId?: number;
+      depth?: number;
     };
 
     if (!name) {
@@ -198,10 +219,10 @@ router.post('/', async (req: Request, res: Response) => {
       : 0;
 
     const result = await query<ListRow>(
-      `INSERT INTO lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, folder_id, position)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, folder_id, position, parent_task_id, depth)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
-      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false, folderId ?? null, nextPos]
+      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false, folderId ?? null, nextPos, parentTaskId ?? null, depth ?? 0]
     );
 
     res.status(201).json({ list: sanitizeList(result.rows[0], []) });
@@ -478,13 +499,15 @@ router.delete('/sections/:sectionId', async (req: Request, res: Response) => {
 router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Response) => {
   try {
     const { listId, sectionId } = req.params;
-    const { id, title, note, deadline, priority, badge } = req.body as {
+    const { id, title, note, deadline, priority, badge, linked_list_id, linked_list_type } = req.body as {
       id?: number;
       title?: string;
       note?: string;
       deadline?: string;
       priority?: string;
       badge?: string;
+      linked_list_id?: string;
+      linked_list_type?: 'sublist' | 'link';
     };
 
     if (!title) {
@@ -516,10 +539,10 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
 
     const result = await query<TaskRow>(
       `INSERT INTO tasks
-         (id, user_id, title, note, deadline, priority, badge, source, list_id, section_id, position)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'list', $8, $9, $10)
+         (id, user_id, title, note, deadline, priority, badge, source, list_id, section_id, position, linked_list_id, linked_list_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'list', $8, $9, $10, $11, $12)
        RETURNING *`,
-      [taskId, req.userId, title, note ?? null, deadline ?? null, priority ?? null, badge ?? null, listId, sectionId, nextPos]
+      [taskId, req.userId, title, note ?? null, deadline ?? null, priority ?? null, badge ?? null, listId, sectionId, nextPos, linked_list_id ?? null, linked_list_type ?? null]
     );
 
     res.status(201).json({ task: sanitizeTask(result.rows[0]) });
@@ -533,7 +556,7 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
 router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
   try {
     const { listId, taskId } = req.params;
-    const { title, note, checked, deadline, time_val, priority, badge, position, sectionId } = req.body as {
+    const { title, note, checked, deadline, time_val, priority, badge, position, sectionId, linked_list_id, linked_list_type } = req.body as {
       title?: string;
       note?: string;
       checked?: boolean;
@@ -543,19 +566,25 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
       badge?: string;
       position?: number;
       sectionId?: string;
+      linked_list_id?: string | null;
+      linked_list_type?: 'sublist' | 'link' | null;
     };
+
+    const updateLinkedList = 'linked_list_id' in req.body;
 
     const result = await query<TaskRow>(
       `UPDATE tasks t
-       SET title      = COALESCE($1, t.title),
-           note       = COALESCE($2, t.note),
-           checked    = COALESCE($3, t.checked),
-           deadline   = COALESCE($4, t.deadline),
-           time_val   = COALESCE($5, t.time_val),
-           priority   = COALESCE($6, t.priority),
-           badge      = COALESCE($7, t.badge),
-           position   = COALESCE($8, t.position),
-           section_id = COALESCE($9, t.section_id)
+       SET title          = COALESCE($1, t.title),
+           note           = COALESCE($2, t.note),
+           checked        = COALESCE($3, t.checked),
+           deadline       = COALESCE($4, t.deadline),
+           time_val       = COALESCE($5, t.time_val),
+           priority       = COALESCE($6, t.priority),
+           badge          = COALESCE($7, t.badge),
+           position       = COALESCE($8, t.position),
+           section_id     = COALESCE($9, t.section_id),
+           linked_list_id   = CASE WHEN $13 THEN $14 ELSE t.linked_list_id END,
+           linked_list_type = CASE WHEN $13 THEN $15 ELSE t.linked_list_type END
        FROM lists l
        WHERE t.id = $10 AND t.list_id = $11 AND l.id = t.list_id AND (l.user_id = $12 OR l.is_public = true)
        RETURNING t.*`,
@@ -572,6 +601,9 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
         taskId,
         listId,
         req.userId,
+        updateLinkedList,
+        linked_list_id ?? null,
+        linked_list_type ?? null,
       ]
     );
 
@@ -607,6 +639,155 @@ router.delete('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (err) {
     console.error('list task DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/lists/:listId/progress
+router.get('/:listId/progress', async (req: Request, res: Response) => {
+  try {
+    const { listId } = req.params;
+
+    // Recursively collect all list IDs (this list + sublists)
+    async function collectSublistIds(id: string): Promise<string[]> {
+      const subResult = await query<{ id: string }>(
+        `SELECT l.id FROM lists l
+         JOIN tasks t ON l.parent_task_id = t.id
+         WHERE t.list_id = $1 AND l.id != $1`,
+        [id]
+      );
+      const ids = [id];
+      for (const row of subResult.rows) {
+        const nested = await collectSublistIds(row.id);
+        ids.push(...nested);
+      }
+      return ids;
+    }
+
+    const allIds = await collectSublistIds(listId);
+    const countRes = await query<{ total: string; completed: string }>(
+      `SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE checked = true) AS completed
+       FROM tasks t
+       JOIN sections s ON t.section_id = s.id
+       WHERE s.list_id = ANY($1::varchar[]) AND t.source = 'list'`,
+      [allIds]
+    );
+    const total = parseInt(countRes.rows[0].total, 10);
+    const completed = parseInt(countRes.rows[0].completed, 10);
+    const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
+    res.json({ total, completed, percent });
+  } catch (err) {
+    console.error('list progress error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/lists/:listId/sections/:sectionId/tasks/sublist
+router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, res: Response) => {
+  try {
+    const { listId, sectionId } = req.params;
+    const { title, sublistName, depth } = req.body as { title?: string; sublistName?: string; depth?: number };
+
+    if (!title || !sublistName) {
+      res.status(400).json({ error: 'title and sublistName are required' });
+      return;
+    }
+
+    const ownerCheck = await query(
+      `SELECT s.id FROM sections s JOIN lists l ON s.list_id = l.id
+       WHERE s.id = $1 AND l.id = $2 AND (l.user_id = $3 OR l.is_public = true)`,
+      [sectionId, listId, req.userId]
+    );
+    if (ownerCheck.rows.length === 0) {
+      res.status(404).json({ error: 'List or section not found' });
+      return;
+    }
+
+    // Get parent list depth for calculating new depth
+    const parentListRes = await query<{ depth: number }>('SELECT depth FROM lists WHERE id = $1', [listId]);
+    const parentDepth = parentListRes.rows[0]?.depth ?? 0;
+    const newDepth = depth ?? parentDepth + 1;
+
+    // 1. Create the new sublist
+    const newListId = `list_${uuidv4()}`;
+    const posResult = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM lists WHERE user_id = $1', [req.userId]);
+    const nextPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
+
+    const newList = await query<ListRow>(
+      `INSERT INTO lists (id, user_id, name, is_public, position, depth) VALUES ($1, $2, $3, false, $4, $5) RETURNING *`,
+      [newListId, req.userId, sublistName, nextPos, newDepth]
+    );
+
+    // 2. Create a default section in the new list
+    const newSectionId = `section_${uuidv4()}`;
+    await query(
+      `INSERT INTO sections (id, list_id, label, position) VALUES ($1, $2, 'Tasks', 0)`,
+      [newSectionId, newListId]
+    );
+
+    // 3. Create the task that links to the sublist
+    const taskId = Date.now();
+    const taskPosResult = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM tasks WHERE section_id = $1', [sectionId]);
+    const taskPos = taskPosResult.rows[0].max !== null ? parseInt(taskPosResult.rows[0].max, 10) + 1 : 0;
+
+    const newTask = await query<TaskRow>(
+      `INSERT INTO tasks (id, user_id, title, source, list_id, section_id, position, linked_list_id, linked_list_type)
+       VALUES ($1, $2, $3, 'list', $4, $5, $6, $7, 'sublist') RETURNING *`,
+      [taskId, req.userId, title, listId, sectionId, taskPos, newListId]
+    );
+
+    // 4. Update the sublist with the parent_task_id
+    await query('UPDATE lists SET parent_task_id = $1 WHERE id = $2', [taskId, newListId]);
+    newList.rows[0].parent_task_id = String(taskId);
+
+    res.status(201).json({ task: sanitizeTask(newTask.rows[0]), list: sanitizeList(newList.rows[0], []) });
+  } catch (err) {
+    console.error('sublist task POST error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/lists/:listId/sections/:sectionId/tasks/link
+router.post('/:listId/sections/:sectionId/tasks/link', async (req: Request, res: Response) => {
+  try {
+    const { listId, sectionId } = req.params;
+    const { title, linkedListId } = req.body as { title?: string; linkedListId?: string };
+
+    if (!title || !linkedListId) {
+      res.status(400).json({ error: 'title and linkedListId are required' });
+      return;
+    }
+
+    const ownerCheck = await query(
+      `SELECT s.id FROM sections s JOIN lists l ON s.list_id = l.id
+       WHERE s.id = $1 AND l.id = $2 AND (l.user_id = $3 OR l.is_public = true)`,
+      [sectionId, listId, req.userId]
+    );
+    if (ownerCheck.rows.length === 0) {
+      res.status(404).json({ error: 'List or section not found' });
+      return;
+    }
+
+    // Verify target list belongs to user
+    const targetCheck = await query('SELECT id FROM lists WHERE id = $1 AND user_id = $2', [linkedListId, req.userId]);
+    if (targetCheck.rows.length === 0) {
+      res.status(404).json({ error: 'Target list not found' });
+      return;
+    }
+
+    const taskId = Date.now();
+    const posResult = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM tasks WHERE section_id = $1', [sectionId]);
+    const taskPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
+
+    const newTask = await query<TaskRow>(
+      `INSERT INTO tasks (id, user_id, title, source, list_id, section_id, position, linked_list_id, linked_list_type)
+       VALUES ($1, $2, $3, 'list', $4, $5, $6, $7, 'link') RETURNING *`,
+      [taskId, req.userId, title, listId, sectionId, taskPos, linkedListId]
+    );
+
+    res.status(201).json({ task: sanitizeTask(newTask.rows[0]) });
+  } catch (err) {
+    console.error('link task POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

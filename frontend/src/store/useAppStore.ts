@@ -398,6 +398,20 @@ const useAppStore = create<AppState>()(
   )
 );
 
+export function getLinkedProgress(listId: string, lists: import('../types').List[]): { total: number; completed: number } {
+  function gatherTasks(id: string): import('../types').Task[] {
+    const list = lists.find(l => l.id === id);
+    if (!list) return [];
+    const direct = list.sections.flatMap(s => s.tasks);
+    const sublistIds = lists
+      .filter(l => l.parentTaskId != null && direct.some(t => t.id === l.parentTaskId))
+      .map(l => l.id);
+    return [...direct, ...sublistIds.flatMap(sid => gatherTasks(sid))];
+  }
+  const tasks = gatherTasks(listId);
+  return { total: tasks.length, completed: tasks.filter(t => t.checked).length };
+}
+
 // Expose API functions for components to use directly
 export {
   apiCreateTask,

@@ -11,6 +11,8 @@ export interface Task {
   _source?: 'dash' | 'list';
   _listId?: string;
   _listName?: string;
+  linkedListId?: string | null;
+  linkedListType?: 'sublist' | 'link' | null;
 }
 
 export interface Section {
@@ -32,6 +34,12 @@ export interface List {
   folderId?: string;
   position?: number;
   sections: Section[];
+  parentTaskId?: number | null;
+  depth?: number;
+  linkedProgress?: {
+    total: number;
+    completed: number;
+  };
 }
 
 export interface Folder {

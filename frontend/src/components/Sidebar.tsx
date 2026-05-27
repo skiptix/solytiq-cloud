@@ -676,6 +676,79 @@ function FolderRow({ folder, lists, active, activeListId, collapsed, dragOverId,
   );
 }
 
+// ── StandaloneListWithSublists ────────────────────────────────────────────────
+interface StandaloneListWithSublistsProps {
+  list: List;
+  sublists: List[];
+  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings';
+  activeListId?: string;
+  collapsed: boolean;
+  dragOverId: string | null;
+  dragOverTaskListId: string | null;
+  recentlyDroppedListId: string | null;
+  folders: Folder[];
+  onNavigate: (path: string) => void;
+  onListDragStart: (listId: string, e: React.DragEvent) => void;
+  onListDragOver: (listId: string, e: React.DragEvent) => void;
+  onListDragLeave: () => void;
+  onListDrop: (listId: string, e: React.DragEvent) => void;
+}
+
+function StandaloneListWithSublists({ list, sublists, active, activeListId, collapsed, dragOverId, dragOverTaskListId, recentlyDroppedListId, folders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop }: StandaloneListWithSublistsProps) {
+  const [subExpanded, setSubExpanded] = useState(true);
+  const isActive = active === 'list' && activeListId === list.id;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        {!collapsed && sublists.length > 0 && (
+          <button onClick={() => setSubExpanded(e => !e)}
+            style={{ display: 'flex', alignItems: 'center', padding: '0 2px', border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}>
+            <Icon name={subExpanded ? 'expand_more' : 'chevron_right'} size={14} color="#b0acbe" />
+          </button>
+        )}
+        <div style={{ flex: 1 }}>
+          <ListItemRow
+            list={list}
+            isActive={isActive}
+            collapsed={collapsed}
+            dragOverId={dragOverId}
+            folders={folders}
+            isTaskDropTarget={dragOverTaskListId === list.id}
+            wasRecentlyDropped={recentlyDroppedListId === list.id}
+            onNavigate={onNavigate}
+            onDragStart={e => onListDragStart(list.id, e)}
+            onDragOver={e => onListDragOver(list.id, e)}
+            onDragLeave={onListDragLeave}
+            onDrop={e => onListDrop(list.id, e)}
+          />
+        </div>
+      </div>
+      {!collapsed && subExpanded && sublists.map(sub => {
+        const isSubActive = active === 'list' && activeListId === sub.id;
+        return (
+          <div key={sub.id} style={{ paddingLeft: (sub.depth ?? 1) * 12, borderLeft: '2px solid #e8e4f0', marginLeft: 10 }}>
+            <ListItemRow
+              list={sub}
+              isActive={isSubActive}
+              collapsed={collapsed}
+              dragOverId={dragOverId}
+              folders={folders}
+              isTaskDropTarget={dragOverTaskListId === sub.id}
+              wasRecentlyDropped={recentlyDroppedListId === sub.id}
+              onNavigate={onNavigate}
+              onDragStart={e => onListDragStart(sub.id, e)}
+              onDragOver={e => onListDragOver(sub.id, e)}
+              onDragLeave={onListDragLeave}
+              onDrop={e => onListDrop(sub.id, e)}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
   active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings';
@@ -897,34 +970,37 @@ export default function Sidebar({ active, activeListId, lists, width, onNavigate
           );
         })}
 
-        {/* Standalone lists */}
-        {standaloneListItems.map((list) => {
-          const isActive = active === 'list' && activeListId === list.id;
+        {/* Standalone lists (root level) */}
+        {standaloneListItems.filter(l => !l.parentTaskId).map((list) => {
+          const taskIds = new Set(list.sections.flatMap(s => s.tasks.map(t => t.id)));
+          const sublists = lists.filter(l2 => l2.parentTaskId != null && taskIds.has(l2.parentTaskId));
           return (
-            <ListItemRow
+            <StandaloneListWithSublists
               key={list.id}
               list={list}
-              isActive={isActive}
+              sublists={sublists}
+              active={active}
+              activeListId={activeListId}
               collapsed={collapsed}
               dragOverId={dragOverId}
+              dragOverTaskListId={dragOverTaskListId}
+              recentlyDroppedListId={recentlyDroppedListId}
               folders={folders}
-              isTaskDropTarget={dragOverTaskListId === list.id}
-              wasRecentlyDropped={recentlyDroppedListId === list.id}
               onNavigate={onNavigate}
-              onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('listId', list.id); }}
-              onDragOver={e => {
+              onListDragStart={(listId, e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('listId', listId); }}
+              onListDragOver={(listId, e) => {
                 if (e.dataTransfer.types.includes('dashtaskid')) {
                   e.preventDefault();
-                  setDragOverTaskListId(list.id);
+                  setDragOverTaskListId(listId);
                   setDragOverId(null);
                 } else if (e.dataTransfer.types.includes('listid')) {
                   e.preventDefault();
-                  setDragOverId(list.id);
+                  setDragOverId(listId);
                   setDragOverTaskListId(null);
                 }
               }}
-              onDragLeave={() => { setDragOverId(null); setDragOverTaskListId(null); }}
-              onDrop={e => handleListDrop(list.id, e)}
+              onListDragLeave={() => { setDragOverId(null); setDragOverTaskListId(null); }}
+              onListDrop={(listId, e) => handleListDrop(listId, e)}
             />
           );
         })}

@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { Task } from '../types';
+import { useNavigate } from 'react-router-dom';
+import type { Task, List } from '../types';
 import Icon from './Icon';
 import CalendarPicker from './CalendarPicker';
+import RingProgress from './RingProgress';
+import SlashCommandInput from './SlashCommandInput';
+import type { SlashCommandResult } from './SlashCommandInput';
 
 const BADGE_COLORS: Record<string, { bg: string; color: string }> = {
   Work:     { bg: '#f9e287', color: '#6e5e0d' },
@@ -37,17 +41,23 @@ interface EditModalProps {
   mode?: 'edit' | 'create';
   onSave: (updates: Partial<Task>) => void;
   onClose: () => void;
+  availableLists?: List[];
+  currentListId?: string;
 }
 
-export function EditModal({ task = {}, mode = 'edit', onSave, onClose }: EditModalProps) {
+export function EditModal({ task = {}, mode = 'edit', onSave, onClose, availableLists = [], currentListId: _currentListId }: EditModalProps) {
   const [title, setTitle] = useState(task.title ?? '');
   const [notes, setNotes] = useState(task.note ?? '');
   const [deadline, setDeadline] = useState(task.deadline ?? '');
   const [priority, setPriority] = useState<string>(task.priority ?? '');
   const [tag, setTag] = useState(task.badge ?? '');
   const [showCal, setShowCal] = useState(false);
+  const [linkedListId, setLinkedListId] = useState<string | null>(task.linkedListId ?? null);
+  const [linkedListType, setLinkedListType] = useState<'sublist' | 'link' | null>(task.linkedListType ?? null);
   const isCreate = mode === 'create';
   const canSubmit = title.trim().length > 0;
+
+  const linkedList = linkedListId ? availableLists.find(l => l.id === linkedListId) : null;
 
   const fl: CSSProperties = { fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', marginBottom: 5, display: 'block' };
   const fi: CSSProperties = { width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', background: 'transparent', border: 'none', borderBottom: '1.5px solid #E5E7EB', padding: '7px 0', outline: 'none', transition: 'border-color 200ms' };
@@ -118,10 +128,28 @@ export function EditModal({ task = {}, mode = 'edit', onSave, onClose }: EditMod
               })}
             </div>
           </div>
+          {linkedList && (
+            <div>
+              <label style={fl}>Linked List</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F5F3FF', border: '1px solid #c4b5fd', borderRadius: 8, padding: '6px 12px', flex: 1 }}>
+                  <Icon name="format_list_bulleted" size={14} color="#5e4dbb" />
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#5e4dbb', fontWeight: 500 }}>
+                    {linkedListType === 'sublist' ? 'Sublist: ' : 'Linked: '}
+                    {linkedList.name}
+                  </span>
+                </div>
+                <button onClick={() => { setLinkedListId(null); setLinkedListType(null); }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer' }}>
+                  <Icon name="close" size={14} color="#787584" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '14px 24px 20px', borderTop: '1px solid #F5F3FF' }}>
           <button onClick={onClose} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>Cancel</button>
-          <button onClick={() => onSave({ title, note: notes, deadline: deadline || undefined, priority: (priority as Task['priority']) || undefined, badge: tag || undefined })}
+          <button onClick={() => onSave({ title, note: notes, deadline: deadline || undefined, priority: (priority as Task['priority']) || undefined, badge: tag || undefined, linkedListId, linkedListType })}
             disabled={!canSubmit}
             style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: canSubmit ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 8, padding: '9px 20px', cursor: canSubmit ? 'pointer' : 'not-allowed', transition: 'all 180ms' }}>
             {isCreate ? 'Add Task' : 'Save Changes'}
@@ -175,16 +203,24 @@ interface TaskItemProps {
   isDragging?: boolean;
   isDragOver?: boolean;
   hideListBadge?: boolean;
+  availableLists?: List[];
+  currentListId?: string;
 }
 
-export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClick, onDragStart, onDragEnd, onDragOver, onDrop, isDragging, isDragOver, hideListBadge }: TaskItemProps) {
+export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClick, onDragStart, onDragEnd, onDragOver, onDrop, isDragging, isDragOver, hideListBadge, availableLists = [], currentListId }: TaskItemProps) {
   const [hovered, setHovered] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
-  const { title, note, priority, badge, checked, deadline, time } = task;
+  const navigate = useNavigate();
+  const { title, note, priority, badge, checked, deadline, time, linkedListId } = task;
   const bc = badge ? (BADGE_COLORS[badge] ?? { bg: '#F5F3FF', color: '#484552' }) : null;
   const priorityColor = priority ? PRIORITY_COLORS[priority] : '#787584';
+
+  // Find linked list for ring progress
+  const linkedList = linkedListId ? availableLists.find(l => l.id === linkedListId) : null;
+  const ringProgress = linkedList?.linkedProgress ?? { total: 0, completed: 0 };
+  const isLinkedComplete = linkedList && ringProgress.total > 0 && ringProgress.completed === ringProgress.total;
 
   return (
     <>
@@ -210,14 +246,25 @@ export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClic
           transition: 'background 200ms, opacity 150ms, border-color 120ms',
           position: 'relative',
         }}>
-        <div style={{ width: 20, height: 20, minWidth: 20, borderRadius: 5, border: '1.5px solid', borderColor: checked ? '#5e4dbb' : '#c9c4d5', background: checked ? '#5e4dbb' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', flexShrink: 0 }}
-          onClick={e => { e.stopPropagation(); onToggle?.(task.id); }}>
-          {checked && <Checkmark />}
-        </div>
+        {linkedListId ? (
+          <RingProgress
+            total={ringProgress.total}
+            completed={ringProgress.completed}
+            color={linkedList?.color ?? '#5e4dbb'}
+          />
+        ) : (
+          <div style={{ width: 20, height: 20, minWidth: 20, borderRadius: 5, border: '1.5px solid', borderColor: checked ? '#5e4dbb' : '#c9c4d5', background: checked ? '#5e4dbb' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', flexShrink: 0 }}
+            onClick={e => { e.stopPropagation(); onToggle?.(task.id); }}>
+            {checked && <Checkmark />}
+          </div>
+        )}
 
-        <div style={{ flex: 1, minWidth: 0, cursor: onRowClick ? 'pointer' : 'default' }}
-          onClick={e => onRowClick?.(task, e)}>
-          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', lineHeight: 1.4, opacity: checked ? 0.4 : 1, textDecoration: checked ? 'line-through' : 'none' }}>{title}</div>
+        <div style={{ flex: 1, minWidth: 0, cursor: onRowClick || linkedListId ? 'pointer' : 'default' }}
+          onClick={e => {
+            if (linkedListId) { e.stopPropagation(); navigate(`/list/${linkedListId}`); return; }
+            onRowClick?.(task, e);
+          }}>
+          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: linkedListId ? (linkedList?.color ?? '#5e4dbb') : '#1c1b22', lineHeight: 1.4, opacity: (checked || isLinkedComplete) ? 0.4 : 1, textDecoration: (checked || isLinkedComplete) ? 'line-through' : 'none', textUnderlineOffset: linkedListId ? 2 : undefined }}>{title}</div>
           {note && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{note}</div>}
           {(deadline || time || priority || badge || (task._listName && !hideListBadge)) && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
@@ -263,7 +310,7 @@ export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClic
         </div>
       </div>
       {showDelete && <DeleteConfirmModal task={task} onConfirm={() => { onDelete?.(task.id); setShowDelete(false); }} onCancel={() => setShowDelete(false)} />}
-      {showEdit && <EditModal task={task} onSave={upd => { onUpdate?.(task.id, upd); setShowEdit(false); }} onClose={() => setShowEdit(false)} />}
+      {showEdit && <EditModal task={task} onSave={upd => { onUpdate?.(task.id, upd); setShowEdit(false); }} onClose={() => setShowEdit(false)} availableLists={availableLists} currentListId={currentListId} />}
     </>
   );
 }
@@ -293,13 +340,19 @@ function ContextMenuItems({ onEdit, onDelete, onClose }: { onEdit: () => void; o
 interface QuickAddProps {
   placeholder?: string;
   onAdd: (data: Partial<Task> & { title: string }) => void;
+  availableLists?: List[];
+  currentListId?: string;
 }
 
-export function QuickAdd({ placeholder = 'Add a new task…', onAdd }: QuickAddProps) {
+export function QuickAdd({ placeholder = 'Add a new task…', onAdd, availableLists = [], currentListId }: QuickAddProps) {
   const [val, setVal] = useState('');
   const [focused, setFocused] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // Pending slash command state (for /list — needs a name modal)
+  const [pendingSublist, setPendingSublist] = useState<{ taskTitle: string; sublistName: string } | null>(null);
+
   const hasText = val.trim().length > 0;
+  const isSlash = val.startsWith('/');
 
   const submit = (data?: Partial<Task>) => {
     const payload = { title: (data?.title ?? val).trim(), note: data?.note, deadline: data?.deadline, priority: data?.priority, badge: data?.badge };
@@ -308,6 +361,62 @@ export function QuickAdd({ placeholder = 'Add a new task…', onAdd }: QuickAddP
     setVal('');
     setAdvancedOpen(false);
   };
+
+  const handleSlashCommand = (cmd: SlashCommandResult) => {
+    if (cmd.type === 'list' && cmd.newListName) {
+      const taskTitle = cmd.newListName;
+      // Store pending sublist creation; pass special signal to onAdd
+      const payload = {
+        title: taskTitle,
+        linkedListType: 'sublist' as const,
+        linkedListId: '__pending__',
+        __sublistName: cmd.newListName,
+      };
+      onAdd(payload as unknown as Partial<Task> & { title: string });
+      setVal('');
+    } else if (cmd.type === 'link' && cmd.linkedListId) {
+      const linkedList = availableLists.find(l => l.id === cmd.linkedListId);
+      const payload = {
+        title: linkedList?.name ?? 'Linked list',
+        linkedListType: 'link' as const,
+        linkedListId: cmd.linkedListId,
+      };
+      onAdd(payload as Partial<Task> & { title: string });
+      setVal('');
+    }
+  };
+
+  if (isSlash && availableLists.length > 0) {
+    return (
+      <div style={{ position: 'relative' }}>
+        <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', width: 18, height: 18, borderRadius: 4, border: `1.5px solid ${focused ? '#5e4dbb' : '#c9c4d5'}`, pointerEvents: 'none', transition: 'border-color 200ms' }} />
+        <SlashCommandInput
+          value={val}
+          onChange={setVal}
+          onCommand={handleSlashCommand}
+          placeholder={placeholder}
+          availableLists={availableLists}
+          currentListId={currentListId}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onKeyDown={e => { if (e.key === 'Enter' && hasText && !val.startsWith('/')) { e.preventDefault(); submit(); } }}
+          inputStyle={{ width: '100%', background: '#fff', border: 'none', borderRadius: 10, padding: `13px ${hasText ? 86 : 48}px 13px 42px`, fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', outline: focused ? '2px solid rgba(94,77,187,0.18)' : 'none', outlineOffset: -1, transition: 'outline 200ms, padding 180ms' }}
+        />
+        <button onMouseDown={e => e.preventDefault()} onClick={() => setVal('')}
+          style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', width: 28, height: 28, borderRadius: '50%', background: '#F5F3FF', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 200ms' }}>
+          <Icon name="close" size={16} color="#5e4dbb" />
+        </button>
+        {pendingSublist && (
+          <EditModal mode="create" task={{ title: pendingSublist.taskTitle }}
+            onSave={d => {
+              onAdd({ title: d.title ?? pendingSublist.taskTitle, linkedListType: 'sublist', linkedListId: '__pending__', __sublistName: pendingSublist.sublistName } as unknown as Partial<Task> & { title: string });
+              setPendingSublist(null); setVal('');
+            }}
+            onClose={() => setPendingSublist(null)} />
+        )}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -329,7 +438,7 @@ export function QuickAdd({ placeholder = 'Add a new task…', onAdd }: QuickAddP
           <Icon name="arrow_upward" size={16} color={hasText ? '#fff' : '#5e4dbb'} />
         </button>
       </div>
-      {advancedOpen && <EditModal mode="create" task={{ title: val }} onSave={submit} onClose={() => setAdvancedOpen(false)} />}
+      {advancedOpen && <EditModal mode="create" task={{ title: val }} onSave={submit} onClose={() => setAdvancedOpen(false)} availableLists={availableLists} currentListId={currentListId} />}
     </>
   );
 }

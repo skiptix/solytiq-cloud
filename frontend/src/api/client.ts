@@ -95,6 +95,32 @@ export const apiDeleteSection = (sectionId: string) =>
 export const apiAddListTask = (listId: string, sectionId: string, data: Partial<Task> & { title: string }) =>
   apiFetch<{ task: Task }>(`/lists/${listId}/sections/${sectionId}/tasks`, { method: 'POST', body: JSON.stringify(data) });
 
+export const apiCreateSublistTask = (
+  parentListId: string,
+  sectionId: string,
+  taskTitle: string,
+  sublistName: string,
+  depth: number
+) =>
+  apiFetch<{ task: Task; list: List }>(`/lists/${parentListId}/sections/${sectionId}/tasks/sublist`, {
+    method: 'POST',
+    body: JSON.stringify({ title: taskTitle, sublistName, depth }),
+  });
+
+export const apiLinkListAsTask = (
+  parentListId: string,
+  sectionId: string,
+  taskTitle: string,
+  linkedListId: string
+) =>
+  apiFetch<{ task: Task }>(`/lists/${parentListId}/sections/${sectionId}/tasks/link`, {
+    method: 'POST',
+    body: JSON.stringify({ title: taskTitle, linkedListId }),
+  });
+
+export const apiGetListProgress = (listId: string) =>
+  apiFetch<{ total: number; completed: number; percent: number }>(`/lists/${listId}/progress`);
+
 export const apiUpdateListTask = (listId: string, taskId: number, data: Partial<Task>) =>
   apiFetch<{ task: Task }>(`/lists/${listId}/tasks/${taskId}`, { method: 'PUT', body: JSON.stringify(data) });
 

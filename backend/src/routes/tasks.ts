@@ -21,27 +21,31 @@ interface TaskRow {
   position: number;
   created_at: string;
   updated_at: string;
+  linked_list_id: string | null;
+  linked_list_type: string | null;
 }
 
 function sanitizeTask(task: TaskRow) {
   return {
-    id:        task.id,
-    creatorId: task.user_id,
-    title:     task.title,
-    note:      task.note,
-    checked:   task.checked,
-    deadline:  task.deadline,
-    time:      task.time_val,
-    priority:  task.priority,
-    badge:     task.badge,
-    source:    task.source,
-    listId:    task.list_id,
-    sectionId: task.section_id,
-    position:  task.position,
-    createdAt: task.created_at,
-    updatedAt: task.updated_at,
-    _source:   task.source,
-    _listId:   task.list_id,
+    id:             task.id,
+    creatorId:      task.user_id,
+    title:          task.title,
+    note:           task.note,
+    checked:        task.checked,
+    deadline:       task.deadline,
+    time:           task.time_val,
+    priority:       task.priority,
+    badge:          task.badge,
+    source:         task.source,
+    listId:         task.list_id,
+    sectionId:      task.section_id,
+    position:       task.position,
+    createdAt:      task.created_at,
+    updatedAt:      task.updated_at,
+    _source:        task.source,
+    _listId:        task.list_id,
+    linkedListId:   task.linked_list_id ?? null,
+    linkedListType: task.linked_list_type ?? null,
   };
 }
 
@@ -74,6 +78,8 @@ router.post('/', async (req: Request, res: Response) => {
       time_val,
       priority,
       badge,
+      linked_list_id,
+      linked_list_type,
     } = req.body as {
       id?: number;
       title?: string;
@@ -82,6 +88,8 @@ router.post('/', async (req: Request, res: Response) => {
       time_val?: string;
       priority?: string;
       badge?: string;
+      linked_list_id?: string;
+      linked_list_type?: 'sublist' | 'link';
     };
 
     if (!title) {
@@ -102,10 +110,10 @@ router.post('/', async (req: Request, res: Response) => {
 
     const result = await query<TaskRow>(
       `INSERT INTO tasks
-         (id, user_id, title, note, deadline, time_val, priority, badge, source, position)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'dash', $9)
+         (id, user_id, title, note, deadline, time_val, priority, badge, source, position, linked_list_id, linked_list_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'dash', $9, $10, $11)
        RETURNING *`,
-      [taskId, req.userId, title, note ?? null, deadline ?? null, time_val ?? null, priority ?? null, badge ?? null, nextPos]
+      [taskId, req.userId, title, note ?? null, deadline ?? null, time_val ?? null, priority ?? null, badge ?? null, nextPos, linked_list_id ?? null, linked_list_type ?? null]
     );
 
     res.status(201).json({ task: sanitizeTask(result.rows[0]) });
@@ -154,6 +162,8 @@ router.put('/:id', async (req: Request, res: Response) => {
       priority,
       badge,
       position,
+      linked_list_id,
+      linked_list_type,
     } = req.body as {
       title?: string;
       note?: string;
@@ -163,18 +173,24 @@ router.put('/:id', async (req: Request, res: Response) => {
       priority?: string;
       badge?: string;
       position?: number;
+      linked_list_id?: string | null;
+      linked_list_type?: 'sublist' | 'link' | null;
     };
+
+    const updateLinkedList = 'linked_list_id' in req.body;
 
     const result = await query<TaskRow>(
       `UPDATE tasks
-       SET title    = COALESCE($1, title),
-           note     = COALESCE($2, note),
-           checked  = COALESCE($3, checked),
-           deadline = COALESCE($4, deadline),
-           time_val = COALESCE($5, time_val),
-           priority = COALESCE($6, priority),
-           badge    = COALESCE($7, badge),
-           position = COALESCE($8, position)
+       SET title          = COALESCE($1, title),
+           note           = COALESCE($2, note),
+           checked        = COALESCE($3, checked),
+           deadline       = COALESCE($4, deadline),
+           time_val       = COALESCE($5, time_val),
+           priority       = COALESCE($6, priority),
+           badge          = COALESCE($7, badge),
+           position       = COALESCE($8, position),
+           linked_list_id   = CASE WHEN $11 THEN $12 ELSE linked_list_id END,
+           linked_list_type = CASE WHEN $11 THEN $13 ELSE linked_list_type END
        WHERE id = $9 AND user_id = $10 AND source = 'dash'
        RETURNING *`,
       [
@@ -188,6 +204,9 @@ router.put('/:id', async (req: Request, res: Response) => {
         position ?? null,
         taskId,
         req.userId,
+        updateLinkedList,
+        linked_list_id ?? null,
+        linked_list_type ?? null,
       ]
     );
 
