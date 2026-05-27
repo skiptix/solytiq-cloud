@@ -24,11 +24,23 @@ interface SlashCommandInputProps {
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
+const SLASH_COMMANDS = [
+  { id: 'list' as const, icon: 'format_list_bulleted', label: 'New Sublist', desc: 'Create a nested sublist', hint: '/list' },
+  { id: 'link' as const, icon: 'link', label: 'Link List', desc: 'Link an existing list', hint: '/link' },
+];
+
 type MenuState =
   | { kind: 'none' }
-  | { kind: 'slash-menu' }
+  | { kind: 'slash-menu'; query: string }
   | { kind: 'link-search'; query: string }
   | { kind: 'list-name'; name: string };
+
+function initMenu(value: string): MenuState {
+  if (!value.startsWith('/')) return { kind: 'none' };
+  if (value.startsWith('/list ') && value.length > 6) return { kind: 'list-name', name: value.slice(6) };
+  if (value.startsWith('/link ') && value.length > 6) return { kind: 'link-search', query: value.slice(6) };
+  return { kind: 'slash-menu', query: value.slice(1) };
+}
 
 export default function SlashCommandInput({
   value,
@@ -44,18 +56,21 @@ export default function SlashCommandInput({
   onBlur,
   onKeyDown,
 }: SlashCommandInputProps) {
-  const [menu, setMenu] = useState<MenuState>(() => {
-    if (value === '/') return { kind: 'slash-menu' };
-    if (value.startsWith('/list')) return { kind: 'list-name', name: value.slice(5).trimStart() };
-    if (value.startsWith('/link')) return { kind: 'link-search', query: value.slice(5).trimStart() };
-    return { kind: 'none' };
-  });
+  const [menu, setMenu] = useState<MenuState>(() => initMenu(value));
   const [highlightIdx, setHighlightIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const excluded = new Set([currentListId, ...excludeListIds].filter(Boolean) as string[]);
   const filteredLists = availableLists.filter(l => !excluded.has(l.id));
+
+  const visibleCommands = menu.kind === 'slash-menu'
+    ? SLASH_COMMANDS.filter(c =>
+        !menu.query ||
+        c.id.startsWith(menu.query.toLowerCase()) ||
+        c.label.toLowerCase().includes(menu.query.toLowerCase())
+      )
+    : [];
 
   const searchResults = menu.kind === 'link-search'
     ? filteredLists.filter(l => l.name.toLowerCase().includes(menu.query.toLowerCase())).slice(0, 8)
@@ -65,23 +80,12 @@ export default function SlashCommandInput({
     const val = e.target.value;
     onChange(val);
 
-    if (val === '/') {
-      setMenu({ kind: 'slash-menu' });
-      setHighlightIdx(0);
-      return;
-    }
-    if (val.startsWith('/list')) {
-      const after = val.slice(5);
-      setMenu({ kind: 'list-name', name: after.trimStart() });
-      return;
-    }
-    if (val.startsWith('/link')) {
-      const q = val.slice(5).trimStart();
-      setMenu({ kind: 'link-search', query: q });
-      setHighlightIdx(0);
-      return;
-    }
-    setMenu({ kind: 'none' });
+    if (!val.startsWith('/')) { setMenu({ kind: 'none' }); return; }
+    if (val.startsWith('/list ') && val.length > 6) { setMenu({ kind: 'list-name', name: val.slice(6) }); return; }
+    if (val.startsWith('/link ') && val.length > 6) { setMenu({ kind: 'link-search', query: val.slice(6) }); setHighlightIdx(0); return; }
+
+    setMenu({ kind: 'slash-menu', query: val.slice(1) });
+    setHighlightIdx(0);
   }, [onChange]);
 
   const selectSlashOption = useCallback((type: 'list' | 'link') => {
@@ -112,9 +116,9 @@ export default function SlashCommandInput({
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (menu.kind === 'slash-menu') {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightIdx(i => Math.min(i + 1, 1)); return; }
+      if (e.key === 'ArrowDown') { e.preventDefault(); setHighlightIdx(i => Math.min(i + 1, visibleCommands.length - 1)); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setHighlightIdx(i => Math.max(i - 1, 0)); return; }
-      if (e.key === 'Enter') { e.preventDefault(); selectSlashOption(highlightIdx === 0 ? 'list' : 'link'); return; }
+      if (e.key === 'Enter' && visibleCommands[highlightIdx]) { e.preventDefault(); selectSlashOption(visibleCommands[highlightIdx].id); return; }
       if (e.key === 'Escape') { e.preventDefault(); setMenu({ kind: 'none' }); onChange(''); return; }
     }
     if (menu.kind === 'link-search') {
@@ -128,7 +132,7 @@ export default function SlashCommandInput({
       if (e.key === 'Escape') { e.preventDefault(); setMenu({ kind: 'none' }); onChange(''); return; }
     }
     onKeyDown?.(e);
-  }, [menu, highlightIdx, searchResults, selectSlashOption, selectLinkedList, confirmListName, onChange, onKeyDown]);
+  }, [menu, highlightIdx, visibleCommands, searchResults, selectSlashOption, selectLinkedList, confirmListName, onChange, onKeyDown]);
 
   // Close on outside click
   useEffect(() => {
@@ -141,24 +145,24 @@ export default function SlashCommandInput({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const dropdownStyle: React.CSSProperties = {
+  const dropdownBase: React.CSSProperties = {
     position: 'absolute',
-    top: 'calc(100% + 4px)',
+    top: 'calc(100% + 6px)',
     left: 0,
     zIndex: 500,
     background: '#fff',
     border: '1px solid #e8e4f0',
-    borderRadius: 10,
-    boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-    minWidth: 240,
+    borderRadius: 12,
+    boxShadow: '0 8px 24px rgba(94,77,187,0.12), 0 2px 8px rgba(0,0,0,0.06)',
     overflow: 'hidden',
     animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both',
   };
 
   const itemBase: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px',
+    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
     cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22',
     border: 'none', background: 'transparent', width: '100%', textAlign: 'left',
+    transition: 'background 100ms',
   };
 
   return (
@@ -175,36 +179,64 @@ export default function SlashCommandInput({
         style={inputStyle}
       />
 
+      {/* ── Slash command picker ── */}
       {menu.kind === 'slash-menu' && (
-        <div style={dropdownStyle}>
-          <div style={{ padding: '7px 14px 5px', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            Commands
+        <div style={{ ...dropdownBase, minWidth: 290 }}>
+          {/* Header */}
+          <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid #F5F3FF', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#5e4dbb' }}>
+              /{menu.query}
+            </span>
+            {!menu.query && (
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#c9c4d5' }}>Type to filter…</span>
+            )}
           </div>
-          {([
-            { opt: 'list', icon: 'format_list_bulleted', label: 'New sublist', hint: '{new list name}', desc: 'Create a nested sublist' },
-            { opt: 'link', icon: 'link', label: 'Link list', hint: '{list name}', desc: 'Link an existing list' },
-          ] as const).map(({ opt, icon, hint, desc }, idx) => (
-            <button
-              key={opt}
-              style={{ ...itemBase, background: highlightIdx === idx ? '#F5F3FF' : 'transparent', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '8px 14px' }}
-              onMouseEnter={() => setHighlightIdx(idx)}
-              onMouseDown={e => { e.preventDefault(); selectSlashOption(opt); }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Icon name={icon} size={15} color="#5e4dbb" />
-                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 700, fontSize: 13, color: '#5e4dbb' }}>/{opt}</span>
-                <span style={{ fontFamily: 'Inter, sans-serif', fontWeight: 400, fontSize: 13, color: '#b0acbe' }}>{hint}</span>
-              </div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584', paddingLeft: 23 }}>{desc}</div>
-            </button>
-          ))}
+
+          {/* Section label */}
+          <div style={{ padding: '8px 14px 3px', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#c9c4d5', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            List commands
+          </div>
+
+          {/* Commands */}
+          {visibleCommands.length === 0 ? (
+            <div style={{ padding: '10px 14px 12px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#c9c4d5' }}>
+              No commands match
+            </div>
+          ) : (
+            visibleCommands.map((cmd, idx) => (
+              <button
+                key={cmd.id}
+                style={{ ...itemBase, background: highlightIdx === idx ? '#F5F3FF' : 'transparent' }}
+                onMouseEnter={() => setHighlightIdx(idx)}
+                onMouseDown={e => { e.preventDefault(); selectSlashOption(cmd.id); }}
+              >
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: highlightIdx === idx ? '#ede9fc' : '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 100ms' }}>
+                  <Icon name={cmd.icon} size={16} color="#5e4dbb" />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22' }}>{cmd.label}</div>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584', marginTop: 1 }}>{cmd.desc}</div>
+                </div>
+                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#c9c4d5', background: '#F5F3FF', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>
+                  {cmd.hint}
+                </span>
+              </button>
+            ))
+          )}
+
+          {/* Footer */}
+          <div style={{ padding: '7px 14px', borderTop: '1px solid #F5F3FF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#c9c4d5' }}>Close menu</span>
+            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#c9c4d5', background: '#F5F3FF', borderRadius: 5, padding: '2px 7px' }}>esc</span>
+          </div>
         </div>
       )}
 
+      {/* ── Link search ── */}
       {menu.kind === 'link-search' && (
-        <div style={dropdownStyle}>
+        <div style={{ ...dropdownBase, minWidth: 260 }}>
           {searchResults.length === 0 ? (
-            <div style={{ padding: '10px 14px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>
+            <div style={{ padding: '10px 14px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#c9c4d5' }}>
               No lists found
             </div>
           ) : (
