@@ -206,7 +206,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/share/:token" element={<SharePage />} />
-      <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : <LoginScreen />} />
+      <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : <LoginScreen />} />
       <Route path="/setup" element={loggedIn ? <Navigate to="/dashboard" replace /> : <SetupWizard />} />
       <Route path="/nuke" element={loggedIn ? <NukeScreen /> : <Navigate to="/login" replace />} />
       <Route path="/*" element={
