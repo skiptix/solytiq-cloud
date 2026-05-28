@@ -569,7 +569,7 @@ export default function FilesScreen() {
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setPageDragOver(false); }}
       onDrop={e => { e.preventDefault(); setPageDragOver(false); if (e.dataTransfer.files.length) setUploadOpen(true); }}
     >
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 28, width: '100%' }}>
+      <div style={{ maxWidth: 860, margin: '0 auto', padding: '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 28, width: '100%', animation: 'sectionFadeUp 360ms cubic-bezier(0.22,1,0.36,1) both' }}>
 
         {/* Page header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
