@@ -47,12 +47,22 @@ function AppLayout() {
     let debounce: ReturnType<typeof setTimeout> | null = null;
     connectSSE(() => {
       if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(() => { loadFromApi(); }, 800);
+      debounce = setTimeout(() => { loadFromApi(); }, 500);
     });
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadFromApi();
+    };
+    const onOnline = () => { loadFromApi(); };
+
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', onOnline);
 
     return () => {
       if (debounce) clearTimeout(debounce);
       disconnectSSE();
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', onOnline);
     };
   }, []);
 
