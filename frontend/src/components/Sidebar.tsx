@@ -814,7 +814,7 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
 
       {dropdownOpen && dropdownPos && (
         <div ref={dropRef}
-          style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 500, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.14)', border: '1px solid #e8e4f0', minWidth: 230, padding: '4px 0', animation: 'menuIn 140ms ease both' }}>
+          style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 500, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.14)', border: '1px solid #e8e4f0', minWidth: 230, padding: '4px 0', animation: 'menuIn 140ms ease both', overflow: 'hidden' }}>
 
           {workspaces.length === 0 && (
             <div style={{ padding: '12px 14px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>No workspaces yet.</div>
