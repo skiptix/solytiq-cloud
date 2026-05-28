@@ -1,9 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Icon from '../components/Icon';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useAuthStore from '../store/useAuthStore';
 import type { Workspace, WorkspaceMember } from '../types';
 import EmojiPicker from 'emoji-picker-react';
+import { apiGetMembers } from '../api/client';
+
+interface UserSuggestion { id: string; username: string; fullName: string | null; profileImage: string | null; }
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -36,6 +39,11 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const [inviteUsername, setInviteUsername] = useState('');
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [allUsers, setAllUsers]       = useState<UserSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestionIndex, setSuggestionIndex] = useState(-1);
+  const inviteInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
 
   // Danger
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -50,8 +58,34 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   useEffect(() => {
     if (activeTab === 'members' && !membersLoaded) {
       getMembers(workspace.id).then(m => { setMembers(m); setMembersLoaded(true); }).catch(() => {});
+      apiGetMembers().then(r => setAllUsers(r.members)).catch(() => {});
     }
   }, [activeTab, membersLoaded]);
+
+  const memberUserIds = new Set(members.map(m => m.userId));
+  const suggestions = inviteUsername.trim().length > 0
+    ? allUsers.filter(u =>
+        !memberUserIds.has(u.id) &&
+        (u.username.toLowerCase().includes(inviteUsername.toLowerCase()) ||
+         (u.fullName ?? '').toLowerCase().includes(inviteUsername.toLowerCase()))
+      ).slice(0, 6)
+    : [];
+
+  const handleInviteUser = useCallback(async (username: string) => {
+    setInviteLoading(true);
+    setInviteError(null);
+    setShowSuggestions(false);
+    setInviteUsername('');
+    setSuggestionIndex(-1);
+    try {
+      const m = await addMember(workspace.id, username);
+      setMembers(prev => [...prev, m]);
+    } catch (e: unknown) {
+      setInviteError(e instanceof Error ? e.message : 'User not found or already a member.');
+    } finally {
+      setInviteLoading(false);
+    }
+  }, [workspace.id, addMember]);
 
   function processFile(file: File) {
     setImgError(null);
@@ -84,17 +118,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const handleInvite = async () => {
     const uname = inviteUsername.trim();
     if (!uname) return;
-    setInviteLoading(true);
-    setInviteError(null);
-    try {
-      const m = await addMember(workspace.id, uname);
-      setMembers(prev => [...prev, m]);
-      setInviteUsername('');
-    } catch (e: unknown) {
-      setInviteError(e instanceof Error ? e.message : 'User not found or already a member.');
-    } finally {
-      setInviteLoading(false);
-    }
+    await handleInviteUser(uname);
   };
 
   const handleRemoveMember = async (memberId: string) => {
@@ -256,18 +280,55 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
               {isOwner && (
                 <div>
                   <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Invite member</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: '#f7f4fc', borderRadius: 10, padding: '8px 14px' }}>
-                      <Icon name="person_add" size={16} color="#787584" />
-                      <input value={inviteUsername} onChange={e => { setInviteUsername(e.target.value); setInviteError(null); }}
-                        onKeyDown={e => { if (e.key === 'Enter') handleInvite(); }}
-                        placeholder="Username…"
-                        style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#1c1b22' }} />
+                  <div style={{ position: 'relative' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f7f4fc', borderRadius: 10, padding: '8px 14px', border: `1.5px solid ${showSuggestions && suggestions.length > 0 ? '#c4b5fd' : 'transparent'}`, transition: 'border-color 150ms' }}>
+                      <Icon name="person_search" size={16} color="#787584" />
+                      <input
+                        ref={inviteInputRef}
+                        value={inviteUsername}
+                        onChange={e => { setInviteUsername(e.target.value); setInviteError(null); setSuggestionIndex(-1); setShowSuggestions(true); }}
+                        onFocus={() => setShowSuggestions(true)}
+                        onBlur={e => { if (!suggestionsRef.current?.contains(e.relatedTarget as Node)) { setShowSuggestions(false); setSuggestionIndex(-1); } }}
+                        onKeyDown={e => {
+                          if (e.key === 'ArrowDown') { e.preventDefault(); setSuggestionIndex(i => Math.min(i + 1, suggestions.length - 1)); }
+                          else if (e.key === 'ArrowUp') { e.preventDefault(); setSuggestionIndex(i => Math.max(i - 1, -1)); }
+                          else if (e.key === 'Enter') {
+                            if (suggestionIndex >= 0 && suggestions[suggestionIndex]) handleInviteUser(suggestions[suggestionIndex].username);
+                            else handleInvite();
+                          }
+                          else if (e.key === 'Escape') { setShowSuggestions(false); setSuggestionIndex(-1); }
+                        }}
+                        placeholder="Search by name or username…"
+                        style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#1c1b22' }}
+                      />
+                      {inviteLoading && <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid #c4b5fd', borderTopColor: '#5e4dbb', animation: 'spin 600ms linear infinite', flexShrink: 0 }} />}
                     </div>
-                    <button onClick={handleInvite} disabled={inviteLoading || !inviteUsername.trim()}
-                      style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, padding: '0 16px', borderRadius: 10, border: 'none', background: inviteUsername.trim() ? '#5e4dbb' : '#e8e4f0', color: inviteUsername.trim() ? '#fff' : '#b0acbe', cursor: inviteUsername.trim() ? 'pointer' : 'default', height: 40, flexShrink: 0, transition: 'all 150ms' }}>
-                      Invite
-                    </button>
+
+                    {showSuggestions && suggestions.length > 0 && (
+                      <div ref={suggestionsRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: '#fff', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', overflow: 'hidden', zIndex: 50, animation: 'menuIn 140ms ease both' }}>
+                        {suggestions.map((u, i) => (
+                          <button key={u.id}
+                            tabIndex={0}
+                            onMouseDown={e => { e.preventDefault(); handleInviteUser(u.username); }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', background: i === suggestionIndex ? '#F5F3FF' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 100ms' }}
+                            onMouseEnter={() => setSuggestionIndex(i)}
+                            onMouseLeave={() => setSuggestionIndex(-1)}
+                          >
+                            {u.profileImage
+                              ? <img src={u.profileImage} style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                              : <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#5e4dbb' }}>{u.username[0].toUpperCase()}</span>
+                                </div>
+                            }
+                            <div style={{ flex: 1, overflow: 'hidden' }}>
+                              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.fullName ?? u.username}</div>
+                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584' }}>@{u.username}</div>
+                            </div>
+                            <Icon name="person_add" size={14} color="#9d8dff" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   {inviteError && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a', marginTop: 6 }}>{inviteError}</div>}
                 </div>
