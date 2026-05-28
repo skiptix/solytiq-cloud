@@ -2,6 +2,9 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type { List, Folder } from '../types';
 import Icon from './Icon';
 import useAppStore from '../store/useAppStore';
+import useWorkspaceStore from '../store/useWorkspaceStore';
+import WorkspaceWizard from '../modals/WorkspaceWizard';
+import WorkspaceSettingsModal from '../modals/WorkspaceSettingsModal';
 import EmojiPicker from 'emoji-picker-react';
 
 const MINI = 60;
@@ -762,6 +765,109 @@ function StandaloneListWithSublists({ list, sublists, active, activeListId, coll
   );
 }
 
+// ── WorkspaceSwitcher ─────────────────────────────────────────────────────────
+function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
+  const { workspaces, currentWorkspaceId, setCurrentWorkspace } = useWorkspaceStore();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
+  const [showWizard, setShowWizard] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  const current = workspaces.find(w => w.id === currentWorkspaceId);
+
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node) && btnRef.current && !btnRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [dropdownOpen]);
+
+  const openDropdown = () => {
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (rect) setDropdownPos({ top: rect.bottom + 4, left: Math.max(8, rect.left) });
+    setDropdownOpen(o => !o);
+  };
+
+  return (
+    <>
+      <button ref={btnRef} onClick={openDropdown} title={collapsed ? (current?.name ?? 'Workspaces') : undefined}
+        style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', width: '100%', borderRadius: 8, border: 'none', background: dropdownOpen ? '#F5F3FF' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 500, color: '#5e4dbb', transition: 'background 150ms' }}>
+        <div style={{ width: 22, height: 22, borderRadius: 6, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+          {current?.image
+            ? <img src={current.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : <span style={{ fontSize: 13 }}>{current?.emoji ?? '🏠'}</span>
+          }
+        </div>
+        {!collapsed && (
+          <>
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{current?.name ?? 'Select workspace'}</span>
+            <Icon name="unfold_more" size={15} color="#9d8dff" />
+          </>
+        )}
+      </button>
+
+      {dropdownOpen && dropdownPos && (
+        <div ref={dropRef}
+          style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 500, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.14)', border: '1px solid #e8e4f0', minWidth: 230, padding: '4px 0', animation: 'menuIn 140ms ease both' }}>
+
+          {workspaces.length === 0 && (
+            <div style={{ padding: '12px 14px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>No workspaces yet.</div>
+          )}
+
+          {workspaces.map(ws => (
+            <button key={ws.id}
+              onClick={() => { setCurrentWorkspace(ws.id); setDropdownOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', background: ws.id === currentWorkspaceId ? '#f5f3ff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: ws.id === currentWorkspaceId ? 600 : 450, color: ws.id === currentWorkspaceId ? '#5e4dbb' : '#1c1b22', textAlign: 'left' }}
+              onMouseEnter={e => { if (ws.id !== currentWorkspaceId) e.currentTarget.style.background = '#f7f4fc'; }}
+              onMouseLeave={e => { if (ws.id !== currentWorkspaceId) e.currentTarget.style.background = 'transparent'; }}>
+              <div style={{ width: 26, height: 26, borderRadius: 8, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                {ws.image
+                  ? <img src={ws.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <span style={{ fontSize: 14 }}>{ws.emoji ?? '🏠'}</span>
+                }
+              </div>
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ws.name}</div>
+                {ws.visibility === 'public' && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe' }}>Public</div>}
+              </div>
+              {ws.id === currentWorkspaceId && <Icon name="check" size={14} color="#5e4dbb" />}
+            </button>
+          ))}
+
+          <div style={{ height: 1, background: '#f0ecf8', margin: '4px 0' }} />
+
+          {current && (current.role === 'owner' || current.ownerId === current.ownerId) && (
+            <button
+              onClick={() => { setShowSettings(true); setDropdownOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 450, color: '#484552', textAlign: 'left' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+              <Icon name="settings" size={15} color="#787584" /> Workspace settings
+            </button>
+          )}
+
+          <button
+            onClick={() => { setShowWizard(true); setDropdownOpen(false); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', textAlign: 'left' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+            <Icon name="add_circle" size={15} color="#5e4dbb" /> New workspace
+          </button>
+        </div>
+      )}
+
+      {showWizard && <WorkspaceWizard onClose={() => setShowWizard(false)} />}
+      {showSettings && current && <WorkspaceSettingsModal workspace={current} onClose={() => setShowSettings(false)} />}
+    </>
+  );
+}
+
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
   active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings' | 'folder';
@@ -885,9 +991,8 @@ export default function Sidebar({ active, activeListId, activeFolderId, lists, w
       </button>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <NavItem icon="today" label="Dashboard" active={active === 'dashboard'} onClick={() => onNavigate('/dashboard')} collapsed={collapsed} />
+        <WorkspaceSwitcher collapsed={collapsed} />
         <NavItem icon="calendar_month" label="Scheduled" active={active === 'scheduled'} onClick={() => onNavigate('/scheduled')} collapsed={collapsed} />
-        <NavItem icon="folder_shared" label="Files" active={active === 'files'} onClick={() => onNavigate('/files')} collapsed={collapsed} />
 
         <div style={{ height: 1, background: '#e8e4f0', margin: '6px 8px' }} />
 

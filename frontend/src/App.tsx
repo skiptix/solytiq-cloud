@@ -1,9 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import type { List } from './types';
 import useAuthStore from './store/useAuthStore';
 import useAppStore from './store/useAppStore';
 import useMembersStore from './store/useMembersStore';
+import useWorkspaceStore from './store/useWorkspaceStore';
 import { apiCheckSetupRequired, connectSSE, disconnectSSE } from './api/client';
 
 import Sidebar from './components/Sidebar';
@@ -39,21 +40,33 @@ function AppLayout() {
   const [modal, setModal] = useState<'add-list' | 'completed' | 'trash' | null>(null);
 
   const loadMembers = useMembersStore(s => s.load);
+  const { currentWorkspaceId, loadWorkspaces } = useWorkspaceStore();
+  const prevWorkspaceRef = useRef<string | null>(null);
 
   useEffect(() => {
-    loadFromApi();
-    loadMembers();
+    const init = async () => {
+      await loadWorkspaces();
+      loadMembers();
+    };
+    init();
 
     let debounce: ReturnType<typeof setTimeout> | null = null;
     connectSSE(() => {
       if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(() => { loadFromApi(); }, 500);
+      const wsId = useWorkspaceStore.getState().currentWorkspaceId;
+      debounce = setTimeout(() => { loadFromApi(wsId ?? undefined); }, 500);
     });
 
     const onVisible = () => {
-      if (document.visibilityState === 'visible') loadFromApi();
+      if (document.visibilityState === 'visible') {
+        const wsId = useWorkspaceStore.getState().currentWorkspaceId;
+        loadFromApi(wsId ?? undefined);
+      }
     };
-    const onOnline = () => { loadFromApi(); };
+    const onOnline = () => {
+      const wsId = useWorkspaceStore.getState().currentWorkspaceId;
+      loadFromApi(wsId ?? undefined);
+    };
 
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('online', onOnline);
@@ -65,6 +78,14 @@ function AppLayout() {
       window.removeEventListener('online', onOnline);
     };
   }, []);
+
+  // Reload data when active workspace changes
+  useEffect(() => {
+    if (prevWorkspaceRef.current !== currentWorkspaceId) {
+      prevWorkspaceRef.current = currentWorkspaceId;
+      loadFromApi(currentWorkspaceId ?? undefined);
+    }
+  }, [currentWorkspaceId]);
 
   // Sidebar resize
   const handleResizeStart = useCallback((initialX: number) => {

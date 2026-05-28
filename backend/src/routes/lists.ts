@@ -25,6 +25,7 @@ interface ListRow {
   created_at: string;
   parent_task_id: string | null;
   depth: number;
+  workspace_id: string | null;
 }
 
 interface SectionRow {
@@ -108,7 +109,8 @@ function sanitizeList(
     colorBg:      list.color_bg,
     subtitle:     list.subtitle,
     isPublic:     list.is_public,
-    folderId:     list.folder_id ?? undefined,
+    folderId:     list.folder_id  ?? undefined,
+    workspaceId:  list.workspace_id ?? undefined,
     position:     list.position,
     createdAt:    list.created_at,
     parentTaskId: list.parent_task_id ?? null,
@@ -122,23 +124,41 @@ function sanitizeList(
 // Helper: build full list objects (lists → sections → tasks)
 // ---------------------------------------------------------------------------
 
-async function buildListsForUser(userId: string) {
+async function buildListsForUser(userId: string, workspaceId?: string) {
+  // When workspaceId is provided: return lists in that workspace the user can access.
+  // When omitted: return all lists the user owns or has access to (global view).
+  const wsFilter = workspaceId
+    ? `AND l.workspace_id = '${workspaceId.replace(/'/g, "''")}'`
+    : '';
+
   const [listsResult, sectionsResult, tasksResult] = await Promise.all([
     query<ListRow>(
-      'SELECT * FROM lists WHERE user_id = $1 OR is_public = true ORDER BY position ASC, created_at ASC',
+      `SELECT l.* FROM lists l
+       LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
+       WHERE (l.user_id = $1 OR l.is_public = true OR wm.user_id = $1
+              OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public'))
+       ${wsFilter}
+       ORDER BY l.position ASC, l.created_at ASC`,
       [userId]
     ),
     query<SectionRow>(
       `SELECT s.* FROM sections s
        JOIN lists l ON s.list_id = l.id
-       WHERE l.user_id = $1 OR l.is_public = true
+       LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
+       WHERE (l.user_id = $1 OR l.is_public = true OR wm.user_id = $1
+              OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public'))
+       ${wsFilter}
        ORDER BY s.position ASC`,
       [userId]
     ),
     query<TaskRow>(
       `SELECT t.* FROM tasks t
        JOIN lists l ON t.list_id = l.id
-       WHERE (l.user_id = $1 OR l.is_public = true) AND t.source = 'list'
+       LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
+       WHERE (l.user_id = $1 OR l.is_public = true OR wm.user_id = $1
+              OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public'))
+       AND t.source = 'list'
+       ${wsFilter.replace(/l\.workspace_id/g, 't.workspace_id')}
        ORDER BY t.position ASC, t.created_at ASC`,
       [userId]
     ),
@@ -180,7 +200,8 @@ async function buildListsForUser(userId: string) {
 // GET /api/lists
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const lists = await buildListsForUser(req.userId!);
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const lists = await buildListsForUser(req.userId!, workspaceId);
     res.json({ lists });
   } catch (err) {
     console.error('lists GET error:', err);
@@ -191,7 +212,7 @@ router.get('/', async (req: Request, res: Response) => {
 // POST /api/lists
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { id, name, emoji, color, colorBg, subtitle, isPublic, folderId, parentTaskId, depth } = req.body as {
+    const { id, name, emoji, color, colorBg, subtitle, isPublic, folderId, parentTaskId, depth, workspaceId } = req.body as {
       id?: string;
       name?: string;
       emoji?: string;
@@ -202,6 +223,7 @@ router.post('/', async (req: Request, res: Response) => {
       folderId?: string;
       parentTaskId?: number;
       depth?: number;
+      workspaceId?: string;
     };
 
     if (!name) {
@@ -220,10 +242,10 @@ router.post('/', async (req: Request, res: Response) => {
       : 0;
 
     const result = await query<ListRow>(
-      `INSERT INTO lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, folder_id, position, parent_task_id, depth)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `INSERT INTO lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, folder_id, position, parent_task_id, depth, workspace_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
-      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false, folderId ?? null, nextPos, parentTaskId ?? null, depth ?? 0]
+      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false, folderId ?? null, nextPos, parentTaskId ?? null, depth ?? 0, workspaceId ?? null]
     );
 
     res.status(201).json({ list: sanitizeList(result.rows[0], []) });

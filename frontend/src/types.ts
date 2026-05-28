@@ -32,6 +32,7 @@ export interface List {
   colorBg?: string;
   subtitle?: string;
   folderId?: string;
+  workspaceId?: string;
   position?: number;
   sections: Section[];
   parentTaskId?: number | null;
@@ -51,6 +52,27 @@ export interface Folder {
   position: number;
   collapsed: boolean;
   isPublic?: boolean;
+  workspaceId?: string;
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  description?: string;
+  emoji?: string;
+  image?: string;
+  visibility: 'private' | 'public';
+  ownerId: string;
+  role: 'owner' | 'member';
+  createdAt: string;
+}
+
+export interface WorkspaceMember {
+  userId: string;
+  username: string;
+  fullName?: string;
+  profileImage?: string;
+  role: 'owner' | 'member';
 }
 
 export interface TrashedTask {
@@ -149,5 +171,5 @@ export interface AppState {
   deleteFolderFromTrash: (trashId: number) => void;
   setSidebarWidth: (w: number) => void;
   moveTaskToList: (taskId: number, targetListId: string) => void;
-  loadFromApi: () => Promise<void>;
+  loadFromApi: (workspaceId?: string) => Promise<void>;
 }

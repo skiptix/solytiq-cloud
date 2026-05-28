@@ -5,14 +5,15 @@ import { rateLimit } from 'express-rate-limit';
 import path from 'path';
 import { pool } from './db';
 
-import authRouter  from './routes/auth';
-import tasksRouter from './routes/tasks';
-import listsRouter from './routes/lists';
-import trashRouter from './routes/trash';
-import adminRouter from './routes/admin';
-import foldersRouter from './routes/folders';
+import authRouter       from './routes/auth';
+import tasksRouter      from './routes/tasks';
+import listsRouter      from './routes/lists';
+import trashRouter      from './routes/trash';
+import adminRouter      from './routes/admin';
+import foldersRouter    from './routes/folders';
 import filesRouter, { UPLOAD_DIR } from './routes/files';
-import aiRouter from './routes/ai';
+import aiRouter         from './routes/ai';
+import workspacesRouter from './routes/workspaces';
 import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
 import { addSseClient, removeSseClient } from './sse';
@@ -74,14 +75,15 @@ app.use('/api/admin/nuke', setupLimiter);
 // Routes
 // ---------------------------------------------------------------------------
 
-app.use('/api/auth',    authRouter);
-app.use('/api/tasks',   tasksRouter);
-app.use('/api/lists',   listsRouter);
-app.use('/api/trash',   trashRouter);
-app.use('/api/admin',   adminRouter);
-app.use('/api/folders', foldersRouter);
-app.use('/api/files',   filesRouter);
-app.use('/api/ai',      aiRouter);
+app.use('/api/auth',       authRouter);
+app.use('/api/tasks',      tasksRouter);
+app.use('/api/lists',      listsRouter);
+app.use('/api/trash',      trashRouter);
+app.use('/api/admin',      adminRouter);
+app.use('/api/folders',    foldersRouter);
+app.use('/api/files',      filesRouter);
+app.use('/api/ai',         aiRouter);
+app.use('/api/workspaces', workspacesRouter);
 
 // Public share endpoints — no auth required
 interface ShareFileRow { id: string; original_name: string; title: string | null; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null; }
@@ -416,6 +418,72 @@ async function runMigrations() {
     INSERT INTO app_settings (key, value) VALUES ('two_fa_feature_enabled', 'true')
     ON CONFLICT (key) DO NOTHING
   `);
+
+  // ── Workspaces ──────────────────────────────────────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workspaces (
+      id          VARCHAR(100) PRIMARY KEY,
+      name        VARCHAR(255) NOT NULL,
+      description TEXT,
+      emoji       VARCHAR(10),
+      image       TEXT,
+      visibility  VARCHAR(20) NOT NULL DEFAULT 'private' CHECK (visibility IN ('private', 'public')),
+      owner_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workspace_members (
+      workspace_id VARCHAR(100) NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role         VARCHAR(20) NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member')),
+      joined_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (workspace_id, user_id)
+    )
+  `);
+
+  await pool.query(`ALTER TABLE lists   ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(100) REFERENCES workspaces(id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE folders ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(100) REFERENCES workspaces(id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(100) REFERENCES workspaces(id) ON DELETE SET NULL`);
+
+  // Seed: create "Personal" workspace for every user that doesn't have one yet
+  {
+    const usersWithoutWs = await pool.query<{ id: string }>(
+      `SELECT u.id FROM users u WHERE NOT EXISTS (SELECT 1 FROM workspaces w WHERE w.owner_id = u.id)`
+    );
+    for (const user of usersWithoutWs.rows) {
+      const wsId = `ws_${user.id.replace(/-/g, '')}`;
+      await pool.query(
+        `INSERT INTO workspaces (id, name, emoji, visibility, owner_id)
+         VALUES ($1, 'Personal', '🏠', 'private', $2)
+         ON CONFLICT DO NOTHING`,
+        [wsId, user.id]
+      );
+      await pool.query(
+        `INSERT INTO workspace_members (workspace_id, user_id, role)
+         VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING`,
+        [wsId, user.id]
+      );
+    }
+
+    // Assign existing unassigned lists/folders/tasks to their owner's workspace
+    await pool.query(`
+      UPDATE lists l
+      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = l.user_id LIMIT 1)
+      WHERE l.workspace_id IS NULL
+    `);
+    await pool.query(`
+      UPDATE folders f
+      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = f.user_id LIMIT 1)
+      WHERE f.workspace_id IS NULL
+    `);
+    await pool.query(`
+      UPDATE tasks t
+      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = t.user_id LIMIT 1)
+      WHERE t.workspace_id IS NULL
+    `);
+  }
 
   console.log('Database migrations applied.');
 }

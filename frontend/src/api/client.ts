@@ -1,4 +1,4 @@
-import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile } from '../types';
+import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, Workspace, WorkspaceMember } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -77,10 +77,10 @@ export const apiUploadProfileImage = (imageData: string | null) =>
   );
 
 // Dashboard Tasks
-export const apiGetTasks = () =>
-  apiFetch<{ tasks: Task[] }>('/tasks');
+export const apiGetTasks = (workspaceId?: string) =>
+  apiFetch<{ tasks: Task[] }>(`/tasks${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`);
 
-export const apiCreateTask = (data: Partial<Task> & { title: string }) =>
+export const apiCreateTask = (data: Partial<Task> & { title: string; workspaceId?: string }) =>
   apiFetch<{ task: Task }>('/tasks', { method: 'POST', body: JSON.stringify(data) });
 
 export const apiUpdateTask = (id: number, data: Partial<Task>) =>
@@ -90,10 +90,10 @@ export const apiDeleteTask = (id: number) =>
   apiFetch<{ success: boolean }>(`/tasks/${id}`, { method: 'DELETE' });
 
 // Lists
-export const apiGetLists = () =>
-  apiFetch<{ lists: List[] }>('/lists');
+export const apiGetLists = (workspaceId?: string) =>
+  apiFetch<{ lists: List[] }>(`/lists${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`);
 
-export const apiCreateList = (data: Omit<List, 'sections'> & { sections?: List['sections'] }) =>
+export const apiCreateList = (data: Omit<List, 'sections'> & { sections?: List['sections']; workspaceId?: string }) =>
   apiFetch<{ list: List }>('/lists', { method: 'POST', body: JSON.stringify(data) });
 
 export const apiUpdateList = (id: string, data: Partial<List>) =>
@@ -151,10 +151,10 @@ export const apiDeleteListTask = (listId: string, taskId: number) =>
   apiFetch<{ success: boolean }>(`/lists/${listId}/tasks/${taskId}`, { method: 'DELETE' });
 
 // Folders
-export const apiGetFolders = () =>
-  apiFetch<{ folders: Folder[] }>('/folders');
+export const apiGetFolders = (workspaceId?: string) =>
+  apiFetch<{ folders: Folder[] }>(`/folders${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`);
 
-export const apiCreateFolder = (data: { id: string; name: string; emoji?: string; color?: string; isPublic?: boolean }) =>
+export const apiCreateFolder = (data: { id: string; name: string; emoji?: string; color?: string; isPublic?: boolean; workspaceId?: string }) =>
   apiFetch<{ folder: Folder }>('/folders', { method: 'POST', body: JSON.stringify(data) });
 
 export const apiUpdateFolder = (id: string, data: Partial<Omit<Folder, 'id'>>) =>
@@ -290,6 +290,28 @@ export const apiUpdateFeatureFlags = (data: { twoFAFeatureEnabled?: boolean }) =
     method: 'PUT',
     body: JSON.stringify(data),
   });
+
+// Workspaces
+export const apiGetWorkspaces = () =>
+  apiFetch<{ workspaces: Workspace[] }>('/workspaces');
+
+export const apiCreateWorkspace = (data: { name: string; description?: string; emoji?: string; image?: string; visibility?: 'private' | 'public' }) =>
+  apiFetch<{ workspace: Workspace }>('/workspaces', { method: 'POST', body: JSON.stringify(data) });
+
+export const apiUpdateWorkspace = (id: string, data: Partial<Pick<Workspace, 'name' | 'description' | 'emoji' | 'image' | 'visibility'>>) =>
+  apiFetch<{ workspace: Workspace }>(`/workspaces/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const apiDeleteWorkspace = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/workspaces/${id}`, { method: 'DELETE' });
+
+export const apiGetWorkspaceMembers = (id: string) =>
+  apiFetch<{ members: WorkspaceMember[] }>(`/workspaces/${id}/members`);
+
+export const apiAddWorkspaceMember = (id: string, username: string) =>
+  apiFetch<{ member: WorkspaceMember }>(`/workspaces/${id}/members`, { method: 'POST', body: JSON.stringify({ username }) });
+
+export const apiRemoveWorkspaceMember = (id: string, userId: string) =>
+  apiFetch<{ ok: boolean }>(`/workspaces/${id}/members/${userId}`, { method: 'DELETE' });
 
 // SSE — real-time sync
 let sseSource: EventSource | null = null;

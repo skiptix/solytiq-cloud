@@ -53,11 +53,16 @@ function sanitizeTask(task: TaskRow) {
 // GET /api/tasks
 router.get('/', async (req: Request, res: Response) => {
   try {
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const wsClause = workspaceId
+      ? `AND t.workspace_id = '${workspaceId.replace(/'/g, "''")}'`
+      : '';
     const result = await query<TaskRow>(
       `SELECT t.* FROM tasks t
        LEFT JOIN lists l ON t.list_id = l.id
        WHERE (t.user_id = $1 AND t.source = 'dash')
           OR (t.source = 'list' AND (l.user_id = $1 OR l.is_public = true))
+       ${wsClause}
        ORDER BY t.position ASC, t.created_at ASC`,
       [req.userId]
     );
@@ -81,6 +86,7 @@ router.post('/', async (req: Request, res: Response) => {
       badge,
       linked_list_id,
       linked_list_type,
+      workspaceId,
     } = req.body as {
       id?: number;
       title?: string;
@@ -91,6 +97,7 @@ router.post('/', async (req: Request, res: Response) => {
       badge?: string;
       linked_list_id?: string;
       linked_list_type?: 'sublist' | 'link';
+      workspaceId?: string;
     };
 
     if (!title) {
@@ -111,10 +118,10 @@ router.post('/', async (req: Request, res: Response) => {
 
     const result = await query<TaskRow>(
       `INSERT INTO tasks
-         (id, user_id, title, note, deadline, time_val, priority, badge, source, position, linked_list_id, linked_list_type)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'dash', $9, $10, $11)
+         (id, user_id, title, note, deadline, time_val, priority, badge, source, position, linked_list_id, linked_list_type, workspace_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'dash', $9, $10, $11, $12)
        RETURNING *`,
-      [taskId, req.userId, title, note ?? null, deadline ?? null, time_val ?? null, priority ?? null, badge ?? null, nextPos, linked_list_id ?? null, linked_list_type ?? null]
+      [taskId, req.userId, title, note ?? null, deadline ?? null, time_val ?? null, priority ?? null, badge ?? null, nextPos, linked_list_id ?? null, linked_list_type ?? null, workspaceId ?? null]
     );
 
     res.status(201).json({ task: sanitizeTask(result.rows[0]) });
