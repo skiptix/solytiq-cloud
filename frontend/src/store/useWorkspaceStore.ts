@@ -22,7 +22,7 @@ interface WorkspaceState {
 
 const useWorkspaceStore = create<WorkspaceState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       workspaces: [],
       currentWorkspaceId: null,
 

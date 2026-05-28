@@ -28,7 +28,6 @@ export default function WorkspaceWizard({ onClose, onCreated }: Props) {
   const [memberLoading, setMemberLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [createdWsId, setCreatedWsId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { createWorkspace, setCurrentWorkspace } = useWorkspaceStore();
 
@@ -82,8 +81,6 @@ export default function WorkspaceWizard({ onClose, onCreated }: Props) {
         image: useImage ? pendingImage ?? undefined : undefined,
         visibility,
       });
-      setCreatedWsId(ws.id);
-
       // Add members
       if (members.length > 0) {
         const { apiAddWorkspaceMember } = await import('../api/client');
