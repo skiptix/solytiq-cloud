@@ -411,6 +411,12 @@ async function runMigrations() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret VARCHAR(100)`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT false`);
 
+  // Feature flags
+  await pool.query(`
+    INSERT INTO app_settings (key, value) VALUES ('two_fa_feature_enabled', 'true')
+    ON CONFLICT (key) DO NOTHING
+  `);
+
   console.log('Database migrations applied.');
 }
 

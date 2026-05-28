@@ -188,10 +188,11 @@ router.get('/settings', authenticate, requireAdmin, async (_req: Request, res: R
 // PUT /api/admin/settings
 router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { storageQuotaPerUser, aiAssistantEnabled, aiModel } = req.body as {
+    const { storageQuotaPerUser, aiAssistantEnabled, aiModel, twoFAFeatureEnabled } = req.body as {
       storageQuotaPerUser?: number;
       aiAssistantEnabled?: boolean;
       aiModel?: string;
+      twoFAFeatureEnabled?: boolean;
     };
     if (storageQuotaPerUser !== undefined) {
       const bytes = Math.max(0, Math.round(Number(storageQuotaPerUser)));
@@ -213,6 +214,13 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
         `INSERT INTO app_settings (key, value) VALUES ('ai_model', $1)
          ON CONFLICT (key) DO UPDATE SET value = $1`,
         [aiModel.trim()]
+      );
+    }
+    if (twoFAFeatureEnabled !== undefined) {
+      await query(
+        `INSERT INTO app_settings (key, value) VALUES ('two_fa_feature_enabled', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [twoFAFeatureEnabled ? 'true' : 'false']
       );
     }
     const result = await query<{ key: string; value: string }>('SELECT key, value FROM app_settings');

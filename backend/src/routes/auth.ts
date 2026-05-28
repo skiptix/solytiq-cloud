@@ -361,4 +361,44 @@ router.post('/2fa/verify', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /api/auth/password  — change own password (requires current password)
+router.put('/password', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({ error: 'currentPassword and newPassword are required' }); return;
+    }
+    if (newPassword.length < 8) {
+      res.status(400).json({ error: 'New password must be at least 8 characters' }); return;
+    }
+    const userRes = await query<UserRow>('SELECT * FROM users WHERE id = $1', [req.userId]);
+    const user = userRes.rows[0];
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+
+    const valid = await comparePassword(currentPassword, user.password_hash);
+    if (!valid) { res.status(400).json({ error: 'Current password is incorrect' }); return; }
+
+    const newHash = await hashPassword(newPassword);
+    await query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, req.userId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('password change error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/auth/feature-flags — accessible to any authenticated user
+router.get('/feature-flags', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const result = await query<{ key: string; value: string }>(
+      "SELECT key, value FROM app_settings WHERE key = 'two_fa_feature_enabled'"
+    );
+    const row = result.rows[0];
+    res.json({ twoFAEnabled: row ? row.value !== 'false' : true });
+  } catch (err) {
+    console.error('feature-flags error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

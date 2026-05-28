@@ -60,6 +60,12 @@ export const apiGetMe = () =>
 export const apiGetMembers = () =>
   apiFetch<{ members: Array<{ id: string; username: string; email: string; fullName: string | null; profileImage: string | null; isAdmin: boolean }> }>('/auth/members');
 
+export const apiChangePassword = (currentPassword: string, newPassword: string) =>
+  apiFetch<{ success: boolean }>('/auth/password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) });
+
+export const apiGetFeatureFlags = () =>
+  apiFetch<{ twoFAEnabled: boolean }>('/auth/feature-flags');
+
 export const apiUpdateProfile = (data: { fullName?: string; email?: string }) =>
   apiFetch<{ user: { id: string; username: string; email: string; fullName: string } }>(
     '/auth/profile', { method: 'PUT', body: JSON.stringify(data) }
@@ -274,6 +280,12 @@ export const apiDeleteAISession = (sessionId: string) =>
   apiFetch<{ success: boolean }>(`/ai/sessions/${sessionId}`, { method: 'DELETE' });
 
 export const apiUpdateAppSettingsAI = (data: { aiAssistantEnabled?: boolean; aiModel?: string }) =>
+  apiFetch<{ settings: Record<string, string> }>('/admin/settings', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+
+export const apiUpdateFeatureFlags = (data: { twoFAFeatureEnabled?: boolean }) =>
   apiFetch<{ settings: Record<string, string> }>('/admin/settings', {
     method: 'PUT',
     body: JSON.stringify(data),
