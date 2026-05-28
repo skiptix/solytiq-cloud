@@ -111,75 +111,45 @@ export default function TrashModal({ onClose }: TrashModalProps) {
               {totalCount} deleted item{totalCount !== 1 ? 's' : ''}
             </div>
           </div>
-          {totalCount > 0 && (
-            <button
-              onClick={() => setConfirmEmpty(true)}
-              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#ba1a1a', background: '#fff5f5', border: '1px solid #ffdad6', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
-              Empty Trash
-            </button>
-          )}
           <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon name="close" size={18} color="#787584" />
           </button>
         </div>
 
-        {/* Tabs */}
-        {totalCount > 0 && (
-          <div style={{ display: 'flex', gap: 4, padding: '10px 16px 0', flexShrink: 0 }}>
+        {/* Toolbar — search + filter pills, always visible */}
+        <div style={{ padding: '12px 20px 8px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f7f4fc', borderRadius: 10, padding: '8px 14px', marginBottom: 10 }}>
+            <Icon name="search" size={16} color="#787584" />
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search trash…"
+              style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#1c1b22' }} />
+            {search && (
+              <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}>
+                <Icon name="close" size={14} color="#787584" />
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {TABS.filter(t => t.id === 'all' || t.count > 0).map(t => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                style={{
-                  fontFamily: 'Hanken Grotesk, sans-serif',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: tab === t.id ? '#5e4dbb' : '#787584',
-                  background: tab === t.id ? '#F5F3FF' : 'transparent',
-                  border: tab === t.id ? '1px solid #e0d9ff' : '1px solid transparent',
-                  borderRadius: 8,
-                  padding: '5px 10px',
-                  cursor: 'pointer',
-                  transition: 'all 150ms',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 5,
-                }}>
+                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 9999, padding: '5px 12px', cursor: 'pointer', background: tab === t.id ? '#5e4dbb' : '#f1ecf6', color: tab === t.id ? '#fff' : '#787584', transition: 'all 150ms' }}>
                 {t.label}
-                <span style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: tab === t.id ? '#5e4dbb' : '#b0acbe',
-                  background: tab === t.id ? '#e0d9ff' : '#f1ecf6',
-                  borderRadius: 20,
-                  padding: '1px 6px',
-                }}>
-                  {t.count}
-                </span>
               </button>
             ))}
+            {totalCount > 0 && (
+              <button
+                onClick={() => setConfirmEmpty(true)}
+                style={{ marginLeft: 'auto', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#ba1a1a', background: '#fff5f5', border: '1px solid #ffdad6', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
+                Empty Trash
+              </button>
+            )}
           </div>
-        )}
-
-        {/* Search */}
-        {totalCount > 0 && (
-          <div style={{ padding: '10px 20px 6px', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f7f4fc', borderRadius: 10, padding: '8px 14px' }}>
-              <Icon name="search" size={16} color="#787584" />
-              <input
-                autoFocus
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search trash…"
-                style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#1c1b22' }} />
-              {search && (
-                <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}>
-                  <Icon name="close" size={14} color="#787584" />
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+        </div>
 
         {/* Items */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 14px 16px' }}>
