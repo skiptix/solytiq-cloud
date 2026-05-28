@@ -133,7 +133,12 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    if (user.totp_enabled) {
+    const featureRes = await query<{ value: string }>(
+      "SELECT value FROM app_settings WHERE key = 'two_fa_feature_enabled'"
+    );
+    const twoFAFeatureOn = featureRes.rows[0] ? featureRes.rows[0].value !== 'false' : true;
+
+    if (user.totp_enabled && twoFAFeatureOn) {
       const pendingToken = generatePendingToken(user.id);
       res.json({ requires2FA: true, pendingToken });
       return;
