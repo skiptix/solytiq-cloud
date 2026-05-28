@@ -239,6 +239,14 @@ export const apiUpdateFile = (id: string, data: { name?: string; title?: string 
 export const apiDeleteFile = (id: string) =>
   apiFetch<{ success: boolean }>(`/files/${id}`, { method: 'DELETE' });
 
+export const apiPreviewFile = async (id: string): Promise<string> => {
+  const token = (await import('../store/useAuthStore')).default.getState().token;
+  const res = await fetch(`/api/files/${id}/preview`, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error('Preview unavailable');
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+};
+
 // AI Assistant
 export const apiGetAISettings = () =>
   apiFetch<{ enabled: boolean; model: string }>('/ai/settings');

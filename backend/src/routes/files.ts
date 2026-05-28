@@ -249,4 +249,25 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/files/:id/preview — authenticated inline file serving for owner preview
+router.get('/:id/preview', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await query<{ file_path: string; mime_type: string; original_name: string }>(
+      'SELECT file_path, mime_type, original_name FROM shared_files WHERE id = $1 AND user_id = $2',
+      [id, req.userId]
+    );
+    if (result.rows.length === 0) { res.status(404).json({ error: 'File not found' }); return; }
+    const { file_path, mime_type, original_name } = result.rows[0];
+    const filePath = path.join(path.resolve(UPLOAD_DIR), file_path);
+    if (!fs.existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(original_name)}"`);
+    res.setHeader('Content-Type', mime_type);
+    res.sendFile(filePath);
+  } catch (err) {
+    console.error('files preview error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

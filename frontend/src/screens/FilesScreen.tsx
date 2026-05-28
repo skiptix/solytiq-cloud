@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SharedFile } from '../types';
-import { apiGetFiles, apiUpdateFile, apiDeleteFile, apiUploadFile, apiGetStorageUsage } from '../api/client';
+import { apiGetFiles, apiUpdateFile, apiDeleteFile, apiUploadFile, apiGetStorageUsage, apiPreviewFile } from '../api/client';
 import useAuthStore from '../store/useAuthStore';
 import Icon from '../components/Icon';
 import CalendarPicker from '../components/CalendarPicker';
@@ -266,15 +266,18 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true }: UploadWiz
   );
 }
 
-// ── Edit File Modal ───────────────────────────────────────────────
+// ── File Detail Modal (preview + edit) ───────────────────────────
 
-interface EditModalProps {
+interface FileDetailModalProps {
   file: SharedFile;
   onClose: () => void;
   onSaved: (f: SharedFile) => void;
 }
 
-function EditModal({ file, onClose, onSaved }: EditModalProps) {
+function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
+  const [closing, setClosing] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(true);
   const [name, setName] = useState(file.name);
   const [title, setTitle] = useState(file.title ?? '');
   const [isPublic, setIsPublic] = useState(file.isPublic);
@@ -285,6 +288,23 @@ function EditModal({ file, onClose, onSaved }: EditModalProps) {
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const isImage = file.mimeType.startsWith('image/');
+  const isVideo = file.mimeType.startsWith('video/');
+  const isPdf   = file.mimeType === 'application/pdf';
+  const canPreview = isImage || isVideo || isPdf;
+
+  useEffect(() => {
+    if (!canPreview) { setPreviewLoading(false); return; }
+    let objectUrl: string;
+    apiPreviewFile(file.id)
+      .then(url => { objectUrl = url; setPreviewUrl(url); })
+      .catch(() => {})
+      .finally(() => setPreviewLoading(false));
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [file.id]);
+
+  const handleClose = () => { setClosing(true); setTimeout(() => onClose(), 190); };
+
   const save = async () => {
     setSaving(true);
     try {
@@ -294,133 +314,153 @@ function EditModal({ file, onClose, onSaved }: EditModalProps) {
       updates.expiresAt = expiresAt ? new Date(expiresAt + 'T23:59:59').toISOString() : null;
       const res = await apiUpdateFile(file.id, updates);
       onSaved(res.file);
-      onClose();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSaving(false);
-    }
+      handleClose();
+    } catch { /* silent */ } finally { setSaving(false); }
   };
 
   const copyLink = () => {
-    navigator.clipboard.writeText(file.shareUrl).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    navigator.clipboard.writeText(file.shareUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   };
 
+  const panelAnim = closing
+    ? 'settingsModalOut 190ms ease-in both'
+    : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both';
+  const backdropAnim = closing
+    ? 'backdropOut 190ms ease both'
+    : 'backdropIn 220ms ease both';
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 480, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 22px 16px', borderBottom: '1px solid #f1ecf6' }}>
-          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>Edit file</div>
-          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#F9FAFB'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+    <div onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: backdropAnim }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 560, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', animation: panelAnim, overflow: 'hidden' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 20px 14px', borderBottom: '1px solid #f1ecf6', flexShrink: 0 }}>
+          <FileBadge mime={file.mimeType} size={36} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.title || file.name}</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 1 }}>{fmtSize(file.size)} · {fmtDate(file.createdAt)}</div>
+          </div>
+          <button onClick={handleClose} style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#f1ecf6')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
             <Icon name="close" size={18} color="#787584" />
           </button>
         </div>
 
-        <div style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Title */}
-          <div>
-            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }}>
-              Share title <span style={{ fontWeight: 400, color: '#b0acbe', textTransform: 'none', letterSpacing: 0 }}>(optional)</span>
-            </label>
-            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Give this share a title…"
-              style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 12px', outline: 'none', boxSizing: 'border-box' }} />
-          </div>
+        {/* Preview area */}
+        <div style={{ background: '#f7f4fc', borderBottom: '1px solid #f1ecf6', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 220, maxHeight: 300, overflow: 'hidden', flexShrink: 0, position: 'relative' }}>
+          {previewLoading && canPreview ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 28, height: 28, border: '3px solid #e8e4f0', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 600ms linear infinite' }} />
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>Loading preview…</span>
+            </div>
+          ) : previewUrl && isImage ? (
+            <img src={previewUrl} alt={file.name} style={{ maxWidth: '100%', maxHeight: 300, objectFit: 'contain', display: 'block', animation: 'sectionFadeUp 280ms ease both' }} />
+          ) : previewUrl && isVideo ? (
+            <video src={previewUrl} controls style={{ maxWidth: '100%', maxHeight: 300, display: 'block', borderRadius: 0 }} />
+          ) : previewUrl && isPdf ? (
+            <iframe src={previewUrl} title={file.name} style={{ width: '100%', height: 280, border: 'none', display: 'block' }} />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: 32, animation: 'sectionFadeUp 280ms ease both' }}>
+              <FileBadge mime={file.mimeType} size={72} />
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#787584', textAlign: 'center' }}>{file.name}</div>
+            </div>
+          )}
+        </div>
 
-          {/* Name */}
-          <div>
-            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }}>File name</label>
-            <input value={name} onChange={e => setName(e.target.value)}
-              style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 12px', outline: 'none', boxSizing: 'border-box' }} />
+        {/* Edit form */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {/* Share link (prominent, at top) */}
+          {isPublic && (
+            <div style={{ background: '#F5F3FF', borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Icon name="link" size={16} color="#5e4dbb" />
+              <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#5e4dbb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.shareUrl}</span>
+              <button onClick={copyLink}
+                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: copied ? '#10B981' : '#5e4dbb', background: copied ? '#f0fdf4' : '#fff', border: `1px solid ${copied ? '#a7f3d0' : '#c4b5fd'}`, borderRadius: 7, padding: '5px 12px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, transition: 'all 150ms' }}>
+                <Icon name={copied ? 'check' : 'content_copy'} size={12} color={copied ? '#10B981' : '#5e4dbb'} />
+                {copied ? 'Copied!' : 'Copy link'}
+              </button>
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {/* Share title */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Share title</label>
+              <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Optional title…"
+                style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 11px', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+            {/* File name */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em' }}>File name</label>
+              <input value={name} onChange={e => setName(e.target.value)}
+                style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 11px', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
           </div>
 
           {/* Visibility */}
-          <div>
-            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }}>Visibility</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Visibility</label>
             <div style={{ display: 'flex', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 3, gap: 2 }}>
               {(['Public', 'Private'] as const).map(v => (
                 <button key={v} onClick={() => setIsPublic(v === 'Public')}
-                  style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: (v === 'Public') === isPublic ? '#5e4dbb' : '#787584', background: (v === 'Public') === isPublic ? '#fff' : 'transparent', border: 'none', borderRadius: 6, padding: '7px', cursor: 'pointer', transition: 'all 150ms', boxShadow: (v === 'Public') === isPublic ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: (v === 'Public') === isPublic ? '#5e4dbb' : '#787584', background: (v === 'Public') === isPublic ? '#fff' : 'transparent', border: 'none', borderRadius: 6, padding: '7px', cursor: 'pointer', transition: 'all 150ms', boxShadow: (v === 'Public') === isPublic ? '0 1px 3px rgba(0,0,0,0.1)' : 'none' }}>
                   <Icon name={v === 'Public' ? 'public' : 'lock'} size={13} color={(v === 'Public') === isPublic ? '#5e4dbb' : '#b0acbe'} /> {v}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Share link */}
-          {isPublic && (
-            <div>
-              <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }}>Share link</label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <div style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.shareUrl}</div>
-                <button onClick={copyLink}
-                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: copied ? '#10B981' : '#5e4dbb', background: copied ? '#f0fdf4' : '#F5F3FF', border: 'none', borderRadius: 8, padding: '9px 14px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}
-                  onMouseEnter={e => { if (!copied) e.currentTarget.style.background = '#ede9ff'; }}
-                  onMouseLeave={e => { if (!copied) e.currentTarget.style.background = '#F5F3FF'; }}>
-                  <Icon name={copied ? 'check' : 'content_copy'} size={14} color={copied ? '#10B981' : '#5e4dbb'} />
-                  {copied ? 'Copied!' : 'Copy'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Password */}
-          <div>
-            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }}>
-              Password {file.hasPassword && <span style={{ fontWeight: 400, color: '#10B981', textTransform: 'none', letterSpacing: 0 }}>· currently set</span>}
-            </label>
-            {file.hasPassword && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: 'pointer' }}>
-                <input type="checkbox" checked={clearPw} onChange={e => setClearPw(e.target.checked)} />
-                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>Remove password</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {/* Password */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Password {file.hasPassword && <span style={{ color: '#10B981', textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>· set</span>}
               </label>
-            )}
-            {!clearPw && (
-              <input value={password} onChange={e => setPassword(e.target.value)} placeholder={file.hasPassword ? 'Enter new password to change' : 'Leave blank for no password'} type="password"
-                style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 12px', outline: 'none', boxSizing: 'border-box' }} />
-            )}
-          </div>
-
-          {/* Expiry */}
-          <div style={{ position: 'relative' }}>
-            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 6 }}>Expires</label>
-            <button
-              onClick={() => setShowExpiryCal(s => !s)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 12px', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: expiresAt ? '#1c1b22' : '#b0acbe', textAlign: 'left' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#E5E7EB'; }}
-            >
-              <Icon name="calendar_today" size={14} color={expiresAt ? '#5e4dbb' : '#b0acbe'} />
-              <span style={{ flex: 1 }}>{expiresAt ? new Date(expiresAt + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Pick a date…'}</span>
-              {expiresAt && (
-                <span onClick={e => { e.stopPropagation(); setExpiresAt(''); setShowExpiryCal(false); }} style={{ color: '#b0acbe', lineHeight: 1, cursor: 'pointer', padding: '0 2px' }}>×</span>
+              {file.hasPassword && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginBottom: 2 }}>
+                  <input type="checkbox" checked={clearPw} onChange={e => setClearPw(e.target.checked)} />
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>Remove</span>
+                </label>
               )}
-            </button>
-            {showExpiryCal && (
-              <div style={{ position: 'absolute', bottom: 'calc(100% + 4px)', left: 0, zIndex: 500 }}>
-                <CalendarPicker
-                  value={expiresAt}
-                  onChange={d => { setExpiresAt(d); setShowExpiryCal(false); }}
-                  onClear={() => { setExpiresAt(''); setShowExpiryCal(false); }}
-                />
-              </div>
-            )}
+              {!clearPw && (
+                <input value={password} onChange={e => setPassword(e.target.value)} placeholder={file.hasPassword ? 'Change password…' : 'No password'} type="password"
+                  style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 11px', outline: 'none', boxSizing: 'border-box' }} />
+              )}
+            </div>
+            {/* Expiry */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, position: 'relative' }}>
+              <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Expires</label>
+              <button onClick={() => setShowExpiryCal(s => !s)}
+                style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 11px', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: expiresAt ? '#1c1b22' : '#b0acbe', textAlign: 'left' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#E5E7EB'; }}>
+                <Icon name="calendar_today" size={13} color={expiresAt ? '#5e4dbb' : '#b0acbe'} />
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{expiresAt ? new Date(expiresAt + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No expiry'}</span>
+                {expiresAt && <span onClick={e => { e.stopPropagation(); setExpiresAt(''); setShowExpiryCal(false); }} style={{ color: '#b0acbe', cursor: 'pointer' }}>×</span>}
+              </button>
+              {showExpiryCal && (
+                <div style={{ position: 'absolute', bottom: 'calc(100% + 4px)', right: 0, zIndex: 500 }}>
+                  <CalendarPicker value={expiresAt} onChange={d => { setExpiresAt(d); setShowExpiryCal(false); }} onClear={() => { setExpiresAt(''); setShowExpiryCal(false); }} />
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, padding: '14px 22px 20px' }}>
-          <button onClick={onClose} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#787584', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 10, padding: '10px', cursor: 'pointer' }}
+        {/* Footer */}
+        <div style={{ display: 'flex', gap: 10, padding: '12px 20px 18px', borderTop: '1px solid #f1ecf6', flexShrink: 0 }}>
+          <button onClick={handleClose}
+            style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#787584', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 10, padding: '10px', cursor: 'pointer' }}
             onMouseEnter={e => { e.currentTarget.style.background = '#f1ecf6'; }}
             onMouseLeave={e => { e.currentTarget.style.background = '#F9FAFB'; }}>
             Cancel
           </button>
           <button onClick={save} disabled={saving}
-            style={{ flex: 2, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#fff', background: saving ? '#9d8dff' : '#5e4dbb', border: 'none', borderRadius: 10, padding: '10px', cursor: saving ? 'not-allowed' : 'pointer' }}
+            style={{ flex: 2, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: saving ? '#9d8dff' : '#5e4dbb', border: 'none', borderRadius: 10, padding: '10px', cursor: saving ? 'not-allowed' : 'pointer' }}
             onMouseEnter={e => { if (!saving) e.currentTarget.style.background = '#4f3fa8'; }}
             onMouseLeave={e => { if (!saving) e.currentTarget.style.background = '#5e4dbb'; }}>
             {saving ? 'Saving…' : 'Save changes'}
@@ -446,8 +486,8 @@ function RecentCard({ file, onEdit, onDelete }: { file: SharedFile; onEdit: () =
   };
 
   return (
-    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ background: '#F9FAFB', border: `1px solid ${hov ? '#c4b5fd' : '#E5E7EB'}`, borderRadius: 14, padding: '16px', display: 'flex', flexDirection: 'column', gap: 12, transition: 'border-color 150ms', cursor: 'default', flex: 1, minWidth: 0 }}>
+    <div onClick={() => onEdit()} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{ background: '#F9FAFB', border: `1px solid ${hov ? '#c4b5fd' : '#E5E7EB'}`, borderRadius: 14, padding: '16px', display: 'flex', flexDirection: 'column', gap: 12, transition: 'border-color 150ms', cursor: 'pointer', flex: 1, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
         <FileBadge mime={file.mimeType} size={44} />
         <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: file.isPublic ? '#5e4dbb' : '#787584', background: file.isPublic ? '#F5F3FF' : '#F9FAFB', border: `1px solid ${file.isPublic ? '#c4b5fd' : '#E5E7EB'}`, borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>
@@ -673,7 +713,10 @@ export default function FilesScreen() {
             ) : (
               files.map((f, i) => (
                 <div key={f.id}
-                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 18px', borderBottom: i < files.length - 1 ? '1px solid #f1ecf6' : 'none' }}>
+                  onClick={() => setEditTarget(f)}
+                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = '#f7f4fc'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = ''; }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 18px', borderBottom: i < files.length - 1 ? '1px solid #f1ecf6' : 'none', cursor: 'pointer', transition: 'background 120ms' }}>
                   <FileBadge mime={f.mimeType} size={38} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
@@ -692,7 +735,7 @@ export default function FilesScreen() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
                     {f.isPublic && (
-                      <button onClick={() => copyLink(f)}
+                      <button onClick={e => { e.stopPropagation(); copyLink(f); }}
                         style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: copiedId === f.id ? '#10B981' : '#5e4dbb', background: copiedId === f.id ? '#f0fdf4' : '#F5F3FF', border: 'none', borderRadius: 7, padding: '6px 10px', cursor: 'pointer' }}
                         onMouseEnter={e => { if (copiedId !== f.id) e.currentTarget.style.background = '#ede9ff'; }}
                         onMouseLeave={e => { if (copiedId !== f.id) e.currentTarget.style.background = '#F5F3FF'; }}>
@@ -700,13 +743,13 @@ export default function FilesScreen() {
                         {copiedId === f.id ? 'Copied!' : 'Share'}
                       </button>
                     )}
-                    <button onClick={() => setEditTarget(f)}
+                    <button onClick={e => { e.stopPropagation(); setEditTarget(f); }}
                       style={{ width: 30, height: 30, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                       onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                       <Icon name="edit" size={15} color="#787584" />
                     </button>
-                    <button onClick={() => setDeleteTarget(f)}
+                    <button onClick={e => { e.stopPropagation(); setDeleteTarget(f); }}
                       style={{ width: 30, height: 30, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                       onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
@@ -723,8 +766,8 @@ export default function FilesScreen() {
       {/* Upload wizard */}
       {uploadOpen && <UploadWizard onClose={() => setUploadOpen(false)} onUploaded={handleUploaded} />}
 
-      {/* Edit modal */}
-      {editTarget && <EditModal file={editTarget} onClose={() => setEditTarget(null)} onSaved={handleSaved} />}
+      {/* File detail modal */}
+      {editTarget && <FileDetailModal file={editTarget} onClose={() => setEditTarget(null)} onSaved={handleSaved} />}
 
       {/* Delete confirmation */}
       {deleteTarget && (
