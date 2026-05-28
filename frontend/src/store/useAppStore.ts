@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AppState, TrashedTask, TrashedList, TrashedFolder } from '../types';
+import useWorkspaceStore from './useWorkspaceStore';
 import {
   apiGetTasks,
   apiGetLists,
@@ -69,7 +70,7 @@ const useAppStore = create<AppState>()(
       },
 
       addFolder: (folder) => {
-        const { currentWorkspaceId } = (require('./useWorkspaceStore').default as typeof import('./useWorkspaceStore').default).getState();
+        const { currentWorkspaceId } = useWorkspaceStore.getState();
         const folderWithDefaults = {
           ...folder,
           isPublic: folder.isPublic ?? true,
