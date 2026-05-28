@@ -51,6 +51,9 @@ const rowStyle: React.CSSProperties = {
   padding: '14px 18px',
 };
 
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
 export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   const { username, fullName, profileImage, isAdmin, totpEnabled, setProfile, setTotpEnabled } = useAuthStore();
 
@@ -60,44 +63,68 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
     apiGetFeatureFlags().then(r => setTwoFAFeatureEnabled(r.twoFAEnabled)).catch(() => {});
   }, []);
 
-  // Profile image
+  // Profile image upload wizard
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [imageUploading, setImageUploading] = useState(false);
-  const [imageError, setImageError] = useState('');
+  const [uploadWizardOpen, setUploadWizardOpen] = useState(false);
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [imgFileError, setImgFileError] = useState<string | null>(null);
+  const [imgSaving, setImgSaving] = useState(false);
   const [avatarHover, setAvatarHover] = useState(false);
+  const [removeLoading, setRemoveLoading] = useState(false);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 512 * 1024) { setImageError('Image must be 512 KB or smaller.'); return; }
-    setImageUploading(true);
-    setImageError('');
+  const processFile = (file: File) => {
+    setImgFileError(null);
+    if (!ACCEPTED_TYPES.includes(file.type)) { setImgFileError('Please upload a JPG, PNG, GIF, or WebP image.'); return; }
+    if (file.size > MAX_IMAGE_BYTES) { setImgFileError('Image must be 2 MB or smaller.'); return; }
     const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const dataUrl = ev.target?.result as string;
-      try {
-        const res = await apiUploadProfileImage(dataUrl);
-        setProfile({ profileImage: res.user.profileImage });
-      } catch {
-        setImageError('Failed to upload. Please try again.');
-      } finally {
-        setImageUploading(false);
-      }
-    };
+    reader.onload = (e) => setPendingImage(e.target?.result as string);
     reader.readAsDataURL(file);
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
     e.target.value = '';
   };
 
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
+  };
+
+  const closeUploadWizard = () => {
+    setUploadWizardOpen(false);
+    setPendingImage(null);
+    setImgFileError(null);
+    setDragOver(false);
+  };
+
+  const handleSaveImage = async () => {
+    if (!pendingImage) return;
+    setImgSaving(true);
+    try {
+      const res = await apiUploadProfileImage(pendingImage);
+      setProfile({ profileImage: res.user.profileImage });
+      closeUploadWizard();
+    } catch {
+      setImgFileError('Failed to save image. Please try again.');
+    } finally {
+      setImgSaving(false);
+    }
+  };
+
   const handleRemoveImage = async () => {
-    setImageUploading(true);
-    setImageError('');
+    setRemoveLoading(true);
     try {
       await apiUploadProfileImage(null);
       setProfile({ profileImage: null });
     } catch {
-      setImageError('Failed to remove image.');
+      // silently fail — image stays
     } finally {
-      setImageUploading(false);
+      setRemoveLoading(false);
     }
   };
 
@@ -265,14 +292,15 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                 {/* Avatar + identity */}
                 <div style={{ padding: '18px 18px', borderBottom: '1px solid #f1ecf6', display: 'flex', alignItems: 'center', gap: 16 }}>
                   {/* Avatar with upload overlay */}
-                  <div style={{ position: 'relative', flexShrink: 0 }}
+                  <div
+                    style={{ position: 'relative', flexShrink: 0, cursor: 'pointer' }}
                     onMouseEnter={() => setAvatarHover(true)}
                     onMouseLeave={() => setAvatarHover(false)}
+                    onClick={() => setUploadWizardOpen(true)}
+                    title="Upload profile photo"
                   >
                     <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg, #9d8dff 0%, #5e4dbb 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
-                      {imageUploading ? (
-                        <div style={{ width: 24, height: 24, border: '2.5px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 700ms linear infinite' }} />
-                      ) : profileImage ? (
+                      {profileImage ? (
                         <img src={profileImage} alt={username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (
                         <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 26, fontWeight: 700, color: '#fff' }}>
@@ -280,15 +308,9 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                         </span>
                       )}
                     </div>
-                    {/* Camera overlay */}
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={imageUploading}
-                      style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.42)', border: '2.5px solid rgba(255,255,255,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: avatarHover && !imageUploading ? 1 : 0, transition: 'opacity 150ms', zIndex: 1 }}
-                    >
-                      <Icon name="photo_camera" size={22} color="#fff" />
-                    </button>
-                    <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: 'none' }} onChange={handleImageUpload} />
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: avatarHover ? 1 : 0, transition: 'opacity 180ms', pointerEvents: 'none' }}>
+                      <Icon name="add" size={22} color="#fff" />
+                    </div>
                   </div>
 
                   {/* Name + role + username */}
@@ -302,15 +324,15 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                       </span>
                     </div>
                     <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>@{username}</div>
-                    {profileImage && !imageUploading && (
+                    {profileImage && (
                       <button
-                        onClick={handleRemoveImage}
-                        style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a', background: 'none', border: 'none', padding: '4px 0 0', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                        onClick={e => { e.stopPropagation(); handleRemoveImage(); }}
+                        disabled={removeLoading}
+                        style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a', background: 'none', border: 'none', padding: '4px 0 0', cursor: removeLoading ? 'wait' : 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }}
                         onMouseEnter={e => { e.currentTarget.style.color = '#991212'; }}
                         onMouseLeave={e => { e.currentTarget.style.color = '#ba1a1a'; }}
-                      >Remove photo</button>
+                      >{removeLoading ? 'Removing…' : 'Remove photo'}</button>
                     )}
-                    {imageError && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#ba1a1a', marginTop: 4 }}>{imageError}</div>}
                   </div>
                 </div>
 
@@ -610,6 +632,122 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
           </div>
         </div>
       </div>
+
+      {/* Profile Image Upload Wizard (nested modal) */}
+      {uploadWizardOpen && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.32)', backdropFilter: 'blur(6px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={e => { if (e.target === e.currentTarget) closeUploadWizard(); }}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 440, boxShadow: '0 12px 40px rgba(0,0,0,0.22)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 0' }}>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22' }}>
+                {pendingImage ? 'Preview' : 'Upload Profile Photo'}
+              </div>
+              <button
+                onClick={closeUploadWizard}
+                style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+              >
+                <Icon name="close" size={15} color="#484552" />
+              </button>
+            </div>
+
+            <div style={{ padding: '20px 24px 24px' }}>
+              {!pendingImage ? (
+                <>
+                  <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style={{ display: 'none' }} onChange={handleFileInput} />
+                  <div
+                    onDrop={handleDrop}
+                    onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={e => { e.preventDefault(); setDragOver(false); }}
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{ border: `2px dashed ${dragOver ? '#5e4dbb' : imgFileError ? '#ba1a1a' : '#e8e4f0'}`, borderRadius: 14, background: dragOver ? '#F5F3FF' : imgFileError ? '#fff5f5' : '#faf9ff', padding: '36px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'all 200ms', userSelect: 'none' }}
+                  >
+                    <div style={{ width: 48, height: 48, borderRadius: '50%', background: dragOver ? '#ede9ff' : '#f1ecf6', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 200ms' }}>
+                      <Icon name="upload" size={24} color={dragOver ? '#5e4dbb' : '#b0acbe'} />
+                    </div>
+                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: dragOver ? '#5e4dbb' : '#484552', textAlign: 'center' }}>
+                      {dragOver ? 'Drop to upload' : 'Drag & drop your photo'}
+                    </div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>or</div>
+                    <div
+                      style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 8, padding: '8px 20px', transition: 'background 150ms' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#ede9ff'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#F5F3FF'; }}
+                    >
+                      Select file
+                    </div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 2 }}>JPG, PNG, GIF or WebP · Max 2 MB</div>
+                  </div>
+
+                  {imgFileError && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '10px 14px', background: '#fff5f5', borderRadius: 8, border: '1px solid #ffdad6' }}>
+                      <Icon name="error" size={15} color="#ba1a1a" />
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a' }}>{imgFileError}</span>
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: 20 }}>
+                    <button
+                      onClick={closeUploadWizard}
+                      style={{ width: '100%', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                    <div style={{ width: 96, height: 96, borderRadius: '50%', overflow: 'hidden', boxShadow: '0 4px 16px rgba(94,77,187,0.25)' }}>
+                      <img src={pendingImage} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Looks good?</div>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 3 }}>This will be your profile photo.</div>
+                    </div>
+                  </div>
+
+                  {imgFileError && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, padding: '10px 14px', background: '#fff5f5', borderRadius: 8, border: '1px solid #ffdad6' }}>
+                      <Icon name="error" size={15} color="#ba1a1a" />
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a' }}>{imgFileError}</span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+                    <button
+                      onClick={() => { setPendingImage(null); setImgFileError(null); }}
+                      style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+                    >
+                      Choose different
+                    </button>
+                    <button
+                      onClick={handleSaveImage}
+                      disabled={imgSaving}
+                      style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: imgSaving ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '11px 0', cursor: imgSaving ? 'wait' : 'pointer', transition: 'background 150ms' }}
+                      onMouseEnter={e => { if (!imgSaving) e.currentTarget.style.background = '#4d3da8'; }}
+                      onMouseLeave={e => { if (!imgSaving) e.currentTarget.style.background = '#5e4dbb'; }}
+                    >
+                      {imgSaving ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 2FA Enable Wizard (nested modal) */}
       {twoFAOpen && <TwoFAWizardInline onClose={() => setTwoFAOpen(false)} onEnabled={() => setTotpEnabled(true)} />}
