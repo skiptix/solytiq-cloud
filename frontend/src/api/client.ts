@@ -281,6 +281,8 @@ export const apiUpdateAppSettingsAI = (data: { aiAssistantEnabled?: boolean; aiM
 
 // SSE — real-time sync
 let sseSource: EventSource | null = null;
+let sseReconnectDelay = 2000;
+const SSE_RECONNECT_MAX = 30000;
 
 export function connectSSE(onSync: (type: string) => void): void {
   if (sseSource) return;
@@ -288,6 +290,9 @@ export function connectSSE(onSync: (type: string) => void): void {
   if (!token) return;
   const url = `${BASE_URL}/events?token=${encodeURIComponent(token)}`;
   sseSource = new EventSource(url);
+  sseSource.onopen = () => {
+    sseReconnectDelay = 2000; // reset backoff on successful connection
+  };
   sseSource.addEventListener('sync', (e: MessageEvent) => {
     try {
       const { type } = JSON.parse(e.data) as { type: string };
@@ -297,14 +302,16 @@ export function connectSSE(onSync: (type: string) => void): void {
   sseSource.onerror = () => {
     sseSource?.close();
     sseSource = null;
-    // Browser's EventSource auto-reconnects; we clear our ref so it re-creates cleanly
-    setTimeout(() => connectSSE(onSync), 5000);
+    const delay = sseReconnectDelay;
+    sseReconnectDelay = Math.min(sseReconnectDelay * 2, SSE_RECONNECT_MAX);
+    setTimeout(() => connectSSE(onSync), delay);
   };
 }
 
 export function disconnectSSE(): void {
   sseSource?.close();
   sseSource = null;
+  sseReconnectDelay = 2000;
 }
 
 export function apiUploadFile(

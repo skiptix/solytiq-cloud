@@ -31,6 +31,7 @@ import {
 } from '../api/client';
 
 let trashCounter = Date.now();
+let loadingFromApi = false;
 
 const useAppStore = create<AppState>()(
   persist(
@@ -143,15 +144,27 @@ const useAppStore = create<AppState>()(
       },
 
       updateDashTask: (taskId, updates) => {
+        const prev = get().dashTasks.find((t) => t.id === taskId);
         set((state) => ({
           dashTasks: state.dashTasks.map((t) =>
             t.id === taskId ? { ...t, ...updates } : t
           ),
         }));
-        apiUpdateTask(taskId, updates).catch(() => {});
+        apiUpdateTask(taskId, updates).catch(() => {
+          if (prev) {
+            set((state) => ({
+              dashTasks: state.dashTasks.map((t) => (t.id === taskId ? prev : t)),
+            }));
+          }
+          get().loadFromApi();
+        });
       },
 
       updateListTask: (listId, taskId, updates) => {
+        const prevTask = get()
+          .lists.find((l) => l.id === listId)
+          ?.sections.flatMap((s) => s.tasks)
+          .find((t) => t.id === taskId);
         set((state) => ({
           lists: state.lists.map((list) => {
             if (list.id !== listId) return list;
@@ -172,7 +185,23 @@ const useAppStore = create<AppState>()(
             };
           }),
         }));
-        apiUpdateListTask(listId, taskId, updates).catch(() => {});
+        apiUpdateListTask(listId, taskId, updates).catch(() => {
+          if (prevTask) {
+            set((state) => ({
+              lists: state.lists.map((list) => {
+                if (list.id !== listId) return list;
+                return {
+                  ...list,
+                  sections: list.sections.map((sec) => ({
+                    ...sec,
+                    tasks: sec.tasks.map((t) => (t.id === taskId ? prevTask : t)),
+                  })),
+                };
+              }),
+            }));
+          }
+          get().loadFromApi();
+        });
       },
 
       deleteListTask: (listId, taskId) => {
@@ -189,7 +218,7 @@ const useAppStore = create<AppState>()(
                 }
           ),
         }));
-        apiDeleteListTask(listId, taskId).catch(() => {});
+        apiDeleteListTask(listId, taskId).catch(() => { get().loadFromApi(); });
       },
 
       addToTrash: (task, meta) => {
@@ -343,6 +372,8 @@ const useAppStore = create<AppState>()(
       },
 
       loadFromApi: async () => {
+        if (loadingFromApi) return;
+        loadingFromApi = true;
         try {
           const [tasksRes, listsRes, foldersRes, trashRes, trashListsRes, trashFoldersRes] = await Promise.all([
             apiGetTasks().catch(() => null),
@@ -386,6 +417,8 @@ const useAppStore = create<AppState>()(
           set(update as AppState);
         } catch {
           // fall back to persisted state
+        } finally {
+          loadingFromApi = false;
         }
       },
     }),
