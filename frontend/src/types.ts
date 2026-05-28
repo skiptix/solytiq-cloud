@@ -65,6 +65,7 @@ export interface Workspace {
   ownerId: string;
   role: 'owner' | 'member';
   createdAt: string;
+  memberCount?: number;
 }
 
 export interface WorkspaceMember {

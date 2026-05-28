@@ -150,7 +150,7 @@ function AppLayout() {
           lists={lists}
           onNavigate={navigate}
         />
-        <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', position: 'relative' }}>
           <Routes>
             <Route path="/dashboard" element={<DashboardScreen />} />
             <Route path="/folder/:folderId" element={<FolderDashboardScreen />} />
@@ -160,6 +160,27 @@ function AppLayout() {
             <Route path="/settings" element={<SettingsScreen />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
+
+          {currentWorkspaceId && lists.length === 0 && getActive() === 'dashboard' && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, zIndex: 10, background: 'rgba(247,242,252,0.90)', backdropFilter: 'blur(10px)', animation: 'backdropIn 220ms ease both' }}>
+              <div style={{ width: 72, height: 72, borderRadius: 20, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+                <span style={{ fontSize: 36 }}>📋</span>
+              </div>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22' }}>No lists yet</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#787584', textAlign: 'center', maxWidth: 280, lineHeight: 1.6 }}>
+                This workspace is empty. Create your first list to get started.
+              </div>
+              <button
+                onClick={() => setModal('add-list')}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 12, border: 'none', background: '#5e4dbb', color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 16px rgba(94,77,187,0.35)', transition: 'all 150ms' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#4d3da8')}
+                onMouseLeave={e => (e.currentTarget.style.background = '#5e4dbb')}
+              >
+                <span style={{ fontSize: 18, lineHeight: 1 }}>+</span>
+                Create List
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

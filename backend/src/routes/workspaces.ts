@@ -16,6 +16,7 @@ interface WorkspaceRow {
   owner_id: string;
   created_at: string;
   role?: string;
+  member_count?: string;
 }
 
 function sanitizeWorkspace(w: WorkspaceRow) {
@@ -29,6 +30,7 @@ function sanitizeWorkspace(w: WorkspaceRow) {
     ownerId:     w.owner_id,
     role:        (w.role ?? 'member') as 'owner' | 'member',
     createdAt:   w.created_at,
+    memberCount: w.member_count !== undefined ? parseInt(w.member_count, 10) : undefined,
   };
 }
 
@@ -36,7 +38,8 @@ function sanitizeWorkspace(w: WorkspaceRow) {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const rows = await query<WorkspaceRow>(
-      `SELECT w.*, wm.role
+      `SELECT w.*, wm.role,
+              (SELECT COUNT(*) FROM workspace_members wm2 WHERE wm2.workspace_id = w.id) AS member_count
        FROM workspaces w
        LEFT JOIN workspace_members wm ON w.id = wm.workspace_id AND wm.user_id = $1
        WHERE wm.user_id = $1 OR w.visibility = 'public'

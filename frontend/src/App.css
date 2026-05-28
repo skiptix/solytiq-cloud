@@ -182,3 +182,5 @@
     border-right-color: var(--border);
   }
 }
+
+@keyframes spin { to { transform: rotate(360deg); } }
