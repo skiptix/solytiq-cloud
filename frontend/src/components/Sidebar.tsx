@@ -834,7 +834,11 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
               </div>
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ws.name}</div>
-                {ws.visibility === 'public' && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe' }}>Public</div>}
+                {(() => {
+                if (ws.visibility === 'public') return <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe' }}>Public</div>;
+                if ((ws.memberCount ?? 1) > 1) return <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe' }}>Shared</div>;
+                return <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe' }}>Private</div>;
+              })()}
               </div>
               {ws.id === currentWorkspaceId && <Icon name="check" size={14} color="#5e4dbb" />}
             </button>
