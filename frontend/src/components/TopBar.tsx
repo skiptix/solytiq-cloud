@@ -4,6 +4,7 @@ import type { Task, List } from '../types';
 import Icon from './Icon';
 import useAuthStore from '../store/useAuthStore';
 import { apiUpdateProfile, apiUploadProfileImage } from '../api/client';
+import UserSettingsModal from '../modals/UserSettingsModal';
 
 interface TopBarProps {
   tasks: Task[];
@@ -55,6 +56,7 @@ export default function TopBar({ tasks, lists, onNavigate }: TopBarProps) {
   const [editSaving, setEditSaving] = useState(false);
 
   // Upload wizard state
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -381,8 +383,17 @@ export default function TopBar({ tasks, lists, onNavigate }: TopBarProps) {
                   {renderField('Email Address', 'email', email, 'email')}
                 </div>
 
-                {/* Sign Out */}
-                <div style={{ padding: '12px 16px' }}>
+                {/* Account Settings + Sign Out */}
+                <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <button
+                    onClick={() => { setProfileOpen(false); setSettingsOpen(true); }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: '1.5px solid #e0d9ff', borderRadius: 8, padding: '9px 0', cursor: 'pointer', transition: 'all 150ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#ede9ff'; e.currentTarget.style.borderColor = '#c4b8f0'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.borderColor = '#e0d9ff'; }}
+                  >
+                    <Icon name="manage_accounts" size={15} color="#5e4dbb" />
+                    Account Settings
+                  </button>
                   <button
                     onClick={handleSignOut}
                     style={{ width: '100%', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#ba1a1a', background: '#fff5f5', border: '1.5px solid #ffdad6', borderRadius: 8, padding: '9px 0', cursor: 'pointer', transition: 'all 150ms' }}
@@ -397,6 +408,9 @@ export default function TopBar({ tasks, lists, onNavigate }: TopBarProps) {
           </div>
         </div>
       </header>
+
+      {/* User Settings Modal */}
+      {settingsOpen && <UserSettingsModal onClose={() => setSettingsOpen(false)} />}
 
       {/* Profile Image Upload Wizard */}
       {uploadOpen && (

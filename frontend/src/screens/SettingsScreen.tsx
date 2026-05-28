@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import useAIStore from '../store/useAIStore';
-import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, api2FADisable } from '../api/client';
+import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags } from '../api/client';
 import Icon from '../components/Icon';
-import TwoFAWizard from '../modals/TwoFAWizard';
 
 interface UserEntry {
   id: string;
@@ -44,7 +43,7 @@ function UserAvatar({ name, username, profileImage, size = 36 }: { name: string 
 
 export default function SettingsScreen() {
   const navigate = useNavigate();
-  const { isAdmin, userId, totpEnabled, setTotpEnabled } = useAuthStore();
+  const { isAdmin, userId } = useAuthStore();
   const [nukeStep, setNukeStep] = useState(0);
   const [nukeText, setNukeText] = useState('');
   const [nukePw, setNukePw] = useState('');
@@ -106,21 +105,10 @@ export default function SettingsScreen() {
   const [aiSaved, setAiSaved] = useState(false);
   const [aiLoaded, setAiLoaded] = useState(false);
 
-  // 2FA state
-  const [twoFAOpen, setTwoFAOpen] = useState(false);
-  const [disableTwoFAOpen, setDisableTwoFAOpen] = useState(false);
-  const [disableOtp, setDisableOtp] = useState(Array(6).fill(''));
-  const [disableLoading, setDisableLoading] = useState(false);
-  const [disableError, setDisableError] = useState('');
-  const [disableShake, setDisableShake] = useState(false);
-
-  const dr0 = useRef<HTMLInputElement>(null);
-  const dr1 = useRef<HTMLInputElement>(null);
-  const dr2 = useRef<HTMLInputElement>(null);
-  const dr3 = useRef<HTMLInputElement>(null);
-  const dr4 = useRef<HTMLInputElement>(null);
-  const dr5 = useRef<HTMLInputElement>(null);
-  const disableOtpRefs = [dr0, dr1, dr2, dr3, dr4, dr5];
+  // 2FA feature flag (admin only)
+  const [twoFAFeatureEnabled, setTwoFAFeatureEnabled] = useState(true);
+  const [twoFAFeatureSaving, setTwoFAFeatureSaving] = useState(false);
+  const [twoFAFeatureSaved, setTwoFAFeatureSaved] = useState(false);
 
   const loadUsers = useCallback(async () => {
     if (!isAdmin) return;
@@ -150,6 +138,7 @@ export default function SettingsScreen() {
       .then(res => {
         const bytes = parseInt(res.settings['storage_quota_per_user'] ?? '0', 10);
         setQuotaGb(bytes > 0 ? (bytes / (1024 ** 3)).toFixed(0) : '15');
+        setTwoFAFeatureEnabled(res.settings['two_fa_feature_enabled'] !== 'false');
       })
       .catch(() => setQuotaGb('15'));
   }, [isAdmin]);
@@ -332,56 +321,18 @@ export default function SettingsScreen() {
     }
   };
 
-  const closeDisable2FA = () => {
-    setDisableTwoFAOpen(false);
-    setDisableOtp(Array(6).fill(''));
-    setDisableError('');
-  };
-
-  const handleDisableOtpChange = (i: number, raw: string) => {
-    const digit = raw.replace(/\D/g, '').slice(-1);
-    setDisableOtp(prev => { const next = [...prev]; next[i] = digit; return next; });
-    if (digit && i < 5) disableOtpRefs[i + 1].current?.focus();
-  };
-
-  const handleDisableOtpKey = (i: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backspace') {
-      if (!disableOtp[i] && i > 0) {
-        setDisableOtp(prev => { const next = [...prev]; next[i - 1] = ''; return next; });
-        disableOtpRefs[i - 1].current?.focus();
-      } else {
-        setDisableOtp(prev => { const next = [...prev]; next[i] = ''; return next; });
-      }
-    } else if (e.key === 'Enter') {
-      if (disableOtp.join('').length === 6) handleDisable2FA();
-    }
-  };
-
-  const handleDisableOtpPaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const digits = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6).split('');
-    const next = Array(6).fill('');
-    digits.forEach((d, i) => { next[i] = d; });
-    setDisableOtp(next);
-    disableOtpRefs[Math.min(digits.length, 5)].current?.focus();
-  };
-
-  const handleDisable2FA = async () => {
-    const code = disableOtp.join('');
-    if (code.length !== 6) return;
-    setDisableLoading(true);
-    setDisableError('');
+  const handleSaveTwoFAFeature = async (enabled: boolean) => {
+    setTwoFAFeatureEnabled(enabled);
+    setTwoFAFeatureSaving(true);
+    setTwoFAFeatureSaved(false);
     try {
-      await api2FADisable(code);
-      setTotpEnabled(false);
-      closeDisable2FA();
+      await apiUpdateFeatureFlags({ twoFAFeatureEnabled: enabled });
+      setTwoFAFeatureSaved(true);
+      setTimeout(() => setTwoFAFeatureSaved(false), 2500);
     } catch {
-      setDisableError('Invalid code. Please try again.');
-      setDisableOtp(Array(6).fill(''));
-      setDisableShake(true);
-      setTimeout(() => { setDisableShake(false); dr0.current?.focus(); }, 600);
+      setTwoFAFeatureEnabled(!enabled); // rollback
     } finally {
-      setDisableLoading(false);
+      setTwoFAFeatureSaving(false);
     }
   };
 
@@ -414,52 +365,6 @@ export default function SettingsScreen() {
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
       <div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 28, width: '100%' }}>
         <h1 style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 28, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.02em' }}>Settings</h1>
-
-        {/* Security — all users */}
-        <div>
-          {sectionLabel('Security')}
-          <div style={card}>
-            <div style={row}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: totpEnabled ? 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)' : '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Icon name="shield_lock" size={18} color={totpEnabled ? '#10B981' : '#5e4dbb'} />
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Two-Factor Authentication</div>
-                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 700, color: totpEnabled ? '#10B981' : '#b0acbe', background: totpEnabled ? 'rgba(16,185,129,0.10)' : '#f1ecf6', borderRadius: 9999, padding: '2px 8px', textTransform: 'uppercase' as const, letterSpacing: '0.04em', flexShrink: 0 }}>
-                      {totpEnabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                  </div>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>
-                    {totpEnabled ? 'Your account is protected with an authenticator app.' : 'Add an extra layer of security to your account.'}
-                  </div>
-                </div>
-              </div>
-              <div style={{ flexShrink: 0 }}>
-                {totpEnabled ? (
-                  <button
-                    onClick={() => { setDisableTwoFAOpen(true); setDisableOtp(Array(6).fill('')); setDisableError(''); }}
-                    style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#ba1a1a', background: '#fff5f5', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', transition: 'background 150ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#ffdad6'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#fff5f5'; }}
-                  >
-                    Disable
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setTwoFAOpen(true)}
-                    style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', transition: 'background 150ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#ede9ff'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#F5F3FF'; }}
-                  >
-                    Enable 2FA
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Users — admin only */}
         {isAdmin && (
@@ -745,6 +650,38 @@ export default function SettingsScreen() {
                   >
                     <Icon name={aiSaved ? 'check' : 'save'} size={14} color={aiSaved ? '#10B981' : '#fff'} />
                     {aiSaved ? 'Saved' : aiSaving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 2FA Feature Flag — admin only */}
+        {isAdmin && (
+          <div>
+            {sectionLabel('Security Features')}
+            <div style={card}>
+              <div style={{ ...row }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icon name="shield_lock" size={18} color="#5e4dbb" />
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Two-Factor Authentication</div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>
+                      Allow users to set up 2FA on their accounts via Account Settings.
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                  {twoFAFeatureSaved && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#10B981' }}>Saved</span>}
+                  <button
+                    onClick={() => handleSaveTwoFAFeature(!twoFAFeatureEnabled)}
+                    disabled={twoFAFeatureSaving}
+                    style={{ width: 44, height: 24, borderRadius: 12, background: twoFAFeatureEnabled ? '#5e4dbb' : '#e8e4f0', border: 'none', cursor: twoFAFeatureSaving ? 'wait' : 'pointer', position: 'relative', flexShrink: 0, transition: 'background 200ms' }}
+                  >
+                    <span style={{ position: 'absolute', top: 3, left: twoFAFeatureEnabled ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.18)', transition: 'left 200ms' }} />
                   </button>
                 </div>
               </div>
@@ -1182,80 +1119,6 @@ export default function SettingsScreen() {
                 onMouseLeave={e => { if (!deleting) e.currentTarget.style.background = '#ba1a1a'; }}
               >
                 {deleting ? 'Removing…' : 'Remove User'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 2FA Enable Wizard */}
-      {twoFAOpen && (
-        <TwoFAWizard
-          onClose={() => setTwoFAOpen(false)}
-          onEnabled={() => setTotpEnabled(true)}
-        />
-      )}
-
-      {/* Disable 2FA Modal */}
-      {disableTwoFAOpen && (
-        <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-          onClick={e => { if (e.target === e.currentTarget) closeDisable2FA(); }}
-        >
-          <div
-            style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 380, padding: '28px 28px 24px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: disableShake ? 'shake 400ms ease-in-out' : 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div style={{ width: 48, height: 48, borderRadius: 14, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-              <Icon name="shield_lock" size={24} color="#5e4dbb" />
-            </div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 18, fontWeight: 700, color: '#1c1b22', marginBottom: 6 }}>Disable Two-Factor Auth</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.6, marginBottom: 22 }}>
-              Enter the 6-digit code from your authenticator app to confirm.
-            </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 16 }}>
-              {disableOtp.map((digit, i) => (
-                <input
-                  key={i}
-                  ref={disableOtpRefs[i]}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={digit}
-                  onChange={e => handleDisableOtpChange(i, e.target.value)}
-                  onKeyDown={e => handleDisableOtpKey(i, e)}
-                  onPaste={i === 0 ? handleDisableOtpPaste : undefined}
-                  style={{
-                    width: 44, height: 52, textAlign: 'center',
-                    fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700,
-                    color: '#1c1b22', background: digit ? '#F5F3FF' : '#F9FAFB',
-                    border: `2px solid ${digit ? '#5e4dbb' : '#E5E7EB'}`,
-                    borderRadius: 10, outline: 'none', transition: 'border-color 150ms, background 150ms',
-                    caretColor: 'transparent',
-                  }}
-                />
-              ))}
-            </div>
-            {disableError && (
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a', textAlign: 'center', marginBottom: 16 }}>{disableError}</div>
-            )}
-            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-              <button
-                onClick={closeDisable2FA}
-                style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDisable2FA}
-                disabled={disableLoading || disableOtp.join('').length !== 6}
-                style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: disableLoading || disableOtp.join('').length !== 6 ? '#c9c4d5' : '#ba1a1a', border: 'none', borderRadius: 8, padding: '11px 0', cursor: disableLoading || disableOtp.join('').length !== 6 ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}
-                onMouseEnter={e => { if (!disableLoading && disableOtp.join('').length === 6) e.currentTarget.style.background = '#991212'; }}
-                onMouseLeave={e => { if (!disableLoading && disableOtp.join('').length === 6) e.currentTarget.style.background = '#ba1a1a'; }}
-              >
-                {disableLoading ? 'Disabling…' : 'Disable 2FA'}
               </button>
             </div>
           </div>
