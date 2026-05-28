@@ -3,6 +3,7 @@ import Icon from '../components/Icon';
 import useAuthStore from '../store/useAuthStore';
 import {
   apiUpdateProfile,
+  apiUploadProfileImage,
   apiChangePassword,
   apiGetFeatureFlags,
   api2FASetup,
@@ -51,13 +52,54 @@ const rowStyle: React.CSSProperties = {
 };
 
 export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
-  const { username, fullName, totpEnabled, setProfile, setTotpEnabled } = useAuthStore();
+  const { username, fullName, profileImage, isAdmin, totpEnabled, setProfile, setTotpEnabled } = useAuthStore();
 
   // Feature flag
   const [twoFAFeatureEnabled, setTwoFAFeatureEnabled] = useState(true);
   useEffect(() => {
     apiGetFeatureFlags().then(r => setTwoFAFeatureEnabled(r.twoFAEnabled)).catch(() => {});
   }, []);
+
+  // Profile image
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageError, setImageError] = useState('');
+  const [avatarHover, setAvatarHover] = useState(false);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 512 * 1024) { setImageError('Image must be 512 KB or smaller.'); return; }
+    setImageUploading(true);
+    setImageError('');
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target?.result as string;
+      try {
+        const res = await apiUploadProfileImage(dataUrl);
+        setProfile({ profileImage: res.user.profileImage });
+      } catch {
+        setImageError('Failed to upload. Please try again.');
+      } finally {
+        setImageUploading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleRemoveImage = async () => {
+    setImageUploading(true);
+    setImageError('');
+    try {
+      await apiUploadProfileImage(null);
+      setProfile({ profileImage: null });
+    } catch {
+      setImageError('Failed to remove image.');
+    } finally {
+      setImageUploading(false);
+    }
+  };
 
   // Profile editing
   const [nameValue, setNameValue] = useState(fullName || username);
@@ -220,6 +262,58 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
             <div>
               {sectionLabel('Profile')}
               <div style={card}>
+                {/* Avatar + identity */}
+                <div style={{ padding: '18px 18px', borderBottom: '1px solid #f1ecf6', display: 'flex', alignItems: 'center', gap: 16 }}>
+                  {/* Avatar with upload overlay */}
+                  <div style={{ position: 'relative', flexShrink: 0 }}
+                    onMouseEnter={() => setAvatarHover(true)}
+                    onMouseLeave={() => setAvatarHover(false)}
+                  >
+                    <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg, #9d8dff 0%, #5e4dbb 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                      {imageUploading ? (
+                        <div style={{ width: 24, height: 24, border: '2.5px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 700ms linear infinite' }} />
+                      ) : profileImage ? (
+                        <img src={profileImage} alt={username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 26, fontWeight: 700, color: '#fff' }}>
+                          {(fullName || username || 'U').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
+                        </span>
+                      )}
+                    </div>
+                    {/* Camera overlay */}
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={imageUploading}
+                      style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.42)', border: '2.5px solid rgba(255,255,255,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: avatarHover && !imageUploading ? 1 : 0, transition: 'opacity 150ms', zIndex: 1 }}
+                    >
+                      <Icon name="photo_camera" size={22} color="#fff" />
+                    </button>
+                    <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: 'none' }} onChange={handleImageUpload} />
+                  </div>
+
+                  {/* Name + role + username */}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
+                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {fullName || username}
+                      </div>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 700, color: isAdmin ? '#5e4dbb' : '#787584', background: isAdmin ? '#F5F3FF' : '#F3F4F6', borderRadius: 9999, padding: '2px 8px', textTransform: 'uppercase' as const, letterSpacing: '0.05em', flexShrink: 0 }}>
+                        {isAdmin ? 'Admin' : 'Member'}
+                      </span>
+                    </div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>@{username}</div>
+                    {profileImage && !imageUploading && (
+                      <button
+                        onClick={handleRemoveImage}
+                        style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a', background: 'none', border: 'none', padding: '4px 0 0', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                        onMouseEnter={e => { e.currentTarget.style.color = '#991212'; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = '#ba1a1a'; }}
+                      >Remove photo</button>
+                    )}
+                    {imageError && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#ba1a1a', marginTop: 4 }}>{imageError}</div>}
+                  </div>
+                </div>
+
                 {/* Full Name */}
                 <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1ecf6' }}>
                   <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Full Name</div>
@@ -241,7 +335,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                         onMouseEnter={e => { if (!nameSaving && !nameSaved) e.currentTarget.style.background = '#ede9ff'; }}
                         onMouseLeave={e => { if (!nameSaving && !nameSaved) e.currentTarget.style.background = '#F5F3FF'; }}
                       >
-                        <Icon name={nameSaved ? 'check' : 'check'} size={14} color={nameSaved ? '#10B981' : '#5e4dbb'} />
+                        <Icon name="check" size={14} color={nameSaved ? '#10B981' : '#5e4dbb'} />
                       </button>
                     )}
                   </div>
