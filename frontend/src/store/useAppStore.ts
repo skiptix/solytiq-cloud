@@ -69,9 +69,11 @@ const useAppStore = create<AppState>()(
       },
 
       addFolder: (folder) => {
+        const { currentWorkspaceId } = (require('./useWorkspaceStore').default as typeof import('./useWorkspaceStore').default).getState();
         const folderWithDefaults = {
           ...folder,
           isPublic: folder.isPublic ?? true,
+          workspaceId: folder.workspaceId ?? currentWorkspaceId ?? undefined,
         };
         set((state) => ({ folders: [...state.folders, folderWithDefaults] }));
         apiCreateFolder({
@@ -80,6 +82,7 @@ const useAppStore = create<AppState>()(
           emoji: folderWithDefaults.emoji,
           color: folderWithDefaults.color,
           isPublic: folderWithDefaults.isPublic,
+          workspaceId: folderWithDefaults.workspaceId,
         }).catch(() => {});
       },
 
@@ -371,14 +374,14 @@ const useAppStore = create<AppState>()(
         })();
       },
 
-      loadFromApi: async () => {
+      loadFromApi: async (workspaceId?: string) => {
         if (loadingFromApi) return;
         loadingFromApi = true;
         try {
           const [tasksRes, listsRes, foldersRes, trashRes, trashListsRes, trashFoldersRes] = await Promise.all([
-            apiGetTasks().catch(() => null),
-            apiGetLists().catch(() => null),
-            apiGetFolders().catch(() => null),
+            apiGetTasks().catch(() => null),                    // always global for dashboard
+            apiGetLists(workspaceId).catch(() => null),
+            apiGetFolders(workspaceId).catch(() => null),
             apiGetTrash().catch(() => null),
             apiGetTrashLists().catch(() => null),
             apiGetTrashFolders().catch(() => null),

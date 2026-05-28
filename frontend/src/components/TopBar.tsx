@@ -323,6 +323,17 @@ export default function TopBar({ tasks, lists, onNavigate }: TopBarProps) {
             </button>
           )}
 
+          {/* Files button */}
+          <button
+            onClick={() => onNavigate('/files')}
+            title="Files"
+            style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid #e8e4f0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.borderColor = '#c4b8f0'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#e8e4f0'; }}
+          >
+            <Icon name="folder_shared" size={17} color="#787584" />
+          </button>
+
           {/* Profile avatar + dropdown */}
           <div ref={profileDropRef} style={{ position: 'relative' }}>
             <button

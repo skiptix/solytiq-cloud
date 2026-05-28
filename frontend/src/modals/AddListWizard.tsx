@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { List } from '../types';
 import useAppStore from '../store/useAppStore';
+import useWorkspaceStore from '../store/useWorkspaceStore';
 import { apiCreateList, apiCreateSection } from '../api/client';
 import Icon from '../components/Icon';
 
@@ -29,6 +30,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
   const [loading, setLoading] = useState(false);
 
   const { setLists } = useAppStore();
+  const currentWorkspaceId = useWorkspaceStore(s => s.currentWorkspaceId);
   const selectedColor = COLORS[colorIdx];
 
   const addSection = () => {
@@ -42,7 +44,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
     setLoading(true);
     try {
       const listId = `list_${Date.now()}`;
-      const res = await apiCreateList({ id: listId, name: name.trim(), emoji, isPublic, color: selectedColor.color, colorBg: selectedColor.bg, subtitle: subtitle.trim() || undefined });
+      const res = await apiCreateList({ id: listId, name: name.trim(), emoji, isPublic, color: selectedColor.color, colorBg: selectedColor.bg, subtitle: subtitle.trim() || undefined, workspaceId: currentWorkspaceId ?? undefined });
       const createdList = res.list;
       // Add sections
       for (const sec of sections) {

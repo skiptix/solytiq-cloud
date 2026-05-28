@@ -1,0 +1,324 @@
+import { useState, useRef } from 'react';
+import Icon from '../components/Icon';
+import useWorkspaceStore from '../store/useWorkspaceStore';
+import type { WorkspaceMember } from '../types';
+import EmojiPicker from 'emoji-picker-react';
+
+const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+const PRESET_EMOJIS = ['🏠', '🚀', '💡', '🎯', '🔬', '💼', '🎨', '🌱', '⚡', '🏋️', '📚', '🎵', '🌍', '💰', '🛒'];
+
+interface Props { onClose: () => void; onCreated?: (wsId: string) => void; }
+
+export default function WorkspaceWizard({ onClose, onCreated }: Props) {
+  const [step, setStep] = useState(0);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [emoji, setEmoji] = useState('🏠');
+  const [useImage, setUseImage] = useState(false);
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [imgError, setImgError] = useState<string | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [visibility, setVisibility] = useState<'private' | 'public'>('private');
+  const [memberUsername, setMemberUsername] = useState('');
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [memberError, setMemberError] = useState<string | null>(null);
+  const [memberLoading, setMemberLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [createdWsId, setCreatedWsId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { createWorkspace, setCurrentWorkspace } = useWorkspaceStore();
+
+  const handleClose = () => {
+    setClosing(true);
+    setTimeout(() => onClose(), 190);
+  };
+
+  function processFile(file: File) {
+    setImgError(null);
+    if (!ACCEPTED_TYPES.includes(file.type)) { setImgError('Unsupported format. Use JPEG, PNG, GIF, or WebP.'); return; }
+    if (file.size > MAX_IMAGE_BYTES) { setImgError('File is too large (max 2 MB).'); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      if (result) { setPendingImage(result); setUseImage(true); }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  const handleAddMember = async () => {
+    const uname = memberUsername.trim();
+    if (!uname) return;
+    if (members.find(m => m.username === uname)) { setMemberError('Already added.'); return; }
+    setMemberLoading(true);
+    setMemberError(null);
+    try {
+      // We'll add members after creation; for now just validate by checking if the username looks reasonable
+      // Actually, we store them locally and add them post-creation
+      const { apiGetMembers } = await import('../api/client');
+      const res = await apiGetMembers();
+      const found = res.members.find(m => m.username === uname);
+      if (!found) { setMemberError('User not found.'); return; }
+      setMembers(prev => [...prev, { userId: found.id, username: found.username, fullName: found.fullName ?? undefined, profileImage: found.profileImage ?? undefined, role: 'member' }]);
+      setMemberUsername('');
+    } catch {
+      setMemberError('Failed to look up user.');
+    } finally {
+      setMemberLoading(false);
+    }
+  };
+
+  const handleCreate = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const ws = await createWorkspace({
+        name: name.trim(),
+        description: description.trim() || undefined,
+        emoji: useImage ? undefined : emoji,
+        image: useImage ? pendingImage ?? undefined : undefined,
+        visibility,
+      });
+      setCreatedWsId(ws.id);
+
+      // Add members
+      if (members.length > 0) {
+        const { apiAddWorkspaceMember } = await import('../api/client');
+        for (const m of members) {
+          await apiAddWorkspaceMember(ws.id, m.username).catch(() => {});
+        }
+      }
+
+      setCurrentWorkspace(ws.id);
+      setStep(2);
+      onCreated?.(ws.id);
+    } catch {
+      // silent — stay on step 1
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const panelAnim = closing
+    ? 'settingsModalOut 190ms ease-in both'
+    : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both';
+  const backdropAnim = closing
+    ? 'backdropOut 190ms ease both'
+    : 'backdropIn 220ms ease both';
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: backdropAnim }}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 500, boxShadow: '0 20px 60px rgba(0,0,0,0.18)', animation: panelAnim, overflow: 'hidden', position: 'relative' }}>
+
+        {/* Step indicator */}
+        <div style={{ padding: '20px 24px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {[0, 1].map(i => (
+            <div key={i} style={{ height: 3, flex: 1, borderRadius: 9999, background: step > i ? '#5e4dbb' : step === i ? '#9d8dff' : '#e8e4f0', transition: 'background 300ms' }} />
+          ))}
+        </div>
+
+        {/* ── Step 0: Details ── */}
+        {step === 0 && (
+          <div style={{ padding: '20px 24px 24px', animation: 'wizardStepIn 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', marginBottom: 4 }}>Create workspace</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: 22 }}>Give your workspace a name and identity.</div>
+
+            {/* Icon area */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 18 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                {/* Avatar preview */}
+                <div style={{ width: 72, height: 72, borderRadius: 18, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', border: '2px solid #e8e4f0', flexShrink: 0 }}
+                  onClick={() => useImage ? (fileInputRef.current?.click()) : setShowEmojiPicker(p => !p)}>
+                  {useImage && pendingImage
+                    ? <img src={pendingImage} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <span style={{ fontSize: 36 }}>{emoji}</span>
+                  }
+                </div>
+                {/* Toggle tabs */}
+                <div style={{ display: 'flex', background: '#f1ecf6', borderRadius: 8, padding: 2, gap: 2 }}>
+                  <button onClick={() => setUseImage(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', background: !useImage ? '#5e4dbb' : 'transparent', color: !useImage ? '#fff' : '#787584', transition: 'all 150ms' }}>Emoji</button>
+                  <button onClick={() => { setUseImage(true); }} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', background: useImage ? '#5e4dbb' : 'transparent', color: useImage ? '#fff' : '#787584', transition: 'all 150ms' }}>Image</button>
+                </div>
+              </div>
+
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <input
+                  autoFocus
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Workspace name…"
+                  maxLength={60}
+                  onKeyDown={e => { if (e.key === 'Enter' && name.trim()) setStep(1); }}
+                  style={{ width: '100%', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 600, padding: '10px 14px', borderRadius: 10, border: '1.5px solid #e8e4f0', outline: 'none', color: '#1c1b22', background: '#fafafa', boxSizing: 'border-box' }}
+                />
+                <textarea
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  placeholder="Description (optional)…"
+                  rows={2}
+                  maxLength={300}
+                  style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, padding: '10px 14px', borderRadius: 10, border: '1.5px solid #e8e4f0', outline: 'none', color: '#484552', background: '#fafafa', resize: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+            </div>
+
+            {/* Emoji picker */}
+            {!useImage && showEmojiPicker && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                  {PRESET_EMOJIS.map(e => (
+                    <button key={e} onClick={() => { setEmoji(e); setShowEmojiPicker(false); }}
+                      style={{ fontSize: 22, width: 36, height: 36, borderRadius: 8, border: emoji === e ? '2px solid #5e4dbb' : '2px solid transparent', background: '#f5f3ff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {e}
+                    </button>
+                  ))}
+                </div>
+                <EmojiPicker onEmojiClick={d => { setEmoji(d.emoji); setShowEmojiPicker(false); }} width="100%" height={300} searchPlaceholder="Search…" previewConfig={{ showPreview: false }} />
+              </div>
+            )}
+
+            {/* Image upload */}
+            {useImage && (
+              <div
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) processFile(f); }}
+                onClick={() => fileInputRef.current?.click()}
+                style={{ border: `2px dashed ${dragOver ? '#5e4dbb' : '#c4b5fd'}`, borderRadius: 12, padding: '20px', textAlign: 'center', cursor: 'pointer', marginBottom: 14, background: dragOver ? '#f0edff' : '#fafbff', transition: 'all 150ms' }}>
+                <Icon name="upload" size={24} color="#9d8dff" />
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#787584', marginTop: 6 }}>
+                  {pendingImage ? 'Click to change image' : 'Drop image here or click to upload'}
+                </div>
+                {imgError && <div style={{ color: '#ba1a1a', fontSize: 12, marginTop: 4 }}>{imgError}</div>}
+              </div>
+            )}
+            <input ref={fileInputRef} type="file" accept={ACCEPTED_TYPES.join(',')} style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = ''; }} />
+
+            {/* Visibility */}
+            <div style={{ marginBottom: 22 }}>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Visibility</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {(['private', 'public'] as const).map(v => (
+                  <button key={v} onClick={() => setVisibility(v)}
+                    style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${visibility === v ? '#5e4dbb' : '#e8e4f0'}`, background: visibility === v ? '#F5F3FF' : '#fafafa', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: visibility === v ? 600 : 450, color: visibility === v ? '#5e4dbb' : '#484552', transition: 'all 150ms' }}>
+                    <Icon name={v === 'private' ? 'lock' : 'public'} size={16} color={visibility === v ? '#5e4dbb' : '#787584'} />
+                    <div style={{ textAlign: 'left' }}>
+                      <div>{v === 'private' ? 'Private' : 'Public'}</div>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 400, color: '#b0acbe', marginTop: 1 }}>
+                        {v === 'private' ? 'Invited members only' : 'Visible to all users'}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={handleClose} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => setStep(1)} disabled={!name.trim()} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: name.trim() ? '#5e4dbb' : '#c4b5fd', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: name.trim() ? 'pointer' : 'default', transition: 'background 150ms' }}>
+                Next <Icon name="arrow_forward" size={15} color="#fff" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 1: Invite members ── */}
+        {step === 1 && (
+          <div style={{ padding: '20px 24px 24px', animation: 'wizardStepIn 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', marginBottom: 4 }}>Invite members</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: 20 }}>Add people to your workspace. You can skip this and invite later.</div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: '#f7f4fc', borderRadius: 10, padding: '8px 14px' }}>
+                <Icon name="person" size={16} color="#787584" />
+                <input
+                  autoFocus
+                  value={memberUsername}
+                  onChange={e => { setMemberUsername(e.target.value); setMemberError(null); }}
+                  onKeyDown={e => { if (e.key === 'Enter') handleAddMember(); }}
+                  placeholder="Username…"
+                  style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#1c1b22' }}
+                />
+              </div>
+              <button onClick={handleAddMember} disabled={memberLoading || !memberUsername.trim()}
+                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, padding: '0 16px', borderRadius: 10, border: 'none', background: memberUsername.trim() ? '#5e4dbb' : '#e8e4f0', color: memberUsername.trim() ? '#fff' : '#b0acbe', cursor: memberUsername.trim() ? 'pointer' : 'default', flexShrink: 0, height: 40, transition: 'all 150ms' }}>
+                Add
+              </button>
+            </div>
+            {memberError && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a', marginBottom: 8 }}>{memberError}</div>}
+
+            {members.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+                {members.map(m => (
+                  <div key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#f7f4fc', borderRadius: 10 }}>
+                    {m.profileImage
+                      ? <img src={m.profileImage} style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                      : <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#5e4dbb', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#fff' }}>{m.username[0].toUpperCase()}</span>
+                        </div>
+                    }
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22' }}>{m.fullName ?? m.username}</div>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584' }}>@{m.username}</div>
+                    </div>
+                    <button onClick={() => setMembers(prev => prev.filter(x => x.userId !== m.userId))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 4 }}>
+                      <Icon name="close" size={15} color="#787584" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {members.length === 0 && (
+              <div style={{ padding: '24px', textAlign: 'center', color: '#b0acbe', fontFamily: 'Inter, sans-serif', fontSize: 13 }}>
+                No members added yet.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setStep(0)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: 'pointer' }}>Back</button>
+              <button onClick={handleCreate} disabled={saving}
+                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 10, padding: '10px 22px', cursor: saving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {saving
+                  ? <><div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTop: '2px solid #fff', animation: 'spin 600ms linear infinite' }} /> Creating…</>
+                  : 'Create workspace'
+                }
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 2: Done ── */}
+        {step === 2 && (
+          <div style={{ padding: '40px 24px', textAlign: 'center', animation: 'wizardStepIn 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 32 }}>
+              {useImage && pendingImage
+                ? <img src={pendingImage} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                : <span>{emoji}</span>
+              }
+            </div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>
+              "{name}" created!
+            </div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: 28 }}>
+              Your workspace is ready. Start adding lists and folders.
+            </div>
+            <button onClick={handleClose}
+              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 10, padding: '11px 28px', cursor: 'pointer' }}>
+              Go to workspace
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

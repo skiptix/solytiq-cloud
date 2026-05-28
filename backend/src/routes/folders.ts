@@ -17,26 +17,37 @@ interface FolderRow {
   collapsed: boolean;
   is_public: boolean;
   created_at: string;
+  workspace_id: string | null;
 }
 
 function sanitizeFolder(f: FolderRow) {
   return {
-    id:        f.id,
-    userId:    f.user_id,
-    name:      f.name,
-    emoji:     f.emoji  ?? undefined,
-    color:     f.color  ?? undefined,
-    position:  f.position,
-    collapsed: f.collapsed,
-    isPublic:  f.is_public,
+    id:          f.id,
+    userId:      f.user_id,
+    name:        f.name,
+    emoji:       f.emoji  ?? undefined,
+    color:       f.color  ?? undefined,
+    position:    f.position,
+    collapsed:   f.collapsed,
+    isPublic:    f.is_public,
+    workspaceId: f.workspace_id ?? undefined,
   };
 }
 
 // GET /api/folders
 router.get('/', async (req: Request, res: Response) => {
   try {
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const wsClause = workspaceId
+      ? `AND f.workspace_id = '${workspaceId.replace(/'/g, "''")}'`
+      : '';
     const rows = await query<FolderRow>(
-      'SELECT * FROM folders WHERE user_id = $1 OR is_public = true ORDER BY position ASC, created_at ASC',
+      `SELECT f.* FROM folders f
+       LEFT JOIN workspace_members wm ON wm.workspace_id = f.workspace_id AND wm.user_id = $1
+       WHERE (f.user_id = $1 OR f.is_public = true OR wm.user_id = $1
+              OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = f.workspace_id AND w.visibility = 'public'))
+       ${wsClause}
+       ORDER BY f.position ASC, f.created_at ASC`,
       [req.userId]
     );
     res.json({ folders: rows.rows.map(sanitizeFolder) });
@@ -49,12 +60,13 @@ router.get('/', async (req: Request, res: Response) => {
 // POST /api/folders
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { id, name, emoji, color, isPublic } = req.body as {
+    const { id, name, emoji, color, isPublic, workspaceId } = req.body as {
       id?: string;
       name?: string;
       emoji?: string;
       color?: string;
       isPublic?: boolean;
+      workspaceId?: string;
     };
     if (!name) {
       res.status(400).json({ error: 'name is required' });
@@ -66,10 +78,10 @@ router.post('/', async (req: Request, res: Response) => {
     );
     const nextPos = posRes.rows[0].max !== null ? parseInt(posRes.rows[0].max, 10) + 1 : 0;
     const result = await query<FolderRow>(
-      `INSERT INTO folders (id, user_id, name, emoji, color, position, is_public)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO folders (id, user_id, name, emoji, color, position, is_public, workspace_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [folderId, req.userId, name, emoji ?? null, color ?? null, nextPos, isPublic ?? true]
+      [folderId, req.userId, name, emoji ?? null, color ?? null, nextPos, isPublic ?? true, workspaceId ?? null]
     );
     res.status(201).json({ folder: sanitizeFolder(result.rows[0]) });
     broadcastToUser(req.userId!, 'folders');
