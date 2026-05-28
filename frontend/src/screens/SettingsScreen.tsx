@@ -16,6 +16,8 @@ interface UserEntry {
   createdAt: string;
 }
 
+type TabId = 'system' | 'ai' | 'security' | 'users' | 'danger';
+
 function relativeTime(iso: string | null): string {
   if (!iso) return 'Never';
   const diff = Date.now() - new Date(iso).getTime();
@@ -44,6 +46,7 @@ function UserAvatar({ name, username, profileImage, size = 36 }: { name: string 
 export default function SettingsScreen() {
   const navigate = useNavigate();
   const { isAdmin, userId } = useAuthStore();
+  const [activeTab, setActiveTab] = useState<TabId>('system');
   const [nukeStep, setNukeStep] = useState(0);
   const [nukeText, setNukeText] = useState('');
   const [nukePw, setNukePw] = useState('');
@@ -94,8 +97,8 @@ export default function SettingsScreen() {
   // Storage quota settings
   const [quotaGb, setQuotaGb] = useState('');
   const [quotaInputFocus, setQuotaInputFocus] = useState(false);
-  const [quotaSaving, setQuotaSaving] = useState(false);
-  const [quotaSaved, setQuotaSaved] = useState(false);
+  const [systemSaving, setSystemSaving] = useState(false);
+  const [systemSaved, setSystemSaved] = useState(false);
 
   // AI assistant settings
   const { setSettings: setAISettings } = useAIStore();
@@ -105,10 +108,10 @@ export default function SettingsScreen() {
   const [aiSaved, setAiSaved] = useState(false);
   const [aiLoaded, setAiLoaded] = useState(false);
 
-  // 2FA feature flag (admin only)
+  // Security / 2FA feature flag
   const [twoFAFeatureEnabled, setTwoFAFeatureEnabled] = useState(true);
-  const [twoFAFeatureSaving, setTwoFAFeatureSaving] = useState(false);
-  const [twoFAFeatureSaved, setTwoFAFeatureSaved] = useState(false);
+  const [securitySaving, setSecuritySaving] = useState(false);
+  const [securitySaved, setSecuritySaved] = useState(false);
 
   const loadUsers = useCallback(async () => {
     if (!isAdmin) return;
@@ -154,19 +157,19 @@ export default function SettingsScreen() {
       .catch(() => setAiLoaded(true));
   }, [isAdmin, aiLoaded]);
 
-  const handleSaveQuota = async () => {
+  const handleSaveSystem = async () => {
     const gb = parseFloat(quotaGb);
     if (!gb || gb <= 0 || isNaN(gb)) return;
-    setQuotaSaving(true);
-    setQuotaSaved(false);
+    setSystemSaving(true);
+    setSystemSaved(false);
     try {
       await apiUpdateAppSettings({ storageQuotaPerUser: Math.round(gb * 1024 ** 3) });
-      setQuotaSaved(true);
-      setTimeout(() => setQuotaSaved(false), 2500);
+      setSystemSaved(true);
+      setTimeout(() => setSystemSaved(false), 2500);
     } catch (e) {
-      console.error('Failed to save quota', e);
+      console.error('Failed to save system settings', e);
     } finally {
-      setQuotaSaving(false);
+      setSystemSaving(false);
     }
   };
 
@@ -182,6 +185,23 @@ export default function SettingsScreen() {
       console.error('Failed to save AI settings', e);
     } finally {
       setAiSaving(false);
+    }
+  };
+
+  const handleSaveSecurity = async () => {
+    setSecuritySaving(true);
+    setSecuritySaved(false);
+    try {
+      await apiUpdateFeatureFlags({ twoFAFeatureEnabled });
+      setSecuritySaved(true);
+      setTimeout(() => setSecuritySaved(false), 2500);
+    } catch {
+      // Rollback: re-fetch actual state
+      apiGetAppSettings()
+        .then(res => setTwoFAFeatureEnabled(res.settings['two_fa_feature_enabled'] !== 'false'))
+        .catch(() => {});
+    } finally {
+      setSecuritySaving(false);
     }
   };
 
@@ -321,21 +341,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleSaveTwoFAFeature = async (enabled: boolean) => {
-    setTwoFAFeatureEnabled(enabled);
-    setTwoFAFeatureSaving(true);
-    setTwoFAFeatureSaved(false);
-    try {
-      await apiUpdateFeatureFlags({ twoFAFeatureEnabled: enabled });
-      setTwoFAFeatureSaved(true);
-      setTimeout(() => setTwoFAFeatureSaved(false), 2500);
-    } catch {
-      setTwoFAFeatureEnabled(!enabled); // rollback
-    } finally {
-      setTwoFAFeatureSaving(false);
-    }
-  };
-
   const PREVIEW_COUNT = 5;
   const previewUsers = users.slice(0, PREVIEW_COUNT);
   const hasMore = users.length > PREVIEW_COUNT;
@@ -351,363 +356,410 @@ export default function SettingsScreen() {
     return matchesSearch && matchesRole;
   });
 
+  const card = { background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 14, overflow: 'hidden' as const };
+  const row = { display: 'flex', alignItems: 'center', justifyContent: 'space-between' as const, gap: 12, padding: '14px 18px' };
+  const fi = { width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none', padding: '6px 0' };
+
   const sectionLabel = (text: string, action?: React.ReactNode) => (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingLeft: 4 }}>
       <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: '#b0acbe' }}>{text}</div>
       {action}
     </div>
   );
-  const card = { background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 14, overflow: 'hidden' as const };
-  const row = { display: 'flex', alignItems: 'center', justifyContent: 'space-between' as const, gap: 12, padding: '14px 18px' };
-  const fi = { width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none', padding: '6px 0' };
+
+  const SaveButton = ({ onClick, saving, saved, disabled }: { onClick: () => void; saving: boolean; saved: boolean; disabled?: boolean }) => (
+    <button
+      onClick={onClick}
+      disabled={saving || disabled}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600,
+        color: saved ? '#10B981' : '#fff',
+        background: saved ? 'rgba(16,185,129,0.12)' : (saving || disabled) ? '#c9c4d5' : '#5e4dbb',
+        border: saved ? '1.5px solid rgba(16,185,129,0.3)' : 'none',
+        borderRadius: 10, padding: '9px 20px',
+        cursor: (saving || disabled) ? 'not-allowed' : 'pointer',
+        transition: 'all 150ms',
+      }}
+      onMouseEnter={e => { if (!saving && !saved && !disabled) e.currentTarget.style.background = '#4f3fa8'; }}
+      onMouseLeave={e => { if (!saving && !saved && !disabled) e.currentTarget.style.background = '#5e4dbb'; }}
+    >
+      <Icon name={saved ? 'check' : 'save'} size={14} color={saved ? '#10B981' : '#fff'} />
+      {saved ? 'Saved' : saving ? 'Saving…' : 'Save'}
+    </button>
+  );
+
+  const TABS: { id: TabId; label: string; icon: string }[] = [
+    { id: 'system',   label: 'System',      icon: 'storage' },
+    { id: 'ai',       label: 'AI',          icon: 'smart_toy' },
+    { id: 'security', label: 'Security',    icon: 'shield_lock' },
+    { id: 'users',    label: 'Users',       icon: 'group' },
+    { id: 'danger',   label: 'Danger Zone', icon: 'warning' },
+  ];
 
   return (
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
-      <div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 28, width: '100%' }}>
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
         <h1 style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 28, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.02em' }}>Settings</h1>
 
-        {/* Users — admin only */}
-        {isAdmin && (
-          <div>
-            {sectionLabel('Users',
-              <button
-                onClick={openAddUser}
-                style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'background 150ms' }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#ede9ff'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#F5F3FF'; }}
-              >
-                <Icon name="person_add" size={14} color="#5e4dbb" />
-                Add User
-              </button>
-            )}
-            <div style={card}>
-              {usersLoading ? (
-                <div style={{ ...row, justifyContent: 'center' }}>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading users…</div>
-                </div>
-              ) : users.length === 0 ? (
-                <div style={{ ...row, justifyContent: 'center' }}>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>No users yet.</div>
-                </div>
-              ) : (
-                <>
-                {previewUsers.map((u, i) => (
-                  <div key={u.id} style={{ ...row, borderBottom: i < previewUsers.length - 1 || hasMore ? '1px solid #f1ecf6' : 'none' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                      <UserAvatar name={u.fullName} username={u.username} profileImage={u.profileImage} size={38} />
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {u.fullName || u.username}
-                          </div>
-                          {u.isAdmin && (
-                            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 9999, padding: '1px 7px', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>Admin</span>
-                          )}
+        {isAdmin ? (
+          <>
+            {/* Tab bar */}
+            <div style={{ display: 'flex', gap: 4, background: '#F5F3FF', borderRadius: 14, padding: 4, flexWrap: 'wrap' }}>
+              {TABS.map(tab => {
+                const active = activeTab === tab.id;
+                const isDanger = tab.id === 'danger';
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600,
+                      color: active ? (isDanger ? '#fff' : '#fff') : (isDanger ? '#ba1a1a' : '#5e4dbb'),
+                      background: active ? (isDanger ? '#ba1a1a' : '#5e4dbb') : 'transparent',
+                      border: 'none', borderRadius: 10,
+                      padding: '7px 14px',
+                      cursor: 'pointer',
+                      transition: 'all 150ms',
+                      flex: '1 1 auto',
+                      justifyContent: 'center',
+                      minWidth: 0,
+                    }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.background = isDanger ? 'rgba(186,26,26,0.08)' : '#ede9ff'; }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <Icon name={tab.icon} size={15} color={active ? '#fff' : (isDanger ? '#ba1a1a' : '#5e4dbb')} />
+                    <span style={{ whiteSpace: 'nowrap' }}>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* ── System Tab ── */}
+            {activeTab === 'system' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {/* Disk Storage */}
+                {sectionLabel('Disk Storage')}
+                <div style={card}>
+                  {storageLoading ? (
+                    <div style={{ ...row, justifyContent: 'center' }}>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading…</div>
+                    </div>
+                  ) : storage === null ? (
+                    <div style={{ ...row, justifyContent: 'center' }}>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Unable to read disk usage.</div>
+                    </div>
+                  ) : (() => {
+                    const fmt = (b: number) => {
+                      if (b >= 1e12) return `${(b / 1e12).toFixed(1)} TB`;
+                      if (b >= 1e9)  return `${(b / 1e9).toFixed(1)} GB`;
+                      return `${(b / 1e6).toFixed(1)} MB`;
+                    };
+                    const pct = Math.round((storage.used / storage.total) * 100);
+                    const barColor = pct >= 90 ? '#ba1a1a' : pct >= 70 ? '#d97706' : '#5e4dbb';
+                    return (
+                      <div style={{ padding: '18px 18px 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Used Space</div>
+                          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: barColor, background: pct >= 90 ? '#ffdad6' : pct >= 70 ? '#fef3c7' : '#F5F3FF', borderRadius: 9999, padding: '2px 9px' }}>{pct}% used</span>
                         </div>
-                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          @{u.username} · {u.email}
+                        <div style={{ background: '#E5E7EB', borderRadius: 99, height: 8, overflow: 'hidden', marginBottom: 12 }}>
+                          <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 99, transition: 'width 600ms ease' }} />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <div style={{ display: 'flex', gap: 20 }}>
+                            <div>
+                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Used</div>
+                              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>{fmt(storage.used)}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Available</div>
+                              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>{fmt(storage.available)}</div>
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Total</div>
+                            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>{fmt(storage.total)}</div>
+                          </div>
                         </div>
                       </div>
+                    );
+                  })()}
+                </div>
+
+                {/* User Storage Quota */}
+                {sectionLabel('User Storage Quota')}
+                <div style={card}>
+                  <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                      <div>
+                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Storage limit per user</div>
+                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Admins are exempt and always have unlimited storage.</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', background: '#fff', border: `1.5px solid ${quotaInputFocus ? '#5e4dbb' : '#E5E7EB'}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color 200ms' }}>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={quotaGb}
+                          onChange={e => { setQuotaGb(e.target.value); setSystemSaved(false); }}
+                          onFocus={() => setQuotaInputFocus(true)}
+                          onBlur={() => setQuotaInputFocus(false)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleSaveSystem(); }}
+                          style={{ width: 64, fontFamily: 'Inter, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none', padding: '8px 10px', textAlign: 'right' }}
+                        />
+                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', paddingRight: 10, paddingLeft: 2, userSelect: 'none' }}>GB</span>
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: u.lastOnline && Date.now() - new Date(u.lastOnline).getTime() < 5 * 60 * 1000 ? '#10B981' : '#e8e4f0', flexShrink: 0 }} />
-                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', whiteSpace: 'nowrap' }}>
-                          {relativeTime(u.lastOnline)}
-                        </span>
+                  </div>
+                </div>
+
+                {/* Single Save button for System tab */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <SaveButton
+                    onClick={handleSaveSystem}
+                    saving={systemSaving}
+                    saved={systemSaved}
+                    disabled={!quotaGb || parseFloat(quotaGb) <= 0 || isNaN(parseFloat(quotaGb))}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ── AI Tab ── */}
+            {activeTab === 'ai' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {sectionLabel('AI Assistant')}
+                <div style={card}>
+                  <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {/* Enable toggle */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div>
+                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Enable AI Assistant</div>
+                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Show the AI assistant bubble for all users on this instance.</div>
                       </div>
                       <button
-                        onClick={() => openEditUser(u)}
-                        title="Edit user"
-                        style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                        onClick={() => { setAiEnabled(v => !v); setAiSaved(false); }}
+                        style={{
+                          width: 44, height: 24, borderRadius: 12,
+                          background: aiEnabled ? '#5e4dbb' : '#e8e4f0',
+                          border: 'none', cursor: 'pointer',
+                          position: 'relative', flexShrink: 0,
+                          transition: 'background 200ms',
+                        }}
                       >
-                        <Icon name="edit" size={15} color="#787584" />
+                        <span style={{
+                          position: 'absolute', top: 2,
+                          left: aiEnabled ? 22 : 2,
+                          width: 20, height: 20, borderRadius: '50%',
+                          background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                          transition: 'left 200ms',
+                        }} />
                       </button>
-                      {u.id !== userId && (
-                        <button
-                          onClick={() => setDeleteTarget(u)}
-                          title="Remove user"
-                          style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                        >
-                          <Icon name="delete" size={15} color="#ba1a1a" />
-                        </button>
-                      )}
                     </div>
-                  </div>
-                ))}
-                {hasMore && (
-                  <button
-                    onClick={() => { setSearchQuery(''); setRoleFilter('all'); setAllUsersOpen(true); }}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px 18px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', transition: 'background 150ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                  >
-                    <Icon name="group" size={15} color="#5e4dbb" />
-                    Show all {users.length} users
-                  </button>
-                )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
 
-        {/* System — admin only */}
-        {isAdmin && (
-          <div>
-            {sectionLabel('System')}
-            <div style={card}>
-              {storageLoading ? (
-                <div style={{ ...row, justifyContent: 'center' }}>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading…</div>
-                </div>
-              ) : storage === null ? (
-                <div style={{ ...row, justifyContent: 'center' }}>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Unable to read disk usage.</div>
-                </div>
-              ) : (() => {
-                const fmt = (b: number) => {
-                  if (b >= 1e12) return `${(b / 1e12).toFixed(1)} TB`;
-                  if (b >= 1e9)  return `${(b / 1e9).toFixed(1)} GB`;
-                  return `${(b / 1e6).toFixed(1)} MB`;
-                };
-                const pct = Math.round((storage.used / storage.total) * 100);
-                const barColor = pct >= 90 ? '#ba1a1a' : pct >= 70 ? '#d97706' : '#5e4dbb';
-                return (
-                  <div style={{ padding: '18px 18px 16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Disk Storage</div>
-                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: barColor, background: pct >= 90 ? '#ffdad6' : pct >= 70 ? '#fef3c7' : '#F5F3FF', borderRadius: 9999, padding: '2px 9px' }}>{pct}% used</span>
-                    </div>
-                    <div style={{ background: '#E5E7EB', borderRadius: 99, height: 8, overflow: 'hidden', marginBottom: 12 }}>
-                      <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 99, transition: 'width 600ms ease' }} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', gap: 20 }}>
-                        <div>
-                          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Used</div>
-                          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>{fmt(storage.used)}</div>
-                        </div>
-                        <div>
-                          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Available</div>
-                          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>{fmt(storage.available)}</div>
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Total</div>
-                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>{fmt(storage.total)}</div>
+                    <div style={{ height: 1, background: '#f1ecf6' }} />
+
+                    {/* Model picker */}
+                    <div>
+                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 8 }}>AI Model</div>
+                      <select
+                        value={aiModel}
+                        onChange={e => { setAiModel(e.target.value); setAiSaved(false); }}
+                        style={{
+                          width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13,
+                          color: '#1c1b22', background: '#fff', border: '1.5px solid #E5E7EB',
+                          borderRadius: 10, padding: '8px 12px', outline: 'none', cursor: 'pointer',
+                          appearance: 'none',
+                          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23787584' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
+                          backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', paddingRight: 32,
+                        }}
+                        onFocus={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
+                        onBlur={e => { e.currentTarget.style.borderColor = '#E5E7EB'; }}
+                      >
+                        {AI_MODELS.map(m => (
+                          <option key={m.value} value={m.value}>{m.label} — {m.sub}</option>
+                        ))}
+                      </select>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', marginTop: 6 }}>
+                        Requires <code style={{ background: '#f1ecf6', padding: '1px 5px', borderRadius: 4 }}>OPENROUTER_API_KEY</code> set in your environment.
                       </div>
                     </div>
                   </div>
-                );
-              })()}
-            </div>
-          </div>
-        )}
+                </div>
 
-        {/* Storage quota — admin only */}
-        {isAdmin && (
-          <div>
-            {sectionLabel('User Storage Quota')}
-            <div style={card}>
-              <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-                  <div>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Storage limit per user</div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Admins are exempt and always have unlimited storage.</div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', background: '#fff', border: `1.5px solid ${quotaInputFocus ? '#5e4dbb' : '#E5E7EB'}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color 200ms' }}>
-                      <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={quotaGb}
-                        onChange={e => { setQuotaGb(e.target.value); setQuotaSaved(false); }}
-                        onFocus={() => setQuotaInputFocus(true)}
-                        onBlur={() => setQuotaInputFocus(false)}
-                        onKeyDown={e => { if (e.key === 'Enter') handleSaveQuota(); }}
-                        style={{ width: 64, fontFamily: 'Inter, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none', padding: '8px 10px', textAlign: 'right' }}
-                      />
-                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', paddingRight: 10, paddingLeft: 2, userSelect: 'none' }}>GB</span>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <SaveButton onClick={handleSaveAI} saving={aiSaving} saved={aiSaved} />
+                </div>
+              </div>
+            )}
+
+            {/* ── Security Tab ── */}
+            {activeTab === 'security' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {sectionLabel('Security Features')}
+                <div style={card}>
+                  <div style={{ ...row }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Icon name="shield_lock" size={18} color="#5e4dbb" />
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Two-Factor Authentication</div>
+                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>
+                          Allow users to set up 2FA on their accounts via Account Settings.
+                        </div>
+                      </div>
                     </div>
                     <button
-                      onClick={handleSaveQuota}
-                      disabled={quotaSaving || !quotaGb || parseFloat(quotaGb) <= 0}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: quotaSaved ? '#10B981' : '#fff', background: quotaSaved ? 'rgba(16,185,129,0.12)' : quotaSaving || !quotaGb || parseFloat(quotaGb) <= 0 ? '#c9c4d5' : '#5e4dbb', border: quotaSaved ? '1.5px solid rgba(16,185,129,0.3)' : 'none', borderRadius: 10, padding: '8px 14px', cursor: quotaSaving || !quotaGb || parseFloat(quotaGb) <= 0 ? 'not-allowed' : 'pointer', transition: 'all 150ms', whiteSpace: 'nowrap' }}
-                      onMouseEnter={e => { if (!quotaSaving && !quotaSaved && quotaGb && parseFloat(quotaGb) > 0) e.currentTarget.style.background = '#4f3fa8'; }}
-                      onMouseLeave={e => { if (!quotaSaving && !quotaSaved) e.currentTarget.style.background = '#5e4dbb'; }}
+                      onClick={() => { setTwoFAFeatureEnabled(v => !v); setSecuritySaved(false); }}
+                      style={{
+                        width: 44, height: 24, borderRadius: 12,
+                        background: twoFAFeatureEnabled ? '#5e4dbb' : '#e8e4f0',
+                        border: 'none', cursor: 'pointer',
+                        position: 'relative', flexShrink: 0,
+                        transition: 'background 200ms',
+                      }}
                     >
-                      <Icon name={quotaSaved ? 'check' : 'save'} size={14} color={quotaSaved ? '#10B981' : '#fff'} />
-                      {quotaSaved ? 'Saved' : quotaSaving ? 'Saving…' : 'Save'}
+                      <span style={{
+                        position: 'absolute', top: 3,
+                        left: twoFAFeatureEnabled ? 23 : 3,
+                        width: 18, height: 18, borderRadius: '50%',
+                        background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
+                        transition: 'left 200ms',
+                      }} />
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <SaveButton onClick={handleSaveSecurity} saving={securitySaving} saved={securitySaved} />
+                </div>
+              </div>
+            )}
+
+            {/* ── Users Tab ── */}
+            {activeTab === 'users' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {sectionLabel('Users',
+                  <button
+                    onClick={openAddUser}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'background 150ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#ede9ff'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                  >
+                    <Icon name="person_add" size={14} color="#5e4dbb" />
+                    Add User
+                  </button>
+                )}
+                <div style={card}>
+                  {usersLoading ? (
+                    <div style={{ ...row, justifyContent: 'center' }}>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading users…</div>
+                    </div>
+                  ) : users.length === 0 ? (
+                    <div style={{ ...row, justifyContent: 'center' }}>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>No users yet.</div>
+                    </div>
+                  ) : (
+                    <>
+                      {previewUsers.map((u, i) => (
+                        <div key={u.id} style={{ ...row, borderBottom: i < previewUsers.length - 1 || hasMore ? '1px solid #f1ecf6' : 'none' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                            <UserAvatar name={u.fullName} username={u.username} profileImage={u.profileImage} size={38} />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {u.fullName || u.username}
+                                </div>
+                                {u.isAdmin && (
+                                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 9999, padding: '1px 7px', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>Admin</span>
+                                )}
+                              </div>
+                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                @{u.username} · {u.email}
+                              </div>
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div style={{ width: 6, height: 6, borderRadius: '50%', background: u.lastOnline && Date.now() - new Date(u.lastOnline).getTime() < 5 * 60 * 1000 ? '#10B981' : '#e8e4f0', flexShrink: 0 }} />
+                              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', whiteSpace: 'nowrap' }}>
+                                {relativeTime(u.lastOnline)}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => openEditUser(u)}
+                              title="Edit user"
+                              style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
+                              onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                            >
+                              <Icon name="edit" size={15} color="#787584" />
+                            </button>
+                            {u.id !== userId && (
+                              <button
+                                onClick={() => setDeleteTarget(u)}
+                                title="Remove user"
+                                style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
+                                onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                              >
+                                <Icon name="delete" size={15} color="#ba1a1a" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {hasMore && (
+                        <button
+                          onClick={() => { setSearchQuery(''); setRoleFilter('all'); setAllUsersOpen(true); }}
+                          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px 18px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', transition: 'background 150ms' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                        >
+                          <Icon name="group" size={15} color="#5e4dbb" />
+                          Show all {users.length} users
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Danger Zone Tab ── */}
+            {activeTab === 'danger' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {sectionLabel('Danger Zone')}
+                <div style={{ ...card, border: '1.5px solid #ffdad6' }}>
+                  <div style={{ ...row, background: '#fff5f5' }}>
+                    <div>
+                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#ba1a1a' }}>Nuke Everything</div>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Permanently delete all data. This cannot be undone.</div>
+                    </div>
+                    <button
+                      onClick={() => setNukeStep(1)}
+                      style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', flexShrink: 0, transition: 'background 150ms' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#991212'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = '#ba1a1a'; }}
+                    >
+                      Nuke
                     </button>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
+          </>
+        ) : (
+          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#b0acbe', textAlign: 'center', padding: '48px 0' }}>
+            No settings available.
           </div>
         )}
-
-        {/* AI Assistant — admin only */}
-        {isAdmin && (
-          <div>
-            {sectionLabel('AI Assistant')}
-            <div style={card}>
-              <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {/* Enable toggle */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                  <div>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Enable AI Assistant</div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Show the AI assistant bubble for all users on this instance.</div>
-                  </div>
-                  <button
-                    onClick={() => setAiEnabled(v => !v)}
-                    style={{
-                      width: 44,
-                      height: 24,
-                      borderRadius: 12,
-                      background: aiEnabled ? '#5e4dbb' : '#e8e4f0',
-                      border: 'none',
-                      cursor: 'pointer',
-                      position: 'relative',
-                      flexShrink: 0,
-                      transition: 'background 200ms',
-                    }}
-                  >
-                    <span style={{
-                      position: 'absolute',
-                      top: 2,
-                      left: aiEnabled ? 22 : 2,
-                      width: 20,
-                      height: 20,
-                      borderRadius: '50%',
-                      background: '#fff',
-                      boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-                      transition: 'left 200ms',
-                    }} />
-                  </button>
-                </div>
-                {/* Model picker */}
-                <div>
-                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 8 }}>AI Model</div>
-                  <select
-                    value={aiModel}
-                    onChange={e => setAiModel(e.target.value)}
-                    style={{
-                      width: '100%',
-                      fontFamily: 'Inter, sans-serif',
-                      fontSize: 13,
-                      color: '#1c1b22',
-                      background: '#fff',
-                      border: '1.5px solid #E5E7EB',
-                      borderRadius: 10,
-                      padding: '8px 12px',
-                      outline: 'none',
-                      cursor: 'pointer',
-                      appearance: 'none',
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23787584' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-                      backgroundRepeat: 'no-repeat',
-                      backgroundPosition: 'right 10px center',
-                      paddingRight: 32,
-                    }}
-                    onFocus={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
-                    onBlur={e => { e.currentTarget.style.borderColor = '#E5E7EB'; }}
-                  >
-                    {AI_MODELS.map(m => (
-                      <option key={m.value} value={m.value}>{m.label} — {m.sub}</option>
-                    ))}
-                  </select>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', marginTop: 6 }}>
-                    Requires <code style={{ background: '#f1ecf6', padding: '1px 5px', borderRadius: 4 }}>OPENROUTER_API_KEY</code> set in your environment.
-                  </div>
-                </div>
-                {/* Save button */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button
-                    onClick={handleSaveAI}
-                    disabled={aiSaving}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      fontFamily: 'Hanken Grotesk, sans-serif',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: aiSaved ? '#10B981' : '#fff',
-                      background: aiSaved ? 'rgba(16,185,129,0.12)' : aiSaving ? '#c9c4d5' : '#5e4dbb',
-                      border: aiSaved ? '1.5px solid rgba(16,185,129,0.3)' : 'none',
-                      borderRadius: 10,
-                      padding: '8px 16px',
-                      cursor: aiSaving ? 'not-allowed' : 'pointer',
-                      transition: 'all 150ms',
-                    }}
-                    onMouseEnter={e => { if (!aiSaving && !aiSaved) e.currentTarget.style.background = '#4f3fa8'; }}
-                    onMouseLeave={e => { if (!aiSaving && !aiSaved) e.currentTarget.style.background = '#5e4dbb'; }}
-                  >
-                    <Icon name={aiSaved ? 'check' : 'save'} size={14} color={aiSaved ? '#10B981' : '#fff'} />
-                    {aiSaved ? 'Saved' : aiSaving ? 'Saving…' : 'Save'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 2FA Feature Flag — admin only */}
-        {isAdmin && (
-          <div>
-            {sectionLabel('Security Features')}
-            <div style={card}>
-              <div style={{ ...row }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Icon name="shield_lock" size={18} color="#5e4dbb" />
-                  </div>
-                  <div>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Two-Factor Authentication</div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>
-                      Allow users to set up 2FA on their accounts via Account Settings.
-                    </div>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                  {twoFAFeatureSaved && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#10B981' }}>Saved</span>}
-                  <button
-                    onClick={() => handleSaveTwoFAFeature(!twoFAFeatureEnabled)}
-                    disabled={twoFAFeatureSaving}
-                    style={{ width: 44, height: 24, borderRadius: 12, background: twoFAFeatureEnabled ? '#5e4dbb' : '#e8e4f0', border: 'none', cursor: twoFAFeatureSaving ? 'wait' : 'pointer', position: 'relative', flexShrink: 0, transition: 'background 200ms' }}
-                  >
-                    <span style={{ position: 'absolute', top: 3, left: twoFAFeatureEnabled ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.18)', transition: 'left 200ms' }} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Danger Zone — admin only */}
-        {isAdmin && <div>
-          {sectionLabel('Danger Zone')}
-          <div style={{ ...card, border: '1.5px solid #ffdad6' }}>
-            <div style={{ ...row, background: '#fff5f5' }}>
-              <div>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#ba1a1a' }}>Nuke Everything</div>
-                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Permanently delete all data. This cannot be undone.</div>
-              </div>
-              <button onClick={() => setNukeStep(1)}
-                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', flexShrink: 0 }}>
-                Nuke
-              </button>
-            </div>
-          </div>
-        </div>}
       </div>
 
-      {/* All Users Dialog */}
+      {/* ── All Users Dialog ── */}
       {allUsersOpen && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
@@ -717,7 +769,6 @@ export default function SettingsScreen() {
             style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 580, maxHeight: '82vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
-            {/* Header */}
             <div style={{ padding: '22px 24px 0', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -738,8 +789,6 @@ export default function SettingsScreen() {
                   <Icon name="close" size={15} color="#484552" />
                 </button>
               </div>
-
-              {/* Search */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F9FAFB', border: `1.5px solid ${searchFocus ? '#5e4dbb' : '#E5E7EB'}`, borderRadius: 10, padding: '8px 14px', marginBottom: 14, transition: 'border-color 200ms' }}>
                 <Icon name="search" size={16} color="#b0acbe" />
                 <input
@@ -757,8 +806,6 @@ export default function SettingsScreen() {
                   </button>
                 )}
               </div>
-
-              {/* Role filter */}
               <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
                 {(['all', 'admin', 'user'] as const).map(f => (
                   <button
@@ -773,8 +820,6 @@ export default function SettingsScreen() {
                 ))}
               </div>
             </div>
-
-            {/* Scrollable list */}
             <div style={{ overflowY: 'auto', flex: 1, borderTop: '1px solid #f1ecf6' }}>
               {filteredUsers.length === 0 ? (
                 <div style={{ padding: '32px 24px', textAlign: 'center', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>
@@ -835,7 +880,7 @@ export default function SettingsScreen() {
         </div>
       )}
 
-      {/* Add User Modal */}
+      {/* ── Add User Modal ── */}
       {addUserOpen && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
@@ -845,7 +890,6 @@ export default function SettingsScreen() {
             style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 420, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
-            {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 24px 0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -862,47 +906,19 @@ export default function SettingsScreen() {
                 <Icon name="close" size={15} color="#484552" />
               </button>
             </div>
-
-            {/* Fields */}
             <div style={{ padding: '20px 24px' }}>
-              {/* Full Name */}
               <div style={{ borderBottom: `${fullNameFocus ? 2 : 1}px solid ${fullNameFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
                 <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Full Name</div>
-                <input
-                  value={newFullName}
-                  onChange={e => setNewFullName(e.target.value)}
-                  placeholder="Jane Doe"
-                  style={fi}
-                  onFocus={() => setFullNameFocus(true)}
-                  onBlur={() => setFullNameFocus(false)}
-                />
+                <input value={newFullName} onChange={e => setNewFullName(e.target.value)} placeholder="Jane Doe" style={fi} onFocus={() => setFullNameFocus(true)} onBlur={() => setFullNameFocus(false)} />
               </div>
-              {/* Username */}
               <div style={{ borderBottom: `${usernameFocus ? 2 : 1}px solid ${usernameFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
                 <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Username <span style={{ color: '#ba1a1a' }}>*</span></div>
-                <input
-                  value={newUsername}
-                  onChange={e => setNewUsername(e.target.value)}
-                  placeholder="janedoe"
-                  style={fi}
-                  onFocus={() => setUsernameFocus(true)}
-                  onBlur={() => setUsernameFocus(false)}
-                />
+                <input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="janedoe" style={fi} onFocus={() => setUsernameFocus(true)} onBlur={() => setUsernameFocus(false)} />
               </div>
-              {/* Email */}
               <div style={{ borderBottom: `${emailFocus ? 2 : 1}px solid ${emailFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
                 <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Email</div>
-                <input
-                  type="email"
-                  value={newEmail}
-                  onChange={e => setNewEmail(e.target.value)}
-                  placeholder="jane@example.com"
-                  style={fi}
-                  onFocus={() => setEmailFocus(true)}
-                  onBlur={() => setEmailFocus(false)}
-                />
+                <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="jane@example.com" style={fi} onFocus={() => setEmailFocus(true)} onBlur={() => setEmailFocus(false)} />
               </div>
-              {/* Password */}
               <div style={{ borderBottom: `${passwordFocus ? 2 : 1}px solid ${passwordFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 20, transition: 'border-color 200ms' }}>
                 <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Password <span style={{ color: '#ba1a1a' }}>*</span></div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -916,55 +932,23 @@ export default function SettingsScreen() {
                     onBlur={() => setPasswordFocus(false)}
                     onKeyDown={e => { if (e.key === 'Enter') handleCreateUser(); }}
                   />
-                  {/* Generate random password */}
-                  <button
-                    type="button"
-                    onClick={generatePassword}
-                    title="Generate random password"
-                    style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                  >
+                  <button type="button" onClick={generatePassword} title="Generate random password" style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                     <Icon name="casino" size={16} color="#787584" />
                   </button>
-                  {/* Copy to clipboard */}
-                  <button
-                    type="button"
-                    onClick={copyPassword}
-                    disabled={!newPassword}
-                    title={passwordCopied ? 'Copied!' : 'Copy password'}
-                    style={{ width: 28, height: 28, borderRadius: 7, background: passwordCopied ? 'rgba(16,185,129,0.10)' : 'transparent', border: 'none', cursor: newPassword ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
-                    onMouseEnter={e => { if (newPassword && !passwordCopied) e.currentTarget.style.background = '#F5F3FF'; }}
-                    onMouseLeave={e => { if (!passwordCopied) e.currentTarget.style.background = 'transparent'; }}
-                  >
+                  <button type="button" onClick={copyPassword} disabled={!newPassword} title={passwordCopied ? 'Copied!' : 'Copy password'} style={{ width: 28, height: 28, borderRadius: 7, background: passwordCopied ? 'rgba(16,185,129,0.10)' : 'transparent', border: 'none', cursor: newPassword ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { if (newPassword && !passwordCopied) e.currentTarget.style.background = '#F5F3FF'; }} onMouseLeave={e => { if (!passwordCopied) e.currentTarget.style.background = 'transparent'; }}>
                     <Icon name={passwordCopied ? 'check' : 'content_copy'} size={15} color={passwordCopied ? '#10B981' : newPassword ? '#787584' : '#e8e4f0'} />
                   </button>
                 </div>
               </div>
-
               {createError && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: '#fff5f5', borderRadius: 8, border: '1px solid #ffdad6' }}>
                   <Icon name="error" size={15} color="#ba1a1a" />
                   <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a' }}>{createError}</span>
                 </div>
               )}
-
               <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  onClick={closeAddUser}
-                  style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCreateUser}
-                  disabled={creating || !newUsername.trim() || !newPassword.trim()}
-                  style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: creating || !newUsername.trim() || !newPassword.trim() ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '11px 0', cursor: creating || !newUsername.trim() || !newPassword.trim() ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}
-                  onMouseEnter={e => { if (!creating && newUsername.trim() && newPassword.trim()) e.currentTarget.style.background = '#4d3da8'; }}
-                  onMouseLeave={e => { if (!creating && newUsername.trim() && newPassword.trim()) e.currentTarget.style.background = '#5e4dbb'; }}
-                >
+                <button onClick={closeAddUser} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }} onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}>Cancel</button>
+                <button onClick={handleCreateUser} disabled={creating || !newUsername.trim() || !newPassword.trim()} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: creating || !newUsername.trim() || !newPassword.trim() ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '11px 0', cursor: creating || !newUsername.trim() || !newPassword.trim() ? 'not-allowed' : 'pointer', transition: 'background 150ms' }} onMouseEnter={e => { if (!creating && newUsername.trim() && newPassword.trim()) e.currentTarget.style.background = '#4d3da8'; }} onMouseLeave={e => { if (!creating && newUsername.trim() && newPassword.trim()) e.currentTarget.style.background = '#5e4dbb'; }}>
                   {creating ? 'Creating…' : 'Create User'}
                 </button>
               </div>
@@ -973,7 +957,7 @@ export default function SettingsScreen() {
         </div>
       )}
 
-      {/* Edit User Modal */}
+      {/* ── Edit User Modal ── */}
       {editUserOpen && editTarget && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
@@ -993,30 +977,15 @@ export default function SettingsScreen() {
                   <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>@{editTarget.username}</div>
                 </div>
               </div>
-              <button
-                onClick={closeEditUser}
-                style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
-              >
+              <button onClick={closeEditUser} style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }} onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}>
                 <Icon name="close" size={15} color="#484552" />
               </button>
             </div>
-
             <div style={{ padding: '20px 24px' }}>
-              {/* Username */}
               <div style={{ borderBottom: `${editUsernameFocus ? 2 : 1}px solid ${editUsernameFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
                 <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Username</div>
-                <input
-                  value={editUsername}
-                  onChange={e => setEditUsername(e.target.value)}
-                  placeholder={editTarget.username}
-                  style={fi}
-                  onFocus={() => setEditUsernameFocus(true)}
-                  onBlur={() => setEditUsernameFocus(false)}
-                />
+                <input value={editUsername} onChange={e => setEditUsername(e.target.value)} placeholder={editTarget.username} style={fi} onFocus={() => setEditUsernameFocus(true)} onBlur={() => setEditUsernameFocus(false)} />
               </div>
-              {/* New Password */}
               <div style={{ borderBottom: `${editPasswordFocus ? 2 : 1}px solid ${editPasswordFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 20, transition: 'border-color 200ms' }}>
                 <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>New Password <span style={{ color: '#b0acbe', fontWeight: 400 }}>(optional)</span></div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -1030,53 +999,23 @@ export default function SettingsScreen() {
                     onBlur={() => setEditPasswordFocus(false)}
                     onKeyDown={e => { if (e.key === 'Enter') handleEditUser(); }}
                   />
-                  <button
-                    type="button"
-                    onClick={generateEditPassword}
-                    title="Generate random password"
-                    style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                  >
+                  <button type="button" onClick={generateEditPassword} title="Generate random password" style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                     <Icon name="casino" size={16} color="#787584" />
                   </button>
-                  <button
-                    type="button"
-                    onClick={copyEditPassword}
-                    disabled={!editPassword}
-                    title={editPasswordCopied ? 'Copied!' : 'Copy password'}
-                    style={{ width: 28, height: 28, borderRadius: 7, background: editPasswordCopied ? 'rgba(16,185,129,0.10)' : 'transparent', border: 'none', cursor: editPassword ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
-                    onMouseEnter={e => { if (editPassword && !editPasswordCopied) e.currentTarget.style.background = '#F5F3FF'; }}
-                    onMouseLeave={e => { if (!editPasswordCopied) e.currentTarget.style.background = 'transparent'; }}
-                  >
+                  <button type="button" onClick={copyEditPassword} disabled={!editPassword} title={editPasswordCopied ? 'Copied!' : 'Copy password'} style={{ width: 28, height: 28, borderRadius: 7, background: editPasswordCopied ? 'rgba(16,185,129,0.10)' : 'transparent', border: 'none', cursor: editPassword ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { if (editPassword && !editPasswordCopied) e.currentTarget.style.background = '#F5F3FF'; }} onMouseLeave={e => { if (!editPasswordCopied) e.currentTarget.style.background = 'transparent'; }}>
                     <Icon name={editPasswordCopied ? 'check' : 'content_copy'} size={15} color={editPasswordCopied ? '#10B981' : editPassword ? '#787584' : '#e8e4f0'} />
                   </button>
                 </div>
               </div>
-
               {editError && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: '#fff5f5', borderRadius: 8, border: '1px solid #ffdad6' }}>
                   <Icon name="error" size={15} color="#ba1a1a" />
                   <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a' }}>{editError}</span>
                 </div>
               )}
-
               <div style={{ display: 'flex', gap: 10 }}>
-                <button
-                  onClick={closeEditUser}
-                  style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleEditUser}
-                  disabled={editing}
-                  style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: editing ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '11px 0', cursor: editing ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}
-                  onMouseEnter={e => { if (!editing) e.currentTarget.style.background = '#4d3da8'; }}
-                  onMouseLeave={e => { if (!editing) e.currentTarget.style.background = '#5e4dbb'; }}
-                >
+                <button onClick={closeEditUser} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }} onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}>Cancel</button>
+                <button onClick={handleEditUser} disabled={editing} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: editing ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '11px 0', cursor: editing ? 'not-allowed' : 'pointer', transition: 'background 150ms' }} onMouseEnter={e => { if (!editing) e.currentTarget.style.background = '#4d3da8'; }} onMouseLeave={e => { if (!editing) e.currentTarget.style.background = '#5e4dbb'; }}>
                   {editing ? 'Saving…' : 'Save Changes'}
                 </button>
               </div>
@@ -1085,7 +1024,7 @@ export default function SettingsScreen() {
         </div>
       )}
 
-      {/* Delete User Confirmation Modal */}
+      {/* ── Delete User Confirmation Modal ── */}
       {deleteTarget && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
@@ -1103,21 +1042,8 @@ export default function SettingsScreen() {
               <span style={{ fontWeight: 600, color: '#1c1b22' }}>@{deleteTarget.username}</span> will be permanently deleted along with all their data. This cannot be undone.
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => setDeleteTarget(null)}
-                style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteUser}
-                disabled={deleting}
-                style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: deleting ? '#c9c4d5' : '#ba1a1a', border: 'none', borderRadius: 8, padding: '11px 0', cursor: deleting ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}
-                onMouseEnter={e => { if (!deleting) e.currentTarget.style.background = '#991212'; }}
-                onMouseLeave={e => { if (!deleting) e.currentTarget.style.background = '#ba1a1a'; }}
-              >
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }} onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}>Cancel</button>
+              <button onClick={handleDeleteUser} disabled={deleting} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: deleting ? '#c9c4d5' : '#ba1a1a', border: 'none', borderRadius: 8, padding: '11px 0', cursor: deleting ? 'not-allowed' : 'pointer', transition: 'background 150ms' }} onMouseEnter={e => { if (!deleting) e.currentTarget.style.background = '#991212'; }} onMouseLeave={e => { if (!deleting) e.currentTarget.style.background = '#ba1a1a'; }}>
                 {deleting ? 'Removing…' : 'Remove User'}
               </button>
             </div>
@@ -1125,7 +1051,7 @@ export default function SettingsScreen() {
         </div>
       )}
 
-      {/* Nuke Confirm Modal */}
+      {/* ── Nuke Confirm Modal ── */}
       {nukeStep > 0 && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) setNukeStep(0); }}>
@@ -1148,7 +1074,7 @@ export default function SettingsScreen() {
               <>
                 <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Type NUKE to confirm</div>
                 <input value={nukeText} onChange={e => setNukeText(e.target.value)} placeholder="NUKE"
-                  style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '10px 12px', outline: 'none', marginBottom: 16 }} />
+                  style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '10px 12px', outline: 'none', marginBottom: 16, boxSizing: 'border-box' }} />
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={() => setNukeStep(0)} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>Cancel</button>
                   <button disabled={nukeText !== 'NUKE'} onClick={() => setNukeStep(3)} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: nukeText === 'NUKE' ? '#ba1a1a' : '#c9c4d5', border: 'none', borderRadius: 8, padding: '10px 0', cursor: nukeText === 'NUKE' ? 'pointer' : 'not-allowed' }}>Continue</button>
@@ -1159,7 +1085,7 @@ export default function SettingsScreen() {
               <>
                 <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Confirm your password</div>
                 <input type="password" value={nukePw} onChange={e => setNukePw(e.target.value)} placeholder="••••••••"
-                  style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '10px 12px', outline: 'none', marginBottom: 16 }} />
+                  style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '10px 12px', outline: 'none', marginBottom: 16, boxSizing: 'border-box' }} />
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={() => setNukeStep(0)} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>Cancel</button>
                   <button onClick={() => { setNukeStep(0); navigate('/nuke', { state: { password: nukePw } }); }} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>Nuke Everything</button>
