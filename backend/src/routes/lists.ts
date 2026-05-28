@@ -131,12 +131,20 @@ async function buildListsForUser(userId: string, workspaceId?: string) {
     ? `AND l.workspace_id = '${workspaceId.replace(/'/g, "''")}'`
     : '';
 
+  const accessCondition = `(
+    l.user_id = $1
+    OR (l.is_public = true AND (
+      wm.user_id = $1
+      OR l.workspace_id IS NULL
+      OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public')
+    ))
+  )`;
+
   const [listsResult, sectionsResult, tasksResult] = await Promise.all([
     query<ListRow>(
       `SELECT l.* FROM lists l
        LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
-       WHERE (l.user_id = $1 OR l.is_public = true OR wm.user_id = $1
-              OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public'))
+       WHERE ${accessCondition}
        ${wsFilter}
        ORDER BY l.position ASC, l.created_at ASC`,
       [userId]
@@ -145,8 +153,7 @@ async function buildListsForUser(userId: string, workspaceId?: string) {
       `SELECT s.* FROM sections s
        JOIN lists l ON s.list_id = l.id
        LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
-       WHERE (l.user_id = $1 OR l.is_public = true OR wm.user_id = $1
-              OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public'))
+       WHERE ${accessCondition}
        ${wsFilter}
        ORDER BY s.position ASC`,
       [userId]
@@ -155,10 +162,9 @@ async function buildListsForUser(userId: string, workspaceId?: string) {
       `SELECT t.* FROM tasks t
        JOIN lists l ON t.list_id = l.id
        LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
-       WHERE (l.user_id = $1 OR l.is_public = true OR wm.user_id = $1
-              OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public'))
+       WHERE ${accessCondition}
        AND t.source = 'list'
-       ${wsFilter.replace(/l\.workspace_id/g, 't.workspace_id')}
+       ${wsFilter}
        ORDER BY t.position ASC, t.created_at ASC`,
       [userId]
     ),

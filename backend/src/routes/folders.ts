@@ -44,8 +44,7 @@ router.get('/', async (req: Request, res: Response) => {
     const rows = await query<FolderRow>(
       `SELECT f.* FROM folders f
        LEFT JOIN workspace_members wm ON wm.workspace_id = f.workspace_id AND wm.user_id = $1
-       WHERE (f.user_id = $1 OR f.is_public = true OR wm.user_id = $1
-              OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = f.workspace_id AND w.visibility = 'public'))
+       WHERE (f.user_id = $1 OR (f.is_public = true AND (wm.user_id = $1 OR f.workspace_id IS NULL OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = f.workspace_id AND w.visibility = 'public'))))
        ${wsClause}
        ORDER BY f.position ASC, f.created_at ASC`,
       [req.userId]
