@@ -233,6 +233,95 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
   }
 });
 
+// GET /api/admin/ai/usage — token usage stats for the last 30 days
+router.get('/ai/usage', authenticate, requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    // Daily breakdown by model (last 30 days)
+    const daily = await query<{
+      date: string;
+      model: string;
+      prompt_tokens: string;
+      completion_tokens: string;
+      total_tokens: string;
+    }>(
+      `SELECT
+         TO_CHAR(DATE(created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS date,
+         model,
+         SUM(prompt_tokens)::text     AS prompt_tokens,
+         SUM(completion_tokens)::text AS completion_tokens,
+         SUM(total_tokens)::text      AS total_tokens
+       FROM ai_usage
+       WHERE created_at >= NOW() - INTERVAL '30 days'
+       GROUP BY DATE(created_at AT TIME ZONE 'UTC'), model
+       ORDER BY date ASC`
+    );
+
+    // Per-model totals
+    const byModel = await query<{
+      model: string;
+      prompt_tokens: string;
+      completion_tokens: string;
+      total_tokens: string;
+      request_count: string;
+    }>(
+      `SELECT
+         model,
+         SUM(prompt_tokens)::text     AS prompt_tokens,
+         SUM(completion_tokens)::text AS completion_tokens,
+         SUM(total_tokens)::text      AS total_tokens,
+         COUNT(*)::text               AS request_count
+       FROM ai_usage
+       WHERE created_at >= NOW() - INTERVAL '30 days'
+       GROUP BY model
+       ORDER BY SUM(total_tokens) DESC`
+    );
+
+    // Grand totals
+    const totals = await query<{
+      prompt_tokens: string;
+      completion_tokens: string;
+      total_tokens: string;
+      request_count: string;
+    }>(
+      `SELECT
+         SUM(prompt_tokens)::text     AS prompt_tokens,
+         SUM(completion_tokens)::text AS completion_tokens,
+         SUM(total_tokens)::text      AS total_tokens,
+         COUNT(*)::text               AS request_count
+       FROM ai_usage
+       WHERE created_at >= NOW() - INTERVAL '30 days'`
+    );
+
+    const t = totals.rows[0] ?? { prompt_tokens: '0', completion_tokens: '0', total_tokens: '0', request_count: '0' };
+
+    res.json({
+      daily: daily.rows.map((r) => ({
+        date:             r.date,
+        model:            r.model,
+        promptTokens:     parseInt(r.prompt_tokens, 10),
+        completionTokens: parseInt(r.completion_tokens, 10),
+        totalTokens:      parseInt(r.total_tokens, 10),
+      })),
+      byModel: byModel.rows.map((r) => ({
+        model:            r.model,
+        promptTokens:     parseInt(r.prompt_tokens, 10),
+        completionTokens: parseInt(r.completion_tokens, 10),
+        totalTokens:      parseInt(r.total_tokens, 10),
+        requestCount:     parseInt(r.request_count, 10),
+      })),
+      totals: {
+        promptTokens:     parseInt(t.prompt_tokens, 10),
+        completionTokens: parseInt(t.completion_tokens, 10),
+        totalTokens:      parseInt(t.total_tokens, 10),
+        requestCount:     parseInt(t.request_count, 10),
+      },
+    });
+  } catch (err) {
+    console.error('admin/ai/usage GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/admin/system/storage
 router.get('/system/storage', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {

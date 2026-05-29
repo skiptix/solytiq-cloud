@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import useAIStore from '../store/useAIStore';
-import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags } from '../api/client';
+import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiGetAIUsage, type AIUsageDay, type AIUsageModel, type AIUsageTotals } from '../api/client';
 import Icon from '../components/Icon';
 
 interface UserEntry {
@@ -41,6 +41,33 @@ function UserAvatar({ name, username, profileImage, size = 36 }: { name: string 
       }
     </div>
   );
+}
+
+const MODEL_PRICING: Record<string, { input: number; output: number; label: string; color: string }> = {
+  'openai/gpt-4o-mini':                { input: 0.15,  output: 0.60,  label: 'GPT-4o Mini',       color: '#10a37f' },
+  'openai/gpt-4o':                      { input: 2.50,  output: 10.00, label: 'GPT-4o',            color: '#4d9e80' },
+  'anthropic/claude-3-5-haiku':         { input: 0.80,  output: 4.00,  label: 'Claude 3.5 Haiku',  color: '#d4691e' },
+  'anthropic/claude-3-5-sonnet':        { input: 3.00,  output: 15.00, label: 'Claude 3.5 Sonnet', color: '#cc785c' },
+  'google/gemini-flash-1.5':            { input: 0.075, output: 0.30,  label: 'Gemini Flash 1.5',  color: '#4285f4' },
+  'meta-llama/llama-3.3-70b-instruct': { input: 0.12,  output: 0.30,  label: 'Llama 3.3 70B',     color: '#0064e0' },
+};
+
+function calcCost(model: string, promptTokens: number, completionTokens: number): number {
+  const p = MODEL_PRICING[model];
+  if (!p) return (promptTokens * 0.15 + completionTokens * 0.60) / 1_000_000;
+  return (promptTokens * p.input + completionTokens * p.output) / 1_000_000;
+}
+
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function fmtCost(usd: number): string {
+  if (usd < 0.0001) return '$0.00';
+  if (usd < 1) return `$${usd.toFixed(4)}`;
+  return `$${usd.toFixed(2)}`;
 }
 
 export default function SettingsScreen() {
@@ -108,6 +135,11 @@ export default function SettingsScreen() {
   const [aiSaved, setAiSaved] = useState(false);
   const [aiLoaded, setAiLoaded] = useState(false);
 
+  // AI usage analytics
+  const [usage, setUsage] = useState<{ daily: AIUsageDay[]; byModel: AIUsageModel[]; totals: AIUsageTotals } | null>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [hoveredBar, setHoveredBar] = useState<{ x: number; y: number; date: string; total: number; prompt: number; completion: number } | null>(null);
+
   // Security / 2FA feature flag
   const [twoFAFeatureEnabled, setTwoFAFeatureEnabled] = useState(true);
   const [securitySaving, setSecuritySaving] = useState(false);
@@ -156,6 +188,15 @@ export default function SettingsScreen() {
       })
       .catch(() => setAiLoaded(true));
   }, [isAdmin, aiLoaded]);
+
+  useEffect(() => {
+    if (activeTab !== 'ai' || !isAdmin) return;
+    setUsageLoading(true);
+    apiGetAIUsage()
+      .then(setUsage)
+      .catch(() => {})
+      .finally(() => setUsageLoading(false));
+  }, [activeTab, isAdmin]);
 
   const handleSaveSystem = async () => {
     const gb = parseFloat(quotaGb);
@@ -592,6 +633,181 @@ export default function SettingsScreen() {
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <SaveButton onClick={handleSaveAI} saving={aiSaving} saved={aiSaved} />
                 </div>
+
+                {/* ── Usage Analytics ── */}
+                {sectionLabel('Token Usage — Last 30 Days')}
+
+                {usageLoading && (
+                  <div style={{ ...card, padding: '32px', textAlign: 'center' as const }}>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading usage data…</div>
+                  </div>
+                )}
+
+                {!usageLoading && usage && (() => {
+                  // Aggregate daily rows (one per model) into per-date totals
+                  const byDate = new Map<string, { total: number; prompt: number; completion: number }>();
+                  for (const d of usage.daily) {
+                    const e = byDate.get(d.date) ?? { total: 0, prompt: 0, completion: 0 };
+                    byDate.set(d.date, { total: e.total + d.totalTokens, prompt: e.prompt + d.promptTokens, completion: e.completion + d.completionTokens });
+                  }
+
+                  // Build ordered 30-day window
+                  const today = new Date();
+                  const days: string[] = [];
+                  for (let i = 29; i >= 0; i--) {
+                    const dt = new Date(today);
+                    dt.setDate(dt.getDate() - i);
+                    days.push(dt.toISOString().slice(0, 10));
+                  }
+
+                  const maxTotal = Math.max(...days.map(d => byDate.get(d)?.total ?? 0), 1);
+                  const totalCost = usage.byModel.reduce((s, m) => s + calcCost(m.model, m.promptTokens, m.completionTokens), 0);
+
+                  // SVG chart dimensions
+                  const W = 600, H = 160;
+                  const padL = 52, padR = 10, padT = 10, padB = 30;
+                  const plotW = W - padL - padR;
+                  const plotH = H - padT - padB;
+                  const slotW = plotW / 30;
+                  const barW = Math.max(4, slotW - 3);
+
+                  return (
+                    <>
+                      {/* Stat cards */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                        {[
+                          { label: 'Total Tokens', value: fmtTokens(usage.totals.totalTokens), icon: 'bolt', color: '#5e4dbb' },
+                          { label: 'Est. Cost', value: fmtCost(totalCost), icon: 'payments', color: '#10B981' },
+                          { label: 'Total Requests', value: usage.totals.requestCount.toLocaleString(), icon: 'chat_bubble', color: '#f59e0b' },
+                        ].map(stat => (
+                          <div key={stat.label} style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 12, padding: '16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div style={{ width: 30, height: 30, borderRadius: 8, background: stat.color + '1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Icon name={stat.icon} size={16} color={stat.color} />
+                              </div>
+                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.07em', fontWeight: 600 }}>{stat.label}</div>
+                            </div>
+                            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22', lineHeight: 1 }}>{stat.value}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Bar chart */}
+                      <div style={{ ...card, padding: '16px 18px 12px' }}>
+                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.07em', marginBottom: 10 }}>Daily Token Usage</div>
+                        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}>
+                          {/* Y-axis grid + labels */}
+                          {([0, 0.25, 0.5, 0.75, 1] as const).map(frac => {
+                            const y = padT + plotH * (1 - frac);
+                            return (
+                              <g key={frac}>
+                                <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="#f1ecf6" strokeWidth={1} />
+                                {frac > 0 && (
+                                  <text x={padL - 5} y={y + 3.5} textAnchor="end" fontFamily="Inter, sans-serif" fontSize="9" fill="#b0acbe">
+                                    {fmtTokens(Math.round(maxTotal * frac))}
+                                  </text>
+                                )}
+                              </g>
+                            );
+                          })}
+
+                          {/* Bars + X-axis labels */}
+                          {days.map((date, i) => {
+                            const data = byDate.get(date);
+                            const total = data?.total ?? 0;
+                            const barH = total > 0 ? Math.max(3, (total / maxTotal) * plotH) : 0;
+                            const x = padL + i * slotW + (slotW - barW) / 2;
+                            const y = padT + plotH - barH;
+                            const isHov = hoveredBar?.date === date;
+                            const showLabel = i === 0 || i === 6 || i === 13 || i === 20 || i === 27 || i === 29;
+                            const lDate = new Date(date + 'T00:00:00');
+                            const lStr = lDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                            return (
+                              <g key={date}>
+                                {total > 0 ? (
+                                  <rect
+                                    x={x} y={y} width={barW} height={barH} rx={3}
+                                    fill={isHov ? '#4f3fa8' : '#5e4dbb'}
+                                    style={{ cursor: 'pointer', transition: 'fill 100ms' }}
+                                    onMouseEnter={() => setHoveredBar({ x: x + barW / 2, y, date, total, prompt: data?.prompt ?? 0, completion: data?.completion ?? 0 })}
+                                    onMouseLeave={() => setHoveredBar(null)}
+                                  />
+                                ) : (
+                                  <rect x={x} y={padT + plotH - 2} width={barW} height={2} rx={1} fill="#f0edfb" />
+                                )}
+                                {showLabel && (
+                                  <text x={padL + i * slotW + slotW / 2} y={H - 4} textAnchor="middle" fontFamily="Inter, sans-serif" fontSize="8.5" fill="#b0acbe">{lStr}</text>
+                                )}
+                              </g>
+                            );
+                          })}
+
+                          {/* Hover tooltip (SVG-native) */}
+                          {hoveredBar && (() => {
+                            const tx = Math.min(Math.max(hoveredBar.x, padL + 76), W - padR - 76);
+                            const ttH = 68;
+                            const ttTop = hoveredBar.y > padT + ttH + 12 ? hoveredBar.y - ttH - 6 : hoveredBar.y + barW + 6;
+                            return (
+                              <g style={{ pointerEvents: 'none' }}>
+                                <rect x={tx - 76} y={ttTop} width={152} height={ttH} rx={7} fill="rgba(28,27,34,0.93)" />
+                                <text x={tx} y={ttTop + 17} textAnchor="middle" fontFamily="Inter, sans-serif" fontSize="9" fill="#9d8dff">
+                                  {new Date(hoveredBar.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                </text>
+                                <text x={tx} y={ttTop + 35} textAnchor="middle" fontFamily="Hanken Grotesk, sans-serif" fontSize="14" fontWeight="700" fill="#ffffff">
+                                  {fmtTokens(hoveredBar.total)} tokens
+                                </text>
+                                <text x={tx} y={ttTop + 52} textAnchor="middle" fontFamily="Inter, sans-serif" fontSize="9" fill="#9d8dff">
+                                  {`In: ${fmtTokens(hoveredBar.prompt)}  ·  Out: ${fmtTokens(hoveredBar.completion)}`}
+                                </text>
+                              </g>
+                            );
+                          })()}
+                        </svg>
+                      </div>
+
+                      {/* Per-model breakdown */}
+                      {usage.byModel.length > 0 && (
+                        <div style={card}>
+                          <div style={{ display: 'flex', alignItems: 'center', padding: '10px 18px', borderBottom: '1px solid #f1ecf6' }}>
+                            <div style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>Model</div>
+                            {['Requests', 'Tokens In', 'Tokens Out', 'Est. Cost'].map(h => (
+                              <div key={h} style={{ width: 84, textAlign: 'right' as const, fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>{h}</div>
+                            ))}
+                          </div>
+                          {usage.byModel.map((m, idx) => {
+                            const cost = calcCost(m.model, m.promptTokens, m.completionTokens);
+                            const info = MODEL_PRICING[m.model];
+                            const label = info?.label ?? (m.model.split('/').pop() ?? m.model);
+                            const color = info?.color ?? '#5e4dbb';
+                            const isLast = idx === usage.byModel.length - 1;
+                            return (
+                              <div key={m.model} style={{ display: 'flex', alignItems: 'center', padding: '10px 18px', borderBottom: isLast ? 'none' : '1px solid #f9f8fc' }}>
+                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22' }}>{label}</span>
+                                </div>
+                                <div style={{ width: 84, textAlign: 'right' as const, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#484552' }}>{m.requestCount.toLocaleString()}</div>
+                                <div style={{ width: 84, textAlign: 'right' as const, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#484552' }}>{fmtTokens(m.promptTokens)}</div>
+                                <div style={{ width: 84, textAlign: 'right' as const, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#484552' }}>{fmtTokens(m.completionTokens)}</div>
+                                <div style={{ width: 84, textAlign: 'right' as const, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22' }}>{fmtCost(cost)}</div>
+                              </div>
+                            );
+                          })}
+                          <div style={{ padding: '9px 18px', borderTop: '1px solid #f1ecf6', fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <Icon name="info" size={12} color="#b0acbe" />
+                            Estimates based on OpenRouter published rates. Actual billing may differ.
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+
+                {!usageLoading && !usage && (
+                  <div style={{ ...card, padding: '32px', textAlign: 'center' as const }}>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>No AI usage data for the last 30 days.</div>
+                  </div>
+                )}
               </div>
             )}
 
