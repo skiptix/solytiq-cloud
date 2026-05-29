@@ -13,6 +13,7 @@ import useAppStore, {
   apiAddListTask,
 } from '../../store/useAppStore';
 import useAuthStore from '../../store/useAuthStore';
+import useWorkspaceStore from '../../store/useWorkspaceStore';
 import {
   apiGetAISettings,
   apiAIChat,
@@ -33,6 +34,9 @@ import {
   apiCreateFolder,
   apiCreateSublistTask,
   apiLinkListAsTask,
+  apiAddWorkspaceMember,
+  apiRemoveWorkspaceMember,
+  apiGetWorkspaceMembers,
 } from '../../api/client';
 import AIBubble from './AIBubble';
 import AIChatWindow from './AIChatWindow';
@@ -53,6 +57,7 @@ export default function AIAssistant() {
     settingsLoaded,
     recentSessions,
     showRecentChats,
+    uploadedFiles,
     setOpen,
     setSettings,
     setMessages,
@@ -64,10 +69,14 @@ export default function AIAssistant() {
     setCurrentSessionId,
     setRecentSessions,
     setShowRecentChats,
+    addUploadedFile,
+    removeUploadedFile,
+    clearUploadedFiles,
   } = useAIStore();
 
   const appStore = useAppStore();
   const { username, userId } = useAuthStore();
+  const workspaceStore = useWorkspaceStore();
   const thinkingIdRef = useRef<string | null>(null);
 
   // Load AI settings once
@@ -167,6 +176,34 @@ export default function AIAssistant() {
             )
           );
           return { id: call.id, name, result: `Created task "${res.task.title}"`, summary: `Added "${res.task.title}"` };
+        }
+
+        // Cross-list task creation — works from any view
+        if (name === 'create_task_in_list') {
+          const listId = args.list_id as string;
+          const sectionId = args.section_id as string;
+          const res = await apiAddListTask(listId, sectionId, {
+            title: args.title as string,
+            deadline: (args.deadline as string) || undefined,
+            priority: args.priority as 'High' | 'Medium' | 'Low' | undefined,
+            note: (args.note as string) || undefined,
+          });
+          appStore.setLists((prev) =>
+            prev.map((l) =>
+              l.id !== listId
+                ? l
+                : {
+                    ...l,
+                    sections: l.sections.map((s) =>
+                      s.id !== sectionId
+                        ? s
+                        : { ...s, tasks: [...s.tasks, { ...res.task, id: Number(res.task.id) }] }
+                    ),
+                  }
+            )
+          );
+          const targetList = appStore.lists.find((l) => l.id === listId);
+          return { id: call.id, name, result: `Created task "${res.task.title}" in "${targetList?.name ?? listId}"`, summary: `Added "${res.task.title}" → ${targetList?.name ?? listId}` };
         }
 
         if (name === 'update_list_task') {
@@ -393,6 +430,32 @@ export default function AIAssistant() {
           return { id: call.id, name, result: `Linked "${linkedList?.name ?? linkedListId}" as task "${taskTitle}"`, summary: `Linked "${linkedList?.name ?? linkedListId}"` };
         }
 
+        // ── Workspace member management ───────────────────────────
+        if (name === 'add_workspace_member') {
+          const wsId = workspaceStore.currentWorkspaceId;
+          if (!wsId) return { id: call.id, name, result: 'No active workspace' };
+          const username = args.username as string;
+          const member = await apiAddWorkspaceMember(wsId, username);
+          return { id: call.id, name, result: `Added @${username} to workspace`, summary: `Added @${username}` };
+          void member;
+        }
+
+        if (name === 'remove_workspace_member') {
+          const wsId = workspaceStore.currentWorkspaceId;
+          if (!wsId) return { id: call.id, name, result: 'No active workspace' };
+          const memberId = args.user_id as string;
+          await apiRemoveWorkspaceMember(wsId, memberId);
+          return { id: call.id, name, result: `Removed member ${memberId} from workspace`, summary: `Removed member` };
+        }
+
+        if (name === 'list_workspace_members') {
+          const wsId = workspaceStore.currentWorkspaceId;
+          if (!wsId) return { id: call.id, name, result: 'No active workspace' };
+          const members = await apiGetWorkspaceMembers(wsId);
+          const memberList = members.members.map((m) => `@${m.username} (id: ${m.userId}, role: ${m.role})`).join(', ');
+          return { id: call.id, name, result: `Members: ${memberList}` };
+        }
+
         return { id: call.id, name, result: `Unknown tool: ${name}` };
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -400,7 +463,7 @@ export default function AIAssistant() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [appStore]
+    [appStore, workspaceStore]
   );
 
   // ── Send message ─────────────────────────────────────────────
@@ -409,6 +472,7 @@ export default function AIAssistant() {
       if (!settings.enabled) return;
 
       const sessionId = useAIStore.getState().currentSessionId;
+      const currentFiles = useAIStore.getState().uploadedFiles;
 
       const userMsg: AIChatMessage = {
         id: crypto.randomUUID(),
@@ -419,6 +483,9 @@ export default function AIAssistant() {
       addMessage(userMsg);
       apiSaveAIMessage('user', text, sessionId).catch(() => {});
 
+      // Clear files after capturing them
+      if (currentFiles.length > 0) clearUploadedFiles();
+
       const thinkingId = crypto.randomUUID();
       thinkingIdRef.current = thinkingId;
       addMessage({ id: thinkingId, role: 'assistant', content: '', isThinking: true, createdAt: new Date().toISOString() });
@@ -426,8 +493,10 @@ export default function AIAssistant() {
 
       try {
         let ctx = buildContext(location.pathname, appStore);
-        let tools = buildTools(ctx);
-        const systemPrompt = buildSystemPrompt(ctx, username || 'User');
+        const wsId = workspaceStore.currentWorkspaceId;
+        const wsInfo = workspaceStore.workspaces.map((w) => ({ id: w.id, name: w.name, role: w.role }));
+        let tools = buildTools(ctx, wsId);
+        const systemPrompt = buildSystemPrompt(ctx, username || 'User', wsInfo, wsId);
 
         // Build API messages from history (last 20 + current)
         const history = useAIStore
@@ -436,8 +505,31 @@ export default function AIAssistant() {
           .slice(-20)
           .map((m) => ({ role: m.role, content: m.content }));
 
+        // Build the current user message — may include file attachments
+        type ContentPart =
+          | { type: 'text'; text: string }
+          | { type: 'image_url'; image_url: { url: string } };
+
+        let userContent: string | ContentPart[];
+        if (currentFiles.length > 0) {
+          const parts: ContentPart[] = [{ type: 'text', text }];
+          for (const f of currentFiles) {
+            if (f.isImage && f.contentText) {
+              parts.push({ type: 'image_url', image_url: { url: f.contentText } });
+            } else if (f.contentText) {
+              parts.push({
+                type: 'text',
+                text: `\n\n---\nAttached file: ${f.filename}\n---\n${f.contentText}`,
+              });
+            }
+          }
+          userContent = parts;
+        } else {
+          userContent = text;
+        }
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const messages: any[] = [{ role: 'system', content: systemPrompt }, ...history];
+        const messages: any[] = [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: userContent }];
         const allResults: Array<{ id: string; name: string; result: string; summary?: string }> = [];
         let finalContent = '';
         const MAX_ROUNDS = 5;
@@ -459,9 +551,9 @@ export default function AIAssistant() {
             messages.push({ role: 'tool', tool_call_id: r.id, name: r.name, content: r.result })
           );
 
-          // Rebuild context with updated store state so newly created folders/lists are available
+          // Rebuild context with updated store state
           ctx = buildContext(location.pathname, appStore);
-          tools = buildTools(ctx);
+          tools = buildTools(ctx, wsId);
         }
 
         const actionSummary = allResults.map((r) => r.summary).filter(Boolean).join(' · ');
@@ -495,7 +587,7 @@ export default function AIAssistant() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [settings.enabled, location.pathname, appStore, username, executeTool]
+    [settings.enabled, location.pathname, appStore, username, executeTool, workspaceStore]
   );
 
   const handleClearHistory = useCallback(async () => {
@@ -568,6 +660,10 @@ export default function AIAssistant() {
           onSelectSession={handleSelectSession}
           onDeleteSession={handleDeleteSession}
           onCloseRecentChats={() => setShowRecentChats(false)}
+          uploadedFiles={uploadedFiles}
+          onAddFile={addUploadedFile}
+          onRemoveFile={removeUploadedFile}
+          sessionId={useAIStore.getState().currentSessionId}
         />
       )}
       <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} />

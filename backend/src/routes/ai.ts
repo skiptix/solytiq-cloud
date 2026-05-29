@@ -1,8 +1,17 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require('pdf-parse');
 import { query } from '../db';
 import { authenticate } from '../middleware';
 
 const router = Router();
+
+// Multer: in-memory, 10 MB limit for AI file uploads
+const aiUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 // GET /api/ai/settings — readable by any authenticated user
 router.get('/settings', authenticate, async (_req: Request, res: Response) => {
@@ -231,6 +240,129 @@ router.delete('/history', authenticate, async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (err) {
     console.error('ai/history DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── AI file uploads ───────────────────────────────────────────────────
+
+interface AIFileRow {
+  id: string;
+  filename: string;
+  mime_type: string;
+  file_size: number;
+  created_at: string;
+}
+
+const MAX_TEXT_CHARS = 50000;
+
+// POST /api/ai/files — upload a file, extract text/base64, store in db
+router.post('/files', authenticate, aiUpload.single('file'), async (req: Request, res: Response) => {
+  try {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: 'No file provided' });
+      return;
+    }
+
+    const sessionId = (req.body as { sessionId?: string }).sessionId ?? null;
+
+    // Verify session belongs to user
+    if (sessionId) {
+      const sess = await query<{ id: string }>(
+        `SELECT id FROM ai_chat_sessions WHERE id = $1 AND user_id = $2`,
+        [sessionId, req.userId]
+      );
+      if (!sess.rows.length) {
+        res.status(403).json({ error: 'Session not found' });
+        return;
+      }
+    }
+
+    let contentText: string | null = null;
+    let isImage = false;
+
+    if (file.mimetype === 'application/pdf') {
+      try {
+        const parsed = await pdfParse(file.buffer);
+        contentText = parsed.text.slice(0, MAX_TEXT_CHARS);
+      } catch {
+        contentText = '[PDF could not be parsed]';
+      }
+    } else if (file.mimetype.startsWith('text/')) {
+      contentText = file.buffer.toString('utf-8').slice(0, MAX_TEXT_CHARS);
+    } else if (file.mimetype.startsWith('image/')) {
+      isImage = true;
+      // Store as base64 data URL for vision models (cap at 4 MB raw)
+      if (file.size <= 4 * 1024 * 1024) {
+        contentText = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+      } else {
+        contentText = '[Image too large for AI context — max 4 MB]';
+        isImage = false;
+      }
+    } else {
+      contentText = `[Unsupported file type: ${file.mimetype}. Supported: PDF, text/*, image/*]`;
+    }
+
+    const result = await query<{ id: string }>(
+      `INSERT INTO ai_chat_files (user_id, session_id, filename, mime_type, file_size, content_text)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [req.userId, sessionId, file.originalname, file.mimetype, file.size, contentText]
+    );
+
+    res.status(201).json({
+      file: {
+        id: result.rows[0].id,
+        filename: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        contentText,
+        isImage,
+      },
+    });
+  } catch (err) {
+    console.error('ai/files POST error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/ai/files?sessionId=... — list files for a session
+router.get('/files', authenticate, async (req: Request, res: Response) => {
+  try {
+    const sessionId = req.query.sessionId as string | undefined;
+    const rows = await query<AIFileRow>(
+      `SELECT id, filename, mime_type, file_size, created_at
+       FROM ai_chat_files
+       WHERE user_id = $1 ${sessionId ? 'AND session_id = $2' : ''}
+       AND expires_at > NOW()
+       ORDER BY created_at ASC`,
+      sessionId ? [req.userId, sessionId] : [req.userId]
+    );
+    res.json({
+      files: rows.rows.map((r) => ({
+        id: r.id,
+        filename: r.filename,
+        mimeType: r.mime_type,
+        size: r.file_size,
+        createdAt: r.created_at,
+      })),
+    });
+  } catch (err) {
+    console.error('ai/files GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/ai/files/:id — delete a file
+router.delete('/files/:id', authenticate, async (req: Request, res: Response) => {
+  try {
+    await query(
+      `DELETE FROM ai_chat_files WHERE id = $1 AND user_id = $2`,
+      [req.params.id, req.userId]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('ai/files/:id DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

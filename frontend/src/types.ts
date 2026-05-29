@@ -115,6 +115,15 @@ export interface SharedFile {
   createdAt: string;
 }
 
+export interface AIFile {
+  id: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  contentText: string | null;
+  isImage: boolean;
+}
+
 export interface AuthUser {
   id: string;
   username: string;

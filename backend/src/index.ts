@@ -314,6 +314,21 @@ async function runMigrations() {
   // Link ai_chats to sessions
   await pool.query(`ALTER TABLE ai_chats ADD COLUMN IF NOT EXISTS session_id UUID REFERENCES ai_chat_sessions(id) ON DELETE CASCADE`);
 
+  // AI chat file attachments (30-day TTL, auto-deleted with session)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_chat_files (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      session_id   UUID REFERENCES ai_chat_sessions(id) ON DELETE CASCADE,
+      filename     VARCHAR(500) NOT NULL,
+      mime_type    VARCHAR(100) NOT NULL DEFAULT 'application/octet-stream',
+      file_size    BIGINT NOT NULL DEFAULT 0,
+      content_text TEXT,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at   TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
+    )
+  `);
+
   // Widen color columns if they were created with the old VARCHAR(20) size
   await pool.query(`ALTER TABLE lists ALTER COLUMN color TYPE VARCHAR(50)`);
   await pool.query(`ALTER TABLE lists ALTER COLUMN color_bg TYPE VARCHAR(50)`);
@@ -503,6 +518,20 @@ async function start() {
     console.error('Failed to apply database migrations:', err);
     process.exit(1);
   }
+
+  // Cleanup expired AI chat files (run once on start, then every 6 hours)
+  const cleanupAiFiles = async () => {
+    try {
+      const result = await pool.query(`DELETE FROM ai_chat_files WHERE expires_at < NOW()`);
+      if (result.rowCount && result.rowCount > 0) {
+        console.log(`Cleaned up ${result.rowCount} expired AI chat file(s).`);
+      }
+    } catch (err) {
+      console.error('AI file cleanup error:', err);
+    }
+  };
+  cleanupAiFiles();
+  setInterval(cleanupAiFiles, 6 * 60 * 60 * 1000);
 
   app.listen(PORT, () => {
     console.log(`Solytiq Cloud API listening on port ${PORT}`);
