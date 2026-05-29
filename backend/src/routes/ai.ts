@@ -74,28 +74,40 @@ router.post('/chat', authenticate, async (req: Request, res: Response) => {
       payload.tool_choice = 'auto';
     }
 
-    const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.FRONTEND_URL ?? 'http://localhost',
-        'X-Title': 'Solytiq Cloud',
-      },
-      body: JSON.stringify(payload),
-    });
+    const abortCtrl = new AbortController();
+    const timeoutId = setTimeout(() => abortCtrl.abort(), 90000);
 
-    if (!upstream.ok) {
-      const text = await upstream.text().catch(() => `HTTP ${upstream.status}`);
-      console.error('OpenRouter error:', upstream.status, text);
-      res.status(502).json({ error: 'AI service error', details: text });
-      return;
+    let data: { choices?: unknown[]; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } };
+    try {
+      const upstreamRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.FRONTEND_URL ?? 'http://localhost',
+          'X-Title': 'Solytiq Cloud',
+        },
+        body: JSON.stringify(payload),
+        signal: abortCtrl.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!upstreamRes.ok) {
+        const text = await upstreamRes.text().catch(() => `HTTP ${upstreamRes.status}`);
+        console.error('OpenRouter error:', upstreamRes.status, text);
+        res.status(502).json({ error: 'AI service error', details: text });
+        return;
+      }
+
+      data = await upstreamRes.json() as typeof data;
+    } catch (fetchErr) {
+      clearTimeout(timeoutId);
+      if (fetchErr instanceof Error && fetchErr.name === 'AbortError') {
+        res.status(504).json({ error: 'AI service timed out — try a smaller request or retry' });
+        return;
+      }
+      throw fetchErr;
     }
-
-    const data = await upstream.json() as {
-      choices?: unknown[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
-    };
 
     // Persist token usage (fire-and-forget, never block the response)
     if (data.usage) {
