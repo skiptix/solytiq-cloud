@@ -344,8 +344,11 @@ export default function AIAssistant() {
             folderId: (args.folder_id as string) || undefined,
             sections: [],
           });
-          appStore.setLists((prev) => [...prev, { ...res.list, sections: [] }]);
-          return { id: call.id, name, result: `Created list "${res.list.name}" (list_id: ${res.list.id})`, summary: `Created list "${res.list.name}"` };
+          // Auto-create a default section so tasks can be added immediately
+          const sectionRes = await apiCreateSection(res.list.id, { label: 'Tasks' });
+          const defaultSection = sectionRes.section;
+          appStore.setLists((prev) => [...prev, { ...res.list, sections: [{ ...defaultSection, tasks: [] }] }]);
+          return { id: call.id, name, result: `Created list "${res.list.name}" (list_id: ${res.list.id}) with default section "Tasks" (section_id: ${defaultSection.id})`, summary: `Created list "${res.list.name}"` };
         }
 
         if (name === 'update_list') {

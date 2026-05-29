@@ -223,7 +223,8 @@ Guidelines:
 - Refer to tasks, lists, sections, and folders by their names, not their IDs, when talking to the user
 - When creating a list you can optionally assign it to a folder from available_folders
 - FOLDER IDs: Always use the exact folder ID (e.g. "folder_abc123"), never the folder name. When creating lists inside a NEW folder that doesn't exist yet, you MUST call create_folder first, then use the folder_id returned in the tool result for subsequent create_list calls — never guess or fabricate a folder_id
-- CROSS-LIST TASKS: You can create tasks in any list using create_task_in_list — use available_lists to find list IDs and their sections
+- NEW LIST SECTIONS: When you create a list with create_list, a default "Tasks" section is automatically created. The tool result contains the section_id (e.g. "section_id: abc123"). Always use that section_id when calling create_task_in_list for that new list — never guess or fabricate a section_id
+- CROSS-LIST TASKS: You can create tasks in any list using create_task_in_list — use available_lists to find list IDs and their sections. For newly created lists, use the section_id returned in the create_list tool result
 - WORKSPACE MEMBERS: You can add or remove members from workspaces using add_workspace_member and remove_workspace_member
 - If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}`;
 }
@@ -517,7 +518,7 @@ export function buildTools(ctx: AIContext, workspaceId?: string | null): ToolDef
     type: 'function',
     function: {
       name: 'create_list',
-      description: 'Create a new list for the current user. Optionally place it in a folder.',
+      description: 'Create a new list. Automatically creates a default "Tasks" section — the tool result includes the section_id. Use that section_id for subsequent create_task_in_list calls targeting this new list.',
       parameters: {
         type: 'object',
         properties: {
