@@ -223,6 +223,32 @@ export const apiGetSystemStorage = () =>
 export const apiGetAppSettings = () =>
   apiFetch<{ settings: Record<string, string> }>('/admin/settings');
 
+export interface AIUsageDay {
+  date: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface AIUsageModel {
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  requestCount: number;
+}
+
+export interface AIUsageTotals {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  requestCount: number;
+}
+
+export const apiGetAIUsage = () =>
+  apiFetch<{ daily: AIUsageDay[]; byModel: AIUsageModel[]; totals: AIUsageTotals }>('/admin/ai/usage');
+
 export const apiUpdateAppSettings = (data: { storageQuotaPerUser?: number }) =>
   apiFetch<{ settings: Record<string, string> }>('/admin/settings', { method: 'PUT', body: JSON.stringify(data) });
 
@@ -251,7 +277,7 @@ export const apiPreviewFile = async (id: string): Promise<string> => {
 export const apiGetAISettings = () =>
   apiFetch<{ enabled: boolean; model: string }>('/ai/settings');
 
-export const apiAIChat = (messages: unknown[], tools?: unknown[]) =>
+export const apiAIChat = (messages: unknown[], tools?: unknown[], sessionId?: string | null) =>
   apiFetch<{
     choices: Array<{
       message: {
@@ -260,7 +286,8 @@ export const apiAIChat = (messages: unknown[], tools?: unknown[]) =>
         tool_calls?: Array<{ id: string; type: string; function: { name: string; arguments: string } }>;
       };
     }>;
-  }>('/ai/chat', { method: 'POST', body: JSON.stringify({ messages, tools }) });
+    usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  }>('/ai/chat', { method: 'POST', body: JSON.stringify({ messages, tools, sessionId }) });
 
 export const apiSaveAIMessage = (role: string, content: string, sessionId?: string | null, metadata?: Record<string, unknown>) =>
   apiFetch<{ id: number; createdAt: string }>('/ai/history', {

@@ -329,6 +329,20 @@ async function runMigrations() {
     )
   `);
 
+  // AI token usage tracking (one row per OpenRouter API call)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_usage (
+      id                SERIAL PRIMARY KEY,
+      user_id           UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      session_id        UUID REFERENCES ai_chat_sessions(id) ON DELETE SET NULL,
+      model             VARCHAR(150) NOT NULL,
+      prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+      completion_tokens INTEGER NOT NULL DEFAULT 0,
+      total_tokens      INTEGER NOT NULL DEFAULT 0,
+      created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
   // Widen color columns if they were created with the old VARCHAR(20) size
   await pool.query(`ALTER TABLE lists ALTER COLUMN color TYPE VARCHAR(50)`);
   await pool.query(`ALTER TABLE lists ALTER COLUMN color_bg TYPE VARCHAR(50)`);

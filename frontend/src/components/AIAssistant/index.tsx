@@ -535,7 +535,7 @@ export default function AIAssistant() {
         const MAX_ROUNDS = 5;
 
         for (let round = 0; round < MAX_ROUNDS; round++) {
-          const response = await apiAIChat(messages, tools.length ? tools : undefined);
+          const response = await apiAIChat(messages, tools.length ? tools : undefined, sessionId);
           const msg = response.choices[0].message;
 
           if (!msg.tool_calls?.length) {

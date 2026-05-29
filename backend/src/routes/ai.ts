@@ -57,9 +57,10 @@ router.post('/chat', authenticate, async (req: Request, res: Response) => {
     }
 
     const model = s['ai_model'] ?? process.env.OPENROUTER_MODEL ?? 'openai/gpt-4o-mini';
-    const { messages, tools } = req.body as {
+    const { messages, tools, sessionId } = req.body as {
       messages: unknown[];
       tools?: unknown[];
+      sessionId?: string | null;
     };
 
     if (!messages || !Array.isArray(messages)) {
@@ -91,7 +92,21 @@ router.post('/chat', authenticate, async (req: Request, res: Response) => {
       return;
     }
 
-    const data = await upstream.json();
+    const data = await upstream.json() as {
+      choices?: unknown[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+    };
+
+    // Persist token usage (fire-and-forget, never block the response)
+    if (data.usage) {
+      const { prompt_tokens = 0, completion_tokens = 0, total_tokens = 0 } = data.usage;
+      query(
+        `INSERT INTO ai_usage (user_id, session_id, model, prompt_tokens, completion_tokens, total_tokens)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [req.userId, sessionId ?? null, model, prompt_tokens, completion_tokens, total_tokens]
+      ).catch(() => {});
+    }
+
     res.json(data);
   } catch (err) {
     console.error('ai/chat POST error:', err);
