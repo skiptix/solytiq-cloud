@@ -344,11 +344,20 @@ export default function AIAssistant() {
             folderId: (args.folder_id as string) || undefined,
             sections: [],
           });
-          // Auto-create a default section so tasks can be added immediately
-          const sectionRes = await apiCreateSection(res.list.id, { label: 'Tasks' });
-          const defaultSection = sectionRes.section;
-          appStore.setLists((prev) => [...prev, { ...res.list, sections: [{ ...defaultSection, tasks: [] }] }]);
-          return { id: call.id, name, result: `Created list "${res.list.name}" (list_id: ${res.list.id}) with default section "Tasks" (section_id: ${defaultSection.id})`, summary: `Created list "${res.list.name}"` };
+          // Auto-create a default "Tasks" section so tasks can be added immediately.
+          // Wrapped in its own try/catch so a section failure never blocks the list result.
+          let defaultSection: { id: string; label: string; tasks: never[] } | null = null;
+          try {
+            const sectionRes = await apiCreateSection(res.list.id, { label: 'Tasks' });
+            defaultSection = { ...sectionRes.section, tasks: [] };
+          } catch {
+            // Section creation failed — list exists but has no section yet
+          }
+          appStore.setLists((prev) => [...prev, { ...res.list, sections: defaultSection ? [defaultSection] : [] }]);
+          const sectionNote = defaultSection
+            ? ` with default section "Tasks" (section_id: ${defaultSection.id})`
+            : ' — NOTE: default section creation failed; use create_section tool to add one';
+          return { id: call.id, name, result: `Created list "${res.list.name}" (list_id: ${res.list.id})${sectionNote}`, summary: `Created list "${res.list.name}"` };
         }
 
         if (name === 'update_list') {
@@ -535,7 +544,7 @@ export default function AIAssistant() {
         const messages: any[] = [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: userContent }];
         const allResults: Array<{ id: string; name: string; result: string; summary?: string }> = [];
         let finalContent = '';
-        const MAX_ROUNDS = 5;
+        const MAX_ROUNDS = 10;
 
         for (let round = 0; round < MAX_ROUNDS; round++) {
           const response = await apiAIChat(messages, tools.length ? tools : undefined, sessionId);
@@ -560,6 +569,9 @@ export default function AIAssistant() {
         }
 
         const actionSummary = allResults.map((r) => r.summary).filter(Boolean).join(' · ');
+        if (!finalContent && allResults.length > 0) {
+          finalContent = "I've completed all the operations I could. Let me know if anything needs adjusting!";
+        }
         const finalMsg: AIChatMessage = {
           id: crypto.randomUUID(),
           role: 'assistant',
@@ -576,6 +588,8 @@ export default function AIAssistant() {
           ? 'The AI assistant has been disabled by your admin.'
           : err instanceof Error && err.message.includes('OPENROUTER')
           ? 'OpenRouter API key is not configured. Please contact your admin.'
+          : err instanceof Error && (err.message.includes('timed out') || err.message.includes('504'))
+          ? 'The request took too long. Try breaking it into smaller steps or retry.'
           : 'Sorry, something went wrong. Please try again.';
         addMessage({
           id: crypto.randomUUID(),
