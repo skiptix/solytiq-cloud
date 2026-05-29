@@ -2,6 +2,11 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require('pdf-parse');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const XLSX: {
+  read: (buf: Buffer, opts: { type: string }) => { SheetNames: string[]; Sheets: Record<string, unknown> };
+  utils: { sheet_to_csv: (sheet: unknown) => string };
+} = require('xlsx');
 import { query } from '../db';
 import { authenticate } from '../middleware';
 
@@ -282,6 +287,22 @@ router.post('/files', authenticate, aiUpload.single('file'), async (req: Request
     let contentText: string | null = null;
     let isImage = false;
 
+    // Derive extension for MIME-ambiguous types (e.g. .ts files arrive as video/mp2t)
+    const ext = (file.originalname.split('.').pop() ?? '').toLowerCase();
+    const TEXT_EXTENSIONS = new Set([
+      'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs',
+      'md', 'markdown',
+      'html', 'htm',
+      'csv',
+      'json', 'yaml', 'yml', 'toml', 'xml',
+      'sql', 'sh', 'bash', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cpp', 'h',
+      'txt', 'log', 'env',
+    ]);
+    const isXlsx = ext === 'xlsx' || ext === 'xls'
+      || file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      || file.mimetype === 'application/vnd.ms-excel';
+    const isTextByExt = TEXT_EXTENSIONS.has(ext);
+
     if (file.mimetype === 'application/pdf') {
       try {
         const parsed = await pdfParse(file.buffer);
@@ -289,7 +310,18 @@ router.post('/files', authenticate, aiUpload.single('file'), async (req: Request
       } catch {
         contentText = '[PDF could not be parsed]';
       }
-    } else if (file.mimetype.startsWith('text/')) {
+    } else if (isXlsx) {
+      try {
+        const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+        const sheets = workbook.SheetNames.map((name) => {
+          const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[name]);
+          return `Sheet: ${name}\n${csv}`;
+        }).join('\n\n');
+        contentText = sheets.slice(0, MAX_TEXT_CHARS);
+      } catch {
+        contentText = '[XLSX could not be parsed]';
+      }
+    } else if (file.mimetype.startsWith('text/') || isTextByExt) {
       contentText = file.buffer.toString('utf-8').slice(0, MAX_TEXT_CHARS);
     } else if (file.mimetype.startsWith('image/')) {
       isImage = true;
@@ -301,7 +333,7 @@ router.post('/files', authenticate, aiUpload.single('file'), async (req: Request
         isImage = false;
       }
     } else {
-      contentText = `[Unsupported file type: ${file.mimetype}. Supported: PDF, text/*, image/*]`;
+      contentText = `[Unsupported file type: ${file.mimetype} (.${ext}). Supported: PDF, XLSX, CSV, HTML, Markdown, TypeScript/JS, images]`;
     }
 
     const result = await query<{ id: string }>(

@@ -35,8 +35,29 @@ const VIEW_LABELS: Record<string, string> = {
 };
 
 const ACCEPTED_MIME_PREFIXES = ['application/pdf', 'text/', 'image/'];
-function isAccepted(mime: string) {
-  return ACCEPTED_MIME_PREFIXES.some((p) => mime === p || mime.startsWith(p));
+const ACCEPTED_MIME_EXACT = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+]);
+// Extensions whose MIME type may be wrong in the browser (e.g. .ts → video/mp2t)
+const ACCEPTED_EXTENSIONS = new Set([
+  'ts', 'tsx', 'js', 'jsx', 'mjs',
+  'md', 'markdown',
+  'html', 'htm',
+  'csv',
+  'xlsx', 'xls',
+  'json', 'yaml', 'yml', 'toml', 'xml', 'sql', 'py', 'rb', 'go', 'rs',
+  'txt', 'log',
+]);
+
+function getExt(name: string) {
+  return (name.split('.').pop() ?? '').toLowerCase();
+}
+
+function isAccepted(file: File) {
+  if (ACCEPTED_MIME_PREFIXES.some((p) => file.type === p || file.type.startsWith(p))) return true;
+  if (ACCEPTED_MIME_EXACT.has(file.type)) return true;
+  return ACCEPTED_EXTENSIONS.has(getExt(file.name));
 }
 
 function formatFileSize(bytes: number): string {
@@ -45,9 +66,15 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function fileIcon(mime: string): string {
+function fileIcon(mime: string, name: string): string {
   if (mime === 'application/pdf') return 'picture_as_pdf';
   if (mime.startsWith('image/')) return 'image';
+  const ext = getExt(name);
+  if (ext === 'xlsx' || ext === 'xls') return 'table_chart';
+  if (ext === 'csv') return 'table_rows';
+  if (ext === 'ts' || ext === 'tsx' || ext === 'js' || ext === 'jsx') return 'code';
+  if (ext === 'md' || ext === 'markdown') return 'article';
+  if (ext === 'html' || ext === 'htm') return 'html';
   return 'description';
 }
 
@@ -274,8 +301,8 @@ export default function AIChatWindow({
   };
 
   const uploadFile = useCallback(async (file: File) => {
-    if (!isAccepted(file.type)) {
-      setUploadError(`Unsupported type "${file.type}". Use PDF, text, or image files.`);
+    if (!isAccepted(file)) {
+      setUploadError(`Unsupported type. Use PDF, XLSX, CSV, HTML, Markdown, TypeScript, or images.`);
       setTimeout(() => setUploadError(null), 4000);
       return;
     }
@@ -581,7 +608,7 @@ export default function AIChatWindow({
                 maxWidth: 160,
               }}
             >
-              <Icon name={fileIcon(f.mimeType)} size={12} color="#7c5dfa" />
+              <Icon name={fileIcon(f.mimeType, f.filename)} size={12} color="#7c5dfa" />
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100 }}>
                 {f.filename}
               </span>
@@ -758,7 +785,7 @@ export default function AIChatWindow({
             textAlign: 'center',
           }}
         >
-          Enter to send · Shift+Enter for new line · Drop files to attach
+          Enter to send · Shift+Enter for newline · Drop PDF, XLSX, CSV, TS, MD, images
         </div>
       </div>
 
@@ -767,7 +794,7 @@ export default function AIChatWindow({
         ref={fileInputRef}
         type="file"
         multiple
-        accept=".pdf,.txt,.md,.csv,.json,.xml,.log,image/*"
+        accept=".pdf,.xlsx,.xls,.csv,.html,.htm,.md,.markdown,.ts,.tsx,.js,.jsx,.txt,.json,.yaml,.yml,.xml,.sql,.log,image/*"
         style={{ display: 'none' }}
         onChange={handleFilePickerChange}
       />
@@ -821,7 +848,7 @@ export default function AIChatWindow({
               textAlign: 'center',
             }}
           >
-            PDF, images, or text files · max 10 MB
+            PDF, XLSX, CSV, HTML, Markdown, TypeScript, images · max 10 MB
           </div>
         </div>
       )}
