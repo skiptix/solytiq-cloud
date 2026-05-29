@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AppState, Task } from '../types';
+import type { AppState, AIFile, Task } from '../types';
 
 export interface AIChatMessage {
   id: string;
@@ -31,6 +31,7 @@ interface AIStore {
   currentSessionId: string | null;
   recentSessions: AISession[];
   showRecentChats: boolean;
+  uploadedFiles: AIFile[];
 
   setOpen: (open: boolean) => void;
   toggle: () => void;
@@ -45,6 +46,9 @@ interface AIStore {
   setCurrentSessionId: (id: string | null) => void;
   setRecentSessions: (sessions: AISession[]) => void;
   setShowRecentChats: (v: boolean) => void;
+  addUploadedFile: (file: AIFile) => void;
+  removeUploadedFile: (id: string) => void;
+  clearUploadedFiles: () => void;
 }
 
 const useAIStore = create<AIStore>()((set) => ({
@@ -56,6 +60,7 @@ const useAIStore = create<AIStore>()((set) => ({
   currentSessionId: null,
   recentSessions: [],
   showRecentChats: false,
+  uploadedFiles: [],
 
   setOpen: (open) => set({ isOpen: open }),
   toggle: () => set((s) => ({ isOpen: !s.isOpen })),
@@ -68,10 +73,13 @@ const useAIStore = create<AIStore>()((set) => ({
     set((s) => ({ messages: s.messages.filter((m) => m.id !== id) })),
   setThinking: (v) => set({ isThinking: v }),
   setSettingsLoaded: (v) => set({ settingsLoaded: v }),
-  clearHistory: () => set({ messages: [] }),
+  clearHistory: () => set({ messages: [], uploadedFiles: [] }),
   setCurrentSessionId: (id) => set({ currentSessionId: id }),
   setRecentSessions: (sessions) => set({ recentSessions: sessions }),
   setShowRecentChats: (v) => set({ showRecentChats: v }),
+  addUploadedFile: (file) => set((s) => ({ uploadedFiles: [...s.uploadedFiles, file] })),
+  removeUploadedFile: (id) => set((s) => ({ uploadedFiles: s.uploadedFiles.filter((f) => f.id !== id) })),
+  clearUploadedFiles: () => set({ uploadedFiles: [] }),
 }));
 
 // ── Context building ──────────────────────────────────────────────
@@ -95,6 +103,8 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
     name: l.name,
     emoji: l.emoji ?? null,
     folder_id: l.folderId ?? null,
+    // Include section stubs for cross-list task creation
+    sections: l.sections.map((s) => ({ section_id: s.id, label: s.label })),
   }));
   const foldersSnapshot = appStore.folders.map((f) => ({
     id: f.id,
@@ -176,7 +186,7 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
 
 // ── System prompt ──────────────────────────────────────────────────
 
-export function buildSystemPrompt(ctx: AIContext, username: string): string {
+export function buildSystemPrompt(ctx: AIContext, username: string, workspaces?: Array<{ id: string; name: string; role: string }>, currentWorkspaceId?: string | null): string {
   const today = toIso(new Date());
   const viewDescriptions: Record<string, string> = {
     dashboard: 'Dashboard — personal quick-add task list with deadlines and priorities',
@@ -190,10 +200,14 @@ export function buildSystemPrompt(ctx: AIContext, username: string): string {
     ? '\n- SUBLISTS: You can create sublists (nested lists) or link existing lists as task items using create_sublist and link_list_as_task tools.'
     : '';
 
+  const workspaceInfo = workspaces?.length
+    ? `\nWorkspaces you can manage: ${workspaces.map((w) => `"${w.name}" (id: ${w.id}, role: ${w.role})`).join(', ')}. Current workspace: ${workspaces.find((w) => w.id === currentWorkspaceId)?.name ?? 'unknown'}.`
+    : '';
+
   return `You are Sol, a helpful AI assistant embedded in Solytiq Cloud, a personal productivity and task management app.
 
 Current user: ${username}
-Current view: ${viewDescriptions[ctx.view] ?? ctx.view}
+Current view: ${viewDescriptions[ctx.view] ?? ctx.view}${workspaceInfo}
 
 Current context data:
 ${contextJson}
@@ -209,6 +223,8 @@ Guidelines:
 - Refer to tasks, lists, sections, and folders by their names, not their IDs, when talking to the user
 - When creating a list you can optionally assign it to a folder from available_folders
 - FOLDER IDs: Always use the exact folder ID (e.g. "folder_abc123"), never the folder name. When creating lists inside a NEW folder that doesn't exist yet, you MUST call create_folder first, then use the folder_id returned in the tool result for subsequent create_list calls — never guess or fabricate a folder_id
+- CROSS-LIST TASKS: You can create tasks in any list using create_task_in_list — use available_lists to find list IDs and their sections
+- WORKSPACE MEMBERS: You can add or remove members from workspaces using add_workspace_member and remove_workspace_member
 - If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}`;
 }
 
@@ -223,7 +239,7 @@ type ToolDef = {
   };
 };
 
-export function buildTools(ctx: AIContext): ToolDef[] {
+export function buildTools(ctx: AIContext, workspaceId?: string | null): ToolDef[] {
   const tools: ToolDef[] = [];
 
   if (ctx.view === 'dashboard') {
@@ -417,6 +433,30 @@ export function buildTools(ctx: AIContext): ToolDef[] {
     });
   }
 
+  // Cross-list task creation — available from any view
+  const allListsWithSections = (ctx.data.available_lists as Array<{ id: string; name: string; sections?: Array<{ section_id: string; label: string }> }> ?? [])
+    .map((l) => `"${l.name}" (id: ${l.id}, sections: [${(l.sections ?? []).map((s) => `"${s.label}" id:${s.section_id}`).join('; ')}])`).join('\n  ');
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'create_task_in_list',
+      description: `Create a task in any of the user's lists — use this when the user is not currently viewing that list.\nAvailable lists:\n  ${allListsWithSections}`,
+      parameters: {
+        type: 'object',
+        properties: {
+          list_id: { type: 'string', description: 'ID of the target list' },
+          section_id: { type: 'string', description: 'ID of the section within that list' },
+          title: { type: 'string', description: 'Task title' },
+          deadline: { type: 'string', description: 'YYYY-MM-DD (optional)' },
+          priority: { type: 'string', enum: ['High', 'Medium', 'Low'] },
+          note: { type: 'string' },
+        },
+        required: ['list_id', 'section_id', 'title'],
+      },
+    },
+  });
+
   // List & folder management — available in every view
   const folderList = (ctx.data.available_folders as Array<{ id: string; name: string }> ?? [])
     .map((f) => `"${f.name}" (id: ${f.id})`).join(', ') || 'none';
@@ -575,6 +615,52 @@ export function buildTools(ctx: AIContext): ToolDef[] {
             linked_list_id: { type: 'string', description: 'ID of the existing list to link' },
           },
           required: ['section_id', 'task_title', 'linked_list_id'],
+        },
+      },
+    });
+  }
+
+  // ── Workspace member management ───────────────────────────────────
+  if (workspaceId) {
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'add_workspace_member',
+        description: 'Add a user to the current workspace by their username. Only the workspace owner can do this.',
+        parameters: {
+          type: 'object',
+          properties: {
+            username: { type: 'string', description: 'Username of the person to add' },
+          },
+          required: ['username'],
+        },
+      },
+    });
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'remove_workspace_member',
+        description: 'Remove a member from the current workspace by their user ID.',
+        parameters: {
+          type: 'object',
+          properties: {
+            user_id: { type: 'string', description: 'User ID of the member to remove' },
+          },
+          required: ['user_id'],
+        },
+      },
+    });
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'list_workspace_members',
+        description: 'List all members of the current workspace.',
+        parameters: {
+          type: 'object',
+          properties: {},
+          required: [],
         },
       },
     });

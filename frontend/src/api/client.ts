@@ -1,4 +1,4 @@
-import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, Workspace, WorkspaceMember } from '../types';
+import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, Workspace, WorkspaceMember, AIFile } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -286,6 +286,39 @@ export const apiGetAISessionMessages = (sessionId: string) =>
 
 export const apiDeleteAISession = (sessionId: string) =>
   apiFetch<{ success: boolean }>(`/ai/sessions/${sessionId}`, { method: 'DELETE' });
+
+// AI File Attachments
+export function apiUploadAIFile(
+  file: File,
+  sessionId: string | null,
+  onProgress: (pct: number) => void,
+): Promise<AIFile> {
+  return new Promise((resolve, reject) => {
+    const token = localStorage.getItem('solytiq_token');
+    const form = new FormData();
+    form.append('file', file);
+    if (sessionId) form.append('sessionId', sessionId);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${(import.meta.env.VITE_API_URL as string | undefined) ?? '/api'}/ai/files`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve((JSON.parse(xhr.responseText) as { file: AIFile }).file);
+      } else {
+        reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(form);
+  });
+}
+
+export const apiDeleteAIFile = (id: string) =>
+  apiFetch<{ success: boolean }>(`/ai/files/${id}`, { method: 'DELETE' });
 
 export const apiUpdateAppSettingsAI = (data: { aiAssistantEnabled?: boolean; aiModel?: string }) =>
   apiFetch<{ settings: Record<string, string> }>('/admin/settings', {
