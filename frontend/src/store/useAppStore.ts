@@ -32,7 +32,7 @@ import {
 } from '../api/client';
 
 let trashCounter = Date.now();
-let loadingFromApi = false;
+let currentLoadId = 0;
 
 const useAppStore = create<AppState>()(
   persist(
@@ -376,8 +376,7 @@ const useAppStore = create<AppState>()(
       },
 
       loadFromApi: async (workspaceId?: string) => {
-        if (loadingFromApi) return;
-        loadingFromApi = true;
+        const myLoadId = ++currentLoadId;
         try {
           const [tasksRes, listsRes, foldersRes, trashRes, trashListsRes, trashFoldersRes] = await Promise.all([
             apiGetTasks().catch(() => null),                    // always global for dashboard
@@ -387,6 +386,8 @@ const useAppStore = create<AppState>()(
             apiGetTrashLists().catch(() => null),
             apiGetTrashFolders().catch(() => null),
           ]);
+          // Discard results if a newer load has been requested (e.g. workspace switched mid-load)
+          if (myLoadId !== currentLoadId) return;
           const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'folders' | 'trashTasks' | 'trashLists' | 'trashFolders'>> = {};
           if (tasksRes) update.dashTasks = tasksRes.tasks.map(t => ({ ...t, id: Number(t.id) }));
           if (foldersRes) update.folders = foldersRes.folders;
@@ -421,8 +422,6 @@ const useAppStore = create<AppState>()(
           set(update as AppState);
         } catch {
           // fall back to persisted state
-        } finally {
-          loadingFromApi = false;
         }
       },
     }),
