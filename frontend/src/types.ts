@@ -157,6 +157,7 @@ export interface AppState {
   dashTasks: Task[];
   lists: List[];
   folders: Folder[];
+  listsLoading: boolean;
   trashTasks: TrashedTask[];
   trashLists: TrashedList[];
   trashFolders: TrashedFolder[];
