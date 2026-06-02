@@ -36,7 +36,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { dashTasks, lists, sidebarWidth, setSidebarWidth, loadFromApi, setLists, updateList, moveTaskToList } = useAppStore();
+  const { dashTasks, lists, sidebarWidth, setSidebarWidth, loadFromApi, setLists, setFolders, updateList, moveTaskToList } = useAppStore();
   const [modal, setModal] = useState<'add-list' | 'completed' | 'trash' | null>(null);
 
   const loadMembers = useMembersStore(s => s.load);
@@ -78,8 +78,10 @@ function AppLayout() {
     };
   }, []);
 
-  // Reload data when active workspace changes
+  // Reload data when active workspace changes, clearing stale workspace-scoped data first
   useEffect(() => {
+    setLists([]);
+    setFolders([]);
     loadFromApi(currentWorkspaceId ?? undefined);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspaceId]);
