@@ -12,7 +12,7 @@ export default function ListScreen() {
   const { listId } = useParams<{ listId: string }>();
   const navigate = useNavigate();
   const { userId: currentUserId } = useAuthStore();
-  const { lists, updateList, updateListTask, deleteListTask, addToTrash, setLists } = useAppStore();
+  const { lists, listsLoading, updateList, updateListTask, deleteListTask, addToTrash, setLists } = useAppStore();
   const list = lists.find(l => l.id === listId);
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -47,6 +47,13 @@ export default function ListScreen() {
   }, [emojiPickerOpen]);
 
   if (!list) {
+    if (listsLoading) {
+      return (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 32, height: 32, border: '3px solid #e8e4f0', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+        </div>
+      );
+    }
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>

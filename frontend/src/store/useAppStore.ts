@@ -40,6 +40,7 @@ const useAppStore = create<AppState>()(
       dashTasks: [],
       lists: [],
       folders: [],
+      listsLoading: false,
       trashTasks: [],
       trashLists: [],
       trashFolders: [],
@@ -377,6 +378,7 @@ const useAppStore = create<AppState>()(
 
       loadFromApi: async (workspaceId?: string) => {
         const myLoadId = ++currentLoadId;
+        set({ listsLoading: true });
         try {
           const [tasksRes, listsRes, foldersRes, trashRes, trashListsRes, trashFoldersRes] = await Promise.all([
             apiGetTasks().catch(() => null),                    // always global for dashboard
@@ -388,7 +390,8 @@ const useAppStore = create<AppState>()(
           ]);
           // Discard results if a newer load has been requested (e.g. workspace switched mid-load)
           if (myLoadId !== currentLoadId) return;
-          const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'folders' | 'trashTasks' | 'trashLists' | 'trashFolders'>> = {};
+          const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'folders' | 'trashTasks' | 'trashLists' | 'trashFolders' | 'listsLoading'>> = {};
+          update.listsLoading = false;
           if (tasksRes) update.dashTasks = tasksRes.tasks.map(t => ({ ...t, id: Number(t.id) }));
           if (foldersRes) update.folders = foldersRes.folders;
           if (listsRes) update.lists = listsRes.lists.map(l => ({
@@ -421,7 +424,7 @@ const useAppStore = create<AppState>()(
           }));
           set(update as AppState);
         } catch {
-          // fall back to persisted state
+          set({ listsLoading: false });
         }
       },
     }),
