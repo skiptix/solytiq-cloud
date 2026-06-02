@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import type { List } from './types';
 import useAuthStore from './store/useAuthStore';
@@ -41,7 +41,6 @@ function AppLayout() {
 
   const loadMembers = useMembersStore(s => s.load);
   const { currentWorkspaceId, loadWorkspaces } = useWorkspaceStore();
-  const prevWorkspaceRef = useRef<string | null>(null);
 
   useEffect(() => {
     const init = async () => {
@@ -81,10 +80,8 @@ function AppLayout() {
 
   // Reload data when active workspace changes
   useEffect(() => {
-    if (prevWorkspaceRef.current !== currentWorkspaceId) {
-      prevWorkspaceRef.current = currentWorkspaceId;
-      loadFromApi(currentWorkspaceId ?? undefined);
-    }
+    loadFromApi(currentWorkspaceId ?? undefined);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspaceId]);
 
   // Sidebar resize
