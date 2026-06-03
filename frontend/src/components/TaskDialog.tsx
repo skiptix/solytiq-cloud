@@ -100,45 +100,73 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
     setNewSubItem('');
     setAddingSubItem(false);
 
+    console.log('[SubItem] ── start ──────────────────────────────');
+    console.log('[SubItem] task.id:', task.id, '| task._source:', task._source, '| task._listId:', task._listId);
+    console.log('[SubItem] linkedListId (local state):', linkedListId);
+    console.log('[SubItem] linkedList in store:', linkedList ? `found (${linkedList.id}, ${linkedList.sections.length} sections)` : 'NOT FOUND');
+    console.log('[SubItem] itemTitle:', itemTitle);
+
     try {
       let listId = linkedListId;
       let sectionId: string;
 
       if (!listId) {
+        console.log('[SubItem] No linkedListId → creating new sublist…');
         setCreatingList(true);
         const newListId = `list_${crypto.randomUUID()}`;
         const newSecId = `sec_${crypto.randomUUID()}`;
+
+        console.log('[SubItem] 1/4 apiCreateList id:', newListId);
         const res = await apiCreateList({ id: newListId, name: title, color: '#5e4dbb', isPublic: false });
         const actualListId = res.list?.id ?? newListId;
+        console.log('[SubItem] 1/4 ✓ list created → actualListId:', actualListId, '(res.list?.id:', res.list?.id, ')');
+
+        console.log('[SubItem] 2/4 apiCreateSection id:', newSecId, 'in list:', actualListId);
         const secRes = await apiCreateSection(actualListId, { id: newSecId, label: 'Tasks' });
         const actualSecId = secRes.section?.id ?? newSecId;
-        // Route to the correct update API based on task source so list tasks
-        // don't hit the dash-only PUT /api/tasks/:id endpoint and get a 404.
+        console.log('[SubItem] 2/4 ✓ section created → actualSecId:', actualSecId, '(secRes.section?.id:', secRes.section?.id, ')');
+
+        console.log('[SubItem] 3/4 linking task → source:', task._source, '| updating linkedListId to:', actualListId);
         if (task._source === 'list' && task._listId) {
-          await apiUpdateListTask(task._listId, task.id, { linkedListId: actualListId, linkedListType: 'sublist' });
+          console.log('[SubItem] 3/4 using apiUpdateListTask (list task) listId:', task._listId);
+          const updRes = await apiUpdateListTask(task._listId, task.id, { linkedListId: actualListId, linkedListType: 'sublist' });
+          console.log('[SubItem] 3/4 ✓ apiUpdateListTask response linkedListId:', (updRes as {task?: {linkedListId?: string}})?.task?.linkedListId);
         } else {
-          await apiUpdateTask(task.id, { linkedListId: actualListId, linkedListType: 'sublist' });
+          console.log('[SubItem] 3/4 using apiUpdateTask (dash task) taskId:', task.id);
+          const updRes = await apiUpdateTask(task.id, { linkedListId: actualListId, linkedListType: 'sublist' });
+          console.log('[SubItem] 3/4 ✓ apiUpdateTask response linkedListId:', (updRes as {task?: {linkedListId?: string}})?.task?.linkedListId);
         }
+
         setLinkedListId(actualListId);
         listId = actualListId;
         sectionId = actualSecId;
         setCreatingList(false);
       } else {
-        // List already linked. Resolve the section ID; if the list isn't in the
-        // current store snapshot (e.g. workspace filter), reload first.
+        console.log('[SubItem] linkedListId already set:', listId);
         let currentLinkedList = linkedList;
         if (!currentLinkedList) {
+          console.log('[SubItem] ⚠ list not in store — calling loadFromApi() to refresh…');
           await loadFromApi();
           currentLinkedList = useAppStore.getState().lists.find(l => l.id === listId) ?? null;
+          console.log('[SubItem] after reload — list found:', currentLinkedList ? `yes (${currentLinkedList.sections.length} sections)` : 'STILL NOT FOUND');
         }
         sectionId = currentLinkedList?.sections[0]?.id ?? '';
-        if (!sectionId) return;
+        console.log('[SubItem] resolved sectionId:', sectionId || '⚠ EMPTY — will bail');
+        if (!sectionId) {
+          console.error('[SubItem] ✗ no section found in linked list', listId, '— aborting');
+          return;
+        }
       }
 
-      await apiAddListTask(listId, sectionId, { title: itemTitle });
+      console.log('[SubItem] 4/4 apiAddListTask → listId:', listId, 'sectionId:', sectionId, 'title:', itemTitle);
+      const addRes = await apiAddListTask(listId, sectionId, { title: itemTitle });
+      console.log('[SubItem] 4/4 ✓ task added → id:', (addRes as {task?: {id?: number}})?.task?.id, 'title:', (addRes as {task?: {title?: string}})?.task?.title);
+
+      console.log('[SubItem] loadFromApi() — refreshing store…');
       await loadFromApi();
+      console.log('[SubItem] ✓ done. lists in store now:', useAppStore.getState().lists.length, '| linked list sections:', useAppStore.getState().lists.find(l => l.id === listId)?.sections.length ?? 'list not found');
     } catch (err) {
-      console.error('Failed to add sub-item:', err);
+      console.error('[SubItem] ✗ ERROR:', err);
       setCreatingList(false);
     }
   };

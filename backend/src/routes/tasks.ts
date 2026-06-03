@@ -195,6 +195,10 @@ router.put('/:id', async (req: Request, res: Response) => {
     const linked_list_type = _llt_snake ?? _llt_camel;
     const updateLinkedList = 'linked_list_id' in req.body || 'linkedListId' in req.body;
 
+    console.log(`[tasks PUT] id=${taskId} userId=${req.userId}`);
+    console.log(`[tasks PUT] body keys: ${Object.keys(req.body).join(', ')}`);
+    console.log(`[tasks PUT] updateLinkedList=${updateLinkedList} linked_list_id=${linked_list_id} linked_list_type=${linked_list_type}`);
+
     const result = await query<TaskRow>(
       `UPDATE tasks
        SET title          = COALESCE($1, title),
@@ -227,11 +231,14 @@ router.put('/:id', async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0) {
+      console.log(`[tasks PUT] ✗ 404 — no task with id=${taskId}, userId=${req.userId}, source=dash`);
       res.status(404).json({ error: 'Task not found' });
       return;
     }
 
-    res.json({ task: sanitizeTask(result.rows[0]) });
+    const saved = result.rows[0];
+    console.log(`[tasks PUT] ✓ updated → linked_list_id=${saved.linked_list_id} linked_list_type=${saved.linked_list_type}`);
+    res.json({ task: sanitizeTask(saved) });
     broadcastToUser(req.userId!, 'tasks');
   } catch (err) {
     console.error('tasks PUT error:', err);
