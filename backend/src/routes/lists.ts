@@ -420,6 +420,8 @@ router.post('/:listId/sections', async (req: Request, res: Response) => {
       emoji?: string;
     };
 
+    console.log(`[sections POST] listId=${listId} requestedId=${id} label=${label}`);
+
     if (!label) {
       res.status(400).json({ error: 'label is required' });
       return;
@@ -431,6 +433,7 @@ router.post('/:listId/sections', async (req: Request, res: Response) => {
       [listId, req.userId]
     );
     if (listCheck.rows.length === 0) {
+      console.log(`[sections POST] ✗ 404 — list ${listId} not found for userId=${req.userId}`);
       res.status(404).json({ error: 'List not found' });
       return;
     }
@@ -452,6 +455,7 @@ router.post('/:listId/sections', async (req: Request, res: Response) => {
       [sectionId, listId, label, emoji ?? null, nextPos]
     );
 
+    console.log(`[sections POST] ✓ created sectionId=${result.rows[0].id}`);
     res.status(201).json({ section: sanitizeSection(result.rows[0], []) });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
@@ -605,6 +609,7 @@ router.delete('/sections/:sectionId', async (req: Request, res: Response) => {
 router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Response) => {
   try {
     const { listId, sectionId } = req.params;
+    console.log(`[list task POST] listId=${listId} sectionId=${sectionId} title=${req.body?.title}`);
     const { id, title, note, deadline, priority, badge, linked_list_id, linked_list_type } = req.body as {
       id?: number;
       title?: string;
@@ -629,6 +634,7 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
       [sectionId, listId, req.userId]
     );
     if (ownerCheck.rows.length === 0) {
+      console.log(`[list task POST] ✗ 404 — section ${sectionId} not found in list ${listId} for userId=${req.userId}`);
       res.status(404).json({ error: 'List or section not found' });
       return;
     }
@@ -651,6 +657,7 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
       [taskId, req.userId, title, note ?? null, deadline ?? null, priority ?? null, badge ?? null, listId, sectionId, nextPos, linked_list_id ?? null, linked_list_type ?? null]
     );
 
+    console.log(`[list task POST] ✓ created taskId=${result.rows[0].id} in section=${sectionId}`);
     res.status(201).json({ task: sanitizeTask(result.rows[0]) });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
@@ -689,6 +696,10 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
     const linked_list_type = _llt_snake ?? _llt_camel;
     const updateLinkedList = 'linked_list_id' in req.body || 'linkedListId' in req.body;
 
+    console.log(`[list task PUT] taskId=${taskId} listId=${listId} userId=${req.userId}`);
+    console.log(`[list task PUT] body keys: ${Object.keys(req.body).join(', ')}`);
+    console.log(`[list task PUT] updateLinkedList=${updateLinkedList} linked_list_id=${linked_list_id} linked_list_type=${linked_list_type}`);
+
     const result = await query<TaskRow>(
       `UPDATE tasks t
        SET title          = COALESCE($1, t.title),
@@ -725,11 +736,14 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0) {
+      console.log(`[list task PUT] ✗ 404 — taskId=${taskId} not found in listId=${listId} for userId=${req.userId}`);
       res.status(404).json({ error: 'Task not found' });
       return;
     }
 
-    res.json({ task: sanitizeTask(result.rows[0]) });
+    const saved = result.rows[0];
+    console.log(`[list task PUT] ✓ updated → linked_list_id=${saved.linked_list_id} linked_list_type=${saved.linked_list_type}`);
+    res.json({ task: sanitizeTask(saved) });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     console.error('list task PUT error:', err);
