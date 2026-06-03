@@ -61,6 +61,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
   const [tag, setTag] = useState(task.badge ?? '');
   const [checked, setChecked] = useState(task.checked);
   const [showCal, setShowCal] = useState(false);
+  const [calPos, setCalPos] = useState<{ top: number; left: number } | null>(null);
   const [showDelete, setShowDelete] = useState(false);
   const [linkedListId, setLinkedListId] = useState(task.linkedListId ?? null);
   const [newSubItem, setNewSubItem] = useState('');
@@ -70,6 +71,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
+  const calBtnRef = useRef<HTMLButtonElement>(null);
 
   const { lists, updateListTask, loadFromApi } = useAppStore();
 
@@ -144,8 +146,8 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
         <div
           onClick={e => e.stopPropagation()}
           style={{
-            background: '#fff', borderRadius: 18, width: '100%', maxWidth: 660,
-            maxHeight: '88vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+            background: '#fff', borderRadius: 18, width: '100%', maxWidth: 800,
+            maxHeight: '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
             boxShadow: '0 32px 80px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.08)',
             animation: 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both',
           }}>
@@ -206,11 +208,16 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
             </div>
 
             {/* Properties panel */}
-            <div style={{ background: '#faf9ff', borderRadius: 12, marginBottom: 28, border: '1px solid #F0EEF8', overflow: 'hidden' }}>
-              <PropRow icon="calendar_today" label="Due date">
-                <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+            <div style={{ background: '#faf9ff', borderRadius: 12, marginBottom: 28, border: '1px solid #F0EEF8' }}>
+              <PropRow icon="calendar_today" label="Due date" first>
+                <div style={{ display: 'inline-flex', alignItems: 'center' }}>
                   <button
-                    onClick={() => setShowCal(c => !c)}
+                    ref={calBtnRef}
+                    onClick={() => {
+                      const rect = calBtnRef.current?.getBoundingClientRect();
+                      if (rect) setCalPos({ top: rect.bottom + 6, left: rect.left });
+                      setShowCal(c => !c);
+                    }}
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6,
                       background: deadline ? '#F5F3FF' : 'transparent',
@@ -230,15 +237,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                       style={{ marginLeft: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 3, display: 'inline-flex', alignItems: 'center' }}>
                       <Icon name="close" size={12} color="#b9b3cb" />
                     </button>
-                  )}
-                  {showCal && (
-                    <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 1300, animation: 'menuIn 200ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-                      <CalendarPicker
-                        value={deadline}
-                        onChange={d => { setDeadline(d); setShowCal(false); save({ deadline: d || undefined }); }}
-                        onClear={() => { setDeadline(''); setShowCal(false); save({ deadline: undefined }); }}
-                      />
-                    </div>
                   )}
                 </div>
               </PropRow>
@@ -304,9 +302,9 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                 style={{
                   width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552',
                   background: 'transparent', border: 'none', outline: 'none', resize: 'none',
-                  lineHeight: 1.75, padding: 0, overflowY: 'hidden', minHeight: 72,
+                  lineHeight: 1.75, padding: 0, overflowY: 'hidden', minHeight: 160,
                 }}
-                rows={3}
+                rows={6}
               />
             </div>
 
@@ -314,7 +312,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
             <div style={{ height: 1, background: '#F0EEF8', marginBottom: 24 }} />
 
             {/* Sub-items */}
-            <div>
+            <div style={{ minHeight: 120 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
                 <SectionLabel>Sub-items</SectionLabel>
                 {subItems.length > 0 && (
@@ -387,6 +385,20 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
         </div>
       </div>
 
+      {/* Calendar rendered at fixed position to escape any overflow: hidden ancestors */}
+      {showCal && calPos && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 1350 }} onClick={() => setShowCal(false)} />
+          <div style={{ position: 'fixed', top: calPos.top, left: calPos.left, zIndex: 1400, animation: 'menuIn 200ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <CalendarPicker
+              value={deadline}
+              onChange={d => { setDeadline(d); setShowCal(false); save({ deadline: d || undefined }); }}
+              onClear={() => { setDeadline(''); setShowCal(false); save({ deadline: undefined }); }}
+            />
+          </div>
+        </>
+      )}
+
       {showDelete && (
         <DeleteConfirmModal
           task={{ ...task, title }}
@@ -398,9 +410,9 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
   );
 }
 
-function PropRow({ icon, label, children, last = false }: { icon: string; label: string; children: React.ReactNode; last?: boolean }) {
+function PropRow({ icon, label, children, last = false, first = false }: { icon: string; label: string; children: React.ReactNode; last?: boolean; first?: boolean }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', padding: '11px 16px', borderBottom: last ? 'none' : '1px solid rgba(229,231,235,0.5)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', padding: '11px 16px', borderBottom: last ? 'none' : '1px solid rgba(229,231,235,0.5)', borderRadius: first ? '11px 11px 0 0' : last ? '0 0 11px 11px' : 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: 130, flexShrink: 0 }}>
         <Icon name={icon} size={14} color="#b9b3cb" />
         <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>{label}</span>
