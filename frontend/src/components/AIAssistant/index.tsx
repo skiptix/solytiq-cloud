@@ -310,6 +310,7 @@ export default function AIAssistant() {
             name: args.name as string,
             emoji: (args.emoji as string) || undefined,
             isPublic: args.is_public !== undefined ? (args.is_public as boolean) : true,
+            workspaceId: workspaceStore.currentWorkspaceId ?? undefined,
           });
           appStore.setFolders((prev) => [...prev, { ...res.folder, collapsed: false }]);
           return { id: call.id, name, result: `Created folder "${res.folder.name}" (folder_id: ${res.folder.id})`, summary: `Created folder "${res.folder.name}"` };
@@ -342,6 +343,8 @@ export default function AIAssistant() {
             name: args.name as string,
             emoji: (args.emoji as string) || undefined,
             folderId: (args.folder_id as string) || undefined,
+            isPublic: args.is_public !== undefined ? (args.is_public as boolean) : false,
+            workspaceId: workspaceStore.currentWorkspaceId ?? undefined,
             sections: [],
           });
           // Auto-create a default "Tasks" section so tasks can be added immediately.
