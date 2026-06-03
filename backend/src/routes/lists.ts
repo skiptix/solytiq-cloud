@@ -125,10 +125,11 @@ function sanitizeList(
 // ---------------------------------------------------------------------------
 
 async function buildListsForUser(userId: string, workspaceId?: string) {
-  // When workspaceId is provided: return lists in that workspace the user can access.
+  // When workspaceId is provided: return lists in that workspace the user can access,
+  // plus the user's own lists with no workspace assigned (backward-compatible "personal" lists).
   // When omitted: return all lists the user owns or has access to (global view).
   const wsFilter = workspaceId
-    ? `AND l.workspace_id = '${workspaceId.replace(/'/g, "''")}'`
+    ? `AND (l.workspace_id = '${workspaceId.replace(/'/g, "''")}' OR (l.workspace_id IS NULL AND l.user_id = $1))`
     : '';
 
   const accessCondition = `(
@@ -254,6 +255,7 @@ router.post('/', async (req: Request, res: Response) => {
       [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false, folderId ?? null, nextPos, parentTaskId ?? null, depth ?? 0, workspaceId ?? null]
     );
 
+    console.log(`[lists POST] ✓ created listId=${result.rows[0].id} workspaceId=${result.rows[0].workspace_id ?? 'null'}`);
     res.status(201).json({ list: sanitizeList(result.rows[0], []) });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
