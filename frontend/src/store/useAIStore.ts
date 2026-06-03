@@ -225,6 +225,7 @@ Guidelines:
 - FOLDER IDs: Always use the exact folder ID (e.g. "folder_abc123"), never the folder name. When creating lists inside a NEW folder that doesn't exist yet, you MUST call create_folder first, then use the folder_id returned in the tool result for subsequent create_list calls — never guess or fabricate a folder_id
 - NEW LIST SECTIONS: When you create a list with create_list, a default "Tasks" section is automatically created. The tool result contains the section_id (e.g. "section_id: abc123"). Always use that section_id when calling create_task_in_list for that new list — never guess or fabricate a section_id
 - CROSS-LIST TASKS: You can create tasks in any list using create_task_in_list — use available_lists to find list IDs and their sections. For newly created lists, use the section_id returned in the create_list tool result
+- SORTING/REORDERING: To sort tasks in a section, call reorder_tasks_in_section with all task IDs in the desired order. To move a task to a different section, call move_task_to_section. To reorder sections themselves, call reorder_sections. Always use actual task/section IDs from the context — never guess IDs.
 - WORKSPACE MEMBERS: You can add or remove members from workspaces using add_workspace_member and remove_workspace_member
 - If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}`;
 }
@@ -394,6 +395,58 @@ export function buildTools(ctx: AIContext, workspaceId?: string | null): ToolDef
             section_id: { type: 'string' },
           },
           required: ['section_id'],
+        },
+      },
+    });
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'move_task_to_section',
+        description: `Move a task from one section to another within the current list. Available sections: ${sectionList}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            task_id: { type: 'number', description: 'ID of the task to move' },
+            to_section_id: { type: 'string', description: 'ID of the destination section' },
+          },
+          required: ['task_id', 'to_section_id'],
+        },
+      },
+    });
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'reorder_tasks_in_section',
+        description: 'Set the display order of all tasks within a section. Pass ALL task IDs for that section in the desired order — any omitted task IDs will not be moved.',
+        parameters: {
+          type: 'object',
+          properties: {
+            section_id: { type: 'string', description: 'Section whose tasks should be reordered' },
+            task_ids: {
+              type: 'array',
+              items: { type: 'number' },
+              description: 'All task IDs in the section, in the desired display order (first = top)',
+            },
+          },
+          required: ['section_id', 'task_ids'],
+        },
+      },
+    });
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'reorder_sections',
+        description: `Set the display order of sections within the current list. Pass ALL section IDs in the desired order. Current sections: ${sectionList}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            section_ids: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'All section IDs in the desired display order (first = top)',
+            },
+          },
+          required: ['section_ids'],
         },
       },
     });

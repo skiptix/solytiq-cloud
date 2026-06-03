@@ -115,6 +115,12 @@ export const apiUpdateSection = (sectionId: string, data: { label?: string; emoj
 export const apiDeleteSection = (sectionId: string) =>
   apiFetch<{ success: boolean }>(`/lists/sections/${sectionId}`, { method: 'DELETE' });
 
+export const apiReorderListSections = (listId: string, sectionIds: string[]) =>
+  apiFetch<{ success: boolean }>(`/lists/${listId}/sections/reorder`, { method: 'PUT', body: JSON.stringify({ section_ids: sectionIds }) });
+
+export const apiReorderSectionTasks = (listId: string, sectionId: string, taskIds: number[]) =>
+  apiFetch<{ success: boolean }>(`/lists/${listId}/sections/${sectionId}/tasks/reorder`, { method: 'PUT', body: JSON.stringify({ task_ids: taskIds }) });
+
 export const apiAddListTask = (listId: string, sectionId: string, data: Partial<Task> & { title: string }) =>
   apiFetch<{ task: Task }>(`/lists/${listId}/sections/${sectionId}/tasks`, { method: 'POST', body: JSON.stringify(data) });
 
