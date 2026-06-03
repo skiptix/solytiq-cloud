@@ -4,6 +4,7 @@ import Icon from './Icon';
 import CalendarPicker from './CalendarPicker';
 import { DeleteConfirmModal } from './TaskItem';
 import useAppStore from '../store/useAppStore';
+import useWorkspaceStore from '../store/useWorkspaceStore';
 import { apiCreateList, apiCreateSection, apiAddListTask, apiUpdateTask, apiUpdateListTask } from '../api/client';
 
 const PRIORITIES = ['High', 'Medium', 'Low'] as const;
@@ -74,6 +75,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
   const calBtnRef = useRef<HTMLButtonElement>(null);
 
   const { lists, updateListTask, loadFromApi } = useAppStore();
+  const { currentWorkspaceId } = useWorkspaceStore();
 
   const linkedList = linkedListId ? lists.find(l => l.id === linkedListId) : null;
   const subItems = linkedList?.sections.flatMap(s => s.tasks) ?? [];
@@ -118,8 +120,11 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
         const newListId = `list_${crypto.randomUUID()}`;
         const newSecId = `sec_${crypto.randomUUID()}`;
 
-        console.log('[SubItem] 1/4 apiCreateList id:', newListId);
-        const res = await apiCreateList({ id: newListId, name: title, color: '#5e4dbb', isPublic: false });
+        // Inherit workspaceId from the parent list (list tasks) or the active workspace (dash tasks)
+        const parentList = task._source === 'list' ? lists.find(l => l.id === task._listId) : null;
+        const workspaceId = parentList?.workspaceId ?? currentWorkspaceId ?? undefined;
+        console.log('[SubItem] 1/4 apiCreateList id:', newListId, '| workspaceId:', workspaceId ?? 'none');
+        const res = await apiCreateList({ id: newListId, name: title, color: '#5e4dbb', isPublic: false, workspaceId });
         const actualListId = res.list?.id ?? newListId;
         console.log('[SubItem] 1/4 ✓ list created → actualListId:', actualListId, '(res.list?.id:', res.list?.id, ')');
 
