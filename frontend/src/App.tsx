@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import type { List } from './types';
 import useAuthStore from './store/useAuthStore';
@@ -36,7 +36,8 @@ function Protected({ children }: { children: React.ReactNode }) {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { dashTasks, lists, sidebarWidth, setSidebarWidth, loadFromApi, setLists, setFolders, updateList, moveTaskToList } = useAppStore();
+  const { dashTasks, lists, listsLoading, sidebarWidth, setSidebarWidth, loadFromApi, setLists, setFolders, updateList, moveTaskToList } = useAppStore();
+  const prevWorkspaceRef = useRef<string | null | undefined>(undefined);
   const [modal, setModal] = useState<'add-list' | 'completed' | 'trash' | null>(null);
 
   const loadMembers = useMembersStore(s => s.load);
@@ -80,9 +81,15 @@ function AppLayout() {
 
   // Reload data when active workspace changes, clearing stale workspace-scoped data first
   useEffect(() => {
+    const prev = prevWorkspaceRef.current;
+    prevWorkspaceRef.current = currentWorkspaceId;
     setLists([]);
     setFolders([]);
     loadFromApi(currentWorkspaceId ?? undefined);
+    // Navigate to dashboard when user explicitly switches between workspaces (not on initial load)
+    if (prev !== undefined && prev !== null && prev !== currentWorkspaceId) {
+      navigate('/dashboard');
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspaceId]);
 
@@ -160,7 +167,7 @@ function AppLayout() {
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
 
-          {currentWorkspaceId && lists.length === 0 && getActive() === 'dashboard' && (
+          {currentWorkspaceId && lists.length === 0 && !listsLoading && getActive() === 'dashboard' && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, zIndex: 10, background: 'rgba(247,242,252,0.90)', backdropFilter: 'blur(10px)', animation: 'backdropIn 220ms ease both' }}>
               <div style={{ width: 72, height: 72, borderRadius: 20, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
                 <span style={{ fontSize: 36 }}>📋</span>
