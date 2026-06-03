@@ -4,7 +4,7 @@ import Icon from './Icon';
 import CalendarPicker from './CalendarPicker';
 import { DeleteConfirmModal } from './TaskItem';
 import useAppStore from '../store/useAppStore';
-import { apiCreateList, apiCreateSection, apiAddListTask, apiUpdateTask } from '../api/client';
+import { apiCreateList, apiCreateSection, apiAddListTask, apiUpdateTask, apiUpdateListTask } from '../api/client';
 
 const PRIORITIES = ['High', 'Medium', 'Low'] as const;
 const PRIORITY_COLORS: Record<string, string> = { High: '#ea580c', Medium: '#f59e0b', Low: '#787584' };
@@ -112,15 +112,26 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
         const actualListId = res.list?.id ?? newListId;
         const secRes = await apiCreateSection(actualListId, { id: newSecId, label: 'Tasks' });
         const actualSecId = secRes.section?.id ?? newSecId;
-        // Await the task update so it commits to the DB before loadFromApi runs,
-        // preventing a race where the GET response beats the PUT and resets linkedListId.
-        await apiUpdateTask(task.id, { linkedListId: actualListId, linkedListType: 'sublist' });
+        // Route to the correct update API based on task source so list tasks
+        // don't hit the dash-only PUT /api/tasks/:id endpoint and get a 404.
+        if (task._source === 'list' && task._listId) {
+          await apiUpdateListTask(task._listId, task.id, { linkedListId: actualListId, linkedListType: 'sublist' });
+        } else {
+          await apiUpdateTask(task.id, { linkedListId: actualListId, linkedListType: 'sublist' });
+        }
         setLinkedListId(actualListId);
         listId = actualListId;
         sectionId = actualSecId;
         setCreatingList(false);
       } else {
-        sectionId = linkedList?.sections[0]?.id ?? '';
+        // List already linked. Resolve the section ID; if the list isn't in the
+        // current store snapshot (e.g. workspace filter), reload first.
+        let currentLinkedList = linkedList;
+        if (!currentLinkedList) {
+          await loadFromApi();
+          currentLinkedList = useAppStore.getState().lists.find(l => l.id === listId) ?? null;
+        }
+        sectionId = currentLinkedList?.sections[0]?.id ?? '';
         if (!sectionId) return;
       }
 
