@@ -165,18 +165,18 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
   // Dashboard (default)
   const overdue = appStore.dashTasks
     .filter((t) => !t.checked && t.deadline && t.deadline < today)
-    .map((t) => ({ id: t.id, title: t.title, deadline: t.deadline, priority: t.priority ?? null }));
+    .map((t) => ({ id: t.id, title: t.title, deadline: t.deadline, priority: t.priority ?? null, linked_list_id: t.linkedListId ?? null }));
   const dueToday = appStore.dashTasks
     .filter((t) => !t.checked && t.deadline === today)
-    .map((t) => ({ id: t.id, title: t.title, priority: t.priority ?? null }));
+    .map((t) => ({ id: t.id, title: t.title, priority: t.priority ?? null, linked_list_id: t.linkedListId ?? null }));
   const noDeadline = appStore.dashTasks
     .filter((t) => !t.checked && !t.deadline)
     .slice(0, 15)
-    .map((t) => ({ id: t.id, title: t.title, priority: t.priority ?? null }));
+    .map((t) => ({ id: t.id, title: t.title, priority: t.priority ?? null, linked_list_id: t.linkedListId ?? null }));
   const upcoming = appStore.dashTasks
     .filter((t) => !t.checked && t.deadline && t.deadline > today)
     .slice(0, 10)
-    .map((t) => ({ id: t.id, title: t.title, deadline: t.deadline, priority: t.priority ?? null }));
+    .map((t) => ({ id: t.id, title: t.title, deadline: t.deadline, priority: t.priority ?? null, linked_list_id: t.linkedListId ?? null }));
 
   return {
     view: 'dashboard',
@@ -198,7 +198,7 @@ export function buildSystemPrompt(ctx: AIContext, username: string, workspaces?:
 
   const sublistNote = ctx.view === 'list'
     ? '\n- SUBLISTS: You can create sublists (nested lists) or link existing lists as task items using create_sublist and link_list_as_task tools.'
-    : '';
+    : '\n- SUBLISTS: You can add sub-items to any dashboard task using add_subitem_to_dash_task (creates a linked sublist automatically if needed), or create a sublist first with add_sublist_to_dash_task. Check linked_list_id in the context — tasks that already have a sublist will show it. You can also link an existing list to a dash task with link_list_to_dash_task.';
 
   const workspaceInfo = workspaces?.length
     ? `\nWorkspaces you can manage: ${workspaces.map((w) => `"${w.name}" (id: ${w.id}, role: ${w.role})`).join(', ')}. Current workspace: ${workspaces.find((w) => w.id === currentWorkspaceId)?.name ?? 'unknown'}.`
@@ -292,6 +292,55 @@ export function buildTools(ctx: AIContext, workspaceId?: string | null): ToolDef
             task_id: { type: 'number' },
           },
           required: ['task_id'],
+        },
+      },
+    });
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'add_subitem_to_dash_task',
+        description: 'Add a sub-item to a dashboard task. If the task has no sublist yet (linked_list_id is null in context), one is created automatically. The task checkbox converts to a ring progress chart.',
+        parameters: {
+          type: 'object',
+          properties: {
+            task_id: { type: 'number', description: 'Dashboard task ID' },
+            sub_item_title: { type: 'string', description: 'Title of the sub-item to add' },
+            sublist_name: { type: 'string', description: 'Name of the sublist to create (only used if task has no sublist yet; defaults to the task title)' },
+          },
+          required: ['task_id', 'sub_item_title'],
+        },
+      },
+    });
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'add_sublist_to_dash_task',
+        description: 'Create a new sublist (linked list) for a dashboard task that has no sub-items yet. The task checkbox converts to a ring progress chart. Use add_subitem_to_dash_task to add items to it afterward.',
+        parameters: {
+          type: 'object',
+          properties: {
+            task_id: { type: 'number', description: 'Dashboard task ID' },
+            sublist_name: { type: 'string', description: 'Name of the new sublist to create' },
+          },
+          required: ['task_id', 'sublist_name'],
+        },
+      },
+    });
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'link_list_to_dash_task',
+        description: 'Link an existing list as a sublist to a dashboard task. The task checkbox converts to a ring progress chart.',
+        parameters: {
+          type: 'object',
+          properties: {
+            task_id: { type: 'number', description: 'Dashboard task ID' },
+            list_id: { type: 'string', description: 'ID of the existing list to link. Find IDs in available_lists.' },
+          },
+          required: ['task_id', 'list_id'],
         },
       },
     });
