@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import type { Task, List } from '../types';
 import useAppStore, { apiCreateTask, apiAddListTask } from '../store/useAppStore';
-import TaskDetailPopup from '../components/TaskDetailPopup';
-import { EditModal } from '../components/TaskItem';
+import TaskDialog from '../components/TaskDialog';
 import Icon from '../components/Icon';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -121,12 +120,10 @@ function AddToDateModal({ date, lists, onAdd, onClose }: AddToDateModalProps) {
 }
 
 export default function ScheduledScreen() {
-  const { dashTasks, lists, updateDashTask, updateListTask, setDashTasks, setLists } = useAppStore();
+  const { dashTasks, lists, updateDashTask, updateListTask, setDashTasks, setLists, addToTrash, deleteListTask } = useAppStore();
   const today = new Date(); today.setHours(0,0,0,0);
   const [viewDate, setViewDate] = useState({ year: today.getFullYear(), month: today.getMonth() });
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [selectedAnchor, setSelectedAnchor] = useState<{ x: number; y: number } | null>(null);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [search, setSearch] = useState('');
   const [dragTaskId, setDragTaskId] = useState<number | null>(null);
   const [addingToDate, setAddingToDate] = useState<string | null>(null);
@@ -138,6 +135,14 @@ export default function ScheduledScreen() {
     if (!t) return;
     if (t._source === 'dash') updateDashTask(id, updates);
     else if (t._listId) updateListTask(t._listId, id, updates);
+  };
+
+  const deleteTask = (id: number) => {
+    const t = allTasks.find(t => t.id === id);
+    if (!t) return;
+    addToTrash(t, { src: t._source ?? 'dash', listId: t._listId, listName: t._listName });
+    if (t._source === 'dash') setDashTasks(ts => ts.filter(x => x.id !== id));
+    else if (t._listId) deleteListTask(t._listId, id);
   };
   const scheduledTasks = allTasks.filter(t => t.deadline);
   const unscheduled = allTasks.filter(t => !t.deadline && !t.checked);
@@ -242,7 +247,7 @@ export default function ScheduledScreen() {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {visible.map(t => (
-                      <div key={t.id} onClick={e => { e.stopPropagation(); setSelectedTask(t); setSelectedAnchor({ x: e.clientX, y: e.clientY }); }}
+                      <div key={t.id} onClick={e => { e.stopPropagation(); setSelectedTask(t); }}
                         style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#F5F3FF', borderRadius: 4, padding: '2px 5px', cursor: 'pointer', transition: 'background 120ms' }}
                         onMouseEnter={e => (e.currentTarget.style.background = '#ede9ff')}
                         onMouseLeave={e => (e.currentTarget.style.background = '#F5F3FF')}>
@@ -291,12 +296,12 @@ export default function ScheduledScreen() {
       </div>
 
       {selectedTask && (
-        <TaskDetailPopup task={selectedTask} anchor={selectedAnchor}
-          onEdit={t => { setSelectedTask(null); setEditingTask(t); }}
-          onClose={() => setSelectedTask(null)} />
-      )}
-      {editingTask && (
-        <EditModal task={editingTask} onSave={upd => { saveTask(editingTask.id, upd); setEditingTask(null); }} onClose={() => setEditingTask(null)} />
+        <TaskDialog
+          task={selectedTask}
+          onUpdate={saveTask}
+          onDelete={deleteTask}
+          onClose={() => setSelectedTask(null)}
+        />
       )}
       {addingToDate && (
         <AddToDateModal date={addingToDate} lists={lists} onAdd={handleAddToDate} onClose={() => setAddingToDate(null)} />

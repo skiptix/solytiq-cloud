@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { Task, List } from '../types';
 import useAppStore from '../store/useAppStore';
 import { apiCreateTask } from '../api/client';
-import TaskItem, { QuickAdd, EditModal } from '../components/TaskItem';
-import TaskDetailPopup from '../components/TaskDetailPopup';
+import TaskItem, { QuickAdd } from '../components/TaskItem';
+import TaskDialog from '../components/TaskDialog';
 import Icon from '../components/Icon';
 
 // ── Date helpers ─────────────────────────────────────────────────
@@ -202,19 +201,16 @@ function TasksDetailModal({ title, icon, accent, accentBg, tasks, onClose, onTog
 
 // ── Dashboard Screen ───────────────────────────────────────────
 export default function DashboardScreen() {
-  const navigate = useNavigate();
   const { dashTasks, setDashTasks, lists, updateDashTask, updateListTask, deleteListTask, addToTrash } = useAppStore();
 
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState<string | null>(null);
   const [detailModal, setDetailModal] = useState<null | { source: 'today' | 'week' | 'todos'; title: string; icon: string; accent: string; accentBg: string }>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [selectedAnchor, setSelectedAnchor] = useState<{ x: number; y: number } | null>(null);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
 
-  const openTask = (task: Task, e: React.MouseEvent) => { setSelectedTask(task); setSelectedAnchor({ x: e.clientX, y: e.clientY }); };
+  const openTask = (task: Task) => setSelectedTask(task);
 
   const allTasks = getFilteredTasks('all', dashTasks, lists);
   const visibleTasks = sortTasks(getFilteredTasks(filter, dashTasks, lists), sort).filter(t => !t.checked);
@@ -387,13 +383,12 @@ export default function DashboardScreen() {
           onClose={() => setDetailModal(null)} onToggle={toggle} onDelete={deleteTask} onUpdate={updateTask} onRowClick={openTask} />
       )}
       {selectedTask && (
-        <TaskDetailPopup task={selectedTask} anchor={selectedAnchor}
-          onEdit={t => { setSelectedTask(null); setEditingTask(t); }}
-          onGoToList={id => { setSelectedTask(null); navigate(`/list/${id}`); }}
-          onClose={() => setSelectedTask(null)} />
-      )}
-      {editingTask && (
-        <EditModal task={editingTask} onSave={upd => { updateTask(editingTask.id, upd); setEditingTask(null); }} onClose={() => setEditingTask(null)} />
+        <TaskDialog
+          task={selectedTask}
+          onUpdate={updateTask}
+          onDelete={deleteTask}
+          onClose={() => setSelectedTask(null)}
+        />
       )}
     </div>
   );

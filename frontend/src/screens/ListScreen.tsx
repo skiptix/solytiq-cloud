@@ -3,8 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import type { Task } from '../types';
 import useAppStore from '../store/useAppStore';
 import useAuthStore from '../store/useAuthStore';
-import TaskItem, { QuickAdd, EditModal } from '../components/TaskItem';
-import TaskDetailPopup from '../components/TaskDetailPopup';
+import TaskItem, { QuickAdd } from '../components/TaskItem';
+import TaskDialog from '../components/TaskDialog';
 import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, apiCreateSublistTask, apiLinkListAsTask } from '../api/client';
 import Icon from '../components/Icon';
 
@@ -16,8 +16,6 @@ export default function ListScreen() {
   const list = lists.find(l => l.id === listId);
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [selectedAnchor, setSelectedAnchor] = useState<{ x: number; y: number } | null>(null);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
 
@@ -305,7 +303,7 @@ export default function ListScreen() {
                       <TaskItem key={task.id} task={enrichedTask}
                         onToggle={toggle} onDelete={deleteTask}
                         onUpdate={(id, upd) => updateListTask(listId!, id, upd)}
-                        onRowClick={(t, e) => { setSelectedTask(t); setSelectedAnchor({ x: e.clientX, y: e.clientY }); }}
+                        onRowClick={t => setSelectedTask(t)}
                         onDragStart={id => setDraggedId(id)}
                         onDragOver={id => setDragOverId(id)}
                         onDrop={id => handleDrop(section.id, id)}
@@ -411,13 +409,12 @@ export default function ListScreen() {
       </div>
 
       {selectedTask && (
-        <TaskDetailPopup task={selectedTask} anchor={selectedAnchor}
-          onEdit={t => { setSelectedTask(null); setEditingTask(t); }}
-          onGoToList={() => {}}
-          onClose={() => setSelectedTask(null)} />
-      )}
-      {editingTask && (
-        <EditModal task={editingTask} onSave={upd => { updateListTask(listId!, editingTask.id, upd); setEditingTask(null); }} onClose={() => setEditingTask(null)} />
+        <TaskDialog
+          task={selectedTask}
+          onUpdate={(id, upd) => updateListTask(listId!, id, upd)}
+          onDelete={deleteTask}
+          onClose={() => setSelectedTask(null)}
+        />
       )}
 
     </div>
