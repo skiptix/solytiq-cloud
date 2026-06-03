@@ -500,6 +500,76 @@ router.put('/sections/:sectionId', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /api/lists/:listId/sections/reorder
+router.put('/:listId/sections/reorder', async (req: Request, res: Response) => {
+  try {
+    const { listId } = req.params;
+    const { section_ids } = req.body as { section_ids?: string[] };
+
+    if (!Array.isArray(section_ids)) {
+      res.status(400).json({ error: 'section_ids must be an array' });
+      return;
+    }
+
+    const listCheck = await query<{ user_id: string }>(
+      'SELECT user_id FROM lists WHERE id = $1',
+      [listId]
+    );
+    if (listCheck.rows.length === 0 || listCheck.rows[0].user_id !== req.userId) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    await Promise.all(
+      section_ids.map((sectionId, index) =>
+        query('UPDATE sections SET position = $1 WHERE id = $2 AND list_id = $3', [index, sectionId, listId])
+      )
+    );
+
+    res.json({ success: true });
+    broadcastToUser(req.userId!, 'lists');
+  } catch (err) {
+    console.error('sections reorder error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/lists/:listId/sections/:sectionId/tasks/reorder
+router.put('/:listId/sections/:sectionId/tasks/reorder', async (req: Request, res: Response) => {
+  try {
+    const { listId, sectionId } = req.params;
+    const { task_ids } = req.body as { task_ids?: number[] };
+
+    if (!Array.isArray(task_ids)) {
+      res.status(400).json({ error: 'task_ids must be an array' });
+      return;
+    }
+
+    const ownerCheck = await query(
+      `SELECT s.id FROM sections s
+       JOIN lists l ON s.list_id = l.id
+       WHERE s.id = $1 AND l.id = $2 AND (l.user_id = $3 OR l.is_public = true)`,
+      [sectionId, listId, req.userId]
+    );
+    if (ownerCheck.rows.length === 0) {
+      res.status(404).json({ error: 'Section not found' });
+      return;
+    }
+
+    await Promise.all(
+      task_ids.map((taskId, index) =>
+        query('UPDATE tasks SET position = $1 WHERE id = $2 AND section_id = $3', [index, taskId, sectionId])
+      )
+    );
+
+    res.json({ success: true });
+    broadcastToUser(req.userId!, 'lists');
+  } catch (err) {
+    console.error('tasks reorder error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // DELETE /api/lists/sections/:sectionId
 router.delete('/sections/:sectionId', async (req: Request, res: Response) => {
   try {

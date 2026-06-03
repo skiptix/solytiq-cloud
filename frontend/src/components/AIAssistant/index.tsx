@@ -37,6 +37,8 @@ import {
   apiAddWorkspaceMember,
   apiRemoveWorkspaceMember,
   apiGetWorkspaceMembers,
+  apiReorderSectionTasks,
+  apiReorderListSections,
 } from '../../api/client';
 import AIBubble from './AIBubble';
 import AIChatWindow from './AIChatWindow';
@@ -445,6 +447,76 @@ export default function AIAssistant() {
           return { id: call.id, name, result: `Linked "${linkedList?.name ?? linkedListId}" as task "${taskTitle}"`, summary: `Linked "${linkedList?.name ?? linkedListId}"` };
         }
 
+        // ── Task movement and reordering ─────────────────────────
+        if (name === 'move_task_to_section') {
+          const listId = ctx.listId!;
+          const taskId = Number(args.task_id);
+          const toSectionId = args.to_section_id as string;
+          await apiUpdateListTask(listId, taskId, { sectionId: toSectionId } as Parameters<typeof apiUpdateListTask>[2]);
+          appStore.setLists((prev) =>
+            prev.map((l) => {
+              if (l.id !== listId) return l;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              let movedTask: any;
+              const withoutTask = l.sections.map((s) => {
+                const task = s.tasks.find((t) => t.id === taskId);
+                if (task) movedTask = task;
+                return { ...s, tasks: s.tasks.filter((t) => t.id !== taskId) };
+              });
+              return {
+                ...l,
+                sections: withoutTask.map((s) =>
+                  s.id !== toSectionId || !movedTask
+                    ? s
+                    : { ...s, tasks: [...s.tasks, movedTask] }
+                ),
+              };
+            })
+          );
+          const toSection = appStore.lists.find((l) => l.id === listId)?.sections.find((s) => s.id === toSectionId);
+          return { id: call.id, name, result: `Moved task ${taskId} to section "${toSection?.label ?? toSectionId}"`, summary: `Moved task to "${toSection?.label ?? toSectionId}"` };
+        }
+
+        if (name === 'reorder_tasks_in_section') {
+          const listId = ctx.listId!;
+          const sectionId = args.section_id as string;
+          const taskIds = (args.task_ids as number[]).map(Number);
+          await apiReorderSectionTasks(listId, sectionId, taskIds);
+          appStore.setLists((prev) =>
+            prev.map((l) =>
+              l.id !== listId
+                ? l
+                : {
+                    ...l,
+                    sections: l.sections.map((s) => {
+                      if (s.id !== sectionId) return s;
+                      const ordered = taskIds
+                        .map((id) => s.tasks.find((t) => t.id === id))
+                        .filter((t): t is NonNullable<typeof t> => t !== undefined);
+                      return { ...s, tasks: ordered };
+                    }),
+                  }
+            )
+          );
+          return { id: call.id, name, result: `Reordered ${taskIds.length} tasks in section`, summary: `Reordered tasks in section` };
+        }
+
+        if (name === 'reorder_sections') {
+          const listId = ctx.listId!;
+          const sectionIds = args.section_ids as string[];
+          await apiReorderListSections(listId, sectionIds);
+          appStore.setLists((prev) =>
+            prev.map((l) => {
+              if (l.id !== listId) return l;
+              const ordered = sectionIds
+                .map((id) => l.sections.find((s) => s.id === id))
+                .filter((s): s is NonNullable<typeof s> => s !== undefined);
+              return { ...l, sections: ordered };
+            })
+          );
+          return { id: call.id, name, result: `Reordered ${sectionIds.length} sections`, summary: `Reordered sections` };
+        }
+
         // ── Workspace member management ───────────────────────────
         if (name === 'add_workspace_member') {
           const wsId = workspaceStore.currentWorkspaceId;
@@ -569,6 +641,19 @@ export default function AIAssistant() {
           // Rebuild context with updated store state
           ctx = buildContext(location.pathname, appStore);
           tools = buildTools(ctx, wsId);
+        }
+
+        // After tool calls complete, refresh from server and let the AI verify
+        // its changes are actually reflected before writing the final response.
+        if (allResults.length > 0) {
+          await appStore.loadFromApi(wsId ?? undefined);
+          const verifiedCtx = buildContext(location.pathname, appStore);
+          messages.push({
+            role: 'system',
+            content: `VERIFICATION — current server state after your operations:\n${JSON.stringify(verifiedCtx.data, null, 2)}\n\nBased on this verified state, write your final response. If something you attempted is not reflected here, acknowledge it instead of claiming success.`,
+          });
+          const verifyResponse = await apiAIChat(messages, undefined, sessionId);
+          finalContent = verifyResponse.choices[0].message.content ?? finalContent;
         }
 
         const actionSummary = allResults.map((r) => r.summary).filter(Boolean).join(' · ');
