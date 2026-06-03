@@ -72,7 +72,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
 
-  const { lists, updateListTask, loadFromApi } = useAppStore();
+  const { lists, setLists, updateListTask, loadFromApi } = useAppStore();
   const { currentWorkspaceId } = useWorkspaceStore();
 
   const linkedList = linkedListId ? lists.find(l => l.id === linkedListId) : null;
@@ -131,6 +131,21 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
         const actualSecId = secRes.section?.id ?? newSecId;
         console.log('[SubItem] 2/4 ✓ section created → actualSecId:', actualSecId, '(secRes.section?.id:', secRes.section?.id, ')');
 
+        // Optimistically add the new sublist to the store so it appears immediately
+        // without waiting for the DB reload (which can be discarded by a concurrent SSE reload)
+        setLists(prev => [
+          ...prev,
+          {
+            id: actualListId,
+            name: title,
+            color: '#5e4dbb',
+            isPublic: false,
+            workspaceId: workspaceId,
+            sections: [{ id: actualSecId, label: 'Tasks', tasks: [] }],
+          },
+        ]);
+        console.log('[SubItem] ✓ sublist added to store optimistically');
+
         console.log('[SubItem] 3/4 linking task → source:', task._source, '| updating linkedListId to:', actualListId);
         if (task._source === 'list' && task._listId) {
           console.log('[SubItem] 3/4 using apiUpdateListTask (list task) listId:', task._listId);
@@ -167,8 +182,9 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
       const addRes = await apiAddListTask(listId, sectionId, { title: itemTitle });
       console.log('[SubItem] 4/4 ✓ task added → id:', (addRes as {task?: {id?: number}})?.task?.id, 'title:', (addRes as {task?: {title?: string}})?.task?.title);
 
-      console.log('[SubItem] loadFromApi() — refreshing store…');
-      await loadFromApi();
+      const wsId = useWorkspaceStore.getState().currentWorkspaceId;
+      console.log('[SubItem] loadFromApi(wsId=' + (wsId ?? 'null') + ') — refreshing store…');
+      await loadFromApi(wsId ?? undefined);
       console.log('[SubItem] ✓ done. lists in store now:', useAppStore.getState().lists.length, '| linked list sections:', useAppStore.getState().lists.find(l => l.id === listId)?.sections.length ?? 'list not found');
     } catch (err) {
       console.error('[SubItem] ✗ ERROR:', err);
