@@ -4,7 +4,7 @@ import Icon from './Icon';
 import CalendarPicker from './CalendarPicker';
 import { DeleteConfirmModal } from './TaskItem';
 import useAppStore from '../store/useAppStore';
-import { apiCreateList, apiCreateSection, apiAddListTask } from '../api/client';
+import { apiCreateList, apiCreateSection, apiAddListTask, apiUpdateTask } from '../api/client';
 
 const PRIORITIES = ['High', 'Medium', 'Low'] as const;
 const PRIORITY_COLORS: Record<string, string> = { High: '#ea580c', Medium: '#f59e0b', Low: '#787584' };
@@ -112,11 +112,14 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
         const newSecId = `sec_${crypto.randomUUID()}`;
         const res = await apiCreateList({ id: newListId, name: title, color: '#5e4dbb', isPublic: false });
         const actualListId = res.list?.id ?? newListId;
-        await apiCreateSection(actualListId, { id: newSecId, label: 'Tasks' });
-        save({ linkedListId: actualListId, linkedListType: 'sublist' });
+        const secRes = await apiCreateSection(actualListId, { id: newSecId, label: 'Tasks' });
+        const actualSecId = secRes.section?.id ?? newSecId;
+        // Await the task update so it commits to the DB before loadFromApi runs,
+        // preventing a race where the GET response beats the PUT and resets linkedListId.
+        await apiUpdateTask(task.id, { linkedListId: actualListId, linkedListType: 'sublist' });
         setLinkedListId(actualListId);
         listId = actualListId;
-        sectionId = newSecId;
+        sectionId = actualSecId;
         setCreatingList(false);
       } else {
         sectionId = linkedList?.sections[0]?.id ?? '';
@@ -124,7 +127,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
       }
 
       await apiAddListTask(listId, sectionId, { title: itemTitle });
-      loadFromApi();
+      await loadFromApi();
     } catch (err) {
       console.error('Failed to add sub-item:', err);
       setCreatingList(false);
