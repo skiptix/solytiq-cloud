@@ -663,7 +663,13 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
 router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
   try {
     const { listId, taskId } = req.params;
-    const { title, note, checked, deadline, time_val, priority, badge, position, sectionId, linked_list_id, linked_list_type } = req.body as {
+    const {
+      title, note, checked, deadline, time_val, priority, badge, position, sectionId,
+      linked_list_id: _ll_snake,
+      linkedListId: _ll_camel,
+      linked_list_type: _llt_snake,
+      linkedListType: _llt_camel,
+    } = req.body as {
       title?: string;
       note?: string;
       checked?: boolean;
@@ -674,10 +680,14 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
       position?: number;
       sectionId?: string;
       linked_list_id?: string | null;
+      linkedListId?: string | null;
       linked_list_type?: 'sublist' | 'link' | null;
+      linkedListType?: 'sublist' | 'link' | null;
     };
 
-    const updateLinkedList = 'linked_list_id' in req.body;
+    const linked_list_id = _ll_snake ?? _ll_camel;
+    const linked_list_type = _llt_snake ?? _llt_camel;
+    const updateLinkedList = 'linked_list_id' in req.body || 'linkedListId' in req.body;
 
     const result = await query<TaskRow>(
       `UPDATE tasks t
