@@ -154,6 +154,58 @@ export default function AIAssistant() {
           return { id: call.id, name, result: `Deleted task ${taskId}`, summary: `Deleted "${task?.title ?? taskId}"` };
         }
 
+        if (name === 'add_sublist_to_dash_task' || name === 'add_subitem_to_dash_task' || name === 'link_list_to_dash_task') {
+          const taskId = Number(args.task_id);
+          const task = appStore.dashTasks.find((t) => t.id === taskId);
+          if (!task) return { id: call.id, name, result: `Error: task ${taskId} not found` };
+
+          let linkedListId = task.linkedListId ?? null;
+          let sectionId: string | null = null;
+
+          if (name === 'link_list_to_dash_task') {
+            linkedListId = args.list_id as string;
+            const linkedList = appStore.lists.find((l) => l.id === linkedListId);
+            sectionId = linkedList?.sections[0]?.id ?? null;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await apiUpdateTask(taskId, { linkedListId, linkedListType: 'link' } as any);
+            appStore.setDashTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, linkedListId: linkedListId!, linkedListType: 'link' } : t));
+            const linkedListName = linkedList?.name ?? linkedListId;
+            return { id: call.id, name, result: `Linked list "${linkedListName}" to task "${task.title}"`, summary: `Linked "${linkedListName}" → "${task.title}"` };
+          }
+
+          // For add_sublist_to_dash_task and add_subitem_to_dash_task: create sublist if needed
+          if (!linkedListId) {
+            const sublistName = (args.sublist_name as string) || task.title;
+            const newListId = `list_${crypto.randomUUID()}`;
+            const newSecId = `sec_${crypto.randomUUID()}`;
+            const listRes = await apiCreateList({ id: newListId, name: sublistName, color: '#5e4dbb', isPublic: false });
+            const actualListId = listRes.list?.id ?? newListId;
+            const secRes = await apiCreateSection(actualListId, { id: newSecId, label: 'Tasks' });
+            sectionId = secRes.section?.id ?? newSecId;
+            linkedListId = actualListId;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await apiUpdateTask(taskId, { linkedListId: actualListId, linkedListType: 'sublist' } as any);
+            appStore.setDashTasks((prev) => prev.map((t) => t.id === taskId ? { ...t, linkedListId: actualListId, linkedListType: 'sublist' as const } : t));
+            appStore.setLists((prev) => [...prev, { id: actualListId, name: sublistName, sections: [{ id: sectionId!, label: 'Tasks', tasks: [], emoji: undefined, collapsed: false, position: 0 }], folderId: undefined, emoji: undefined, isPublic: false, depth: 1 }]);
+          } else {
+            const linkedList = appStore.lists.find((l) => l.id === linkedListId);
+            sectionId = linkedList?.sections[0]?.id ?? null;
+          }
+
+          if (name === 'add_subitem_to_dash_task') {
+            if (!sectionId) return { id: call.id, name, result: 'Error: could not find a section in the sublist' };
+            const itemTitle = args.sub_item_title as string;
+            const res = await apiAddListTask(linkedListId!, sectionId, { title: itemTitle });
+            await appStore.loadFromApi();
+            return { id: call.id, name, result: `Added sub-item "${itemTitle}" to task "${task.title}"`, summary: `Added "${itemTitle}" to "${task.title}"` };
+            void res;
+          }
+
+          // add_sublist_to_dash_task (no sub-item to add)
+          await appStore.loadFromApi();
+          return { id: call.id, name, result: `Created sublist for task "${task.title}" (list_id: ${linkedListId})`, summary: `Created sublist for "${task.title}"` };
+        }
+
         if (name === 'create_list_task') {
           const listId = ctx.listId!;
           const sectionId = args.section_id as string;

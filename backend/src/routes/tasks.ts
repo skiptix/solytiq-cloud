@@ -172,8 +172,10 @@ router.put('/:id', async (req: Request, res: Response) => {
       priority,
       badge,
       position,
-      linked_list_id,
-      linked_list_type,
+      linked_list_id: _ll_snake,
+      linkedListId: _ll_camel,
+      linked_list_type: _llt_snake,
+      linkedListType: _llt_camel,
     } = req.body as {
       title?: string;
       note?: string;
@@ -184,10 +186,14 @@ router.put('/:id', async (req: Request, res: Response) => {
       badge?: string;
       position?: number;
       linked_list_id?: string | null;
+      linkedListId?: string | null;
       linked_list_type?: 'sublist' | 'link' | null;
+      linkedListType?: 'sublist' | 'link' | null;
     };
 
-    const updateLinkedList = 'linked_list_id' in req.body;
+    const linked_list_id = _ll_snake ?? _ll_camel;
+    const linked_list_type = _llt_snake ?? _llt_camel;
+    const updateLinkedList = 'linked_list_id' in req.body || 'linkedListId' in req.body;
 
     const result = await query<TaskRow>(
       `UPDATE tasks
