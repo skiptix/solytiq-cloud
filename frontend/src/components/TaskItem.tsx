@@ -1,5 +1,4 @@
-import { useState, useRef } from 'react';
-import type { CSSProperties } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Task, List } from '../types';
 import Icon from './Icon';
@@ -45,7 +44,7 @@ interface EditModalProps {
   currentListId?: string;
 }
 
-export function EditModal({ task = {}, mode = 'edit', onSave, onClose, availableLists = [], currentListId: _currentListId }: EditModalProps) {
+export function EditModal({ task = {}, mode = 'edit', onSave, onClose, availableLists = [] }: EditModalProps) {
   const [title, setTitle] = useState(task.title ?? '');
   const [notes, setNotes] = useState(task.note ?? '');
   const [deadline, setDeadline] = useState(task.deadline ?? '');
@@ -207,13 +206,8 @@ interface TaskItemProps {
   currentListId?: string;
 }
 
-export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClick, onDragStart, onDragEnd, onDragOver, onDrop, isDragging, isDragOver, hideListBadge, availableLists = [], currentListId }: TaskItemProps) {
+export default function TaskItem({ task, onToggle, onRowClick, onDragStart, onDragEnd, onDragOver, onDrop, isDragging, isDragOver, hideListBadge, availableLists = [] }: TaskItemProps) {
   const [hovered, setHovered] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
-  const [showDelete, setShowDelete] = useState(false);
-  const [showEdit, setShowEdit] = useState(false);
-  const menuBtnRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
   const { title, note, priority, badge, checked, deadline, time, linkedListId } = task;
   const bc = badge ? (BADGE_COLORS[badge] ?? { bg: '#F5F3FF', color: '#484552' }) : null;
@@ -291,56 +285,10 @@ export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClic
           )}
         </div>
 
-        <div style={{ width: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: hovered || menuOpen ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab' }}>
+        <div style={{ width: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: hovered ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab' }}>
           <Icon name="drag_indicator" size={16} color="#c9c4d5" />
         </div>
-
-        <div style={{ flexShrink: 0 }}>
-          <button ref={menuBtnRef} onClick={e => {
-            e.stopPropagation();
-            if (!menuOpen) {
-              const rect = menuBtnRef.current?.getBoundingClientRect();
-              if (rect) setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-            }
-            setMenuOpen(m => !m);
-          }}
-            style={{ display: 'flex', alignItems: 'center', padding: 4, borderRadius: 4, background: menuOpen ? '#f1ecf6' : 'transparent', border: 'none', cursor: 'pointer', opacity: hovered || menuOpen ? 1 : 0, transition: 'opacity 200ms' }}>
-            <Icon name="more_vert" size={18} color="#787584" />
-          </button>
-          {menuOpen && menuPos && (
-            <div style={{ position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 1000, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.10)', minWidth: 128, overflow: 'hidden', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
-              onClick={e => e.stopPropagation()}>
-              <ContextMenuItems
-                onEdit={() => { setMenuOpen(false); setShowEdit(true); }}
-                onDelete={() => { setMenuOpen(false); setShowDelete(true); }}
-                onClose={() => setMenuOpen(false)} />
-            </div>
-          )}
-        </div>
       </div>
-      {showDelete && <DeleteConfirmModal task={task} onConfirm={() => { onDelete?.(task.id); setShowDelete(false); }} onCancel={() => setShowDelete(false)} />}
-      {showEdit && <EditModal task={task} onSave={upd => { onUpdate?.(task.id, upd); setShowEdit(false); }} onClose={() => setShowEdit(false)} availableLists={availableLists} currentListId={currentListId} />}
-    </>
-  );
-}
-
-function ContextMenuItems({ onEdit, onDelete, onClose }: { onEdit: () => void; onDelete: () => void; onClose: () => void }) {
-  const itemStyle: CSSProperties = { display: 'block', width: '100%', textAlign: 'left', padding: '9px 16px', background: 'transparent', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, cursor: 'pointer' };
-  return (
-    <>
-      <button style={{ ...itemStyle, color: '#1c1b22' }}
-        onMouseEnter={e => (e.currentTarget.style.background='#F5F3FF')}
-        onMouseLeave={e => (e.currentTarget.style.background='transparent')}
-        onClick={() => { onEdit(); onClose(); }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="edit" size={14} color="#5e4dbb" /> Edit</span>
-      </button>
-      <div style={{ height: 1, background: '#F5F3FF' }} />
-      <button style={{ ...itemStyle, color: '#ba1a1a' }}
-        onMouseEnter={e => (e.currentTarget.style.background='#fff5f5')}
-        onMouseLeave={e => (e.currentTarget.style.background='transparent')}
-        onClick={() => { onDelete(); onClose(); }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Icon name="delete" size={14} color="#ba1a1a" /> Delete</span>
-      </button>
     </>
   );
 }
