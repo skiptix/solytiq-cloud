@@ -9,9 +9,9 @@ const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 const PRESET_EMOJIS = ['🏠', '🚀', '💡', '🎯', '🔬', '💼', '🎨', '🌱', '⚡', '🏋️', '📚', '🎵', '🌍', '💰', '🛒'];
 
-interface Props { onClose: () => void; onCreated?: (wsId: string) => void; }
+interface Props { onClose: () => void; onCreated?: (wsId: string) => void; forced?: boolean; }
 
-export default function WorkspaceWizard({ onClose, onCreated }: Props) {
+export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -108,7 +108,7 @@ export default function WorkspaceWizard({ onClose, onCreated }: Props) {
 
   return (
     <div
-      onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
+      onClick={e => { if (e.target === e.currentTarget && !forced) handleClose(); }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: backdropAnim }}>
       <div
         onClick={e => e.stopPropagation()}
@@ -124,8 +124,8 @@ export default function WorkspaceWizard({ onClose, onCreated }: Props) {
         {/* ── Step 0: Details ── */}
         {step === 0 && (
           <div style={{ padding: '20px 24px 24px', animation: 'wizardStepIn 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', marginBottom: 4 }}>Create workspace</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: 22 }}>Give your workspace a name and identity.</div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', marginBottom: 4 }}>{forced ? 'Create your first workspace' : 'Create workspace'}</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: 22 }}>{forced ? 'You need a workspace to get started. Give it a name and identity.' : 'Give your workspace a name and identity.'}</div>
 
             {/* Icon area */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 18 }}>
@@ -219,7 +219,9 @@ export default function WorkspaceWizard({ onClose, onCreated }: Props) {
             </div>
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={handleClose} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: 'pointer' }}>Cancel</button>
+              {!forced && (
+                <button onClick={handleClose} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: 'pointer' }}>Cancel</button>
+              )}
               <button onClick={() => setStep(1)} disabled={!name.trim()} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: name.trim() ? '#5e4dbb' : '#c4b5fd', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: name.trim() ? 'pointer' : 'default', transition: 'background 150ms' }}>
                 Next <Icon name="arrow_forward" size={15} color="#fff" />
               </button>
