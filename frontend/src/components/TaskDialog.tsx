@@ -124,7 +124,8 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
         const parentList = task._source === 'list' ? lists.find(l => l.id === task._listId) : null;
         const workspaceId = parentList?.workspaceId ?? currentWorkspaceId ?? undefined;
         console.log('[SubItem] 1/4 apiCreateList id:', newListId, '| workspaceId:', workspaceId ?? 'none');
-        const res = await apiCreateList({ id: newListId, name: title, color: '#5e4dbb', isPublic: false, workspaceId });
+        const newDepth = (parentList?.depth ?? 0) + 1;
+        const res = await apiCreateList({ id: newListId, name: title, color: '#5e4dbb', isPublic: false, workspaceId, parentTaskId: task.id, depth: newDepth });
         const actualListId = res.list?.id ?? newListId;
         console.log('[SubItem] 1/4 ✓ list created → actualListId:', actualListId, '(res.list?.id:', res.list?.id, ')');
 
@@ -143,6 +144,8 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
             color: '#5e4dbb',
             isPublic: false,
             workspaceId: workspaceId,
+            parentTaskId: task.id,
+            depth: newDepth,
             sections: [{ id: actualSecId, label: 'Tasks', tasks: [] }],
           },
         ]);
