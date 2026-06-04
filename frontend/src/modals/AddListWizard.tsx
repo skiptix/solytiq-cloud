@@ -28,8 +28,9 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
   const [newSection, setNewSection] = useState('');
   const [newSectionEmoji, setNewSectionEmoji] = useState('📌');
   const [loading, setLoading] = useState(false);
+  const [createError, setCreateError] = useState('');
 
-  const { setLists } = useAppStore();
+  const { setLists, loadFromApi } = useAppStore();
   const currentWorkspaceId = useWorkspaceStore(s => s.currentWorkspaceId);
   const selectedColor = COLORS[colorIdx];
 
@@ -42,38 +43,26 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
   const handleCreate = async () => {
     if (!name.trim()) return;
     setLoading(true);
+    setCreateError('');
     try {
       const listId = `list_${Date.now()}`;
       const res = await apiCreateList({ id: listId, name: name.trim(), emoji, isPublic, color: selectedColor.color, colorBg: selectedColor.bg, subtitle: subtitle.trim() || undefined, workspaceId: currentWorkspaceId ?? undefined });
       const createdList = res.list;
-      // Add sections
+      // Add an optimistic placeholder so the list appears immediately
+      setLists(prev => [...prev, { ...createdList, sections: [] }]);
+      // Create sections sequentially; any individual failure is logged but does not abort
       for (const sec of sections) {
         try {
           await apiCreateSection(createdList.id, { id: sec.id, label: sec.label, emoji: sec.emoji });
         } catch (e) { console.error('section create failed', e); }
       }
-      // Reload to get full list with sections
-      const finalList: List = {
-        ...createdList,
-        sections: sections.map(s => ({ id: s.id, label: s.label, emoji: s.emoji, tasks: [] })),
-      };
-      setLists(prev => [...prev, finalList]);
-      onCreated(finalList);
+      // Reload from server to get the authoritative state (includes only sections that actually saved)
+      await loadFromApi(currentWorkspaceId ?? undefined);
+      const savedList = useAppStore.getState().lists.find(l => l.id === createdList.id) ?? { ...createdList, sections: [] };
+      onCreated(savedList as List);
     } catch (e) {
       console.error('createList failed', e);
-      // Fallback: create locally
-      const localList: List = {
-        id: `list_${Date.now()}`,
-        name: name.trim(),
-        emoji,
-        isPublic,
-        color: selectedColor.color,
-        colorBg: selectedColor.bg,
-        subtitle: subtitle.trim() || undefined,
-        sections: sections.map(s => ({ id: s.id, label: s.label, emoji: s.emoji, tasks: [] })),
-      };
-      setLists(prev => [...prev, localList]);
-      onCreated(localList);
+      setCreateError('Failed to create list. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -147,7 +136,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
                   </button>
                 </div>
                 <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584', marginTop: 6 }}>
-                  {isPublic ? 'Everyone can see and edit this list and its items.' : 'Only you can see and edit this list.'}
+                  {isPublic ? 'Everyone in this workspace can see this list.' : 'Only you can see and edit this list.'}
                 </div>
               </div>
               {/* Color */}
@@ -228,6 +217,11 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
         </div>
 
         {/* Footer */}
+        {createError && (
+          <div style={{ margin: '0 24px 8px', padding: '8px 12px', background: '#ffdad6', borderRadius: 8, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a' }}>
+            {createError}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 10, padding: '0 24px 24px', justifyContent: 'space-between', alignItems: 'center' }}>
           {step > 0 ? (
             <button onClick={() => setStep(s => s - 1)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 0', display: 'flex', alignItems: 'center', gap: 4 }}>

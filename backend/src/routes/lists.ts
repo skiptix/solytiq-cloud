@@ -128,9 +128,11 @@ async function buildListsForUser(userId: string, workspaceId?: string) {
   // When workspaceId is provided: return lists in that workspace the user can access,
   // plus the user's own lists with no workspace assigned (backward-compatible "personal" lists).
   // When omitted: return all lists the user owns or has access to (global view).
+  const params: unknown[] = [userId];
   const wsFilter = workspaceId
-    ? `AND (l.workspace_id = '${workspaceId.replace(/'/g, "''")}' OR (l.workspace_id IS NULL AND l.user_id = $1))`
+    ? `AND (l.workspace_id = $2 OR (l.workspace_id IS NULL AND l.user_id = $1))`
     : '';
+  if (workspaceId) params.push(workspaceId);
 
   const accessCondition = `(
     l.user_id = $1
@@ -148,7 +150,7 @@ async function buildListsForUser(userId: string, workspaceId?: string) {
        WHERE ${accessCondition}
        ${wsFilter}
        ORDER BY l.position ASC, l.created_at ASC`,
-      [userId]
+      params
     ),
     query<SectionRow>(
       `SELECT s.* FROM sections s
@@ -157,7 +159,7 @@ async function buildListsForUser(userId: string, workspaceId?: string) {
        WHERE ${accessCondition}
        ${wsFilter}
        ORDER BY s.position ASC`,
-      [userId]
+      params
     ),
     query<TaskRow>(
       `SELECT t.* FROM tasks t
@@ -167,7 +169,7 @@ async function buildListsForUser(userId: string, workspaceId?: string) {
        AND t.source = 'list'
        ${wsFilter}
        ORDER BY t.position ASC, t.created_at ASC`,
-      [userId]
+      params
     ),
   ]);
 
@@ -429,14 +431,18 @@ router.post('/:listId/sections', async (req: Request, res: Response) => {
       return;
     }
 
-    // Verify list belongs to user or is public
-    const listCheck = await query(
-      'SELECT id FROM lists WHERE id = $1 AND (user_id = $2 OR is_public = true)',
-      [listId, req.userId]
+    // Only owner or admin can add sections
+    const listCheck = await query<{ user_id: string }>(
+      'SELECT user_id FROM lists WHERE id = $1',
+      [listId]
     );
     if (listCheck.rows.length === 0) {
       console.log(`[sections POST] ✗ 404 — list ${listId} not found for userId=${req.userId}`);
       res.status(404).json({ error: 'List not found' });
+      return;
+    }
+    if (listCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
       return;
     }
 
@@ -476,15 +482,17 @@ router.put('/sections/:sectionId', async (req: Request, res: Response) => {
       position?: number;
     };
 
-    // Verify section belongs to a list owned by this user or public
-    const ownerCheck = await query(
-      `SELECT s.id FROM sections s
-       JOIN lists l ON s.list_id = l.id
-       WHERE s.id = $1 AND (l.user_id = $2 OR l.is_public = true)`,
-      [sectionId, req.userId]
+    // Only owner or admin can update sections
+    const ownerCheck = await query<{ user_id: string }>(
+      `SELECT l.user_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1`,
+      [sectionId]
     );
     if (ownerCheck.rows.length === 0) {
       res.status(404).json({ error: 'Section not found' });
+      return;
+    }
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
       return;
     }
 
@@ -521,7 +529,11 @@ router.put('/:listId/sections/reorder', async (req: Request, res: Response) => {
       'SELECT user_id FROM lists WHERE id = $1',
       [listId]
     );
-    if (listCheck.rows.length === 0 || listCheck.rows[0].user_id !== req.userId) {
+    if (listCheck.rows.length === 0) {
+      res.status(404).json({ error: 'List not found' });
+      return;
+    }
+    if (listCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }
@@ -551,14 +563,16 @@ router.put('/:listId/sections/:sectionId/tasks/reorder', async (req: Request, re
       return;
     }
 
-    const ownerCheck = await query(
-      `SELECT s.id FROM sections s
-       JOIN lists l ON s.list_id = l.id
-       WHERE s.id = $1 AND l.id = $2 AND (l.user_id = $3 OR l.is_public = true)`,
-      [sectionId, listId, req.userId]
+    const ownerCheck = await query<{ user_id: string }>(
+      `SELECT l.user_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
+      [sectionId, listId]
     );
     if (ownerCheck.rows.length === 0) {
       res.status(404).json({ error: 'Section not found' });
+      return;
+    }
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
       return;
     }
 
@@ -581,15 +595,17 @@ router.delete('/sections/:sectionId', async (req: Request, res: Response) => {
   try {
     const { sectionId } = req.params;
 
-    // Verify ownership or public
-    const ownerCheck = await query(
-      `SELECT s.id FROM sections s
-       JOIN lists l ON s.list_id = l.id
-       WHERE s.id = $1 AND (l.user_id = $2 OR l.is_public = true)`,
-      [sectionId, req.userId]
+    // Only owner or admin can delete sections
+    const ownerCheck = await query<{ user_id: string }>(
+      `SELECT l.user_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1`,
+      [sectionId]
     );
     if (ownerCheck.rows.length === 0) {
       res.status(404).json({ error: 'Section not found' });
+      return;
+    }
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
       return;
     }
 
@@ -628,16 +644,18 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
       return;
     }
 
-    // Verify list + section belong to user or public
-    const ownerCheck = await query(
-      `SELECT s.id FROM sections s
-       JOIN lists l ON s.list_id = l.id
-       WHERE s.id = $1 AND l.id = $2 AND (l.user_id = $3 OR l.is_public = true)`,
-      [sectionId, listId, req.userId]
+    // Only owner or admin can add tasks
+    const ownerCheck = await query<{ user_id: string }>(
+      `SELECT l.user_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
+      [sectionId, listId]
     );
     if (ownerCheck.rows.length === 0) {
       console.log(`[list task POST] ✗ 404 — section ${sectionId} not found in list ${listId} for userId=${req.userId}`);
       res.status(404).json({ error: 'List or section not found' });
+      return;
+    }
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
       return;
     }
 
@@ -702,22 +720,36 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
     console.log(`[list task PUT] body keys: ${Object.keys(req.body).join(', ')}`);
     console.log(`[list task PUT] updateLinkedList=${updateLinkedList} linked_list_id=${linked_list_id} linked_list_type=${linked_list_type}`);
 
+    // Verify the task belongs to a list owned by this user (or admin)
+    const permCheck = await query<{ user_id: string }>(
+      `SELECT l.user_id FROM tasks t JOIN lists l ON t.list_id = l.id WHERE t.id = $1 AND t.list_id = $2`,
+      [taskId, listId]
+    );
+    if (permCheck.rows.length === 0) {
+      console.log(`[list task PUT] ✗ 404 — taskId=${taskId} not found in listId=${listId}`);
+      res.status(404).json({ error: 'Task not found' });
+      return;
+    }
+    if (permCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
     const result = await query<TaskRow>(
-      `UPDATE tasks t
-       SET title          = COALESCE($1, t.title),
-           note           = COALESCE($2, t.note),
-           checked        = COALESCE($3, t.checked),
-           deadline       = COALESCE($4, t.deadline),
-           time_val       = COALESCE($5, t.time_val),
-           priority       = COALESCE($6, t.priority),
-           badge          = COALESCE($7, t.badge),
-           position       = COALESCE($8, t.position),
-           section_id     = COALESCE($9, t.section_id),
-           linked_list_id   = CASE WHEN $13 THEN $14 ELSE t.linked_list_id END,
-           linked_list_type = CASE WHEN $13 THEN $15 ELSE t.linked_list_type END
-       FROM lists l
-       WHERE t.id = $10 AND t.list_id = $11 AND l.id = t.list_id AND (l.user_id = $12 OR l.is_public = true)
-       RETURNING t.*`,
+      `UPDATE tasks
+       SET title          = COALESCE($1, title),
+           note           = COALESCE($2, note),
+           checked        = COALESCE($3, checked),
+           deadline       = COALESCE($4, deadline),
+           time_val       = COALESCE($5, time_val),
+           priority       = COALESCE($6, priority),
+           badge          = COALESCE($7, badge),
+           position       = COALESCE($8, position),
+           section_id     = COALESCE($9, section_id),
+           linked_list_id   = CASE WHEN $11 THEN $12 ELSE linked_list_id END,
+           linked_list_type = CASE WHEN $11 THEN $13 ELSE linked_list_type END
+       WHERE id = $10
+       RETURNING *`,
       [
         title     ?? null,
         note      ?? null,
@@ -729,8 +761,6 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
         position  ?? null,
         sectionId ?? null,
         taskId,
-        listId,
-        req.userId,
         updateLinkedList,
         linked_list_id ?? null,
         linked_list_type ?? null,
@@ -758,11 +788,23 @@ router.delete('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
   try {
     const { listId, taskId } = req.params;
 
+    // Only owner or admin can delete tasks
+    const permCheck = await query<{ user_id: string }>(
+      `SELECT l.user_id FROM tasks t JOIN lists l ON t.list_id = l.id WHERE t.id = $1 AND t.list_id = $2`,
+      [taskId, listId]
+    );
+    if (permCheck.rows.length === 0) {
+      res.status(404).json({ error: 'Task not found' });
+      return;
+    }
+    if (permCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
     const result = await query(
-      `DELETE FROM tasks t
-       USING lists l
-       WHERE t.id = $1 AND t.list_id = $2 AND l.id = t.list_id AND (t.user_id = $3 OR l.is_public = true)`,
-      [taskId, listId, req.userId]
+      `DELETE FROM tasks WHERE id = $1 AND list_id = $2`,
+      [taskId, listId]
     );
 
     if (result.rowCount === 0) {
@@ -828,13 +870,16 @@ router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, r
       return;
     }
 
-    const ownerCheck = await query(
-      `SELECT s.id FROM sections s JOIN lists l ON s.list_id = l.id
-       WHERE s.id = $1 AND l.id = $2 AND (l.user_id = $3 OR l.is_public = true)`,
-      [sectionId, listId, req.userId]
+    const ownerCheck = await query<{ user_id: string }>(
+      `SELECT l.user_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
+      [sectionId, listId]
     );
     if (ownerCheck.rows.length === 0) {
       res.status(404).json({ error: 'List or section not found' });
+      return;
+    }
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
       return;
     }
 
@@ -894,13 +939,16 @@ router.post('/:listId/sections/:sectionId/tasks/link', async (req: Request, res:
       return;
     }
 
-    const ownerCheck = await query(
-      `SELECT s.id FROM sections s JOIN lists l ON s.list_id = l.id
-       WHERE s.id = $1 AND l.id = $2 AND (l.user_id = $3 OR l.is_public = true)`,
-      [sectionId, listId, req.userId]
+    const ownerCheck = await query<{ user_id: string }>(
+      `SELECT l.user_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
+      [sectionId, listId]
     );
     if (ownerCheck.rows.length === 0) {
       res.status(404).json({ error: 'List or section not found' });
+      return;
+    }
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
       return;
     }
 

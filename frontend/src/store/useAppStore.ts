@@ -85,14 +85,25 @@ const useAppStore = create<AppState>()(
           color: folderWithDefaults.color,
           isPublic: folderWithDefaults.isPublic,
           workspaceId: folderWithDefaults.workspaceId,
-        }).catch(() => {});
+        }).catch(() => {
+          set((state) => ({ folders: state.folders.filter((f) => f.id !== folderWithDefaults.id) }));
+          get().loadFromApi();
+        });
       },
 
       updateFolder: (id, updates) => {
+        const prev = get().folders.find((f) => f.id === id);
         set((state) => ({
           folders: state.folders.map((f) => (f.id === id ? { ...f, ...updates } : f)),
         }));
-        apiUpdateFolder(id, updates).catch(() => {});
+        apiUpdateFolder(id, updates).catch(() => {
+          if (prev) {
+            set((state) => ({
+              folders: state.folders.map((f) => (f.id === id ? prev : f)),
+            }));
+          }
+          get().loadFromApi();
+        });
       },
 
       deleteFolder: (id) => {
@@ -105,8 +116,9 @@ const useAppStore = create<AppState>()(
           lists: s.lists.map((l) => l.folderId === id ? { ...l, folderId: undefined } : l),
         }));
 
+        let trashId: number | null = null;
         if (folder) {
-          const trashId = ++trashCounter;
+          trashId = ++trashCounter;
           const trashEntry: TrashedFolder = {
             id: trashId,
             folderId: folder.id,
@@ -117,14 +129,31 @@ const useAppStore = create<AppState>()(
           set((s) => ({ trashFolders: [...s.trashFolders, trashEntry] }));
         }
 
-        apiDeleteFolder(id).catch(() => {});
+        apiDeleteFolder(id).catch(() => {
+          if (folder) {
+            set((s) => ({
+              folders: [...s.folders, folder],
+              lists: s.lists.map((l) => listIds.includes(l.id) ? { ...l, folderId: id } : l),
+              trashFolders: trashId != null ? s.trashFolders.filter((t) => t.id !== trashId) : s.trashFolders,
+            }));
+          }
+          get().loadFromApi();
+        });
       },
 
       updateList: (listId, updates) => {
+        const prev = get().lists.find((l) => l.id === listId);
         set((state) => ({
           lists: state.lists.map((l) => (l.id === listId ? { ...l, ...updates } : l)),
         }));
-        apiUpdateList(listId, updates).catch(() => {});
+        apiUpdateList(listId, updates).catch(() => {
+          if (prev) {
+            set((state) => ({
+              lists: state.lists.map((l) => (l.id === listId ? prev : l)),
+            }));
+          }
+          get().loadFromApi();
+        });
       },
 
       deleteList: (listId) => {
@@ -133,8 +162,9 @@ const useAppStore = create<AppState>()(
 
         set((s) => ({ lists: s.lists.filter((l) => l.id !== listId) }));
 
+        let trashId: number | null = null;
         if (list) {
-          const trashId = ++trashCounter;
+          trashId = ++trashCounter;
           const trashEntry: TrashedList = {
             id: trashId,
             listId: list.id,
@@ -145,7 +175,15 @@ const useAppStore = create<AppState>()(
           set((s) => ({ trashLists: [...s.trashLists, trashEntry] }));
         }
 
-        apiDeleteList(listId).catch(() => {});
+        apiDeleteList(listId).catch(() => {
+          if (list) {
+            set((s) => ({
+              lists: [...s.lists, list],
+              trashLists: trashId != null ? s.trashLists.filter((t) => t.id !== trashId) : s.trashLists,
+            }));
+          }
+          get().loadFromApi();
+        });
       },
 
       updateDashTask: (taskId, updates) => {
