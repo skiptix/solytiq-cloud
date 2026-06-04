@@ -5,7 +5,7 @@ import useAppStore from '../store/useAppStore';
 import useAuthStore from '../store/useAuthStore';
 import TaskItem, { QuickAdd } from '../components/TaskItem';
 import TaskDialog from '../components/TaskDialog';
-import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, apiCreateSublistTask, apiLinkListAsTask, apiReorderSectionTasks } from '../api/client';
+import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, apiCreateSublistTask, apiLinkListAsTask, apiReorderSectionTasks, apiUpdateListTask } from '../api/client';
 import Icon from '../components/Icon';
 
 export default function ListScreen() {
@@ -18,6 +18,8 @@ export default function ListScreen() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
+  const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
+  const [dragOverSectionId, setDragOverSectionId] = useState<string | null>(null);
 
   // Section management state
   const [hoverSectionId, setHoverSectionId] = useState<string | null>(null);
@@ -169,29 +171,99 @@ export default function ListScreen() {
     setEditingTitle(false);
   };
 
-  const handleDrop = (sectionId: string, targetId: number) => {
-    if (!draggedId || draggedId === targetId) return;
-    let reorderedIds: number[] = [];
-    setLists(prev => prev.map(l => l.id !== listId ? l : {
-      ...l,
-      sections: l.sections.map(s => {
-        if (s.id !== sectionId) return s;
-        const arr = [...s.tasks];
-        const from = arr.findIndex(t => t.id === draggedId);
-        const to = arr.findIndex(t => t.id === targetId);
-        if (from === -1 || to === -1) return s;
-        const [moved] = arr.splice(from, 1);
-        arr.splice(to, 0, moved);
-        reorderedIds = arr.map(t => t.id);
-        return { ...s, tasks: arr };
-      }),
+  const clearDragState = () => {
+    setDraggedId(null); setDragOverId(null);
+    setDraggedSectionId(null); setDragOverSectionId(null);
+  };
+
+  const handleDrop = (targetSectionId: string, targetId: number) => {
+    if (!draggedId || !draggedSectionId) return;
+
+    if (draggedSectionId === targetSectionId) {
+      // Same section — reorder
+      if (draggedId === targetId) { clearDragState(); return; }
+      let reorderedIds: number[] = [];
+      setLists(prev => prev.map(l => l.id !== listId ? l : {
+        ...l,
+        sections: l.sections.map(s => {
+          if (s.id !== targetSectionId) return s;
+          const arr = [...s.tasks];
+          const from = arr.findIndex(t => t.id === draggedId);
+          const to = arr.findIndex(t => t.id === targetId);
+          if (from === -1 || to === -1) return s;
+          const [moved] = arr.splice(from, 1);
+          arr.splice(to, 0, moved);
+          reorderedIds = arr.map(t => t.id);
+          return { ...s, tasks: arr };
+        }),
+      }));
+      if (reorderedIds.length > 0) {
+        apiReorderSectionTasks(listId!, targetSectionId, reorderedIds).catch(e =>
+          console.error('reorder tasks failed', e)
+        );
+      }
+    } else {
+      // Cross-section move — remove from source, insert before targetId in destination
+      const srcId = draggedSectionId;
+      const movedId = draggedId;
+      let movedTask: Task | undefined;
+      let newTargetIds: number[] = [];
+      setLists(prev => prev.map(l => {
+        if (l.id !== listId) return l;
+        movedTask = l.sections.find(s => s.id === srcId)?.tasks.find(t => t.id === movedId);
+        if (!movedTask) return l;
+        const captured = movedTask;
+        return {
+          ...l,
+          sections: l.sections.map(s => {
+            if (s.id === srcId) return { ...s, tasks: s.tasks.filter(t => t.id !== movedId) };
+            if (s.id === targetSectionId) {
+              const arr = [...s.tasks];
+              const toIdx = arr.findIndex(t => t.id === targetId);
+              arr.splice(toIdx === -1 ? arr.length : toIdx, 0, captured);
+              newTargetIds = arr.map(t => t.id);
+              return { ...s, tasks: arr };
+            }
+            return s;
+          }),
+        };
+      }));
+      if (movedTask) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        apiUpdateListTask(listId!, movedId, { sectionId: targetSectionId } as any)
+          .then(() => { if (newTargetIds.length > 1) apiReorderSectionTasks(listId!, targetSectionId, newTargetIds).catch(() => {}); })
+          .catch(e => console.error('move task to section failed', e));
+      }
+    }
+    clearDragState();
+  };
+
+  const handleDropOnSection = (targetSectionId: string) => {
+    if (!draggedId || !draggedSectionId || draggedSectionId === targetSectionId) { clearDragState(); return; }
+    const srcId = draggedSectionId;
+    const movedId = draggedId;
+    let movedTask: Task | undefined;
+    setLists(prev => prev.map(l => {
+      if (l.id !== listId) return l;
+      movedTask = l.sections.find(s => s.id === srcId)?.tasks.find(t => t.id === movedId);
+      if (!movedTask) return l;
+      const captured = movedTask;
+      return {
+        ...l,
+        sections: l.sections.map(s => {
+          if (s.id === srcId) return { ...s, tasks: s.tasks.filter(t => t.id !== movedId) };
+          if (s.id === targetSectionId) return { ...s, tasks: [...s.tasks, captured] };
+          return s;
+        }),
+      };
     }));
-    if (reorderedIds.length > 0) {
-      apiReorderSectionTasks(listId!, sectionId, reorderedIds).catch(e =>
-        console.error('reorder tasks failed', e)
+    if (movedTask) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      apiUpdateListTask(listId!, movedId, { sectionId: targetSectionId } as any).catch(e =>
+        console.error('move task to section failed', e)
       );
     }
-    setDraggedId(null); setDragOverId(null);
+    clearDragState();
   };
 
   return (
@@ -241,8 +313,16 @@ export default function ListScreen() {
         </div>
 
         {/* Sections */}
-        {list.sections.map(section => (
-          <div key={section.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {list.sections.map(section => {
+          const isSectionDropTarget = dragOverSectionId === section.id && draggedSectionId !== null && draggedSectionId !== section.id;
+          return (
+          <div
+            key={section.id}
+            style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+            onDragOver={e => { if (draggedId && draggedSectionId !== section.id) { e.preventDefault(); setDragOverSectionId(section.id); } }}
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOverSectionId(null); }}
+            onDrop={e => { e.preventDefault(); handleDropOnSection(section.id); }}
+          >
             {/* Section header */}
             <div
               onMouseEnter={() => setHoverSectionId(section.id)}
@@ -307,9 +387,16 @@ export default function ListScreen() {
             </div>
 
             {/* Tasks */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, background: '#F9FAFB', borderRadius: 12, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
+            <div style={{
+              display: 'flex', flexDirection: 'column', gap: 2, background: '#F9FAFB', borderRadius: 12,
+              border: isSectionDropTarget ? '1.5px solid #9d8dff' : '1px solid #E5E7EB',
+              overflow: 'hidden', transition: 'border-color 120ms',
+              boxShadow: isSectionDropTarget ? '0 0 0 3px rgba(157,141,255,0.15)' : 'none',
+            }}>
               {section.tasks.length === 0 ? (
-                <div style={{ padding: '16px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', textAlign: 'center' }}>No tasks in this section.</div>
+                <div style={{ padding: '16px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: isSectionDropTarget ? '#9d8dff' : '#b0acbe', textAlign: 'center', transition: 'color 120ms' }}>
+                  {isSectionDropTarget ? 'Drop here to move' : 'No tasks in this section.'}
+                </div>
               ) : (
                 <div style={{ padding: '4px' }}>
                   {section.tasks.map(task => {
@@ -319,10 +406,10 @@ export default function ListScreen() {
                         onToggle={toggle} onDelete={deleteTask}
                         onUpdate={(id, upd) => updateListTask(listId!, id, upd)}
                         onRowClick={t => setSelectedTask(t)}
-                        onDragStart={id => setDraggedId(id)}
+                        onDragStart={id => { setDraggedId(id); setDraggedSectionId(section.id); }}
                         onDragOver={id => setDragOverId(id)}
                         onDrop={id => handleDrop(section.id, id)}
-                        onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
+                        onDragEnd={clearDragState}
                         isDragging={draggedId === task.id}
                         isDragOver={dragOverId === task.id && draggedId !== task.id}
                         hideListBadge
@@ -337,7 +424,8 @@ export default function ListScreen() {
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
 
         {list.sections.length === 0 && !addingSection && (
           <div style={{ textAlign: 'center', padding: '32px 16px 8px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>
