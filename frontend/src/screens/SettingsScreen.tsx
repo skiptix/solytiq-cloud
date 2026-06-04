@@ -44,12 +44,15 @@ function UserAvatar({ name, username, profileImage, size = 36 }: { name: string 
 }
 
 const MODEL_PRICING: Record<string, { input: number; output: number; label: string; color: string }> = {
-  'openai/gpt-4o-mini':                { input: 0.15,  output: 0.60,  label: 'GPT-4o Mini',       color: '#10a37f' },
-  'openai/gpt-4o':                      { input: 2.50,  output: 10.00, label: 'GPT-4o',            color: '#4d9e80' },
-  'anthropic/claude-3-5-haiku':         { input: 0.80,  output: 4.00,  label: 'Claude 3.5 Haiku',  color: '#d4691e' },
-  'anthropic/claude-3-5-sonnet':        { input: 3.00,  output: 15.00, label: 'Claude 3.5 Sonnet', color: '#cc785c' },
-  'google/gemini-flash-1.5':            { input: 0.075, output: 0.30,  label: 'Gemini Flash 1.5',  color: '#4285f4' },
-  'meta-llama/llama-3.3-70b-instruct': { input: 0.12,  output: 0.30,  label: 'Llama 3.3 70B',     color: '#0064e0' },
+  'openai/gpt-4o-mini':                 { input: 0.15,  output: 0.60,  label: 'GPT-4o Mini',           color: '#10a37f' },
+  'openai/gpt-4o':                      { input: 2.50,  output: 10.00, label: 'GPT-4o',                color: '#4d9e80' },
+  'anthropic/claude-3-5-haiku':         { input: 0.80,  output: 4.00,  label: 'Claude 3.5 Haiku',      color: '#d4691e' },
+  'anthropic/claude-3-5-sonnet':        { input: 3.00,  output: 15.00, label: 'Claude 3.5 Sonnet',     color: '#cc785c' },
+  'anthropic/claude-3.7-sonnet':        { input: 3.00,  output: 15.00, label: 'Claude 3.7 Sonnet',     color: '#cc785c' },
+  'google/gemini-flash-1.5':            { input: 0.075, output: 0.30,  label: 'Gemini Flash 1.5',      color: '#4285f4' },
+  'google/gemini-2.5-flash':            { input: 0.15,  output: 0.60,  label: 'Gemini 2.5 Flash',      color: '#4285f4' },
+  'google/gemini-2.5-pro':              { input: 1.25,  output: 10.00, label: 'Gemini 2.5 Pro',        color: '#4285f4' },
+  'meta-llama/llama-3.3-70b-instruct':  { input: 0.12,  output: 0.30,  label: 'Llama 3.3 70B',        color: '#0064e0' },
 };
 
 function calcCost(model: string, promptTokens: number, completionTokens: number): number {
@@ -246,13 +249,16 @@ export default function SettingsScreen() {
     }
   };
 
-  const AI_MODELS = [
-    { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini', sub: 'Fast · Affordable' },
-    { value: 'openai/gpt-4o', label: 'GPT-4o', sub: 'Powerful · Slower' },
-    { value: 'anthropic/claude-3-5-haiku', label: 'Claude 3.5 Haiku', sub: 'Fast · Smart' },
-    { value: 'anthropic/claude-3-5-sonnet', label: 'Claude 3.5 Sonnet', sub: 'Very Smart · Slower' },
-    { value: 'google/gemini-flash-1.5', label: 'Gemini Flash 1.5', sub: 'Fast · Free tier' },
-    { value: 'meta-llama/llama-3.3-70b-instruct', label: 'Llama 3.3 70B', sub: 'Open-source · Free' },
+  const AI_MODELS: { value: string; label: string; sub: string; badge?: string; badgeColor?: string }[] = [
+    { value: 'google/gemini-2.5-flash',            label: 'Gemini 2.5 Flash',    sub: 'Fast · Excellent tool use',         badge: 'Best Value',   badgeColor: '#1a8a4a' },
+    { value: 'anthropic/claude-3.7-sonnet',        label: 'Claude 3.7 Sonnet',   sub: 'Best for AI tasks · Expensive',     badge: 'Recommended',  badgeColor: '#5e4dbb' },
+    { value: 'openai/gpt-4o-mini',                 label: 'GPT-4o Mini',         sub: 'Fast · Affordable' },
+    { value: 'anthropic/claude-3-5-haiku',         label: 'Claude 3.5 Haiku',    sub: 'Smart · Good value' },
+    { value: 'google/gemini-2.5-pro',              label: 'Gemini 2.5 Pro',      sub: 'Most capable Gemini · Slower' },
+    { value: 'openai/gpt-4o',                      label: 'GPT-4o',              sub: 'Powerful · Higher cost' },
+    { value: 'anthropic/claude-3-5-sonnet',        label: 'Claude 3.5 Sonnet',   sub: 'Very smart · Expensive' },
+    { value: 'google/gemini-flash-1.5',            label: 'Gemini Flash 1.5',    sub: 'Fast · Older model' },
+    { value: 'meta-llama/llama-3.3-70b-instruct',  label: 'Llama 3.3 70B',       sub: 'Open-source · Free on some tiers' },
   ];
 
   const generatePassword = () => {
@@ -605,25 +611,47 @@ export default function SettingsScreen() {
                     {/* Model picker */}
                     <div>
                       <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 8 }}>AI Model</div>
-                      <select
-                        value={aiModel}
-                        onChange={e => { setAiModel(e.target.value); setAiSaved(false); }}
-                        style={{
-                          width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13,
-                          color: '#1c1b22', background: '#fff', border: '1.5px solid #E5E7EB',
-                          borderRadius: 10, padding: '8px 12px', outline: 'none', cursor: 'pointer',
-                          appearance: 'none',
-                          backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23787584' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`,
-                          backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center', paddingRight: 32,
-                        }}
-                        onFocus={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
-                        onBlur={e => { e.currentTarget.style.borderColor = '#E5E7EB'; }}
-                      >
-                        {AI_MODELS.map(m => (
-                          <option key={m.value} value={m.value}>{m.label} — {m.sub}</option>
-                        ))}
-                      </select>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', marginTop: 6 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {AI_MODELS.map(m => {
+                          const selected = aiModel === m.value;
+                          return (
+                            <button
+                              key={m.value}
+                              onClick={() => { setAiModel(m.value); setAiSaved(false); }}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 10,
+                                padding: '9px 12px', borderRadius: 10, cursor: 'pointer',
+                                border: selected ? '1.5px solid #5e4dbb' : '1.5px solid #e8e4f0',
+                                background: selected ? '#f4f1fc' : '#fafafa',
+                                textAlign: 'left', width: '100%',
+                                transition: 'border-color 150ms, background 150ms',
+                              }}
+                            >
+                              <span style={{
+                                width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+                                border: selected ? '4px solid #5e4dbb' : '2px solid #c8c3d8',
+                                background: selected ? '#fff' : 'transparent',
+                                transition: 'border 150ms',
+                              }} />
+                              <span style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', display: 'block' }}>{m.label}</span>
+                                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#9995a8' }}>{m.sub}</span>
+                              </span>
+                              {m.badge && (
+                                <span style={{
+                                  fontFamily: 'Inter, sans-serif', fontSize: 10.5, fontWeight: 700,
+                                  color: '#fff', background: m.badgeColor ?? '#5e4dbb',
+                                  borderRadius: 5, padding: '2px 7px', flexShrink: 0,
+                                  letterSpacing: '0.02em',
+                                }}>
+                                  {m.badge}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', marginTop: 8 }}>
                         Requires <code style={{ background: '#f1ecf6', padding: '1px 5px', borderRadius: 4 }}>OPENROUTER_API_KEY</code> set in your environment.
                       </div>
                     </div>
