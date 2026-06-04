@@ -595,6 +595,37 @@ export default function AIAssistant() {
           return { id: call.id, name, result: `Members: ${memberList}` };
         }
 
+        // ── Workspace CRUD ────────────────────────────────────────
+        if (name === 'create_workspace') {
+          const ws = await workspaceStore.createWorkspace({
+            name: args.name as string,
+            description: (args.description as string) || undefined,
+            emoji: (args.emoji as string) || undefined,
+            visibility: (args.visibility as 'private' | 'public') || 'private',
+          });
+          workspaceStore.setCurrentWorkspace(ws.id);
+          return { id: call.id, name, result: `Created workspace "${ws.name}" (id: ${ws.id})`, summary: `Created workspace "${ws.name}"` };
+        }
+
+        if (name === 'update_workspace') {
+          const targetId = args.workspace_id as string;
+          const updates: Partial<{ name: string; description: string; emoji: string; visibility: 'private' | 'public' }> = {};
+          if (args.name !== undefined) updates.name = args.name as string;
+          if (args.description !== undefined) updates.description = args.description as string;
+          if (args.emoji !== undefined) updates.emoji = args.emoji as string;
+          if (args.visibility !== undefined) updates.visibility = args.visibility as 'private' | 'public';
+          const prevName = workspaceStore.workspaces.find((w) => w.id === targetId)?.name ?? targetId;
+          await workspaceStore.updateWorkspace(targetId, updates);
+          return { id: call.id, name, result: `Updated workspace "${prevName}"`, summary: `Updated workspace "${updates.name ?? prevName}"` };
+        }
+
+        if (name === 'delete_workspace') {
+          const targetId = args.workspace_id as string;
+          const prevName = workspaceStore.workspaces.find((w) => w.id === targetId)?.name ?? targetId;
+          await workspaceStore.deleteWorkspace(targetId);
+          return { id: call.id, name, result: `Deleted workspace "${prevName}"`, summary: `Deleted workspace "${prevName}"` };
+        }
+
         return { id: call.id, name, result: `Unknown tool: ${name}` };
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -634,7 +665,7 @@ export default function AIAssistant() {
         let ctx = buildContext(location.pathname, appStore);
         const wsId = workspaceStore.currentWorkspaceId;
         const wsInfo = workspaceStore.workspaces.map((w) => ({ id: w.id, name: w.name, role: w.role }));
-        let tools = buildTools(ctx, wsId);
+        let tools = buildTools(ctx, wsId, wsInfo);
         const systemPrompt = buildSystemPrompt(ctx, username || 'User', wsInfo, wsId);
 
         // Build API messages from history (last 20 + current)
@@ -692,7 +723,7 @@ export default function AIAssistant() {
 
           // Rebuild context with updated store state
           ctx = buildContext(location.pathname, appStore);
-          tools = buildTools(ctx, wsId);
+          tools = buildTools(ctx, wsId, workspaceStore.workspaces.map((w) => ({ id: w.id, name: w.name, role: w.role })));
         }
 
         // After tool calls complete, refresh from server and let the AI verify

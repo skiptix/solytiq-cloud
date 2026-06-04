@@ -226,7 +226,7 @@ Guidelines:
 - NEW LIST SECTIONS: When you create a list with create_list, a default "Tasks" section is automatically created. The tool result contains the section_id (e.g. "section_id: abc123"). Always use that section_id when calling create_task_in_list for that new list — never guess or fabricate a section_id
 - CROSS-LIST TASKS: You can create tasks in any list using create_task_in_list — use available_lists to find list IDs and their sections. For newly created lists, use the section_id returned in the create_list tool result
 - SORTING/REORDERING: To sort tasks in a section, call reorder_tasks_in_section with all task IDs in the desired order. To move a task to a different section, call move_task_to_section. To reorder sections themselves, call reorder_sections. Always use actual task/section IDs from the context — never guess IDs.
-- WORKSPACE MEMBERS: You can add or remove members from workspaces using add_workspace_member and remove_workspace_member
+- WORKSPACES: You can create workspaces (create_workspace), rename/update them (update_workspace), or delete them (delete_workspace). ALWAYS ask the user to confirm before deleting a workspace. You can also manage members with add_workspace_member and remove_workspace_member
 - If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}`;
 }
 
@@ -241,7 +241,7 @@ type ToolDef = {
   };
 };
 
-export function buildTools(ctx: AIContext, workspaceId?: string | null): ToolDef[] {
+export function buildTools(ctx: AIContext, workspaceId?: string | null, workspaces?: Array<{ id: string; name: string; role: string }>): ToolDef[] {
   const tools: ToolDef[] = [];
 
   if (ctx.view === 'dashboard') {
@@ -764,6 +764,63 @@ export function buildTools(ctx: AIContext, workspaceId?: string | null): ToolDef
           type: 'object',
           properties: {},
           required: [],
+        },
+      },
+    });
+  }
+
+  // ── Workspace CRUD ────────────────────────────────────────────────
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'create_workspace',
+      description: 'Create a new workspace. After creation the new workspace becomes the active one.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Workspace name' },
+          description: { type: 'string', description: 'Optional description' },
+          emoji: { type: 'string', description: 'Optional emoji icon (e.g. 🚀)' },
+          visibility: { type: 'string', enum: ['private', 'public'], description: 'private (default) or public' },
+        },
+        required: ['name'],
+      },
+    },
+  });
+
+  if (workspaces?.length) {
+    const wsList = workspaces.map((w) => `"${w.name}" (id: ${w.id}, role: ${w.role})`).join(', ');
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'update_workspace',
+        description: `Rename a workspace, change its emoji, description, or visibility. Available workspaces: ${wsList}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            workspace_id: { type: 'string', description: 'Workspace ID from the list above' },
+            name: { type: 'string', description: 'New name' },
+            description: { type: 'string', description: 'New description' },
+            emoji: { type: 'string', description: 'New emoji icon' },
+            visibility: { type: 'string', enum: ['private', 'public'] },
+          },
+          required: ['workspace_id'],
+        },
+      },
+    });
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'delete_workspace',
+        description: `Permanently delete a workspace and all its data. ALWAYS ask the user for confirmation before calling this. Available workspaces: ${wsList}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            workspace_id: { type: 'string', description: 'Workspace ID to delete' },
+          },
+          required: ['workspace_id'],
         },
       },
     });
