@@ -4,6 +4,14 @@ Solytiq Cloud is a self-hosted, full-stack task manager with file sharing and an
 
 ---
 
+## Version Number
+
+The current version is displayed at the bottom-left of the sidebar in `frontend/src/components/Sidebar.tsx`.
+
+**On every deploy / release, update the version string** in that file — look for the `v1.0.1` literal inside the `{!collapsed && ...}` block near the bottom of the `Sidebar` export and bump it (e.g. `v1.0.1` → `v1.0.2`). Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
+
+---
+
 ## Repository Layout
 
 ```
