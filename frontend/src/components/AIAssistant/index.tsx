@@ -702,7 +702,7 @@ export default function AIAssistant() {
         const messages: any[] = [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: userContent }];
         const allResults: Array<{ id: string; name: string; result: string; summary?: string }> = [];
         let finalContent = '';
-        const MAX_ROUNDS = 10;
+        const MAX_ROUNDS = 25;
 
         for (let round = 0; round < MAX_ROUNDS; round++) {
           const response = await apiAIChat(messages, tools.length ? tools : undefined, sessionId);
