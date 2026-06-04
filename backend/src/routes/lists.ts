@@ -659,7 +659,7 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
       return;
     }
 
-    const taskId = id ?? Date.now();
+    const taskId = id ?? (Date.now() * 1000 + Math.floor(Math.random() * 1000));
 
     const posResult = await query<{ max: string | null }>(
       `SELECT MAX(position) AS max FROM tasks WHERE section_id = $1`,
@@ -906,7 +906,7 @@ router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, r
     );
 
     // 3. Create the task that links to the sublist
-    const taskId = Date.now();
+    const taskId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
     const taskPosResult = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM tasks WHERE section_id = $1', [sectionId]);
     const taskPos = taskPosResult.rows[0].max !== null ? parseInt(taskPosResult.rows[0].max, 10) + 1 : 0;
 
@@ -959,7 +959,7 @@ router.post('/:listId/sections/:sectionId/tasks/link', async (req: Request, res:
       return;
     }
 
-    const taskId = Date.now();
+    const taskId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
     const posResult = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM tasks WHERE section_id = $1', [sectionId]);
     const taskPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
 

@@ -105,7 +105,7 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const taskId = id ?? Date.now();
+    const taskId = id ?? (Date.now() * 1000 + Math.floor(Math.random() * 1000));
 
     // Determine next position
     const posResult = await query<{ max: string | null }>(
