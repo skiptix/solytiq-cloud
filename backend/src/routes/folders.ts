@@ -38,16 +38,16 @@ function sanitizeFolder(f: FolderRow) {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
-    const wsClause = workspaceId
-      ? `AND f.workspace_id = '${workspaceId.replace(/'/g, "''")}'`
-      : '';
+    const params: unknown[] = [req.userId];
+    const wsClause = workspaceId ? `AND f.workspace_id = $2` : '';
+    if (workspaceId) params.push(workspaceId);
     const rows = await query<FolderRow>(
       `SELECT f.* FROM folders f
        LEFT JOIN workspace_members wm ON wm.workspace_id = f.workspace_id AND wm.user_id = $1
        WHERE (f.user_id = $1 OR (f.is_public = true AND (wm.user_id = $1 OR f.workspace_id IS NULL OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = f.workspace_id AND w.visibility = 'public'))))
        ${wsClause}
        ORDER BY f.position ASC, f.created_at ASC`,
-      [req.userId]
+      params
     );
     res.json({ folders: rows.rows.map(sanitizeFolder) });
   } catch (err) {
@@ -73,7 +73,8 @@ router.post('/', async (req: Request, res: Response) => {
     }
     const folderId = id ?? `folder_${uuidv4()}`;
     const posRes = await query<{ max: string | null }>(
-      'SELECT MAX(position) AS max FROM folders'
+      'SELECT MAX(position) AS max FROM folders WHERE user_id = $1',
+      [req.userId]
     );
     const nextPos = posRes.rows[0].max !== null ? parseInt(posRes.rows[0].max, 10) + 1 : 0;
     const result = await query<FolderRow>(

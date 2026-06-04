@@ -5,7 +5,7 @@ import useAppStore from '../store/useAppStore';
 import useAuthStore from '../store/useAuthStore';
 import TaskItem, { QuickAdd } from '../components/TaskItem';
 import TaskDialog from '../components/TaskDialog';
-import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, apiCreateSublistTask, apiLinkListAsTask } from '../api/client';
+import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, apiCreateSublistTask, apiLinkListAsTask, apiReorderSectionTasks } from '../api/client';
 import Icon from '../components/Icon';
 
 export default function ListScreen() {
@@ -144,13 +144,21 @@ export default function ListScreen() {
     const trimmed = label.trim();
     setEditingSection(null);
     if (!trimmed) return;
+    const prevList = list;
     setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, label: trimmed }) }));
-    apiUpdateSection(sectionId, { label: trimmed }).catch(e => console.error('updateSection failed', e));
+    apiUpdateSection(sectionId, { label: trimmed }).catch(e => {
+      console.error('updateSection failed', e);
+      setLists(prev => prev.map(l => l.id !== listId ? l : prevList));
+    });
   };
 
   const handleDeleteSection = async (sectionId: string) => {
+    const prevList = list;
     setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.filter(s => s.id !== sectionId) }));
-    apiDeleteSection(sectionId).catch(e => console.error('deleteSection failed', e));
+    apiDeleteSection(sectionId).catch(e => {
+      console.error('deleteSection failed', e);
+      setLists(prev => prev.map(l => l.id !== listId ? l : prevList));
+    });
   };
 
   const handleUpdateTitle = () => {
@@ -163,6 +171,7 @@ export default function ListScreen() {
 
   const handleDrop = (sectionId: string, targetId: number) => {
     if (!draggedId || draggedId === targetId) return;
+    let reorderedIds: number[] = [];
     setLists(prev => prev.map(l => l.id !== listId ? l : {
       ...l,
       sections: l.sections.map(s => {
@@ -173,9 +182,15 @@ export default function ListScreen() {
         if (from === -1 || to === -1) return s;
         const [moved] = arr.splice(from, 1);
         arr.splice(to, 0, moved);
+        reorderedIds = arr.map(t => t.id);
         return { ...s, tasks: arr };
       }),
     }));
+    if (reorderedIds.length > 0) {
+      apiReorderSectionTasks(listId!, sectionId, reorderedIds).catch(e =>
+        console.error('reorder tasks failed', e)
+      );
+    }
     setDraggedId(null); setDragOverId(null);
   };
 

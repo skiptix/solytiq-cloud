@@ -54,9 +54,9 @@ function sanitizeTask(task: TaskRow) {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
-    const wsClause = workspaceId
-      ? `AND t.workspace_id = '${workspaceId.replace(/'/g, "''")}'`
-      : '';
+    const params: unknown[] = [req.userId];
+    const wsClause = workspaceId ? `AND t.workspace_id = $2` : '';
+    if (workspaceId) params.push(workspaceId);
     const result = await query<TaskRow>(
       `SELECT t.* FROM tasks t
        LEFT JOIN lists l ON t.list_id = l.id
@@ -64,7 +64,7 @@ router.get('/', async (req: Request, res: Response) => {
           OR (t.source = 'list' AND (l.user_id = $1 OR l.is_public = true))
        ${wsClause}
        ORDER BY t.position ASC, t.created_at ASC`,
-      [req.userId]
+      params
     );
     res.json({ tasks: result.rows.map(sanitizeTask) });
   } catch (err) {
