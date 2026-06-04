@@ -728,8 +728,10 @@ export default function AIAssistant() {
 
         // After tool calls complete, refresh from server and let the AI verify
         // its changes are actually reflected before writing the final response.
+        // Re-read currentWorkspaceId from the store — tool calls (e.g. create_workspace)
+        // may have changed it, and using the stale captured wsId would fetch the wrong workspace.
         if (allResults.length > 0) {
-          await appStore.loadFromApi(wsId ?? undefined);
+          await appStore.loadFromApi(workspaceStore.currentWorkspaceId ?? undefined);
           const verifiedCtx = buildContext(location.pathname, appStore);
           messages.push({
             role: 'system',
