@@ -12,6 +12,7 @@ import TopBar from './components/TopBar';
 import AddListWizard from './modals/AddListWizard';
 import CompletedModal from './modals/CompletedModal';
 import TrashModal from './modals/TrashModal';
+import WorkspaceWizard from './modals/WorkspaceWizard';
 import AIAssistant from './components/AIAssistant';
 
 import LoginScreen from './screens/LoginScreen';
@@ -41,7 +42,7 @@ function AppLayout() {
   const [modal, setModal] = useState<'add-list' | 'completed' | 'trash' | null>(null);
 
   const loadMembers = useMembersStore(s => s.load);
-  const { currentWorkspaceId, loadWorkspaces } = useWorkspaceStore();
+  const { currentWorkspaceId, workspaces, workspacesLoaded, loadWorkspaces } = useWorkspaceStore();
 
   useEffect(() => {
     const init = async () => {
@@ -196,6 +197,13 @@ function AppLayout() {
       {modal === 'completed' && <CompletedModal onClose={() => setModal(null)} />}
       {modal === 'trash' && <TrashModal onClose={() => setModal(null)} />}
       <AIAssistant />
+
+      {workspacesLoaded && workspaces.length === 0 && !location.pathname.startsWith('/settings') && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 450, backdropFilter: 'blur(10px)', background: 'rgba(245,243,255,0.65)', pointerEvents: 'all' }} />
+          <WorkspaceWizard forced onClose={() => {}} />
+        </>
+      )}
     </div>
   );
 }

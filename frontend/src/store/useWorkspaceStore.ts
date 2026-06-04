@@ -9,6 +9,7 @@ import {
 interface WorkspaceState {
   workspaces: Workspace[];
   currentWorkspaceId: string | null;
+  workspacesLoaded: boolean;
   setWorkspaces: (workspaces: Workspace[]) => void;
   setCurrentWorkspace: (id: string | null) => void;
   loadWorkspaces: () => Promise<void>;
@@ -25,6 +26,7 @@ const useWorkspaceStore = create<WorkspaceState>()(
     (set) => ({
       workspaces: [],
       currentWorkspaceId: null,
+      workspacesLoaded: false,
 
       setWorkspaces: (workspaces) => set({ workspaces }),
 
@@ -40,10 +42,11 @@ const useWorkspaceStore = create<WorkspaceState>()(
             return {
               workspaces,
               currentWorkspaceId: stillValid ? current : (workspaces[0]?.id ?? null),
+              workspacesLoaded: true,
             };
           });
         } catch {
-          // keep persisted state on network failure
+          set({ workspacesLoaded: true });
         }
       },
 
