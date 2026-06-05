@@ -231,7 +231,7 @@ export default function TaskItem({ task, onToggle, onRowClick, onDragStart, onDr
           onDragStart?.(task.id);
         }}
         onDragOver={e => { e.preventDefault(); onDragOver?.(task.id); }}
-        onDrop={e => { e.preventDefault(); onDrop?.(task.id); }}
+        onDrop={e => { e.preventDefault(); e.stopPropagation(); onDrop?.(task.id); }}
         onDragEnd={() => onDragEnd?.()}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
