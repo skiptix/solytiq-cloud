@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import type { GpsFile, GpsTrackData, GpsMetricPoint } from '../types';
+import type { GpsTrackData, GpsMetricPoint } from '../types';
 import {
   apiGetGpsFiles, apiUploadGpsFile, apiGetGpsTrackData,
   apiDownloadGpsFile, apiDeleteGpsFile, apiSmoothAndSaveGpsFile,
@@ -29,13 +29,6 @@ function fmtDuration(s?: number | null) {
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
-
-const METRIC_COLORS: Record<string, string> = {
-  elevation: '#5e4dbb',
-  hr: '#ef4444',
-  cadence: '#10b981',
-  power: '#f59e0b',
-};
 
 // ─── MultiLineMapChart ────────────────────────────────────────────────────────
 interface MultiLineMapChartProps {
