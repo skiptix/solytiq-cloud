@@ -765,8 +765,21 @@ export default function GPSScreen() {
           </div>
 
           {/* ── Map area ───────────────────────────────────────────────────────── */}
-          <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#e8e4f0' }}>
-            <div ref={mapCallbackRef} style={{ position: 'absolute', inset: 0 }} />
+          <div style={{
+            flex: 1,
+            position: 'relative',
+            overflow: 'hidden',
+            background: '#e8e4f0',
+            isolation: 'isolate',
+          }}>
+            <div
+              ref={mapCallbackRef}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                zIndex: 0,
+              }}
+            />
 
             {/* No-selection overlay */}
             {!selectedId && (
@@ -795,9 +808,16 @@ export default function GPSScreen() {
             {/* Multi-metric chart overlay */}
             {selectedId && trackData && (
               <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0, height: 200,
-                zIndex: 10, background: 'rgba(8,5,18,0.72)', backdropFilter: 'blur(6px)',
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 200,
+                zIndex: 1000,
+                background: 'rgba(8,5,18,0.72)',
+                backdropFilter: 'blur(6px)',
                 animation: 'mapFadeIn 400ms ease both',
+                pointerEvents: 'auto',
               }}>
                 <MultiLineMapChart
                   trackData={trackData}
