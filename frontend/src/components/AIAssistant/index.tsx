@@ -39,7 +39,12 @@ import {
   apiGetWorkspaceMembers,
   apiReorderSectionTasks,
   apiReorderListSections,
+  apiDeleteGpsFile,
+  apiRenameGpsFile,
+  apiSmoothAndSaveGpsFile,
+  apiCombineGpsFiles,
 } from '../../api/client';
+import useGpsStore from '../../store/useGpsStore';
 import AIBubble from './AIBubble';
 import AIChatWindow from './AIChatWindow';
 
@@ -624,6 +629,64 @@ export default function AIAssistant() {
           const prevName = workspaceStore.workspaces.find((w) => w.id === targetId)?.name ?? targetId;
           await workspaceStore.deleteWorkspace(targetId);
           return { id: call.id, name, result: `Deleted workspace "${prevName}"`, summary: `Deleted workspace "${prevName}"` };
+        }
+
+        // ── GPS tools ─────────────────────────────────────────────
+        if (name === 'list_gps_routes') {
+          const gpsFiles = useGpsStore.getState().files;
+          const list = gpsFiles.map(f => {
+            const dist = f.metadata?.totalDistance != null ? ` ${(f.metadata.totalDistance / 1000).toFixed(1)} km` : '';
+            const elev = f.metadata?.totalElevationGain != null ? ` ↑${Math.round(f.metadata.totalElevationGain)}m` : '';
+            return `• ${f.name} (id: ${f.id}, ${f.fileType.toUpperCase()}${dist}${elev})`;
+          }).join('\n') || 'No routes uploaded yet.';
+          return { id: call.id, name, result: list };
+        }
+
+        if (name === 'rename_gps_route') {
+          const { route_id, new_name } = args as { route_id: string; new_name: string };
+          try {
+            const file = await apiRenameGpsFile(route_id, new_name);
+            useGpsStore.getState().setFiles(prev => prev.map(f => f.id === route_id ? file : f));
+            window.dispatchEvent(new CustomEvent('gps-files-changed'));
+            return { id: call.id, name, result: `Renamed to "${file.name}"` };
+          } catch (e) { return { id: call.id, name, result: `Error: ${e}` }; }
+        }
+
+        if (name === 'delete_gps_route') {
+          const { route_id } = args as { route_id: string };
+          try {
+            await apiDeleteGpsFile(route_id);
+            useGpsStore.getState().setFiles(prev => prev.filter(f => f.id !== route_id));
+            window.dispatchEvent(new CustomEvent('gps-files-changed'));
+            return { id: call.id, name, result: 'Route deleted successfully.' };
+          } catch (e) { return { id: call.id, name, result: `Error: ${e}` }; }
+        }
+
+        if (name === 'merge_gps_routes') {
+          const { route_ids, output_name } = args as { route_ids: string[]; output_name: string };
+          try {
+            const blob = await apiCombineGpsFiles(route_ids, output_name);
+            // trigger download since save endpoint handled separately
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = `${output_name}.gpx`; a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+            window.dispatchEvent(new CustomEvent('gps-files-changed'));
+            return { id: call.id, name, result: `Merged ${route_ids.length} routes into "${output_name}" — download started.` };
+          } catch (e) { return { id: call.id, name, result: `Error: ${e}` }; }
+        }
+
+        if (name === 'smooth_gps_elevation') {
+          const { route_id, sigma, mode, output_name } = args as { route_id: string; sigma: number; mode: 'new' | 'replace'; output_name?: string };
+          try {
+            const file = await apiSmoothAndSaveGpsFile(route_id, sigma, mode, output_name);
+            if (mode === 'new') {
+              useGpsStore.getState().setFiles(prev => [file, ...prev]);
+            } else {
+              useGpsStore.getState().setFiles(prev => prev.map(f => f.id === route_id ? file : f));
+            }
+            window.dispatchEvent(new CustomEvent('gps-files-changed'));
+            return { id: call.id, name, result: `Smoothed (σ=${sigma}) and ${mode === 'new' ? `saved as "${file.name}"` : 'replaced original'}.` };
+          } catch (e) { return { id: call.id, name, result: `Error: ${e}` }; }
         }
 
         return { id: call.id, name, result: `Unknown tool: ${name}` };

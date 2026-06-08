@@ -515,6 +515,30 @@ export async function apiDeleteGpsFile(id: string): Promise<void> {
   await apiFetch<void>(`/gps/${id}`, { method: 'DELETE' });
 }
 
+export async function apiSmoothAndSaveGpsFile(id: string, sigma: number, mode: 'new' | 'replace', name?: string): Promise<GpsFile> {
+  const token = getToken();
+  const res = await fetch(`/api/gps/${encodeURIComponent(id)}/smooth-save`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ sigma, mode, name }),
+  });
+  if (!res.ok) throw new Error(`GPS smooth-save failed: ${res.status}`);
+  const data = await res.json() as { file: GpsFile };
+  return data.file;
+}
+
+export async function apiRenameGpsFile(id: string, name: string): Promise<GpsFile> {
+  const token = getToken();
+  const res = await fetch(`/api/gps/${encodeURIComponent(id)}/rename`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) throw new Error(`GPS rename failed: ${res.status}`);
+  const data = await res.json() as { file: GpsFile };
+  return data.file;
+}
+
 export function apiUploadFile(
   file: File,
   opts: { isPublic?: boolean; password?: string; expiresAt?: string; title?: string },

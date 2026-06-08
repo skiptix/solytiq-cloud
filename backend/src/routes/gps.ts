@@ -291,6 +291,68 @@ router.post('/:id/smooth', async (req, res) => {
   } catch (err) { console.error('GPS smooth:', err); res.status(500).json({ error: 'Failed to smooth GPS file' }); }
 });
 
+// POST /api/gps/:id/smooth-save — smooth and save (new file or replace in-place)
+router.post('/:id/smooth-save', async (req, res) => {
+  try {
+    const userId = (req as any).userId;
+    const { id } = req.params;
+    const { sigma = 5, mode = 'new', name: newName } = req.body as { sigma?: number; mode?: 'new' | 'replace'; name?: string };
+    const sigmaNum = Math.min(30, Math.max(1, Number(sigma) || 5));
+
+    const result = await query<{ id: string; user_id: string; original_name: string; file_type: string; file_path: string; file_size: number; metadata: Record<string,unknown>|null; created_at: string }>(
+      'SELECT * FROM gps_files WHERE id=$1 AND user_id=$2', [id, userId]
+    );
+    if (!result.rows.length) { res.status(404).json({ error: 'Not found' }); return; }
+    const row = result.rows[0];
+    const filePath = path.join(UPLOAD_DIR, row.file_path);
+
+    const points = await readAndParse(filePath, row.file_type);
+    const smoothed = gaussianSmooth(points, sigmaNum);
+    const baseName = row.original_name.replace(/\.(gpx|fit)$/i, '');
+
+    if (mode === 'replace') {
+      const gpx = writeGpx(smoothed, baseName);
+      fs.writeFileSync(filePath, gpx, 'utf8');
+      const newSize = Buffer.byteLength(gpx, 'utf8');
+      const metadata = computeMetadata(smoothed);
+      await query('UPDATE gps_files SET metadata=$1, file_size=$2, file_type=$3 WHERE id=$4',
+        [metadata ? JSON.stringify(metadata) : null, newSize, 'gpx', id]);
+      const outName = baseName.endsWith('.gpx') ? baseName : `${baseName}.gpx`;
+      res.json({ file: { id, userId, name: outName, fileType: 'gpx', size: newSize, metadata, createdAt: row.created_at } });
+    } else {
+      const safeName = ((newName || `${baseName}_smoothed`)).replace(/[^\w\s\-_.]/g, '').trim() || `${baseName}_smoothed`;
+      const outName = safeName.endsWith('.gpx') ? safeName : `${safeName}.gpx`;
+      const gpx = writeGpx(smoothed, safeName);
+      const newId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const filename = `gps_${newId}.gpx`;
+      const fullPath = path.join(UPLOAD_DIR, filename);
+      fs.writeFileSync(fullPath, gpx, 'utf8');
+      const newSize = Buffer.byteLength(gpx, 'utf8');
+      const metadata = computeMetadata(smoothed);
+      await query('INSERT INTO gps_files (id, user_id, original_name, file_type, file_path, file_size, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [newId, userId, outName, 'gpx', filename, newSize, metadata ? JSON.stringify(metadata) : null]);
+      res.json({ file: { id: newId, userId, name: outName, fileType: 'gpx', size: newSize, metadata, createdAt: new Date().toISOString() } });
+    }
+  } catch (err) { console.error('GPS smooth-save:', err); res.status(500).json({ error: 'Failed to smooth and save GPS file' }); }
+});
+
+// PATCH /api/gps/:id/rename — rename a GPS file
+router.patch('/:id/rename', async (req, res) => {
+  try {
+    const userId = (req as any).userId;
+    const { id } = req.params;
+    const { name } = req.body as { name: string };
+    if (!name?.trim()) { res.status(400).json({ error: 'name is required' }); return; }
+    const result = await query<{ id: string; user_id: string; original_name: string; file_type: string; file_size: number; metadata: Record<string,unknown>|null; created_at: string }>(
+      'UPDATE gps_files SET original_name=$1 WHERE id=$2 AND user_id=$3 RETURNING *',
+      [name.trim(), id, userId]
+    );
+    if (!result.rows.length) { res.status(404).json({ error: 'Not found' }); return; }
+    const row = result.rows[0];
+    res.json({ file: { id: row.id, userId: row.user_id, name: row.original_name, fileType: row.file_type, size: row.file_size, metadata: row.metadata, createdAt: row.created_at } });
+  } catch (err) { console.error('GPS rename:', err); res.status(500).json({ error: 'Failed to rename GPS file' }); }
+});
+
 // POST /api/gps/combine — merge multiple files; optional gap handling and save-to-library
 router.post('/combine', async (req, res) => {
   try {
