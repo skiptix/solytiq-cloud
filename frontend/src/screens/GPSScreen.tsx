@@ -520,7 +520,7 @@ export default function GPSScreen() {
       style={{ display: 'flex', height: '100%', overflow: 'hidden', fontFamily: 'Inter, sans-serif' }}
       onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
       onDragLeave={() => setIsDragOver(false)}
-      onDrop={e => { e.preventDefault(); setIsDragOver(false); if (!combineMode) handleUpload(e.dataTransfer.files); }}
+      onDrop={e => { e.preventDefault(); setIsDragOver(false); handleUpload(e.dataTransfer.files); }}
     >
       {/* ── Left Panel ─────────────────────────────────────────────────────── */}
       <div style={{
@@ -605,7 +605,7 @@ export default function GPSScreen() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#fdf8ff', position: 'relative' }}>
 
         {/* Drag overlay */}
-        {isDragOver && !combineMode && (
+        {isDragOver && (
           <div style={{
             position: 'absolute', inset: 0, zIndex: 50,
             background: 'rgba(94,77,187,0.09)', border: '2px dashed #5e4dbb',
