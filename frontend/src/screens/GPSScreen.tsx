@@ -374,6 +374,39 @@ export default function GPSScreen() {
     return () => window.removeEventListener('gps-upload-trigger', handler);
   }, []);
 
+  // ── Window-level drag-and-drop (fires anywhere on the page)
+  const dragCounter = useRef(0);
+  const handleUploadRef = useRef(handleUpload);
+  useEffect(() => { handleUploadRef.current = handleUpload; });
+  useEffect(() => {
+    const onEnter = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes('Files')) return;
+      dragCounter.current++;
+      if (dragCounter.current === 1) setIsDragOver(true);
+    };
+    const onLeave = () => {
+      dragCounter.current--;
+      if (dragCounter.current <= 0) { dragCounter.current = 0; setIsDragOver(false); }
+    };
+    const onOver = (e: DragEvent) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); };
+    const onDrop = (e: DragEvent) => {
+      e.preventDefault();
+      dragCounter.current = 0;
+      setIsDragOver(false);
+      if (e.dataTransfer?.files?.length) handleUploadRef.current(e.dataTransfer.files);
+    };
+    window.addEventListener('dragenter', onEnter);
+    window.addEventListener('dragleave', onLeave);
+    window.addEventListener('dragover', onOver);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragenter', onEnter);
+      window.removeEventListener('dragleave', onLeave);
+      window.removeEventListener('dragover', onOver);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, []);
+
   // ── Draw polyline when trackData changes
   useEffect(() => {
     const map = leafletRef.current;
@@ -516,12 +549,7 @@ export default function GPSScreen() {
   ];
 
   return (
-    <div
-      style={{ display: 'flex', height: '100%', overflow: 'hidden', fontFamily: 'Inter, sans-serif' }}
-      onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
-      onDragLeave={() => setIsDragOver(false)}
-      onDrop={e => { e.preventDefault(); setIsDragOver(false); handleUpload(e.dataTransfer.files); }}
-    >
+    <div style={{ display: 'flex', height: '100%', overflow: 'hidden', fontFamily: 'Inter, sans-serif' }}>
       {/* ── Left Panel ─────────────────────────────────────────────────────── */}
       <div style={{
         width: 272, flexShrink: 0, borderRight: '1px solid #e8e4f0',
@@ -604,22 +632,6 @@ export default function GPSScreen() {
       {/* ── Main Area ──────────────────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#fdf8ff', position: 'relative' }}>
 
-        {/* Drag overlay */}
-        {isDragOver && (
-          <div style={{
-            position: 'absolute', inset: 0, zIndex: 50,
-            background: 'rgba(94,77,187,0.09)', border: '2px dashed #5e4dbb',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12,
-            pointerEvents: 'none',
-          }}>
-            <div style={{ width: 60, height: 60, borderRadius: 18, background: '#ede9ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name="upload" size={28} color="#5e4dbb" />
-            </div>
-            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#5e4dbb' }}>
-              Drop GPX or FIT file here
-            </span>
-          </div>
-        )}
 
         {!selectedId ? (
           /* ── Empty state ─────────────────────────────────────────────────── */
@@ -839,6 +851,27 @@ export default function GPSScreen() {
         onChange={e => handleUpload(e.target.files)}
         onClick={e => { (e.target as HTMLInputElement).value = ''; }}
       />
+
+      {/* Full-window drag overlay */}
+      {isDragOver && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 500, pointerEvents: 'none',
+          background: 'rgba(94,77,187,0.10)', backdropFilter: 'blur(3px)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16,
+        }}>
+          <div style={{ border: '3px dashed #5e4dbb', borderRadius: 24, padding: '48px 72px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, background: 'rgba(253,248,255,0.85)' }}>
+            <div style={{ width: 72, height: 72, borderRadius: 22, background: '#ede9ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="upload" size={34} color="#5e4dbb" />
+            </div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#5e4dbb' }}>
+              Drop to upload route
+            </div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#9d8dff' }}>
+              .GPX and .FIT files supported
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Merge wizard */}
       {mergeWizardOpen && (
