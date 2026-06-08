@@ -291,29 +291,69 @@ router.post('/:id/smooth', async (req, res) => {
   } catch (err) { console.error('GPS smooth:', err); res.status(500).json({ error: 'Failed to smooth GPS file' }); }
 });
 
-// POST /api/gps/combine — merge multiple files into one GPX download
+// POST /api/gps/combine — merge multiple files; optional gap handling and save-to-library
 router.post('/combine', async (req, res) => {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const userId = (req as any).userId as string;
-    const { ids, name = 'combined' } = req.body as { ids: string[]; name: string };
-    if (!Array.isArray(ids) || ids.length < 2) return res.status(400).json({ error: 'At least 2 file IDs required' });
+    const { ids, name = 'combined', gapMode, save: saveToLibrary = false } = req.body as {
+      ids: string[]; name: string;
+      gapMode?: Array<'skip' | 'straight'>;
+      save?: boolean;
+    };
+    if (!Array.isArray(ids) || ids.length < 2 || ids.length > 10) {
+      return res.status(400).json({ error: 'Between 2 and 10 file IDs required' });
+    }
     const placeholders = ids.map((_, i) => `$${i + 2}`).join(', ');
     const result = await query<GpsFileRow>(
-      `SELECT * FROM gps_files WHERE user_id = $1 AND id IN (${placeholders}) ORDER BY created_at ASC`,
+      `SELECT * FROM gps_files WHERE user_id = $1 AND id IN (${placeholders})`,
       [userId, ...ids],
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'No files found' });
-    const allPoints: GpsPoint[] = [];
-    for (const row of result.rows) {
-      const pts = await readAndParse(row.file_path, row.file_type);
-      allPoints.push(...pts);
+    // Preserve the caller-specified order
+    const rowMap = new Map(result.rows.map(r => [r.id, r]));
+    const orderedRows = ids.map(id => rowMap.get(id)).filter(Boolean) as GpsFileRow[];
+    const segments: GpsPoint[][] = [];
+    for (const row of orderedRows) {
+      segments.push(await readAndParse(row.file_path, row.file_type));
     }
-    if (allPoints.every(p => p.time)) {
-      allPoints.sort((a, b) => new Date(a.time!).getTime() - new Date(b.time!).getTime());
+    const allPoints: GpsPoint[] = [];
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (seg.length === 0) continue;
+      if (i > 0 && allPoints.length > 0) {
+        const mode = (gapMode?.[i - 1]) ?? 'skip';
+        if (mode === 'straight') {
+          const last = allPoints[allPoints.length - 1];
+          const first = seg[0];
+          const STEPS = 10;
+          for (let s = 1; s < STEPS; s++) {
+            const t = s / STEPS;
+            allPoints.push({
+              lat: last.lat + (first.lat - last.lat) * t,
+              lon: last.lon + (first.lon - last.lon) * t,
+              ele: last.ele + (first.ele - last.ele) * t,
+            });
+          }
+        }
+      }
+      allPoints.push(...seg);
     }
     const safeName = String(name).replace(/[^\w\s\-_.]/g, '').trim() || 'combined';
     const gpx = writeGpx(allPoints, safeName);
+    if (saveToLibrary) {
+      const id = `gps_${Date.now()}`;
+      const filename = `gps_${crypto.randomUUID()}.gpx`;
+      const filePath = path.join(UPLOAD_DIR, filename);
+      fs.writeFileSync(filePath, gpx);
+      const fileSize = Buffer.byteLength(gpx, 'utf8');
+      const metadata = computeMetadata(allPoints);
+      await query(
+        'INSERT INTO gps_files (id, user_id, original_name, file_type, file_path, file_size, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [id, userId, `${safeName}.gpx`, 'gpx', filename, fileSize, metadata ? JSON.stringify(metadata) : null],
+      );
+      return res.json({ file: { id, userId, name: `${safeName}.gpx`, fileType: 'gpx', size: fileSize, metadata, createdAt: new Date().toISOString() } });
+    }
     res.setHeader('Content-Type', 'application/gpx+xml');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeName)}.gpx"`);
     res.send(gpx);

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import type { GpsFile, GpsTrackData, GpsMetricPoint } from '../types';
 import {
   apiGetGpsFiles, apiUploadGpsFile, apiGetGpsTrackData,
-  apiSmoothGpsElevation, apiCombineGpsFiles, apiDownloadGpsFile, apiDeleteGpsFile,
+  apiSmoothGpsElevation, apiDownloadGpsFile, apiDeleteGpsFile,
 } from '../api/client';
 import Icon from '../components/Icon';
+import GPSMergeWizard from '../components/GPSMergeWizard';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDist(m?: number | null) {
@@ -292,13 +294,12 @@ function FileCard({ file, selected, checked, combineMode, onSelect, onCheck, onD
 
 // ─── GPSScreen ────────────────────────────────────────────────────────────────
 export default function GPSScreen() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [files, setFiles] = useState<GpsFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [checkedIds, setCheckedIds] = useState<string[]>([]);
-  const [combineMode, setCombineMode] = useState(false);
-  const [combineName, setCombineName] = useState('combined_route');
-  const [combining, setCombining] = useState(false);
   const [trackData, setTrackData] = useState<GpsTrackData | null>(null);
   const [trackLoading, setTrackLoading] = useState(false);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
@@ -309,8 +310,10 @@ export default function GPSScreen() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [mergeWizardOpen, setMergeWizardOpen] = useState(false);
 
-  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const selectedIdRef = useRef<string | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const leafletRef = useRef<L.Map | null>(null);
   const polylineRef = useRef<L.Polyline | null>(null);
   const startMarkerRef = useRef<L.CircleMarker | null>(null);
@@ -325,23 +328,50 @@ export default function GPSScreen() {
       .catch(() => setLoading(false));
   }, []);
 
-  // ── Init Leaflet map
+  // ── Init Leaflet via callback ref (handles lazy-mount inside conditional JSX)
+  const mapCallbackRef = useCallback((node: HTMLDivElement | null) => {
+    mapContainerRef.current = node;
+    if (node && !leafletRef.current) {
+      const map = L.map(node, { zoomControl: true }).setView([47, 10], 5);
+      L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a> contributors',
+        maxZoom: 17,
+      }).addTo(map);
+      leafletRef.current = map;
+      setTimeout(() => map.invalidateSize(), 150);
+    }
+  }, []);
+
+  // ── Cleanup Leaflet on unmount
   useEffect(() => {
-    if (!mapContainerRef.current || leafletRef.current) return;
-    const map = L.map(mapContainerRef.current, { zoomControl: true }).setView([47, 10], 5);
-    L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a> contributors',
-      maxZoom: 17,
-    }).addTo(map);
-    leafletRef.current = map;
     return () => {
-      map.remove();
+      leafletRef.current?.remove();
       leafletRef.current = null;
       polylineRef.current = null;
       startMarkerRef.current = null;
       endMarkerRef.current = null;
       cursorMarkerRef.current = null;
     };
+  }, []);
+
+  // ── Sync from URL param (handles sidebar clicks + direct links)
+  useEffect(() => {
+    const fileId = new URLSearchParams(location.search).get('file');
+    if (fileId && fileId !== selectedIdRef.current) {
+      selectFile(fileId);
+    } else if (!fileId && selectedIdRef.current) {
+      selectedIdRef.current = null;
+      setSelectedId(null);
+      setTrackData(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
+
+  // ── Sidebar upload button trigger
+  useEffect(() => {
+    const handler = () => fileInputRef.current?.click();
+    window.addEventListener('gps-upload-trigger', handler);
+    return () => window.removeEventListener('gps-upload-trigger', handler);
   }, []);
 
   // ── Draw polyline when trackData changes
@@ -388,8 +418,10 @@ export default function GPSScreen() {
   }, [hoveredIdx, trackData]);
 
   async function selectFile(id: string) {
-    if (selectedId === id) return;
+    if (selectedIdRef.current === id) return;
+    selectedIdRef.current = id;
     setSelectedId(id);
+    navigate(`/gps?file=${id}`, { replace: true });
     setTrackData(null);
     setTrackLoading(true);
     setHoveredIdx(null);
@@ -409,6 +441,7 @@ export default function GPSScreen() {
     try {
       const uploaded = await apiUploadGpsFile(file, pct => setUploadProgress(pct));
       setFiles(prev => [uploaded, ...prev]);
+      window.dispatchEvent(new CustomEvent('gps-files-changed'));
     } catch (err) { console.error('Upload failed:', err); }
     setUploading(false); setUploadProgress(0);
   }
@@ -435,30 +468,21 @@ export default function GPSScreen() {
     setDownloading(false);
   }
 
-  async function handleCombine() {
-    if (checkedIds.length < 2 || combining) return;
-    setCombining(true);
-    try {
-      const blob = await apiCombineGpsFiles(checkedIds, combineName);
-      triggerDownload(blob, `${combineName}.gpx`);
-      setCombineMode(false); setCheckedIds([]);
-    } catch (err) { console.error(err); }
-    setCombining(false);
-  }
-
   async function handleDelete(id: string, e: React.MouseEvent) {
     e.stopPropagation();
     if (deleteConfirm !== id) { setDeleteConfirm(id); return; }
     setDeleteConfirm(null);
     await apiDeleteGpsFile(id);
     setFiles(prev => prev.filter(f => f.id !== id));
+    window.dispatchEvent(new CustomEvent('gps-files-changed'));
     if (selectedId === id) {
+      selectedIdRef.current = null;
       setSelectedId(null); setTrackData(null);
+      navigate('/gps', { replace: true });
       polylineRef.current?.remove(); polylineRef.current = null;
       startMarkerRef.current?.remove(); startMarkerRef.current = null;
       endMarkerRef.current?.remove(); endMarkerRef.current = null;
     }
-    setCheckedIds(prev => prev.filter(x => x !== id));
   }
 
   function triggerDownload(blob: Blob, filename: string) {
@@ -466,11 +490,6 @@ export default function GPSScreen() {
     const a = document.createElement('a');
     a.href = url; a.download = filename; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-  }
-
-  function toggleCheck(id: string, e: React.MouseEvent) {
-    e.stopPropagation();
-    setCheckedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
 
   // Smooth preview for chart overlay (client-side, instant)
@@ -516,20 +535,20 @@ export default function GPSScreen() {
             </span>
             <div style={{ display: 'flex', gap: 6 }}>
               <button
-                onClick={() => { setCombineMode(v => !v); setCheckedIds([]); }}
-                title={combineMode ? 'Exit combine mode' : 'Combine files'}
+                onClick={() => setMergeWizardOpen(true)}
+                title="Merge routes"
                 style={{
                   height: 28, padding: '0 10px', borderRadius: 7,
-                  border: `1px solid ${combineMode ? '#5e4dbb' : '#e8e4f0'}`,
-                  background: combineMode ? '#F5F3FF' : 'transparent',
-                  color: combineMode ? '#5e4dbb' : '#484552',
+                  border: '1px solid #e8e4f0', background: 'transparent', color: '#484552',
                   fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
                   display: 'flex', alignItems: 'center', gap: 4, transition: 'all 150ms',
                   fontFamily: 'Hanken Grotesk, sans-serif',
                 }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.borderColor = '#c4b8f0'; e.currentTarget.style.color = '#5e4dbb'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#e8e4f0'; e.currentTarget.style.color = '#484552'; }}
               >
-                <Icon name="merge" size={13} color={combineMode ? '#5e4dbb' : '#787584'} />
-                {combineMode ? 'Cancel' : 'Merge'}
+                <Icon name="merge" size={13} color="#787584" />
+                Merge
               </button>
               <button
                 onClick={() => fileInputRef.current?.click()}
@@ -570,49 +589,16 @@ export default function GPSScreen() {
             <FileCard
               key={f.id}
               file={f}
-              selected={selectedId === f.id && !combineMode}
-              checked={checkedIds.includes(f.id)}
-              combineMode={combineMode}
+              selected={selectedId === f.id}
+              checked={false}
+              combineMode={false}
               onSelect={() => selectFile(f.id)}
-              onCheck={e => toggleCheck(f.id, e)}
+              onCheck={() => {}}
               onDelete={e => handleDelete(f.id, e)}
             />
           ))}
         </div>
 
-        {/* Combine action bar */}
-        {combineMode && (
-          <div style={{ padding: '12px 12px', borderTop: '1px solid #e8e4f0', flexShrink: 0, background: '#fdf8ff' }}>
-            <input
-              value={combineName}
-              onChange={e => setCombineName(e.target.value)}
-              placeholder="Output file name"
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '7px 10px',
-                border: '1.5px solid #e8e4f0', borderRadius: 8, fontSize: 12,
-                fontFamily: 'Inter, sans-serif', color: '#1c1b22', outline: 'none',
-                background: '#fff', marginBottom: 8, transition: 'border-color 200ms',
-              }}
-              onFocus={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
-              onBlur={e => { e.currentTarget.style.borderColor = '#e8e4f0'; }}
-            />
-            <button
-              onClick={handleCombine}
-              disabled={checkedIds.length < 2 || combining}
-              style={{
-                width: '100%', padding: '9px', borderRadius: 8, border: 'none',
-                background: checkedIds.length >= 2 ? '#5e4dbb' : '#e8e4f0',
-                color: checkedIds.length >= 2 ? '#fff' : '#b0acbe',
-                fontSize: 12.5, fontWeight: 600, cursor: checkedIds.length >= 2 ? 'pointer' : 'default',
-                transition: 'all 150ms', fontFamily: 'Hanken Grotesk, sans-serif',
-              }}
-              onMouseEnter={e => { if (checkedIds.length >= 2) e.currentTarget.style.background = '#4d3da8'; }}
-              onMouseLeave={e => { if (checkedIds.length >= 2) e.currentTarget.style.background = '#5e4dbb'; }}
-            >
-              {combining ? 'Merging…' : checkedIds.length >= 2 ? `Merge ${checkedIds.length} files & download` : 'Select ≥ 2 files to merge'}
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ── Main Area ──────────────────────────────────────────────────────── */}
@@ -715,7 +701,7 @@ export default function GPSScreen() {
 
             {/* ── Map ──────────────────────────────────────────────────────────── */}
             <div style={{ flex: '0 0 52%', position: 'relative', background: '#e8e4f0', overflow: 'hidden' }}>
-              <div ref={mapContainerRef} style={{ position: 'absolute', inset: 0 }} />
+              <div ref={mapCallbackRef} style={{ position: 'absolute', inset: 0 }} />
               {trackLoading && (
                 <div style={{
                   position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -854,7 +840,16 @@ export default function GPSScreen() {
         onClick={e => { (e.target as HTMLInputElement).value = ''; }}
       />
 
-      {/* Delete confirm tooltip (shown inline on card hover) */}
+      {/* Merge wizard */}
+      {mergeWizardOpen && (
+        <GPSMergeWizard
+          files={files}
+          onClose={() => setMergeWizardOpen(false)}
+          onMerged={file => { setFiles(prev => [file, ...prev]); setMergeWizardOpen(false); }}
+        />
+      )}
+
+      {/* Delete confirm */}
       {deleteConfirm && (
         <div
           onClick={() => setDeleteConfirm(null)}
