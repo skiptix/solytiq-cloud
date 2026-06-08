@@ -22,6 +22,7 @@ import DashboardScreen from './screens/DashboardScreen';
 import ListScreen from './screens/ListScreen';
 import ScheduledScreen from './screens/ScheduledScreen';
 import FilesScreen from './screens/FilesScreen';
+import GPSScreen from './screens/GPSScreen';
 import SharePage from './screens/SharePage';
 import SettingsScreen from './screens/SettingsScreen';
 import FolderDashboardScreen from './screens/FolderDashboardScreen';
@@ -165,6 +166,7 @@ function AppLayout() {
             <Route path="/files" element={<FilesScreen />} />
             <Route path="/list/:listId" element={<ListScreen />} />
             <Route path="/settings" element={<SettingsScreen />} />
+            <Route path="/gps" element={<GPSScreen />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
 

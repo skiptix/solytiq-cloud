@@ -22,7 +22,9 @@
     "pg": "^8.11.3",
     "qrcode": "^1.5.3",
     "uuid": "^9.0.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "fast-xml-parser": "^4.4.0",
+    "fit-file-parser": "^1.9.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
