@@ -908,6 +908,7 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
   const folderInputRef = useRef<HTMLInputElement>(null);
   const [gpsFiles, setGpsFiles] = useState<GpsFile[]>([]);
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsSearch, setGpsSearch] = useState('');
 
   const { folders, addFolder, updateList, updateFolder, setFolders } = useAppStore();
 
@@ -1031,6 +1032,26 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
 
         {!collapsed && <div style={{ height: 1, background: '#e8e4f0', margin: '2px 8px' }} />}
 
+        {/* Search */}
+        {!collapsed && (
+          <div style={{ padding: '0 4px 4px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #e8e4f0', borderRadius: 8, padding: '5px 8px' }}>
+              <Icon name="search" size={14} color="#b0acbe" />
+              <input
+                value={gpsSearch}
+                onChange={e => setGpsSearch(e.target.value)}
+                placeholder="Search routes…"
+                style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#1c1b22' }}
+              />
+              {gpsSearch && (
+                <button onClick={() => setGpsSearch('')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
+                  <Icon name="close" size={13} color="#b0acbe" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Route list */}
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
           {gpsLoading && !collapsed && (
@@ -1041,7 +1062,7 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
               No routes yet.<br />Upload a .GPX or .FIT file.
             </div>
           )}
-          {gpsFiles.map(file => {
+          {gpsFiles.filter(f => !gpsSearch || f.name.toLowerCase().includes(gpsSearch.toLowerCase())).map(file => {
             const isActive = activeGpsFileId === file.id;
             const displayName = file.name.replace(/\.(gpx|fit)$/i, '');
             if (collapsed) {
