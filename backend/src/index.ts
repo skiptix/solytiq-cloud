@@ -14,6 +14,7 @@ import foldersRouter    from './routes/folders';
 import filesRouter, { UPLOAD_DIR } from './routes/files';
 import aiRouter         from './routes/ai';
 import workspacesRouter from './routes/workspaces';
+import gpsRouter from './routes/gps';
 import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
 import { addSseClient, removeSseClient } from './sse';
@@ -84,6 +85,7 @@ app.use('/api/folders',    foldersRouter);
 app.use('/api/files',      filesRouter);
 app.use('/api/ai',         aiRouter);
 app.use('/api/workspaces', workspacesRouter);
+app.use('/api/gps',        gpsRouter);
 
 // Public share endpoints — no auth required
 interface ShareFileRow { id: string; original_name: string; title: string | null; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null; }
@@ -513,6 +515,21 @@ async function runMigrations() {
       WHERE t.workspace_id IS NULL
     `);
   }
+
+  // GPS files table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gps_files (
+      id            VARCHAR(100) PRIMARY KEY,
+      user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      original_name VARCHAR(500) NOT NULL,
+      file_type     VARCHAR(10) NOT NULL DEFAULT 'gpx',
+      file_path     VARCHAR(500) NOT NULL,
+      file_size     BIGINT NOT NULL DEFAULT 0,
+      metadata      JSONB,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS gps_files_user_idx ON gps_files(user_id)`);
 
   console.log('Database migrations applied.');
 }

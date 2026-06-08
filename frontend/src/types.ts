@@ -153,6 +153,52 @@ export interface AuthState {
   setTotpEnabled: (enabled: boolean) => void;
 }
 
+// ─── GPS / Workout file types ─────────────────────────────────────────────────
+
+export interface GpsFileMetadata {
+  totalDistance?: number;
+  totalElevationGain?: number;
+  duration?: number;
+  startTime?: string | null;
+  pointCount?: number;
+}
+
+export interface GpsFile {
+  id: string;
+  userId: string;
+  name: string;
+  fileType: 'gpx' | 'fit';
+  size: number;
+  metadata?: GpsFileMetadata | null;
+  createdAt: string;
+}
+
+export interface GpsTrackPoint {
+  lat: number;
+  lon: number;
+  ele: number;
+  time?: string;
+  hr?: number;
+  cadence?: number;
+  power?: number;
+}
+
+export interface GpsMetricPoint {
+  idx: number;
+  distance: number;
+  value: number | null;
+}
+
+export interface GpsTrackData {
+  points: GpsTrackPoint[];
+  elevationProfile: Array<{ distance: number; elevation: number; idx: number }>;
+  metadata: GpsFileMetadata;
+  metricsAvailable: { hr: boolean; cadence: boolean; power: boolean };
+  hrProfile: GpsMetricPoint[] | null;
+  cadenceProfile: GpsMetricPoint[] | null;
+  powerProfile: GpsMetricPoint[] | null;
+}
+
 export interface AppState {
   dashTasks: Task[];
   lists: List[];

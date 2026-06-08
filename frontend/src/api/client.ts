@@ -1,4 +1,4 @@
-import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, Workspace, WorkspaceMember, AIFile } from '../types';
+import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -420,6 +420,76 @@ export function disconnectSSE(): void {
   sseSource?.close();
   sseSource = null;
   sseReconnectDelay = 2000;
+}
+
+// ─── GPS API ─────────────────────────────────────────────────────────────────
+
+export async function apiGetGpsFiles(): Promise<GpsFile[]> {
+  const data = await apiFetch<{ files: GpsFile[] }>('/gps');
+  return data.files;
+}
+
+export function apiUploadGpsFile(
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<GpsFile> {
+  return new Promise((resolve, reject) => {
+    const token = getToken();
+    const form = new FormData();
+    form.append('file', file);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${BASE_URL}/gps/upload`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve((JSON.parse(xhr.responseText) as { file: GpsFile }).file);
+      } else {
+        reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(form);
+  });
+}
+
+export async function apiGetGpsTrackData(id: string): Promise<GpsTrackData> {
+  return apiFetch<GpsTrackData>(`/gps/${id}/data`);
+}
+
+export async function apiSmoothGpsElevation(id: string, sigma: number): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`${BASE_URL}/gps/${id}/smooth`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ sigma }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.blob();
+}
+
+export async function apiCombineGpsFiles(ids: string[], name: string): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`${BASE_URL}/gps/combine`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ ids, name }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.blob();
+}
+
+export async function apiDownloadGpsFile(id: string): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`${BASE_URL}/gps/${id}/download`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.blob();
+}
+
+export async function apiDeleteGpsFile(id: string): Promise<void> {
+  await apiFetch<void>(`/gps/${id}`, { method: 'DELETE' });
 }
 
 export function apiUploadFile(

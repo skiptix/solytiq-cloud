@@ -1,0 +1,353 @@
+import { Router } from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
+import { XMLParser } from 'fast-xml-parser';
+import { query } from '../db';
+import { authenticate } from '../middleware';
+
+// ─── FIT parser types ────────────────────────────────────────────────────────
+interface FitRecord {
+  position_lat?: number; position_long?: number;
+  altitude?: number; enhanced_altitude?: number;
+  heart_rate?: number; cadence?: number; power?: number;
+  timestamp?: Date | string;
+}
+type FitParserInstance = {
+  parse(buf: Buffer, cb: (err: Error | null, data: { records?: FitRecord[] }) => void): void;
+};
+type FitParserCtor = new (opts?: object) => FitParserInstance;
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
+const _fitLib: any = require('fit-file-parser');
+const FitParserClass = (_fitLib.default ?? _fitLib) as FitParserCtor;
+
+// ─── Storage ─────────────────────────────────────────────────────────────────
+const UPLOAD_DIR = process.env.UPLOAD_DIR ?? '/app/uploads';
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: UPLOAD_DIR,
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `gps_${crypto.randomUUID()}${ext}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === '.gpx' || ext === '.fit') cb(null, true);
+    else cb(new Error('Only .gpx and .fit files are allowed'));
+  },
+});
+
+const router = Router();
+router.use(authenticate);
+
+// ─── Internal types ──────────────────────────────────────────────────────────
+interface GpsPoint {
+  lat: number; lon: number; ele: number; time?: string;
+  hr?: number; cadence?: number; power?: number;
+}
+interface GpsFileRow {
+  id: string; user_id: string; original_name: string; file_type: string;
+  file_path: string; file_size: number; metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+// ─── Utilities ───────────────────────────────────────────────────────────────
+function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const φ1 = (lat1 * Math.PI) / 180, φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function computeMetadata(points: GpsPoint[]) {
+  if (points.length === 0) return null;
+  let totalDistance = 0, totalElevationGain = 0;
+  for (let i = 1; i < points.length; i++) {
+    totalDistance += haversine(points[i - 1].lat, points[i - 1].lon, points[i].lat, points[i].lon);
+    const δ = points[i].ele - points[i - 1].ele;
+    if (δ > 0) totalElevationGain += δ;
+  }
+  const startTime = points[0].time ?? null;
+  const endTime = points[points.length - 1].time ?? null;
+  const duration = startTime && endTime
+    ? Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 1000)
+    : null;
+  return {
+    totalDistance: Math.round(totalDistance),
+    totalElevationGain: Math.round(totalElevationGain),
+    duration,
+    startTime,
+    pointCount: points.length,
+  };
+}
+
+function gaussianSmooth(points: GpsPoint[], sigma: number): GpsPoint[] {
+  const win = Math.ceil(3 * sigma);
+  return points.map((p, i) => {
+    let wEle = 0, wTotal = 0;
+    for (let j = Math.max(0, i - win); j <= Math.min(points.length - 1, i + win); j++) {
+      const d = j - i;
+      const w = Math.exp(-(d * d) / (2 * sigma * sigma));
+      wEle += points[j].ele * w;
+      wTotal += w;
+    }
+    return { ...p, ele: wTotal > 0 ? wEle / wTotal : p.ele };
+  });
+}
+
+function buildElevationProfile(points: GpsPoint[]) {
+  let cum = 0;
+  return points.map((p, i) => {
+    if (i > 0) cum += haversine(points[i - 1].lat, points[i - 1].lon, p.lat, p.lon);
+    return { distance: Math.round(cum), elevation: p.ele, idx: i };
+  });
+}
+
+function writeGpx(points: GpsPoint[], name = 'Route'): string {
+  const safeName = name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c] ?? c));
+  const trkpts = points.map(p => {
+    const eleLine = `        <ele>${p.ele.toFixed(2)}</ele>`;
+    const timeLine = p.time ? `\n        <time>${p.time}</time>` : '';
+    return `      <trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}">\n${eleLine}${timeLine}\n      </trkpt>`;
+  }).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Solytiq Cloud" xmlns="http://www.topografix.com/GPX/1/1">\n  <metadata><name>${safeName}</name></metadata>\n  <trk>\n    <name>${safeName}</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>`;
+}
+
+// ─── Parsers ─────────────────────────────────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseGpx(content: string): GpsPoint[] {
+  const parser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    isArray: (name) => ['trkpt', 'trkseg', 'trk'].includes(name),
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: any = parser.parse(content);
+  const gpx = result.gpx ?? result;
+  if (!gpx?.trk) return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const trks: any[] = Array.isArray(gpx.trk) ? gpx.trk : [gpx.trk];
+  const points: GpsPoint[] = [];
+  for (const trk of trks) {
+    if (!trk?.trkseg) continue;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const segs: any[] = Array.isArray(trk.trkseg) ? trk.trkseg : [trk.trkseg];
+    for (const seg of segs) {
+      if (!seg?.trkpt) continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const trkpts: any[] = Array.isArray(seg.trkpt) ? seg.trkpt : [seg.trkpt];
+      for (const pt of trkpts) {
+        const lat = parseFloat(pt['@_lat']);
+        const lon = parseFloat(pt['@_lon']);
+        if (isNaN(lat) || isNaN(lon)) continue;
+        points.push({
+          lat, lon,
+          ele: parseFloat(pt.ele) || 0,
+          time: pt.time ? String(pt.time) : undefined,
+        });
+      }
+    }
+  }
+  return points;
+}
+
+function parseFit(buffer: Buffer): Promise<GpsPoint[]> {
+  return new Promise((resolve, reject) => {
+    const fitParser = new FitParserClass({ force: true, speedUnit: 'km/h', lengthUnit: 'km', temperatureUnit: 'celsius', elapsedRecordField: true, mode: 'list' });
+    fitParser.parse(buffer, (error, data) => {
+      if (error) { reject(error); return; }
+      const records: FitRecord[] = data?.records ?? [];
+      const SEMI_TO_DEG = 180 / Math.pow(2, 31);
+      const points: GpsPoint[] = records
+        .filter(r => r.position_lat != null && r.position_long != null)
+        .map(r => {
+          let lat = r.position_lat as number;
+          let lon = r.position_long as number;
+          // Convert from semicircles if values are out of degree range
+          if (Math.abs(lat) > 90) lat = lat * SEMI_TO_DEG;
+          if (Math.abs(lon) > 180) lon = lon * SEMI_TO_DEG;
+          const ts = r.timestamp;
+          return {
+            lat, lon,
+            ele: (r.altitude ?? r.enhanced_altitude ?? 0),
+            time: ts ? (ts instanceof Date ? ts.toISOString() : String(ts)) : undefined,
+            hr: r.heart_rate ?? undefined,
+            cadence: r.cadence ?? undefined,
+            power: r.power ?? undefined,
+          };
+        });
+      resolve(points);
+    });
+  });
+}
+
+async function readAndParse(filePath: string, fileType: string): Promise<GpsPoint[]> {
+  const abs = path.join(UPLOAD_DIR, filePath);
+  if (fileType === 'fit') return parseFit(fs.readFileSync(abs));
+  return parseGpx(fs.readFileSync(abs, 'utf-8'));
+}
+
+// ─── Routes ──────────────────────────────────────────────────────────────────
+
+// GET /api/gps — list user's GPS files
+router.get('/', async (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const userId = (req as any).userId as string;
+    const result = await query<GpsFileRow>('SELECT * FROM gps_files WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
+    res.json({ files: result.rows.map(r => ({ id: r.id, userId: r.user_id, name: r.original_name, fileType: r.file_type, size: r.file_size, metadata: r.metadata, createdAt: r.created_at })) });
+  } catch (err) { console.error('GPS list:', err); res.status(500).json({ error: 'Failed to list GPS files' }); }
+});
+
+// POST /api/gps/upload — upload a .gpx or .fit file
+router.post('/upload', upload.single('file'), async (req, res) => {
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: 'No file uploaded' });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const userId = (req as any).userId as string;
+  const ext = path.extname(file.originalname).toLowerCase().replace('.', '');
+  const fileType = ext === 'fit' ? 'fit' : 'gpx';
+  try {
+    let points: GpsPoint[];
+    try {
+      points = fileType === 'fit'
+        ? await parseFit(fs.readFileSync(file.path))
+        : parseGpx(fs.readFileSync(file.path, 'utf-8'));
+    } catch {
+      points = [];
+    }
+    const metadata = computeMetadata(points);
+    const id = crypto.randomUUID();
+    const relPath = path.basename(file.path);
+    await query(
+      'INSERT INTO gps_files (id, user_id, original_name, file_type, file_path, file_size, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [id, userId, file.originalname, fileType, relPath, file.size, metadata ? JSON.stringify(metadata) : null],
+    );
+    res.json({ file: { id, userId, name: file.originalname, fileType, size: file.size, metadata, createdAt: new Date().toISOString() } });
+  } catch (err) {
+    fs.unlink(file.path, () => {});
+    console.error('GPS upload:', err);
+    res.status(500).json({ error: 'Failed to process GPS file' });
+  }
+});
+
+// GET /api/gps/:id/data — parse and return full track data
+router.get('/:id/data', async (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const userId = (req as any).userId as string;
+    const result = await query<GpsFileRow>('SELECT * FROM gps_files WHERE id = $1 AND user_id = $2', [req.params.id, userId]);
+    const row = result.rows[0];
+    if (!row) return res.status(404).json({ error: 'File not found' });
+    const points = await readAndParse(row.file_path, row.file_type);
+    if (points.length === 0) return res.status(422).json({ error: 'No GPS points found in file' });
+    const elevationProfile = buildElevationProfile(points);
+    const metadata = computeMetadata(points);
+    const metricsAvailable = {
+      hr: points.some(p => p.hr != null),
+      cadence: points.some(p => p.cadence != null),
+      power: points.some(p => p.power != null),
+    };
+    const hrProfile = metricsAvailable.hr
+      ? points.map((p, i) => ({ idx: i, distance: elevationProfile[i].distance, value: p.hr ?? null }))
+      : null;
+    const cadenceProfile = metricsAvailable.cadence
+      ? points.map((p, i) => ({ idx: i, distance: elevationProfile[i].distance, value: p.cadence ?? null }))
+      : null;
+    const powerProfile = metricsAvailable.power
+      ? points.map((p, i) => ({ idx: i, distance: elevationProfile[i].distance, value: p.power ?? null }))
+      : null;
+    res.json({ points, elevationProfile, metadata, metricsAvailable, hrProfile, cadenceProfile, powerProfile });
+  } catch (err) { console.error('GPS data:', err); res.status(500).json({ error: 'Failed to parse GPS file' }); }
+});
+
+// POST /api/gps/:id/smooth — apply Gaussian elevation smoothing, return GPX download
+router.post('/:id/smooth', async (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const userId = (req as any).userId as string;
+    const sigma = Math.max(1, Math.min(50, parseFloat(String(req.body.sigma)) || 5));
+    const result = await query<GpsFileRow>('SELECT * FROM gps_files WHERE id = $1 AND user_id = $2', [req.params.id, userId]);
+    const row = result.rows[0];
+    if (!row) return res.status(404).json({ error: 'File not found' });
+    const points = await readAndParse(row.file_path, row.file_type);
+    if (points.length === 0) return res.status(422).json({ error: 'No GPS points found' });
+    const smoothed = gaussianSmooth(points, sigma);
+    const baseName = path.basename(row.original_name, path.extname(row.original_name));
+    const outName = `${baseName}_smoothed`;
+    const gpx = writeGpx(smoothed, outName);
+    res.setHeader('Content-Type', 'application/gpx+xml');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(outName)}.gpx"`);
+    res.send(gpx);
+  } catch (err) { console.error('GPS smooth:', err); res.status(500).json({ error: 'Failed to smooth GPS file' }); }
+});
+
+// POST /api/gps/combine — merge multiple files into one GPX download
+router.post('/combine', async (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const userId = (req as any).userId as string;
+    const { ids, name = 'combined' } = req.body as { ids: string[]; name: string };
+    if (!Array.isArray(ids) || ids.length < 2) return res.status(400).json({ error: 'At least 2 file IDs required' });
+    const placeholders = ids.map((_, i) => `$${i + 2}`).join(', ');
+    const result = await query<GpsFileRow>(
+      `SELECT * FROM gps_files WHERE user_id = $1 AND id IN (${placeholders}) ORDER BY created_at ASC`,
+      [userId, ...ids],
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'No files found' });
+    const allPoints: GpsPoint[] = [];
+    for (const row of result.rows) {
+      const pts = await readAndParse(row.file_path, row.file_type);
+      allPoints.push(...pts);
+    }
+    if (allPoints.every(p => p.time)) {
+      allPoints.sort((a, b) => new Date(a.time!).getTime() - new Date(b.time!).getTime());
+    }
+    const safeName = String(name).replace(/[^\w\s\-_.]/g, '').trim() || 'combined';
+    const gpx = writeGpx(allPoints, safeName);
+    res.setHeader('Content-Type', 'application/gpx+xml');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeName)}.gpx"`);
+    res.send(gpx);
+  } catch (err) { console.error('GPS combine:', err); res.status(500).json({ error: 'Failed to combine GPS files' }); }
+});
+
+// GET /api/gps/:id/download — download raw original file
+router.get('/:id/download', async (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const userId = (req as any).userId as string;
+    const result = await query<GpsFileRow>('SELECT * FROM gps_files WHERE id = $1 AND user_id = $2', [req.params.id, userId]);
+    const row = result.rows[0];
+    if (!row) return res.status(404).json({ error: 'File not found' });
+    const abs = path.join(UPLOAD_DIR, row.file_path);
+    if (!fs.existsSync(abs)) return res.status(404).json({ error: 'File not on disk' });
+    const mime = row.file_type === 'fit' ? 'application/octet-stream' : 'application/gpx+xml';
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(row.original_name)}"`);
+    res.sendFile(abs);
+  } catch (err) { console.error('GPS download:', err); res.status(500).json({ error: 'Failed to download' }); }
+});
+
+// DELETE /api/gps/:id
+router.delete('/:id', async (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const userId = (req as any).userId as string;
+    const result = await query<GpsFileRow>('DELETE FROM gps_files WHERE id = $1 AND user_id = $2 RETURNING *', [req.params.id, userId]);
+    const row = result.rows[0];
+    if (!row) return res.status(404).json({ error: 'File not found' });
+    fs.unlink(path.join(UPLOAD_DIR, row.file_path), () => {});
+    res.json({ ok: true });
+  } catch (err) { console.error('GPS delete:', err); res.status(500).json({ error: 'Failed to delete' }); }
+});
+
+export default router;
