@@ -154,6 +154,7 @@ export interface AuthState {
 }
 
 // ─── GPS / Workout file types ─────────────────────────────────────────────────
+export type GapMode = 'skip' | 'straight';
 
 export interface GpsFileMetadata {
   totalDistance?: number;

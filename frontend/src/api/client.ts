@@ -1,4 +1,4 @@
-import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData } from '../types';
+import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GapMode } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -477,6 +477,29 @@ export async function apiCombineGpsFiles(ids: string[], name: string): Promise<B
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.blob();
+}
+
+export async function apiMergeGpsFilesDownload(ids: string[], name: string, gapMode: GapMode[]): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(`${BASE_URL}/gps/combine`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ ids, name, gapMode, save: false }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.blob();
+}
+
+export async function apiMergeGpsFilesSave(ids: string[], name: string, gapMode: GapMode[]): Promise<GpsFile> {
+  const token = getToken();
+  const res = await fetch(`${BASE_URL}/gps/combine`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ ids, name, gapMode, save: true }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json() as { file: GpsFile };
+  return data.file;
 }
 
 export async function apiDownloadGpsFile(id: string): Promise<Blob> {

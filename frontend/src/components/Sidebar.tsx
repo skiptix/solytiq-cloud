@@ -1,11 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { List, Folder } from '../types';
+import type { List, Folder, GpsFile } from '../types';
 import Icon from './Icon';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import WorkspaceWizard from '../modals/WorkspaceWizard';
 import WorkspaceSettingsModal from '../modals/WorkspaceSettingsModal';
 import EmojiPicker from 'emoji-picker-react';
+import { apiGetGpsFiles } from '../api/client';
 
 const MINI = 60;
 
@@ -350,7 +351,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
 interface FolderRowProps {
   folder: Folder;
   lists: List[];
-  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings' | 'folder';
+  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings' | 'folder' | 'gps';
   activeListId?: string;
   activeFolderId?: string;
   collapsed: boolean;
@@ -696,7 +697,7 @@ function FolderRow({ folder, lists, active, activeListId, activeFolderId, collap
 interface StandaloneListWithSublistsProps {
   list: List;
   sublists: List[];
-  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings' | 'folder';
+  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings' | 'folder' | 'gps';
   activeListId?: string;
   collapsed: boolean;
   dragOverId: string | null;
@@ -874,9 +875,10 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
-  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings' | 'folder';
+  active: 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings' | 'folder' | 'gps';
   activeListId?: string;
   activeFolderId?: string;
+  activeGpsFileId?: string;
   lists: List[];
   width: number;
   onNavigate: (path: string) => void;
@@ -886,7 +888,12 @@ interface SidebarProps {
   onTaskDropToList: (taskId: number, listId: string) => void;
 }
 
-export default function Sidebar({ active, activeListId, activeFolderId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList }: SidebarProps) {
+function fmtDistShort(m?: number | null) {
+  if (m == null) return null;
+  return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`;
+}
+
+export default function Sidebar({ active, activeListId, activeFolderId, activeGpsFileId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList }: SidebarProps) {
   const collapsed = width <= 72;
   const [addHov, setAddHov] = useState(false);
   const [folderHov, setFolderHov] = useState(false);
@@ -899,6 +906,8 @@ export default function Sidebar({ active, activeListId, activeFolderId, lists, w
   const [addingFolder, setAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const [gpsFiles, setGpsFiles] = useState<GpsFile[]>([]);
+  const [gpsLoading, setGpsLoading] = useState(false);
 
   const { folders, addFolder, updateList, updateFolder, setFolders } = useAppStore();
 
@@ -907,6 +916,19 @@ export default function Sidebar({ active, activeListId, activeFolderId, lists, w
     document.addEventListener('dragend', clearTaskDrag);
     return () => document.removeEventListener('dragend', clearTaskDrag);
   }, []);
+
+  useEffect(() => {
+    if (active !== 'gps') return;
+    setGpsLoading(true);
+    apiGetGpsFiles()
+      .then(data => { setGpsFiles(data); setGpsLoading(false); })
+      .catch(() => setGpsLoading(false));
+    const refresh = () => {
+      apiGetGpsFiles().then(data => setGpsFiles(data)).catch(() => {});
+    };
+    window.addEventListener('gps-files-changed', refresh);
+    return () => window.removeEventListener('gps-files-changed', refresh);
+  }, [active]);
 
   const handleTaskDrop = useCallback((listId: string, taskId: number) => {
     onTaskDropToList(taskId, listId);
@@ -971,6 +993,108 @@ export default function Sidebar({ active, activeListId, activeFolderId, lists, w
   };
 
   const standaloneListItems = lists.filter(l => !l.folderId);
+
+  // ── GPS sidebar mode ───────────────────────────────────────────────────────
+  if (active === 'gps') {
+    return (
+      <aside style={{ width, minWidth: width, height: '100vh', background: '#f7f2fc', borderRight: '1px solid #E5E7EB', display: 'flex', flexDirection: 'column', padding: collapsed ? '16px 6px' : '16px 12px', gap: 4, position: 'fixed', left: 0, top: 0, zIndex: 40, overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box' }}>
+        {/* Resize handle */}
+        <div onMouseDown={e => { e.preventDefault(); onResizeStart(e.clientX); }}
+          onMouseEnter={() => setHandleHov(true)} onMouseLeave={() => setHandleHov(false)}
+          style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, background: handleHov ? 'rgba(94,77,187,0.10)' : 'transparent', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {handleHov && <div style={{ width: 2, height: 48, borderRadius: 2, background: '#9d8dff', opacity: 0.7 }} />}
+        </div>
+
+        {/* Logo / header */}
+        <button type="button" onClick={() => onNavigate('/gps')} title={collapsed ? 'GPS Routes' : undefined}
+          style={{ padding: collapsed ? '12px 0 20px' : '12px 8px 20px', display: 'flex', flexDirection: 'column', alignItems: collapsed ? 'center' : 'flex-start', gap: 4, background: 'transparent', border: 'none', cursor: 'pointer', width: '100%', borderRadius: 8 }}>
+          <img src="/solytiq-cloud.png" alt="Solytiq" style={{ width: 44, height: 44, borderRadius: 11, objectFit: 'cover', marginBottom: 6, flexShrink: 0 }} />
+          {!collapsed && (
+            <>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 500, color: '#5e4dbb', lineHeight: 1.2, whiteSpace: 'nowrap' }}>Solytiq Cloud</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>Your Routes. Your cloud.</div>
+            </>
+          )}
+        </button>
+
+        {/* Upload button */}
+        <button
+          onClick={() => window.dispatchEvent(new CustomEvent('gps-upload-trigger'))}
+          title={collapsed ? 'Upload Route' : undefined}
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 500, color: '#5e4dbb', background: 'transparent', border: 'none', transition: 'background 200ms', width: '100%' }}
+          onMouseEnter={e => (e.currentTarget.style.background = '#F5F3FF')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        >
+          <Icon name="upload" size={19} color="#5e4dbb" />
+          {!collapsed && <span>Upload Route</span>}
+        </button>
+
+        {!collapsed && <div style={{ height: 1, background: '#e8e4f0', margin: '2px 8px' }} />}
+
+        {/* Route list */}
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {gpsLoading && !collapsed && (
+            <div style={{ padding: '16px 8px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', textAlign: 'center' }}>Loading…</div>
+          )}
+          {!gpsLoading && gpsFiles.length === 0 && !collapsed && (
+            <div style={{ padding: '20px 8px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', textAlign: 'center', lineHeight: 1.6 }}>
+              No routes yet.<br />Upload a .GPX or .FIT file.
+            </div>
+          )}
+          {gpsFiles.map(file => {
+            const isActive = activeGpsFileId === file.id;
+            const displayName = file.name.replace(/\.(gpx|fit)$/i, '');
+            if (collapsed) {
+              return (
+                <div key={file.id} style={{ position: 'relative' }}>
+                  <button
+                    title={displayName}
+                    onClick={() => onNavigate(`/gps?file=${file.id}`)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '8px 0', border: 'none', background: isActive ? '#F5F3FF' : 'transparent', borderRadius: 8, cursor: 'pointer', transition: 'all 150ms' }}
+                  >
+                    <Icon name="route" size={18} color={isActive ? '#5e4dbb' : '#787584'} />
+                  </button>
+                </div>
+              );
+            }
+            return (
+              <div
+                key={file.id}
+                onClick={() => onNavigate(`/gps?file=${file.id}`)}
+                style={{ background: isActive ? '#F5F3FF' : 'transparent', borderLeft: `3px solid ${isActive ? '#5e4dbb' : 'transparent'}`, borderRadius: 8, padding: '7px 8px 7px 6px', cursor: 'pointer', transition: 'all 150ms' }}
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f1ecf6'; }}
+                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 4, background: file.fileType === 'gpx' ? '#ede9fe' : '#ccfbf1', color: file.fileType === 'gpx' ? '#5e4dbb' : '#0d9488', letterSpacing: '0.04em', flexShrink: 0 }}>
+                    {file.fileType.toUpperCase()}
+                  </span>
+                  <span style={{ fontSize: 12.5, fontWeight: isActive ? 600 : 450, color: isActive ? '#5e4dbb' : '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontFamily: 'Hanken Grotesk, sans-serif' }}>
+                    {displayName}
+                  </span>
+                </div>
+                {file.metadata && (
+                  <div style={{ marginTop: 3, fontSize: 11, color: '#b0acbe', display: 'flex', gap: 8, paddingLeft: 2, fontFamily: 'Inter, sans-serif' }}>
+                    {file.metadata.totalDistance != null && <span>{fmtDistShort(file.metadata.totalDistance)}</span>}
+                    {file.metadata.totalElevationGain != null && file.metadata.totalElevationGain > 0 && <span>↑{Math.round(file.metadata.totalElevationGain)}m</span>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Bottom: version */}
+        <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
+          {!collapsed && (
+            <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
+              v1.0.2
+            </div>
+          )}
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside style={{ width, minWidth: width, height: '100vh', background: '#f7f2fc', borderRight: '1px solid #E5E7EB', display: 'flex', flexDirection: 'column', padding: collapsed ? '16px 6px' : '16px 12px', gap: 4, position: 'fixed', left: 0, top: 0, zIndex: 40, overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box' }}>
