@@ -142,6 +142,23 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
     }
   }
 
+  if (pathname.startsWith('/gps')) {
+    // GPS files are provided via the optional gpsFiles param
+    const gpsFiles = (appStore as unknown as { gpsFiles?: Array<{ id: string; name: string; fileType: string; metadata?: { totalDistance?: number; totalElevationGain?: number } }> }).gpsFiles ?? [];
+    return {
+      view: 'gps',
+      data: {
+        routes: gpsFiles.map(f => ({
+          id: f.id,
+          name: f.name,
+          fileType: f.fileType,
+          distanceKm: f.metadata?.totalDistance != null ? Math.round(f.metadata.totalDistance / 100) / 10 : null,
+          elevationGain: f.metadata?.totalElevationGain != null ? Math.round(f.metadata.totalElevationGain) : null,
+        })),
+      },
+    };
+  }
+
   if (pathname.startsWith('/scheduled')) {
     const allTasks: (Task & { list_name: string; list_id: string | null })[] = [
       ...appStore.dashTasks.map((t) => ({ ...t, list_name: 'Dashboard', list_id: null })),
@@ -192,6 +209,7 @@ export function buildSystemPrompt(ctx: AIContext, username: string, workspaces?:
     dashboard: 'Dashboard — personal quick-add task list with deadlines and priorities',
     list: `List — "${(ctx.data.list_name as string) ?? 'unknown'}" with multiple sections containing tasks`,
     scheduled: 'Scheduled — calendar view showing tasks with and without deadlines',
+    gps: 'GPS Routes — route/workout file manager for .GPX and .FIT files',
   };
 
   const contextJson = JSON.stringify(ctx.data, null, 2);
@@ -822,6 +840,87 @@ export function buildTools(ctx: AIContext, workspaceId?: string | null, workspac
             workspace_id: { type: 'string', description: 'Workspace ID to delete' },
           },
           required: ['workspace_id'],
+        },
+      },
+    });
+  }
+
+  // ── GPS tools (available when on GPS tab) ─────────────────────────────────
+  if (ctx.view === 'gps') {
+    const routeList = (ctx.data.routes as Array<{ id: string; name: string; fileType: string; distanceKm: number | null; elevationGain: number | null }> ?? [])
+      .map(r => `"${r.name}" (id: ${r.id}, type: ${r.fileType}${r.distanceKm != null ? `, ${r.distanceKm} km` : ''}${r.elevationGain != null ? `, ↑${r.elevationGain}m` : ''})`)
+      .join('\n  ') || 'none uploaded yet';
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'list_gps_routes',
+        description: 'List all GPS routes/files the user has uploaded. Returns names, IDs, distances, and elevation gains.',
+        parameters: { type: 'object', properties: {}, required: [] },
+      },
+    });
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'rename_gps_route',
+        description: `Rename a GPS route file.\nAvailable routes:\n  ${routeList}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            route_id: { type: 'string', description: 'ID of the route to rename' },
+            new_name: { type: 'string', description: 'New filename (without extension if desired)' },
+          },
+          required: ['route_id', 'new_name'],
+        },
+      },
+    });
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'delete_gps_route',
+        description: `Delete a GPS route file permanently. ALWAYS confirm with the user before deleting.\nAvailable routes:\n  ${routeList}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            route_id: { type: 'string', description: 'ID of the route to delete' },
+          },
+          required: ['route_id'],
+        },
+      },
+    });
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'merge_gps_routes',
+        description: `Merge multiple GPS routes into one and save to library.\nAvailable routes:\n  ${routeList}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            route_ids: { type: 'array', items: { type: 'string' }, description: 'IDs of routes to merge, in order' },
+            output_name: { type: 'string', description: 'Name for the merged route file' },
+          },
+          required: ['route_ids', 'output_name'],
+        },
+      },
+    });
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'smooth_gps_elevation',
+        description: `Apply Gaussian elevation smoothing to a GPS route and save the result.\nAvailable routes:\n  ${routeList}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            route_id: { type: 'string', description: 'ID of the route to smooth' },
+            sigma: { type: 'number', description: 'Smoothing strength 1–30 (1 = no change, 15 = moderate, 30 = heavy)' },
+            mode: { type: 'string', enum: ['new', 'replace'], description: '"new" saves a new file, "replace" overwrites the original' },
+            output_name: { type: 'string', description: 'Name for the new file (only used when mode = "new")' },
+          },
+          required: ['route_id', 'sigma', 'mode'],
         },
       },
     });
