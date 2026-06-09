@@ -267,7 +267,10 @@ router.get('/:id/data', async (req, res) => {
       ? points.map((p, i) => ({ idx: i, distance: elevationProfile[i].distance, value: p.power ?? null }))
       : null;
     res.json({ points, elevationProfile, metadata, metricsAvailable, hrProfile, cadenceProfile, powerProfile });
-  } catch (err) { console.error('GPS data:', err); res.status(500).json({ error: 'Failed to parse GPS file' }); }
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return res.status(404).json({ error: 'GPS file not found on disk' });
+    console.error('GPS data:', err); res.status(500).json({ error: 'Failed to parse GPS file' });
+  }
 });
 
 // POST /api/gps/:id/smooth — apply Gaussian elevation smoothing, return GPX download
@@ -288,7 +291,10 @@ router.post('/:id/smooth', async (req, res) => {
     res.setHeader('Content-Type', 'application/gpx+xml');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(outName)}.gpx"`);
     res.send(gpx);
-  } catch (err) { console.error('GPS smooth:', err); res.status(500).json({ error: 'Failed to smooth GPS file' }); }
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return res.status(404).json({ error: 'GPS file not found on disk' });
+    console.error('GPS smooth:', err); res.status(500).json({ error: 'Failed to smooth GPS file' });
+  }
 });
 
 // POST /api/gps/:id/smooth-save — smooth and save (new file or replace in-place)
@@ -306,7 +312,7 @@ router.post('/:id/smooth-save', async (req, res) => {
     const row = result.rows[0];
     const filePath = path.join(UPLOAD_DIR, row.file_path);
 
-    const points = await readAndParse(filePath, row.file_type);
+    const points = await readAndParse(row.file_path, row.file_type);
     const smoothed = gaussianSmooth(points, sigmaNum);
     const baseName = row.original_name.replace(/\.(gpx|fit)$/i, '');
 
@@ -333,7 +339,10 @@ router.post('/:id/smooth-save', async (req, res) => {
         [newId, userId, outName, 'gpx', filename, newSize, metadata ? JSON.stringify(metadata) : null]);
       res.json({ file: { id: newId, userId, name: outName, fileType: 'gpx', size: newSize, metadata, createdAt: new Date().toISOString() } });
     }
-  } catch (err) { console.error('GPS smooth-save:', err); res.status(500).json({ error: 'Failed to smooth and save GPS file' }); }
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return res.status(404).json({ error: 'GPS file not found on disk' });
+    console.error('GPS smooth-save:', err); res.status(500).json({ error: 'Failed to smooth and save GPS file' });
+  }
 });
 
 // PATCH /api/gps/:id/rename — rename a GPS file
@@ -419,7 +428,10 @@ router.post('/combine', async (req, res) => {
     res.setHeader('Content-Type', 'application/gpx+xml');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeName)}.gpx"`);
     res.send(gpx);
-  } catch (err) { console.error('GPS combine:', err); res.status(500).json({ error: 'Failed to combine GPS files' }); }
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return res.status(404).json({ error: 'GPS file not found on disk' });
+    console.error('GPS combine:', err); res.status(500).json({ error: 'Failed to combine GPS files' });
+  }
 });
 
 // GET /api/gps/:id/download — download raw original file
