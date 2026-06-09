@@ -26,9 +26,6 @@ function fmtDuration(s?: number | null) {
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
 }
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
 
 // ─── MultiLineMapChart ────────────────────────────────────────────────────────
 interface MultiLineMapChartProps {
@@ -40,7 +37,7 @@ interface MultiLineMapChartProps {
 function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const [dims, setDims] = useState({ w: 800, h: 190 });
+  const [dims, setDims] = useState({ w: 800, h: 150 });
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -52,44 +49,30 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
     return () => obs.disconnect();
   }, []);
 
-  const PAD = { l: 8, r: 8, t: 32, b: 24 };
+  const PAD = { l: 8, r: 8, t: 28, b: 22 };
   const cw = dims.w - PAD.l - PAD.r;
   const ch = dims.h - PAD.t - PAD.b;
 
   const elevProf = trackData.elevationProfile;
   const maxDist = elevProf.length > 0 ? elevProf[elevProf.length - 1].distance : 1;
-
   const toX = (dist: number) => PAD.l + (dist / maxDist) * cw;
 
-  // Metrics to show
-  const metrics: Array<{
-    key: string;
-    color: string;
-    label: string;
-    unit: string;
-    values: (number | null)[];
-  }> = [];
-
-  // Elevation always present
+  const metrics: Array<{ key: string; color: string; label: string; unit: string; values: (number | null)[] }> = [];
   const elevVals = elevProf.map(p => p.elevation);
   const elevMin = Math.min(...elevVals);
   const elevMax = Math.max(...elevVals);
   metrics.push({ key: 'elevation', color: '#5e4dbb', label: 'Elevation', unit: 'm', values: elevVals });
 
   if (trackData.metricsAvailable.hr && trackData.hrProfile) {
-    const vals = trackData.hrProfile.map((p: GpsMetricPoint) => p.value);
-    metrics.push({ key: 'hr', color: '#ef4444', label: 'HR', unit: 'bpm', values: vals });
+    metrics.push({ key: 'hr', color: '#ef4444', label: 'HR', unit: 'bpm', values: trackData.hrProfile.map((p: GpsMetricPoint) => p.value) });
   }
   if (trackData.metricsAvailable.cadence && trackData.cadenceProfile) {
-    const vals = trackData.cadenceProfile.map((p: GpsMetricPoint) => p.value);
-    metrics.push({ key: 'cadence', color: '#10b981', label: 'Cadence', unit: 'rpm', values: vals });
+    metrics.push({ key: 'cadence', color: '#10b981', label: 'Cadence', unit: 'rpm', values: trackData.cadenceProfile.map((p: GpsMetricPoint) => p.value) });
   }
   if (trackData.metricsAvailable.power && trackData.powerProfile) {
-    const vals = trackData.powerProfile.map((p: GpsMetricPoint) => p.value);
-    metrics.push({ key: 'power', color: '#f59e0b', label: 'Power', unit: 'W', values: vals });
+    metrics.push({ key: 'power', color: '#f59e0b', label: 'Power', unit: 'W', values: trackData.powerProfile.map((p: GpsMetricPoint) => p.value) });
   }
 
-  // Normalize each metric to [0,1]
   const normalizedMetrics = metrics.map(m => {
     const validVals = m.values.filter((v): v is number => v != null);
     const min = validVals.length > 0 ? Math.min(...validVals) : 0;
@@ -98,12 +81,8 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
     return { ...m, min, max, range, normalized: m.values.map(v => v != null ? (v - min) / range : null) };
   });
 
-  const toY = (norm: number | null) => {
-    if (norm == null) return null;
-    return PAD.t + (1 - norm) * ch;
-  };
+  const toY = (norm: number | null) => norm == null ? null : PAD.t + (1 - norm) * ch;
 
-  // Build paths
   const paths = normalizedMetrics.map(m => {
     let d = '';
     let first = true;
@@ -117,7 +96,6 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
     return { ...m, pathD: d };
   });
 
-  // Elevation area
   const elevMetric = normalizedMetrics[0];
   const areaD = elevMetric && elevProf.length > 0 ? (() => {
     const firstX = toX(elevProf[0].distance);
@@ -134,7 +112,6 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
     return d;
   })() : '';
 
-  // Hover marker info
   const hovX = hoveredIdx != null ? toX(elevProf[hoveredIdx]?.distance ?? 0) : null;
 
   const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
@@ -151,123 +128,66 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
     onHover(nearest);
   }, [elevProf, maxDist, PAD.l, PAD.r, onHover]);
 
-  // X axis ticks
-  const xTicks = 5;
-
   return (
     <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
-      {/* Legend row */}
-      <div style={{
-        position: 'absolute', top: 6, left: PAD.l, right: PAD.r,
-        display: 'flex', gap: 12, zIndex: 2, pointerEvents: 'none',
-      }}>
+      <div style={{ position: 'absolute', top: 6, left: PAD.l, right: PAD.r, display: 'flex', gap: 12, zIndex: 2, pointerEvents: 'none' }}>
         {metrics.map(m => (
           <div key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <div style={{ width: 10, height: 3, borderRadius: 2, background: m.color }} />
-            <span style={{ fontSize: 10, color: '#5e4dbb', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>
-              {m.label}
-            </span>
+            <span style={{ fontSize: 10, color: '#5e4dbb', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>{m.label}</span>
           </div>
         ))}
       </div>
-
-      <svg
-        ref={svgRef}
-        width={dims.w}
-        height={dims.h}
-        style={{ display: 'block', cursor: 'crosshair' }}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={() => onHover(null)}
-      >
+      <svg ref={svgRef} width={dims.w} height={dims.h} style={{ display: 'block', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={() => onHover(null)}>
         <defs>
-          <linearGradient id="multiline-elev-grad" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="gps-elev-grad" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#5e4dbb" stopOpacity="0.28" />
             <stop offset="100%" stopColor="#5e4dbb" stopOpacity="0.03" />
           </linearGradient>
         </defs>
-
-        {/* Grid lines */}
         {[0, 0.25, 0.5, 0.75, 1].map(frac => {
           const y = PAD.t + (1 - frac) * ch;
-          return (
-            <line key={frac} x1={PAD.l} y1={y} x2={PAD.l + cw} y2={y}
-              stroke="rgba(94,77,187,0.10)" strokeWidth={0.8} />
-          );
+          return <line key={frac} x1={PAD.l} y1={y} x2={PAD.l + cw} y2={y} stroke="rgba(94,77,187,0.10)" strokeWidth={0.8} />;
         })}
-
-        {/* X-axis distance labels */}
-        {Array.from({ length: xTicks + 1 }, (_, i) => {
-          const dist = (i / xTicks) * maxDist;
+        {Array.from({ length: 6 }, (_, i) => {
+          const dist = (i / 5) * maxDist;
           const x = toX(dist);
           return (
-            <text key={i} x={x} y={dims.h - 6} textAnchor="middle"
-              style={{ fontSize: 9, fill: 'rgba(80,60,140,0.60)', fontFamily: 'Inter, sans-serif' }}>
+            <text key={i} x={x} y={dims.h - 5} textAnchor="middle" style={{ fontSize: 9, fill: 'rgba(80,60,140,0.55)', fontFamily: 'Inter, sans-serif' }}>
               {dist >= 1000 ? `${(dist / 1000).toFixed(1)}k` : Math.round(dist)}m
             </text>
           );
         })}
-
-        {/* Elevation area fill */}
-        {areaD && <path d={areaD} fill="url(#multiline-elev-grad)" />}
-
-        {/* Lines for each metric */}
-        {paths.map(p => (
-          p.pathD ? <path key={p.key} d={p.pathD} fill="none" stroke={p.color} strokeWidth={p.key === 'elevation' ? 2 : 1.5} opacity={0.9} /> : null
-        ))}
-
-        {/* Hover cursor line */}
-        {hovX != null && (
-          <line x1={hovX} y1={PAD.t} x2={hovX} y2={PAD.t + ch}
-            stroke="rgba(94,77,187,0.45)" strokeWidth={1.5} strokeDasharray="4,3" />
-        )}
-
-        {/* Hover dots */}
+        {areaD && <path d={areaD} fill="url(#gps-elev-grad)" />}
+        {paths.map(p => p.pathD ? <path key={p.key} d={p.pathD} fill="none" stroke={p.color} strokeWidth={p.key === 'elevation' ? 2 : 1.5} opacity={0.9} /> : null)}
+        {hovX != null && <line x1={hovX} y1={PAD.t} x2={hovX} y2={PAD.t + ch} stroke="rgba(94,77,187,0.45)" strokeWidth={1.5} strokeDasharray="4,3" />}
         {hovX != null && hoveredIdx != null && normalizedMetrics.map(m => {
           const norm = m.normalized[hoveredIdx];
           const y = toY(norm);
           if (y == null) return null;
-          return (
-            <circle key={m.key} cx={hovX} cy={y} r={4}
-              fill={m.color} stroke="rgba(255,255,255,0.90)" strokeWidth={2} />
-          );
+          return <circle key={m.key} cx={hovX} cy={y} r={4} fill={m.color} stroke="rgba(255,255,255,0.90)" strokeWidth={2} />;
         })}
       </svg>
-
-      {/* Hover tooltip */}
       {hovX != null && hoveredIdx != null && (
         <div style={{
-          position: 'absolute',
-          top: PAD.t,
-          left: Math.min(hovX + 10, dims.w - 140),
-          background: 'rgba(255,255,255,0.75)',
-          backdropFilter: 'blur(16px) saturate(160%)',
-          WebkitBackdropFilter: 'blur(16px) saturate(160%)',
-          border: '1px solid rgba(255,255,255,0.70)',
-          borderRadius: 10,
-          padding: '6px 10px',
-          pointerEvents: 'none',
-          zIndex: 10,
-          fontFamily: 'Inter, sans-serif',
-          fontSize: 11,
-          minWidth: 120,
+          position: 'absolute', top: PAD.t, left: Math.min(hovX + 10, dims.w - 140),
+          background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(16px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(16px) saturate(160%)', border: '1px solid rgba(255,255,255,0.70)',
+          borderRadius: 10, padding: '6px 10px', pointerEvents: 'none', zIndex: 10,
+          fontFamily: 'Inter, sans-serif', fontSize: 11, minWidth: 110,
           boxShadow: '0 4px 20px rgba(94,77,187,0.12), inset 0 1px 0 rgba(255,255,255,0.90)',
         }}>
-          <div style={{ color: 'rgba(80,60,140,0.65)', marginBottom: 4, fontSize: 10 }}>
-            {fmtDist(elevProf[hoveredIdx]?.distance)}
-          </div>
+          <div style={{ color: 'rgba(80,60,140,0.65)', marginBottom: 4, fontSize: 10 }}>{fmtDist(elevProf[hoveredIdx]?.distance)}</div>
           {normalizedMetrics.map(m => {
             const val = m.values[hoveredIdx];
             if (val == null) return null;
             return (
               <div key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                 <div style={{ width: 8, height: 8, borderRadius: 2, background: m.color, flexShrink: 0 }} />
-                <span style={{ color: m.color, fontWeight: 600 }}>
-                  {Math.round(val)} {m.unit}
-                </span>
+                <span style={{ color: m.color, fontWeight: 600 }}>{Math.round(val)} {m.unit}</span>
               </div>
             );
           })}
-          {/* Show elevation range context */}
           {elevVals.length > 0 && (
             <div style={{ color: 'rgba(80,60,140,0.50)', fontSize: 9, marginTop: 3 }}>
               Range: {Math.round(elevMin)}–{Math.round(elevMax)}m
@@ -297,8 +217,8 @@ export default function GPSScreen() {
   const [downloading, setDownloading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [mergeWizardOpen, setMergeWizardOpen] = useState(false);
+  const [chartCollapsed, setChartCollapsed] = useState(false);
 
-  // Smooth wizard state
   const [smoothWizardOpen, setSmoothWizardOpen] = useState(false);
   const [smoothSigma, setSmoothSigma] = useState(5);
   const [smoothMode, setSmoothMode] = useState<'new' | 'replace'>('new');
@@ -306,7 +226,6 @@ export default function GPSScreen() {
   const [smoothSaving, setSmoothSaving] = useState(false);
 
   const selectedIdRef = useRef<string | null>(null);
-  const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const leafletRef = useRef<L.Map | null>(null);
   const polylineRef = useRef<L.Polyline | null>(null);
   const startMarkerRef = useRef<L.CircleMarker | null>(null);
@@ -315,37 +234,30 @@ export default function GPSScreen() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialLoadDone = useRef(false);
 
-  // ── Load files on mount (only once, if store is empty)
   useEffect(() => {
     if (initialLoadDone.current) return;
     initialLoadDone.current = true;
-    apiGetGpsFiles()
-      .then(data => setFiles(data))
-      .catch(() => {});
+    apiGetGpsFiles().then(data => setFiles(data)).catch(() => {});
   }, [setFiles]);
 
-  // ── Listen for external GPS changes (e.g. from AI assistant)
   useEffect(() => {
-    const handler = () => {
-      apiGetGpsFiles().then(data => setFiles(data)).catch(() => {});
-    };
+    const handler = () => { apiGetGpsFiles().then(data => setFiles(data)).catch(() => {}); };
     window.addEventListener('gps-files-changed', handler);
     return () => window.removeEventListener('gps-files-changed', handler);
   }, [setFiles]);
 
-  // ── Init Leaflet via callback ref
   const mapCallbackRef = useCallback((node: HTMLDivElement | null) => {
     if (!node) {
       leafletRef.current?.remove();
       leafletRef.current = null;
       return;
     }
-    mapContainerRef.current = node;
     if (!leafletRef.current) {
       const map = L.map(node, { zoomControl: true }).setView([47, 10], 5);
-      L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://opentopomap.org" target="_blank" rel="noopener">OpenTopoMap</a>',
-        maxZoom: 17,
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19,
       }).addTo(map);
       leafletRef.current = map;
       setTimeout(() => map.invalidateSize(), 100);
@@ -355,7 +267,6 @@ export default function GPSScreen() {
     }
   }, []);
 
-  // ── Cleanup Leaflet on unmount
   useEffect(() => {
     return () => {
       leafletRef.current?.remove();
@@ -367,7 +278,6 @@ export default function GPSScreen() {
     };
   }, []);
 
-  // ── Sync from URL param
   useEffect(() => {
     const fileId = new URLSearchParams(location.search).get('file');
     if (fileId && fileId !== selectedIdRef.current) {
@@ -381,14 +291,18 @@ export default function GPSScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
-  // ── Sidebar upload button trigger
   useEffect(() => {
     const handler = () => fileInputRef.current?.click();
     window.addEventListener('gps-upload-trigger', handler);
     return () => window.removeEventListener('gps-upload-trigger', handler);
   }, []);
 
-  // ── Window-level drag-and-drop
+  // Chart collapse/expand — invalidate map size after animation
+  useEffect(() => {
+    const t = setTimeout(() => leafletRef.current?.invalidateSize(), 310);
+    return () => clearTimeout(t);
+  }, [chartCollapsed, selectedId, trackData]);
+
   const dragCounter = useRef(0);
   const handleUploadRef = useRef(handleUpload);
   useEffect(() => { handleUploadRef.current = handleUpload; });
@@ -421,7 +335,6 @@ export default function GPSScreen() {
     };
   }, []);
 
-  // ── Draw polyline when trackData changes
   useEffect(() => {
     const map = leafletRef.current;
     if (!map) return;
@@ -431,16 +344,15 @@ export default function GPSScreen() {
     cursorMarkerRef.current?.remove(); cursorMarkerRef.current = null;
     if (!trackData || trackData.points.length === 0) return;
     const lls: L.LatLngTuple[] = trackData.points.map(p => [p.lat, p.lon]);
-    polylineRef.current = L.polyline(lls, { color: '#5e4dbb', weight: 3.5, opacity: 0.92 }).addTo(map);
-    startMarkerRef.current = L.circleMarker(lls[0], { radius: 7, fillColor: '#22c55e', color: '#fff', weight: 2.5, fillOpacity: 1 }).addTo(map);
+    polylineRef.current = L.polyline(lls, { color: '#5e4dbb', weight: 5, opacity: 0.95, lineJoin: 'round', lineCap: 'round' }).addTo(map);
+    startMarkerRef.current = L.circleMarker(lls[0], { radius: 9, fillColor: '#22c55e', color: '#fff', weight: 3, fillOpacity: 1 }).addTo(map);
     if (lls.length > 1) {
-      endMarkerRef.current = L.circleMarker(lls[lls.length - 1], { radius: 7, fillColor: '#ef4444', color: '#fff', weight: 2.5, fillOpacity: 1 }).addTo(map);
+      endMarkerRef.current = L.circleMarker(lls[lls.length - 1], { radius: 9, fillColor: '#ef4444', color: '#fff', weight: 3, fillOpacity: 1 }).addTo(map);
     }
     map.fitBounds(L.latLngBounds(lls), { padding: [30, 30], maxZoom: 16 });
     setTimeout(() => map.invalidateSize(), 80);
   }, [trackData]);
 
-  // ── Move cursor marker on chart hover
   useEffect(() => {
     const map = leafletRef.current;
     if (!map || !trackData) {
@@ -520,31 +432,23 @@ export default function GPSScreen() {
     if (!selectedId || smoothSaving) return;
     setSmoothSaving(true);
     try {
-      const selectedFile = files.find(f => f.id === selectedId);
-      const baseName = selectedFile ? selectedFile.name.replace(/\.(gpx|fit)$/i, '') : 'route';
+      const sel = files.find(f => f.id === selectedId);
+      const baseName = sel ? sel.name.replace(/\.(gpx|fit)$/i, '') : 'route';
       const nameToUse = smoothMode === 'new' ? (smoothName.trim() || `${baseName}_smoothed`) : undefined;
       const file = await apiSmoothAndSaveGpsFile(selectedId, smoothSigma, smoothMode, nameToUse);
       if (smoothMode === 'new') {
         setFiles(prev => [file, ...prev]);
       } else {
         setFiles(prev => prev.map(f => f.id === selectedId ? file : f));
-        // Reload track data since file was replaced
         setTrackLoading(true);
         setTrackData(null);
-        try {
-          const data = await apiGetGpsTrackData(selectedId);
-          setTrackData(data);
-        } catch { /* ignore */ }
+        try { const data = await apiGetGpsTrackData(selectedId); setTrackData(data); } catch { /* ignore */ }
         setTrackLoading(false);
       }
       window.dispatchEvent(new CustomEvent('gps-files-changed'));
       setSmoothWizardOpen(false);
-      setSmoothName('');
-      setSmoothSigma(5);
-      setSmoothMode('new');
-    } catch (err) {
-      console.error('Smooth-save failed:', err);
-    }
+      setSmoothName(''); setSmoothSigma(5); setSmoothMode('new');
+    } catch (err) { console.error('Smooth-save failed:', err); }
     setSmoothSaving(false);
   }
 
@@ -557,283 +461,304 @@ export default function GPSScreen() {
 
   const selectedFile = useMemo(() => files.find(f => f.id === selectedId) ?? null, [files, selectedId]);
 
+  const CHART_H = 160;
+  const chartVisible = !!(selectedId && trackData && !chartCollapsed);
+
+  // Shared glassmorphic button style for map controls
+  const mapCtrlBtn = (enabled = true): React.CSSProperties => ({
+    width: 36, height: 36, borderRadius: 9,
+    background: 'rgba(255,255,255,0.88)',
+    backdropFilter: 'blur(16px)',
+    WebkitBackdropFilter: 'blur(16px)',
+    border: '1px solid rgba(255,255,255,0.75)',
+    boxShadow: '0 2px 12px rgba(94,77,187,0.10)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    cursor: enabled ? 'pointer' : 'default',
+    opacity: enabled ? 1 : 0.45,
+    transition: 'box-shadow 150ms, background 150ms',
+  });
+
   return (
     <>
       <style>{`
         @keyframes gpsPageIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes mapFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .gps-map-ctrl:hover { box-shadow: 0 4px 18px rgba(94,77,187,0.18) !important; background: rgba(255,255,255,0.97) !important; }
       `}</style>
 
       <div style={{
         flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
-        height: '100%', overflow: 'hidden',
+        height: '100%', overflow: 'hidden', position: 'relative',
         animation: 'gpsPageIn 380ms cubic-bezier(0.23,1,0.32,1) both',
         fontFamily: 'Inter, sans-serif',
       }}>
+        {/* ── Map fills full area ─────────────────────────────────────────────── */}
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden', isolation: 'isolate' }}>
+          {/* Leaflet map */}
+          <div ref={mapCallbackRef} style={{ position: 'absolute', inset: 0, zIndex: 0 }} />
 
-        {/* ── Secondary Toolbar ──────────────────────────────────────────────── */}
-        <div style={{
-          height: 46, flexShrink: 0, borderBottom: '1px solid #e8e4f0',
-          background: 'rgba(253,248,255,0.97)', backdropFilter: 'blur(8px)',
-          display: 'flex', alignItems: 'center', padding: '0 16px', gap: 10,
-        }}>
-          <button
-            onClick={() => { if (selectedId) setSmoothWizardOpen(true); }}
-            disabled={!selectedId}
-            style={{
-              height: 30, padding: '0 14px', borderRadius: 8,
-              border: '1px solid #c4b8f0', background: '#F5F3FF', color: '#5e4dbb',
-              fontSize: 12, fontWeight: 600, cursor: selectedId ? 'pointer' : 'default',
-              display: 'flex', alignItems: 'center', gap: 6, transition: 'all 150ms',
-              fontFamily: 'Hanken Grotesk, sans-serif', flexShrink: 0,
-              opacity: selectedId ? 1 : 0.5,
-            }}
-            onMouseEnter={e => { if (selectedId) e.currentTarget.style.background = '#ede9ff'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#F5F3FF'; }}
-          >
-            <Icon name="auto_fix_high" size={14} color="#5e4dbb" />
-            Smooth Elevation
-          </button>
-
-          {uploading && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 120, height: 4, borderRadius: 4, background: '#ede9ff', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${uploadProgress}%`, background: '#5e4dbb', borderRadius: 4, transition: 'width 200ms' }} />
-              </div>
-              <span style={{ fontSize: 11, color: '#787584', whiteSpace: 'nowrap' }}>{uploadProgress}%</span>
-            </div>
-          )}
-
-          <div style={{ flex: 1 }} />
-
-          <button
-            onClick={() => setMergeWizardOpen(true)}
-            style={{
-              height: 30, padding: '0 14px', borderRadius: 8,
-              border: '1px solid #e8e4f0', background: 'transparent', color: '#484552',
-              fontSize: 12, fontWeight: 600, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 6, transition: 'all 150ms',
-              fontFamily: 'Hanken Grotesk, sans-serif', flexShrink: 0,
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.borderColor = '#c4b8f0'; e.currentTarget.style.color = '#5e4dbb'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#e8e4f0'; e.currentTarget.style.color = '#484552'; }}
-          >
-            <Icon name="merge" size={14} color="#787584" />
-            Merge Routes
-          </button>
-        </div>
-
-        {/* ── Body ───────────────────────────────────────────────────────────── */}
-        <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
-
-          {/* ── Left Info Panel ──────────────────────────────────────────────── */}
-          <div style={{
-            width: 300, flexShrink: 0, borderRight: '1px solid #e8e4f0',
-            display: 'flex', flexDirection: 'column', background: '#faf9ff',
-            overflowY: 'auto',
-          }}>
-            {!selectedFile ? (
-              /* Empty state */
-              <div style={{
-                flex: 1, display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center', padding: '32px 24px', textAlign: 'center',
-              }}>
-                <div style={{
-                  width: 64, height: 64, borderRadius: 20, background: '#ede9ff',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+          {/* ── Floating Info Card (top-left, only when file selected) ─────── */}
+          {selectedFile && (
+            <div style={{
+              position: 'absolute', top: 16, left: 16, zIndex: 1000,
+              width: 268,
+              background: 'rgba(255,255,255,0.88)',
+              backdropFilter: 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              border: '1px solid rgba(255,255,255,0.75)',
+              borderRadius: 14, padding: '14px 16px',
+              boxShadow: '0 4px 32px rgba(94,77,187,0.12), inset 0 1px 0 rgba(255,255,255,0.90)',
+              animation: 'mapFadeIn 300ms ease both',
+            }}>
+              {/* File type badge + name */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
+                <span style={{
+                  background: selectedFile.fileType === 'gpx' ? '#ede9ff' : '#ccfbf1',
+                  color: selectedFile.fileType === 'gpx' ? '#5e4dbb' : '#0d9488',
+                  borderRadius: 4, padding: '2px 6px', fontSize: 9,
+                  fontWeight: 700, letterSpacing: '0.04em',
+                  fontFamily: 'Hanken Grotesk, sans-serif', flexShrink: 0, marginTop: 2,
                 }}>
-                  <Icon name="route" size={30} color="#5e4dbb" />
-                </div>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>
-                  {files.length === 0 ? 'No routes yet' : 'Select a route'}
-                </div>
-                <div style={{ fontSize: 12, color: '#787584', lineHeight: 1.6, fontFamily: 'Inter, sans-serif' }}>
-                  {files.length === 0
-                    ? 'Upload a .GPX or .FIT file to preview it on the map.'
-                    : 'Click a route in the sidebar to see details here.'}
-                </div>
+                  {selectedFile.fileType.toUpperCase()}
+                </span>
+                <span style={{
+                  fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13,
+                  fontWeight: 700, color: '#1c1b22', lineHeight: 1.3, wordBreak: 'break-word',
+                }}>
+                  {selectedFile.name.replace(/\.(gpx|fit)$/i, '')}
+                </span>
               </div>
-            ) : (
-              /* Route details */
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
 
-                {/* Route header */}
-                <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 5 }}>
-                    <span style={{
-                      background: selectedFile.fileType === 'gpx' ? '#ede9ff' : '#ccfbf1',
-                      color: selectedFile.fileType === 'gpx' ? '#5e4dbb' : '#0d9488',
-                      borderRadius: 4, padding: '2px 7px', fontSize: 10, fontWeight: 700,
-                      fontFamily: 'Hanken Grotesk, sans-serif', letterSpacing: '0.03em',
-                      flexShrink: 0, marginTop: 3,
-                    }}>{selectedFile.fileType.toUpperCase()}</span>
-                    <span style={{
-                      fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 700,
-                      color: '#1c1b22', lineHeight: 1.3, wordBreak: 'break-all',
-                    }}>{selectedFile.name}</span>
-                  </div>
-                  <div style={{ fontSize: 11, color: '#b0acbe', fontFamily: 'Inter, sans-serif' }}>
-                    {fmtDate(selectedFile.createdAt)}
+              {/* Stats row */}
+              <div style={{ display: 'flex', gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 10, color: '#b0acbe', fontFamily: 'Inter', marginBottom: 2 }}>Distance</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>
+                    {fmtDist(selectedFile.metadata?.totalDistance)}
                   </div>
                 </div>
-
-                {/* Stats grid */}
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                    {([
-                      { label: 'Distance', value: fmtDist(selectedFile.metadata?.totalDistance), icon: 'straighten' },
-                      { label: 'Elevation Gain', value: fmtElev(selectedFile.metadata?.totalElevationGain), icon: 'landscape' },
-                      ...(selectedFile.metadata?.duration != null ? [{ label: 'Duration', value: fmtDuration(selectedFile.metadata.duration) ?? '—', icon: 'schedule' }] : []),
-                      ...(selectedFile.metadata?.pointCount != null ? [{ label: 'Points', value: String(selectedFile.metadata.pointCount), icon: 'pin_drop' }] : []),
-                    ] as Array<{ label: string; value: string; icon: string }>).map(stat => (
-                      <div key={stat.label} style={{
-                        background: '#fff', borderRadius: 8, padding: '10px 12px',
-                        border: '1px solid #e8e4f0',
-                      }}>
-                        <div style={{ fontSize: 10, color: '#b0acbe', fontFamily: 'Inter, sans-serif', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <Icon name={stat.icon} size={10} color="#c9c4d5" />
-                          {stat.label}
-                        </div>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>
-                          {stat.value}
-                        </div>
-                      </div>
-                    ))}
+                <div>
+                  <div style={{ fontSize: 10, color: '#b0acbe', fontFamily: 'Inter', marginBottom: 2 }}>Elev Gain</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>
+                    {fmtElev(selectedFile.metadata?.totalElevationGain)}
                   </div>
                 </div>
+                {selectedFile.metadata?.duration != null && (
+                  <div>
+                    <div style={{ fontSize: 10, color: '#b0acbe', fontFamily: 'Inter', marginBottom: 2 }}>Time</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>
+                      {fmtDuration(selectedFile.metadata.duration)}
+                    </div>
+                  </div>
+                )}
+              </div>
 
-                {/* Download original */}
-                <div style={{ padding: '10px 16px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
+              {/* Action buttons — 3 columns, unless delete confirm shown */}
+              {deleteConfirm === 'selected' ? (
+                <div style={{ background: '#fff5f5', border: '1px solid #fca5a5', borderRadius: 10, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#ba1a1a', marginBottom: 4, fontFamily: 'Hanken Grotesk, sans-serif' }}>Delete this route?</div>
+                  <div style={{ fontSize: 11, color: '#9e7070', marginBottom: 10, fontFamily: 'Inter, sans-serif' }}>This action cannot be undone.</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => setDeleteConfirm(null)}
+                      style={{ flex: 1, padding: '6px 0', borderRadius: 7, border: '1px solid #e8e4f0', background: '#fff', color: '#484552', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
+                    >Cancel</button>
+                    <button
+                      onClick={handleDeleteSelected}
+                      style={{ flex: 1, padding: '6px 0', borderRadius: 7, border: 'none', background: '#ba1a1a', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif' }}
+                    >Delete</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                  {/* Edit */}
+                  <button
+                    onClick={() => navigate(`/gps/${selectedId}/edit`)}
+                    style={{
+                      height: 32, borderRadius: 8, border: 'none',
+                      background: '#5e4dbb', color: '#fff',
+                      fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                      fontFamily: 'Hanken Grotesk, sans-serif', transition: 'background 150ms',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#4d3da8'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#5e4dbb'; }}
+                  >
+                    <Icon name="edit" size={12} color="#fff" />
+                    Edit
+                  </button>
+                  {/* Download */}
                   <button
                     onClick={downloadOriginal}
                     disabled={downloading}
                     style={{
-                      width: '100%', padding: '8px 0', borderRadius: 8,
-                      border: '1px solid #E5E7EB', background: 'transparent', color: '#484552',
-                      fontSize: 12, fontWeight: 600,
-                      cursor: !downloading ? 'pointer' : 'default',
-                      transition: 'all 150ms', fontFamily: 'Hanken Grotesk, sans-serif',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      height: 32, borderRadius: 8, border: '1px solid #e8e4f0',
+                      background: '#fff', color: '#484552',
+                      fontSize: 11, fontWeight: 600,
+                      cursor: downloading ? 'default' : 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                      fontFamily: 'Hanken Grotesk, sans-serif', transition: 'background 150ms',
+                      opacity: downloading ? 0.6 : 1,
                     }}
-                    onMouseEnter={e => { if (!downloading) e.currentTarget.style.background = '#f1ecf6'; }}
+                    onMouseEnter={e => { if (!downloading) e.currentTarget.style.background = '#f5f3ff'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+                  >
+                    <Icon name="download" size={12} color="#787584" />
+                    Save
+                  </button>
+                  {/* Delete */}
+                  <button
+                    onClick={() => setDeleteConfirm('selected')}
+                    style={{
+                      height: 32, borderRadius: 8, border: '1px solid #fca5a5',
+                      background: 'transparent', color: '#ba1a1a',
+                      fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                      fontFamily: 'Hanken Grotesk, sans-serif', transition: 'background 150ms',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <Icon name="download" size={13} color="#787584" />
-                    Download Original
+                    <Icon name="delete" size={12} color="#ba1a1a" />
+                    Del
                   </button>
                 </div>
+              )}
 
-                {/* Delete */}
-                <div style={{ padding: '12px 16px', flexShrink: 0 }}>
-                  {deleteConfirm === 'selected' ? (
-                    <div style={{ background: '#fff5f5', border: '1px solid #fca5a5', borderRadius: 10, padding: '12px 14px' }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 600, color: '#ba1a1a', marginBottom: 6, fontFamily: 'Hanken Grotesk, sans-serif' }}>
-                        Delete this route?
-                      </div>
-                      <div style={{ fontSize: 11.5, color: '#9e7070', marginBottom: 12, fontFamily: 'Inter, sans-serif' }}>
-                        This action cannot be undone.
-                      </div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button
-                          onClick={() => setDeleteConfirm(null)}
-                          style={{ flex: 1, padding: '7px 0', borderRadius: 7, border: '1px solid #e8e4f0', background: '#fff', color: '#484552', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
-                        >Cancel</button>
-                        <button
-                          onClick={handleDeleteSelected}
-                          style={{ flex: 1, padding: '7px 0', borderRadius: 7, border: 'none', background: '#ba1a1a', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif' }}
-                        >Delete</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setDeleteConfirm('selected')}
-                      style={{
-                        width: '100%', padding: '8px 0', borderRadius: 8,
-                        border: '1px solid #fca5a5', background: 'transparent', color: '#ba1a1a',
-                        fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                        transition: 'all 150ms', fontFamily: 'Hanken Grotesk, sans-serif',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                    >
-                      <Icon name="delete" size={13} color="#ba1a1a" />
-                      Delete Route
-                    </button>
-                  )}
+              {/* Upload progress */}
+              {uploading && (
+                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1, height: 4, borderRadius: 4, background: '#ede9ff', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${uploadProgress}%`, background: '#5e4dbb', borderRadius: 4, transition: 'width 200ms' }} />
+                  </div>
+                  <span style={{ fontSize: 10, color: '#787584', whiteSpace: 'nowrap' }}>{uploadProgress}%</span>
                 </div>
+              )}
+            </div>
+          )}
 
-              </div>
-            )}
+          {/* ── Map action controls (top-right) ───────────────────────────── */}
+          <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button
+              className="gps-map-ctrl"
+              onClick={() => selectedId && setSmoothWizardOpen(true)}
+              disabled={!selectedId}
+              title="Smooth Elevation"
+              style={mapCtrlBtn(!!selectedId)}
+            >
+              <Icon name="auto_fix_high" size={16} color="#5e4dbb" />
+            </button>
+            <button
+              className="gps-map-ctrl"
+              onClick={() => setMergeWizardOpen(true)}
+              title="Merge Routes"
+              style={mapCtrlBtn()}
+            >
+              <Icon name="merge" size={16} color="#5e4dbb" />
+            </button>
+            <button
+              className="gps-map-ctrl"
+              onClick={() => fileInputRef.current?.click()}
+              title="Upload Route"
+              style={mapCtrlBtn()}
+            >
+              <Icon name="upload" size={16} color="#5e4dbb" />
+            </button>
           </div>
 
-          {/* ── Map area ───────────────────────────────────────────────────────── */}
-          <div style={{
-            flex: 1,
-            position: 'relative',
-            overflow: 'hidden',
-            background: '#e8e4f0',
-            isolation: 'isolate',
-          }}>
-            <div
-              ref={mapCallbackRef}
+          {/* ── Empty state (no file selected) ────────────────────────────── */}
+          {!selectedId && (
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              zIndex: 5, pointerEvents: 'none',
+            }}>
+              <div style={{
+                background: 'rgba(255,255,255,0.82)',
+                backdropFilter: 'blur(16px)',
+                WebkitBackdropFilter: 'blur(16px)',
+                border: '1px solid rgba(255,255,255,0.75)',
+                borderRadius: 16, padding: '24px 32px',
+                textAlign: 'center',
+                boxShadow: '0 4px 24px rgba(94,77,187,0.10)',
+              }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: 14,
+                  background: '#ede9ff', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px',
+                }}>
+                  <Icon name="route" size={24} color="#5e4dbb" />
+                </div>
+                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22', marginBottom: 6 }}>
+                  {files.length === 0 ? 'No routes yet' : 'Select a route'}
+                </div>
+                <div style={{ fontSize: 12, color: '#787584', fontFamily: 'Inter, sans-serif' }}>
+                  {files.length === 0
+                    ? 'Upload a GPX or FIT file from the sidebar'
+                    : 'Click a route in the sidebar to preview it'}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Track loading overlay ─────────────────────────────────────── */}
+          {trackLoading && (
+            <div style={{
+              position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(253,248,255,0.65)', backdropFilter: 'blur(4px)', zIndex: 10,
+            }}>
+              <div style={{ fontSize: 13, color: '#787584', fontFamily: 'Inter, sans-serif' }}>Loading route…</div>
+            </div>
+          )}
+
+          {/* ── Elevation chart toggle button ─────────────────────────────── */}
+          {selectedId && trackData && (
+            <button
+              onClick={() => setChartCollapsed(c => !c)}
               style={{
                 position: 'absolute',
-                inset: 0,
-                zIndex: 0,
+                bottom: chartVisible ? CHART_H + 10 : 12,
+                left: '50%', transform: 'translateX(-50%)',
+                zIndex: 1001, height: 24, padding: '0 12px',
+                background: 'rgba(255,255,255,0.88)',
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255,255,255,0.75)',
+                borderRadius: 20, fontSize: 11, fontWeight: 600,
+                color: '#5e4dbb', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 4,
+                transition: 'bottom 280ms cubic-bezier(0.23,1,0.32,1)',
+                boxShadow: '0 2px 10px rgba(94,77,187,0.10)',
+                fontFamily: 'Inter, sans-serif',
               }}
-            />
+            >
+              <Icon name={chartCollapsed ? 'expand_less' : 'expand_more'} size={14} color="#5e4dbb" />
+              {chartCollapsed ? 'Elevation' : 'Hide'}
+            </button>
+          )}
 
-            {/* No-selection overlay */}
-            {!selectedId && (
-              <div style={{
-                position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center', zIndex: 5,
-                background: 'rgba(253,248,255,0.72)', backdropFilter: 'blur(4px)',
-                pointerEvents: 'none',
-              }}>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 600, color: '#787584' }}>
-                  {files.length === 0 ? 'Upload a route to get started' : 'Select a route from the sidebar'}
-                </div>
-              </div>
-            )}
-
-            {/* Track loading overlay */}
-            {trackLoading && (
-              <div style={{
-                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'rgba(253,248,255,0.65)', backdropFilter: 'blur(4px)', zIndex: 10,
-              }}>
-                <div style={{ fontSize: 13, color: '#787584', fontFamily: 'Inter, sans-serif' }}>Loading route…</div>
-              </div>
-            )}
-
-            {/* Multi-metric chart overlay */}
-            {selectedId && trackData && (
-              <div style={{
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: 200,
-                zIndex: 1000,
-                background: 'rgba(255,255,255,0.38)',
-                backdropFilter: 'blur(22px) saturate(180%)',
-                WebkitBackdropFilter: 'blur(22px) saturate(180%)',
-                borderTop: '1px solid rgba(255,255,255,0.68)',
-                boxShadow: '0 -6px 32px rgba(94,77,187,0.09), inset 0 1px 0 rgba(255,255,255,0.80)',
-                animation: 'mapFadeIn 400ms ease both',
-                pointerEvents: 'auto',
-              }}>
-                <MultiLineMapChart
-                  trackData={trackData}
-                  hoveredIdx={hoveredIdx}
-                  onHover={setHoveredIdx}
-                />
-              </div>
-            )}
-          </div>
-
+          {/* ── Elevation chart strip (bottom) ────────────────────────────── */}
+          {selectedId && trackData && (
+            <div style={{
+              position: 'absolute', bottom: 0, left: 0, right: 0,
+              height: chartCollapsed ? 0 : CHART_H,
+              overflow: 'hidden',
+              transition: 'height 280ms cubic-bezier(0.23,1,0.32,1)',
+              zIndex: 1000,
+              background: 'rgba(255,255,255,0.70)',
+              backdropFilter: 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              borderTop: '1px solid rgba(255,255,255,0.68)',
+              boxShadow: '0 -6px 32px rgba(94,77,187,0.08)',
+            }}>
+              <MultiLineMapChart
+                trackData={trackData}
+                hoveredIdx={hoveredIdx}
+                onHover={setHoveredIdx}
+              />
+            </div>
+          )}
         </div>
 
         {/* Hidden file input */}
@@ -857,12 +782,8 @@ export default function GPSScreen() {
               <div style={{ width: 72, height: 72, borderRadius: 22, background: '#ede9ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon name="upload" size={34} color="#5e4dbb" />
               </div>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#5e4dbb' }}>
-                Drop to upload route
-              </div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#9d8dff' }}>
-                .GPX and .FIT files supported
-              </div>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#5e4dbb' }}>Drop to upload route</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#9d8dff' }}>.GPX and .FIT files supported</div>
             </div>
           </div>
         )}
@@ -878,51 +799,25 @@ export default function GPSScreen() {
 
         {/* Smooth wizard modal */}
         {smoothWizardOpen && (
-          <div style={{
-            position: 'fixed', inset: 0, zIndex: 200,
-            background: 'rgba(8,5,18,0.45)', backdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(8,5,18,0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onClick={e => { if (e.target === e.currentTarget) setSmoothWizardOpen(false); }}
           >
-            <div style={{
-              background: '#fff', borderRadius: 16, padding: '24px',
-              width: 380, boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
-              border: '1px solid #e8e4f0', fontFamily: 'Inter, sans-serif',
-            }}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 4 }}>
-                Smooth Elevation
-              </div>
-              <div style={{ fontSize: 12, color: '#787584', marginBottom: 20 }}>
-                Apply Gaussian smoothing to reduce GPS noise in the elevation profile.
-              </div>
-
-              {/* Sigma slider */}
+            <div style={{ background: '#fff', borderRadius: 16, padding: '24px', width: 380, boxShadow: '0 20px 60px rgba(0,0,0,0.18)', border: '1px solid #e8e4f0', fontFamily: 'Inter, sans-serif' }}>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 4 }}>Smooth Elevation</div>
+              <div style={{ fontSize: 12, color: '#787584', marginBottom: 20 }}>Apply Gaussian smoothing to reduce GPS noise in the elevation profile.</div>
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#484552', fontFamily: 'Hanken Grotesk, sans-serif' }}>
-                    Smoothing Strength
-                  </span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#5e4dbb', fontFamily: 'Hanken Grotesk, sans-serif' }}>
-                    σ = {smoothSigma}
-                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#484552', fontFamily: 'Hanken Grotesk, sans-serif' }}>Smoothing Strength</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#5e4dbb', fontFamily: 'Hanken Grotesk, sans-serif' }}>σ = {smoothSigma}</span>
                 </div>
-                <input
-                  type="range" min={1} max={30} value={smoothSigma}
-                  onChange={e => setSmoothSigma(Number(e.target.value))}
-                  style={{ width: '100%', accentColor: '#5e4dbb', cursor: 'pointer' }}
-                />
+                <input type="range" min={1} max={30} value={smoothSigma} onChange={e => setSmoothSigma(Number(e.target.value))} style={{ width: '100%', accentColor: '#5e4dbb', cursor: 'pointer' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#b0acbe', marginTop: 3 }}>
-                  <span>Subtle (1)</span>
-                  <span>Heavy (30)</span>
+                  <span>Subtle (1)</span><span>Heavy (30)</span>
                 </div>
               </div>
-
-              {/* Mode cards */}
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#484552', fontFamily: 'Hanken Grotesk, sans-serif', marginBottom: 8 }}>
-                  Save As
-                </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#484552', fontFamily: 'Hanken Grotesk, sans-serif', marginBottom: 8 }}>Save As</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   {([
                     { value: 'new', label: 'Save as New Route', icon: 'add_circle', desc: 'Keep the original' },
@@ -940,58 +835,38 @@ export default function GPSScreen() {
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                         <Icon name={opt.icon} size={14} color={smoothMode === opt.value ? '#5e4dbb' : '#b0acbe'} />
-                        <span style={{ fontSize: 11.5, fontWeight: 700, color: smoothMode === opt.value ? '#5e4dbb' : '#484552', fontFamily: 'Hanken Grotesk, sans-serif' }}>
-                          {opt.label}
-                        </span>
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: smoothMode === opt.value ? '#5e4dbb' : '#484552', fontFamily: 'Hanken Grotesk, sans-serif' }}>{opt.label}</span>
                       </div>
-                      <div style={{ fontSize: 10.5, color: '#b0acbe', fontFamily: 'Inter, sans-serif' }}>
-                        {opt.desc}
-                      </div>
+                      <div style={{ fontSize: 10.5, color: '#b0acbe', fontFamily: 'Inter, sans-serif' }}>{opt.desc}</div>
                     </button>
                   ))}
                 </div>
               </div>
-
-              {/* Name input (only for new mode) */}
               {smoothMode === 'new' && (
                 <div style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 12, fontWeight: 600, color: '#484552', fontFamily: 'Hanken Grotesk, sans-serif', marginBottom: 6 }}>
                     New File Name <span style={{ fontWeight: 400, color: '#b0acbe' }}>(optional)</span>
                   </div>
                   <input
-                    type="text"
-                    value={smoothName}
-                    onChange={e => setSmoothName(e.target.value)}
+                    type="text" value={smoothName} onChange={e => setSmoothName(e.target.value)}
                     placeholder={`${(selectedFile?.name ?? 'route').replace(/\.(gpx|fit)$/i, '')}_smoothed`}
-                    style={{
-                      width: '100%', padding: '8px 12px', borderRadius: 8, boxSizing: 'border-box',
-                      border: '1px solid #e8e4f0', fontSize: 12, fontFamily: 'Inter, sans-serif',
-                      color: '#1c1b22', outline: 'none', background: '#faf9ff',
-                    }}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: 8, boxSizing: 'border-box', border: '1px solid #e8e4f0', fontSize: 12, fontFamily: 'Inter, sans-serif', color: '#1c1b22', outline: 'none', background: '#faf9ff' }}
                     onFocus={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
                     onBlur={e => { e.currentTarget.style.borderColor = '#e8e4f0'; }}
                   />
                 </div>
               )}
-
-              {/* Actions */}
               <div style={{ display: 'flex', gap: 10 }}>
                 <button
                   onClick={() => setSmoothWizardOpen(false)}
-                  style={{
-                    flex: 1, padding: '9px 0', borderRadius: 9,
-                    border: '1px solid #e8e4f0', background: '#fff', color: '#484552',
-                    fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif',
-                  }}
-                >
-                  Cancel
-                </button>
+                  style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: '1px solid #e8e4f0', background: '#fff', color: '#484552', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif' }}
+                >Cancel</button>
                 <button
                   onClick={handleSmoothApply}
                   disabled={smoothSaving}
                   style={{
-                    flex: 2, padding: '9px 0', borderRadius: 9,
-                    border: 'none', background: smoothSaving ? '#c4b8f0' : '#5e4dbb', color: '#fff',
+                    flex: 2, padding: '9px 0', borderRadius: 9, border: 'none',
+                    background: smoothSaving ? '#c4b8f0' : '#5e4dbb', color: '#fff',
                     fontSize: 13, fontWeight: 600, cursor: smoothSaving ? 'default' : 'pointer',
                     fontFamily: 'Hanken Grotesk, sans-serif', transition: 'background 150ms',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -1006,7 +881,6 @@ export default function GPSScreen() {
             </div>
           </div>
         )}
-
       </div>
     </>
   );
