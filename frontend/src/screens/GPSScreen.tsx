@@ -164,7 +164,7 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
         {metrics.map(m => (
           <div key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <div style={{ width: 10, height: 3, borderRadius: 2, background: m.color }} />
-            <span style={{ fontSize: 10, color: '#e0d8ff', fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>
+            <span style={{ fontSize: 10, color: '#5e4dbb', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>
               {m.label}
             </span>
           </div>
@@ -181,8 +181,8 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
       >
         <defs>
           <linearGradient id="multiline-elev-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#5e4dbb" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="#5e4dbb" stopOpacity="0.04" />
+            <stop offset="0%" stopColor="#5e4dbb" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="#5e4dbb" stopOpacity="0.03" />
           </linearGradient>
         </defs>
 
@@ -191,7 +191,7 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
           const y = PAD.t + (1 - frac) * ch;
           return (
             <line key={frac} x1={PAD.l} y1={y} x2={PAD.l + cw} y2={y}
-              stroke="rgba(255,255,255,0.07)" strokeWidth={0.8} />
+              stroke="rgba(94,77,187,0.10)" strokeWidth={0.8} />
           );
         })}
 
@@ -201,7 +201,7 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
           const x = toX(dist);
           return (
             <text key={i} x={x} y={dims.h - 6} textAnchor="middle"
-              style={{ fontSize: 9, fill: 'rgba(200,190,255,0.7)', fontFamily: 'Inter, sans-serif' }}>
+              style={{ fontSize: 9, fill: 'rgba(80,60,140,0.60)', fontFamily: 'Inter, sans-serif' }}>
               {dist >= 1000 ? `${(dist / 1000).toFixed(1)}k` : Math.round(dist)}m
             </text>
           );
@@ -218,7 +218,7 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
         {/* Hover cursor line */}
         {hovX != null && (
           <line x1={hovX} y1={PAD.t} x2={hovX} y2={PAD.t + ch}
-            stroke="rgba(255,255,255,0.5)" strokeWidth={1.5} strokeDasharray="4,3" />
+            stroke="rgba(94,77,187,0.45)" strokeWidth={1.5} strokeDasharray="4,3" />
         )}
 
         {/* Hover dots */}
@@ -228,7 +228,7 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
           if (y == null) return null;
           return (
             <circle key={m.key} cx={hovX} cy={y} r={4}
-              fill={m.color} stroke="rgba(8,5,18,0.72)" strokeWidth={2} />
+              fill={m.color} stroke="rgba(255,255,255,0.90)" strokeWidth={2} />
           );
         })}
       </svg>
@@ -239,17 +239,20 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
           position: 'absolute',
           top: PAD.t,
           left: Math.min(hovX + 10, dims.w - 140),
-          background: 'rgba(8,5,18,0.85)',
-          border: '1px solid rgba(255,255,255,0.12)',
-          borderRadius: 8,
+          background: 'rgba(255,255,255,0.75)',
+          backdropFilter: 'blur(16px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(16px) saturate(160%)',
+          border: '1px solid rgba(255,255,255,0.70)',
+          borderRadius: 10,
           padding: '6px 10px',
           pointerEvents: 'none',
           zIndex: 10,
           fontFamily: 'Inter, sans-serif',
           fontSize: 11,
           minWidth: 120,
+          boxShadow: '0 4px 20px rgba(94,77,187,0.12), inset 0 1px 0 rgba(255,255,255,0.90)',
         }}>
-          <div style={{ color: 'rgba(200,190,255,0.7)', marginBottom: 4, fontSize: 10 }}>
+          <div style={{ color: 'rgba(80,60,140,0.65)', marginBottom: 4, fontSize: 10 }}>
             {fmtDist(elevProf[hoveredIdx]?.distance)}
           </div>
           {normalizedMetrics.map(m => {
@@ -266,7 +269,7 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
           })}
           {/* Show elevation range context */}
           {elevVals.length > 0 && (
-            <div style={{ color: 'rgba(160,150,200,0.6)', fontSize: 9, marginTop: 3 }}>
+            <div style={{ color: 'rgba(80,60,140,0.50)', fontSize: 9, marginTop: 3 }}>
               Range: {Math.round(elevMin)}–{Math.round(elevMax)}m
             </div>
           )}
@@ -814,8 +817,11 @@ export default function GPSScreen() {
                 right: 0,
                 height: 200,
                 zIndex: 1000,
-                background: 'rgba(8,5,18,0.72)',
-                backdropFilter: 'blur(6px)',
+                background: 'rgba(255,255,255,0.38)',
+                backdropFilter: 'blur(22px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(22px) saturate(180%)',
+                borderTop: '1px solid rgba(255,255,255,0.68)',
+                boxShadow: '0 -6px 32px rgba(94,77,187,0.09), inset 0 1px 0 rgba(255,255,255,0.80)',
                 animation: 'mapFadeIn 400ms ease both',
                 pointerEvents: 'auto',
               }}>
