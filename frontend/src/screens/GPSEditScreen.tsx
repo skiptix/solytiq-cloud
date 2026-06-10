@@ -247,6 +247,28 @@ function simplifyLeg(line: Array<{ lat: number; lon: number }>): Array<{ lat: nu
   return rdp(line.map(p => ({ lat: p.lat, lon: p.lon, ele: 0 })), 0.00005);
 }
 
+// Find the leg anchors (nearest existing waypoints) on either side of an edit
+// position. Returns indices into pts; defaults to ts/te when no waypoint exists.
+// prevBound: waypoints at index ≤ prevBound qualify as aPrev
+// nextBound: waypoints at index ≥ nextBound qualify as aNext
+function findLegAnchors(
+  pts: GpsTrackPoint[],
+  wps: EditWaypoint[],
+  ts: number,
+  te: number,
+  prevBound: number,
+  nextBound: number,
+): { aPrevIdx: number; aNextIdx: number } {
+  let aPrevIdx = ts;
+  let aNextIdx = te;
+  for (const wp of wps) {
+    const wpi = findNearestPoint(pts, wp.lat, wp.lon);
+    if (wpi >= ts && wpi <= prevBound && wpi > aPrevIdx) aPrevIdx = wpi;
+    if (wpi <= te && wpi >= nextBound && wpi < aNextIdx) aNextIdx = wpi;
+  }
+  return { aPrevIdx, aNextIdx };
+}
+
 // Distribute elevation linearly along a routed leg by cumulative distance
 function interpolateEle(line: Array<{ lat: number; lon: number }>, eleStart: number, eleEnd: number): GpsTrackPoint[] {
   if (line.length === 0) return [];
@@ -1061,8 +1083,10 @@ export default function GPSEditScreen() {
       : null;
     dragWpIdRef.current = null;
 
-    // Re-dragging an existing waypoint re-routes its whole leg (anchor to anchor);
-    // a fresh drag connects through the immediate neighbours
+    // Re-dragging an existing waypoint re-routes its whole leg (anchor to anchor).
+    // A fresh drag replans the entire leg between the nearest existing waypoints
+    // (Komoot-style: the new point takes priority, old sub-points in the leg are
+    // replaced by the freshly routed path).
     let aPrevIdx: number | null = gi > ts ? gi - 1 : null;
     let aNextIdx: number | null = gi < te ? gi + 1 : null;
     if (existing?.anchorPrev) {
@@ -1072,6 +1096,13 @@ export default function GPSEditScreen() {
     if (existing?.anchorNext) {
       const i = findNearestPoint(pts, existing.anchorNext.lat, existing.anchorNext.lon);
       if (i > gi && i <= te) aNextIdx = i;
+    }
+    // For new vertex drags (interior points only), extend the anchors to the
+    // nearest existing waypoints so the whole leg gets re-planned cleanly
+    if (!existing && gi > ts && gi < te) {
+      const legAnchors = findLegAnchors(pts, waypointsRef.current, ts, te, gi - 1, gi + 1);
+      aPrevIdx = legAnchors.aPrevIdx;
+      aNextIdx = legAnchors.aNextIdx;
     }
     const anchorPrev = aPrevIdx != null ? pts[aPrevIdx] : null;
     const anchorNext = aNextIdx != null ? pts[aNextIdx] : null;
@@ -1088,7 +1119,13 @@ export default function GPSEditScreen() {
         anchorPrev: anchorPrev ? { lat: anchorPrev.lat, lon: anchorPrev.lon } : null,
         anchorNext: anchorNext ? { lat: anchorNext.lat, lon: anchorNext.lon } : null,
       };
-      const newWps = [...waypointsRef.current.filter(w => w.id !== wpId), wp];
+      // Remove waypoints strictly inside the replaced span — those track points
+      // no longer exist after the leg is re-routed (new point has priority)
+      const newWps = waypointsRef.current.filter(w => {
+        if (w.id === wpId) return false;
+        const wpi = findNearestPoint(pts, w.lat, w.lon);
+        return wpi <= spanStart || wpi >= spanEnd;
+      }).concat([wp]);
       editPointsRef.current = newPts;
       trimEndRef.current = newTe;
       waypointsRef.current = newWps;
@@ -1410,21 +1447,32 @@ export default function GPSEditScreen() {
     }
   }, [hoveredIdx, editPoints]);
 
-  // ── Add a clicked map point into the route (nearest-segment insertion) ────
+  // ── Add a clicked map point into the route (Komoot-style leg re-planning) ─
+  // Instead of inserting between the two nearest consecutive track points (which
+  // creates a V-shaped detour), we find the nearest existing *waypoints* on
+  // either side and re-plan the entire leg between them through the new point.
+  // Old intermediate track points in that leg are discarded (new point has
+  // priority, as with Komoot / Google Maps route editing).
   async function addClickedPointToRoute() {
     const mc = mapClick;
     const pts = editPointsRef.current;
     if (!mc || !pts || routingBusy) return;
     const ts = trimStartRef.current, te = trimEndRef.current;
     if (te - ts < 1) return;
+
     // Find the active segment closest to the clicked point
     let best = ts, bestD = Infinity;
     for (let i = ts; i < te; i++) {
       const d = distToSegmentM(mc, pts[i], pts[i + 1]);
       if (d < bestD) { bestD = d; best = i; }
     }
-    const anchorPrev = pts[best];
-    const anchorNext = pts[best + 1];
+
+    // Leg anchors: nearest existing waypoints (or start/end) on either side of
+    // the clicked segment — the whole leg between them will be re-routed
+    const { aPrevIdx, aNextIdx } = findLegAnchors(pts, waypointsRef.current, ts, te, best, best + 1);
+    const anchorPrev = pts[aPrevIdx];
+    const anchorNext = pts[aNextIdx];
+
     const newPt: GpsTrackPoint = { lat: mc.lat, lon: mc.lon, ele: mc.ele ?? (anchorPrev.ele + anchorNext.ele) / 2 };
     const offRoad = !snapEnabledRef.current;
     const wpId = `wp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -1437,7 +1485,12 @@ export default function GPSEditScreen() {
         anchorPrev: { lat: anchorPrev.lat, lon: anchorPrev.lon },
         anchorNext: { lat: anchorNext.lat, lon: anchorNext.lon },
       };
-      const newWps = [...waypointsRef.current, wp];
+      // Remove waypoints strictly inside the replaced leg — they no longer
+      // correspond to any track point after the re-plan
+      const newWps = waypointsRef.current.filter(w => {
+        const wpi = findNearestPoint(pts, w.lat, w.lon);
+        return wpi <= aPrevIdx || wpi >= aNextIdx;
+      }).concat([wp]);
       editPointsRef.current = newPts;
       trimEndRef.current = newTe;
       waypointsRef.current = newWps;
@@ -1454,14 +1507,14 @@ export default function GPSEditScreen() {
       const span2 = await withDemElevation(span, true, true);
       setBusy(null);
       if (editPointsRef.current !== pts) return;
-      finish([...pts.slice(0, best), ...span2, ...pts.slice(best + 2)], newPt);
+      finish([...pts.slice(0, aPrevIdx), ...span2, ...pts.slice(aNextIdx + 1)], newPt);
     };
 
     const straightDist =
       haversineClient(anchorPrev.lat, anchorPrev.lon, newPt.lat, newPt.lon) +
       haversineClient(newPt.lat, newPt.lon, anchorNext.lat, anchorNext.lon);
-    if (offRoad || straightDist > 50000) {
-      if (straightDist > 50000) flashRoutingError('Point too far to snap — connected with straight lines');
+    if (offRoad || straightDist > 200000) {
+      if (straightDist > 200000) flashRoutingError('Leg too long to snap — connected with straight lines');
       await finishStraight();
       return;
     }
@@ -1480,7 +1533,7 @@ export default function GPSEditScreen() {
       const wpIdxInSpan = span.indexOf(wpPoint);
       const span2 = await withDemElevation(span, true, true);
       if (editPointsRef.current !== pts) return;
-      finish([...pts.slice(0, best), ...span2, ...pts.slice(best + 2)], span2[wpIdxInSpan]);
+      finish([...pts.slice(0, aPrevIdx), ...span2, ...pts.slice(aNextIdx + 1)], span2[wpIdxInSpan]);
     } finally {
       setBusy(null);
     }
@@ -2222,7 +2275,7 @@ export default function GPSEditScreen() {
                 Add to route
               </button>
               <div style={{ fontSize: 10, color: '#b0acbe', marginTop: 6, textAlign: 'center' }}>
-                {snapEnabled ? 'Snaps along mapped ways into the nearest section' : 'Connects with straight lines (snap off)'}
+                {snapEnabled ? 'Replans the nearest leg through this point — old sub-points replaced' : 'Connects with straight lines (snap off)'}
               </div>
 
               {/* Pointer */}
