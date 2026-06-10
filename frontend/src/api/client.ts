@@ -1,4 +1,4 @@
-import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GapMode } from '../types';
+import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GapMode, NamedPinInput } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -530,12 +530,21 @@ export async function apiSmoothAndSaveGpsFile(id: string, sigma: number, mode: '
 export async function apiSaveEditedGpsTrack(
   id: string,
   points: GpsTrackPoint[],
-  options: { saveAs: 'new' | 'replace'; name?: string },
+  options: {
+    saveAs: 'new' | 'replace';
+    name?: string;
+    waypoints?: NamedPinInput[];  // NEU
+  },
 ): Promise<GpsFile> {
   const data = await apiFetch<{ file: GpsFile }>(`/gps/${id}/points`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ points, saveAs: options.saveAs, name: options.name }),
+    body: JSON.stringify({
+      points,
+      saveAs: options.saveAs,
+      name: options.name,
+      waypoints: options.waypoints ?? [],  // NEU
+    }),
   });
   return data.file;
 }
