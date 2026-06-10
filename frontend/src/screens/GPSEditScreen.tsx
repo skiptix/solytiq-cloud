@@ -359,7 +359,6 @@ export default function GPSEditScreen() {
         subdomains: 'abcd',
         maxZoom: 19,
       }).addTo(map);
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
       leafletRef.current = map;
       setTimeout(() => map.invalidateSize(), 100);
       const ro = new ResizeObserver(() => leafletRef.current?.invalidateSize());
@@ -630,6 +629,18 @@ export default function GPSEditScreen() {
     transition: 'background 150ms',
   };
 
+  const mapCtrlBtn: React.CSSProperties = {
+    width: 36, height: 36, borderRadius: 9,
+    background: 'rgba(255,255,255,0.88)',
+    backdropFilter: 'blur(16px)',
+    WebkitBackdropFilter: 'blur(16px)',
+    border: '1px solid rgba(255,255,255,0.75)',
+    boxShadow: '0 2px 12px rgba(94,77,187,0.10)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    cursor: 'pointer',
+    transition: 'box-shadow 150ms, background 150ms',
+  };
+
   if (loading) {
     return (
       <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#faf9ff', fontFamily: 'Inter, sans-serif', color: '#787584', fontSize: 14 }}>
@@ -651,7 +662,7 @@ export default function GPSEditScreen() {
           background: rgba(94,77,187,0.45) !important; border: 2px solid white !important;
           border-radius: 50% !important;
         }
-        .leaflet-bottom.leaflet-right { bottom: 158px !important; }
+        .gps-map-ctrl:hover { box-shadow: 0 4px 18px rgba(94,77,187,0.18) !important; background: rgba(255,255,255,0.97) !important; }
       `}</style>
 
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#faf9ff', fontFamily: 'Inter, sans-serif' }}>
@@ -919,16 +930,36 @@ export default function GPSEditScreen() {
             style={{ position: 'absolute', inset: 0, bottom: 150 }}
           />
 
-          {/* Edit mode badge */}
+          {/* Edit mode badge + zoom controls (top-right) */}
           <div style={{
             position: 'absolute', top: 14, right: 14, zIndex: 1000,
-            background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255,255,255,0.75)', borderRadius: 10,
-            padding: '7px 12px', fontSize: 11, color: '#5e4dbb', fontFamily: 'Inter, sans-serif',
-            boxShadow: '0 2px 12px rgba(94,77,187,0.10)',
+            display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8,
           }}>
-            <span style={{ fontWeight: 600 }}>Edit Mode</span> — drag points to reshape
+            <div style={{
+              background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              border: '1px solid rgba(255,255,255,0.75)', borderRadius: 10,
+              padding: '7px 12px', fontSize: 11, color: '#5e4dbb', fontFamily: 'Inter, sans-serif',
+              boxShadow: '0 2px 12px rgba(94,77,187,0.10)',
+            }}>
+              <span style={{ fontWeight: 600 }}>Edit Mode</span> — drag points to reshape
+            </div>
+            <button
+              className="gps-map-ctrl"
+              onClick={() => leafletRef.current?.zoomIn()}
+              title="Zoom In"
+              style={mapCtrlBtn}
+            >
+              <Icon name="add" size={16} color="#5e4dbb" />
+            </button>
+            <button
+              className="gps-map-ctrl"
+              onClick={() => leafletRef.current?.zoomOut()}
+              title="Zoom Out"
+              style={mapCtrlBtn}
+            >
+              <Icon name="remove" size={16} color="#5e4dbb" />
+            </button>
           </div>
 
           {/* Elevation chart with trim handles */}
