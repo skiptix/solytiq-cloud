@@ -23,6 +23,7 @@ import ListScreen from './screens/ListScreen';
 import ScheduledScreen from './screens/ScheduledScreen';
 import FilesScreen from './screens/FilesScreen';
 import GPSScreen from './screens/GPSScreen';
+import GPSEditScreen from './screens/GPSEditScreen';
 import SharePage from './screens/SharePage';
 import SettingsScreen from './screens/SettingsScreen';
 import FolderDashboardScreen from './screens/FolderDashboardScreen';
@@ -228,6 +229,7 @@ export default function App() {
       <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : <LoginScreen />} />
       <Route path="/setup" element={loggedIn ? <Navigate to="/dashboard" replace /> : <SetupWizard />} />
       <Route path="/nuke" element={loggedIn ? <NukeScreen /> : <Navigate to="/login" replace />} />
+      <Route path="/gps/:id/edit" element={loggedIn ? <GPSEditScreen /> : <Navigate to="/login" replace />} />
       <Route path="/*" element={
         <Protected>
           <AppLayout />

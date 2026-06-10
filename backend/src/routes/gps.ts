@@ -196,6 +196,18 @@ async function readAndParse(filePath: string, fileType: string): Promise<GpsPoin
   return parseGpx(fs.readFileSync(abs, 'utf-8'));
 }
 
+function rowToGpsFile(row: GpsFileRow) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    name: row.original_name,
+    fileType: row.file_type as 'gpx' | 'fit',
+    size: row.file_size,
+    metadata: row.metadata,
+    createdAt: row.created_at,
+  };
+}
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 // GET /api/gps — list user's GPS files
@@ -449,6 +461,72 @@ router.get('/:id/download', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(row.original_name)}"`);
     res.sendFile(abs);
   } catch (err) { console.error('GPS download:', err); res.status(500).json({ error: 'Failed to download' }); }
+});
+
+// PUT /api/gps/:id/points — save edited track points as new or replaced GPX file
+router.put('/:id/points', async (req, res) => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const userId = (req as any).userId as string;
+    const { id } = req.params;
+    const { points, saveAs = 'new', name } = req.body as {
+      points: GpsPoint[];
+      saveAs?: 'new' | 'replace';
+      name?: string;
+    };
+
+    if (!Array.isArray(points) || points.length < 2) {
+      return res.status(400).json({ error: 'points must be an array with at least 2 entries' });
+    }
+    for (const p of points) {
+      if (typeof p.lat !== 'number' || typeof p.lon !== 'number' || typeof p.ele !== 'number') {
+        return res.status(400).json({ error: 'Each point must have lat, lon, ele as numbers' });
+      }
+    }
+
+    const origResult = await query<GpsFileRow>(
+      'SELECT * FROM gps_files WHERE id = $1 AND user_id = $2',
+      [id, userId],
+    );
+    if (origResult.rows.length === 0) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    const origFile = origResult.rows[0];
+
+    const baseName = origFile.original_name.replace(/\.(gpx|fit)$/i, '');
+    const outputName = saveAs === 'new'
+      ? (name?.trim() || `${baseName}_edited`)
+      : baseName;
+
+    const gpxContent = writeGpx(points, outputName);
+    const newFileName = `gps_${crypto.randomUUID()}.gpx`;
+    const newFilePath = path.join(UPLOAD_DIR, newFileName);
+    fs.writeFileSync(newFilePath, gpxContent, 'utf8');
+    const fileSize = Buffer.byteLength(gpxContent, 'utf8');
+    const metadata = computeMetadata(points);
+
+    if (saveAs === 'replace') {
+      try { fs.unlinkSync(path.join(UPLOAD_DIR, origFile.file_path)); } catch { /* ignore */ }
+      await query(
+        `UPDATE gps_files SET file_path = $1, original_name = $2, file_size = $3, metadata = $4 WHERE id = $5 AND user_id = $6`,
+        [newFileName, `${outputName}.gpx`, fileSize, JSON.stringify(metadata), id, userId],
+      );
+      const updated = await query<GpsFileRow>('SELECT * FROM gps_files WHERE id = $1', [id]);
+      return res.json({ file: rowToGpsFile(updated.rows[0]) });
+    } else {
+      const newId = crypto.randomUUID();
+      await query(
+        `INSERT INTO gps_files (id, user_id, original_name, file_type, file_path, file_size, metadata) VALUES ($1, $2, $3, 'gpx', $4, $5, $6)`,
+        [newId, userId, `${outputName}.gpx`, newFileName, fileSize, JSON.stringify(metadata)],
+      );
+      const inserted = await query<GpsFileRow>('SELECT * FROM gps_files WHERE id = $1', [newId]);
+      return res.json({ file: rowToGpsFile(inserted.rows[0]) });
+    }
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return res.status(404).json({ error: 'GPS file not found on disk' });
+    console.error('GPS edit save:', err);
+    res.status(500).json({ error: 'Failed to save edited GPS track' });
+  }
 });
 
 // DELETE /api/gps/:id
