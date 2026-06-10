@@ -569,8 +569,9 @@ router.post('/route', async (req, res) => {
       }),
       signal: AbortSignal.timeout(12000),
     });
-    const data = await upstream.json().catch(() => null);
-    if (!upstream.ok || !data) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = (await upstream.json().catch(() => null)) as any;
+    if (!upstream.ok || !data || !data.trip) {
       console.error('Valhalla routing failed:', upstream.status, JSON.stringify(data)?.slice(0, 300));
       return res.status(502).json({ error: 'Routing service unavailable' });
     }
