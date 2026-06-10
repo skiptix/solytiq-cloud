@@ -353,8 +353,7 @@ export default function GPSEditScreen() {
       return;
     }
     if (!leafletRef.current) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const map = L.map(node, { editable: true as any, zoomControl: false }).setView([47, 10], 5);
+      const map = L.map(node, { editable: true, zoomControl: false } as L.MapOptions).setView([47, 10], 5);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd',
