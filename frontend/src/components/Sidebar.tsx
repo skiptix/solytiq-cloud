@@ -920,6 +920,8 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
 
   useEffect(() => {
     if (active !== 'gps') return;
+    // Loading flag must reset on every GPS tab activation, not just mount
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setGpsLoading(true);
     apiGetGpsFiles()
       .then(data => { setGpsFiles(data); setGpsLoading(false); })
@@ -1109,7 +1111,7 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.2.0
+              v1.3.0
             </div>
           )}
         </div>
@@ -1280,7 +1282,7 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.2.0
+            v1.3.0
           </div>
         )}
       </div>

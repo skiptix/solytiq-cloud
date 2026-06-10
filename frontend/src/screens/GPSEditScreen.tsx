@@ -69,8 +69,22 @@ function createDotIcon(color: string): L.DivIcon {
   });
 }
 
-// ─── Snap-to-ways routing (FOSSGIS OSRM, free, no API key) ───────────────────
-type RoutingProfile = 'bike' | 'foot' | 'car';
+// ─── Snap-to-ways routing (FOSSGIS Valhalla, free, no API key) ────────────────
+// Same operator and fair-use policy as the OSRM instance previously used, but
+// Valhalla exposes bicycle_type (Mountain/Cross/Road) and sac_scale-aware
+// pedestrian costing — which is what MTB / Gravel / Road / Hike need.
+type RoutingProfile = 'mtb' | 'gravel' | 'road' | 'hike';
+
+const ROUTING_PROFILES: Record<RoutingProfile, { costing: 'bicycle' | 'pedestrian'; options: Record<string, number | string> }> = {
+  // All available paths incl. singletrack — surface restrictions off
+  mtb: { costing: 'bicycle', options: { bicycle_type: 'Mountain', use_roads: 0.1, use_hills: 0.6, avoid_bad_surfaces: 0 } },
+  // Cyclocross tires: gravel/forest tracks yes, technical MTB trails no
+  gravel: { costing: 'bicycle', options: { bicycle_type: 'Cross', use_roads: 0.2, use_hills: 0.5, avoid_bad_surfaces: 0.25 } },
+  // Race bike: paved roads only (1.0 would forbid even start/end on gravel)
+  road: { costing: 'bicycle', options: { bicycle_type: 'Road', use_roads: 0.9, use_hills: 0.6, avoid_bad_surfaces: 0.9 } },
+  // Hiking paths up to difficult alpine sac_scale
+  hike: { costing: 'pedestrian', options: { max_hiking_difficulty: 6 } },
+};
 
 interface EditWaypoint {
   id: string;
@@ -91,34 +105,138 @@ interface EditableVertexEvent extends L.LeafletEvent {
   vertex: L.Marker & { getIndex: () => number };
 }
 
-interface OsrmResponse {
-  code: string;
-  routes?: Array<{ geometry: { coordinates: [number, number][] } }>;
-  waypoints?: Array<{ location: [number, number] }>;
+interface ValhallaResponse {
+  trip?: { legs?: Array<{ shape: string }> };
 }
 
+// Valhalla shapes are Google polylines with 6 decimal digits precision
+function decodePolyline6(str: string): Array<{ lat: number; lon: number }> {
+  let index = 0, lat = 0, lon = 0;
+  const out: Array<{ lat: number; lon: number }> = [];
+  while (index < str.length) {
+    let b: number, shift = 0, result = 0;
+    do { b = str.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+    shift = 0; result = 0;
+    do { b = str.charCodeAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
+    lon += result & 1 ? ~(result >> 1) : result >> 1;
+    out.push({ lat: lat / 1e6, lon: lon / 1e6 });
+  }
+  return out;
+}
+
+// One leg per consecutive location pair, so the via point is exactly the
+// boundary between legs[0] and legs[1] — no nearest-point splitting needed
 async function fetchRoutedPath(
   coords: Array<{ lat: number; lon: number }>,
   profile: RoutingProfile,
-): Promise<{ points: Array<{ lat: number; lon: number }>; snapped: Array<{ lat: number; lon: number }> } | null> {
-  const pairStr = coords.map(p => `${p.lon},${p.lat}`).join(';');
-  const url = `https://routing.openstreetmap.de/routed-${profile}/route/v1/driving/${pairStr}?overview=full&geometries=geojson&steps=false`;
+): Promise<{ legs: Array<Array<{ lat: number; lon: number }>> } | null> {
+  const prof = ROUTING_PROFILES[profile];
+  const req = {
+    locations: coords.map(c => ({ lat: c.lat, lon: c.lon })),
+    costing: prof.costing,
+    costing_options: { [prof.costing]: prof.options },
+  };
+  // GET keeps this a "simple" CORS request (no preflight)
+  const url = `https://valhalla1.openstreetmap.de/route?json=${encodeURIComponent(JSON.stringify(req))}`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 12000);
   try {
     const res = await fetch(url, { signal: ctrl.signal });
     if (!res.ok) return null;
-    const data = (await res.json()) as OsrmResponse;
-    if (data.code !== 'Ok' || !data.routes?.[0]) return null;
-    return {
-      points: data.routes[0].geometry.coordinates.map(([lon, lat]) => ({ lat, lon })),
-      snapped: (data.waypoints ?? []).map(w => ({ lat: w.location[1], lon: w.location[0] })),
-    };
+    const data = (await res.json()) as ValhallaResponse;
+    const legs = (data.trip?.legs ?? []).map(l => decodePolyline6(l.shape));
+    if (legs.length !== coords.length - 1 || legs.some(l => l.length < 2)) return null;
+    return { legs };
   } catch {
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+// ─── Elevation lookup (Open-Meteo Copernicus DEM, free, no API key) ───────────
+async function fetchElevations(coords: Array<{ lat: number; lon: number }>): Promise<number[] | null> {
+  if (coords.length === 0) return [];
+  const out: number[] = [];
+  for (let i = 0; i < coords.length; i += 100) {
+    const chunk = coords.slice(i, i + 100);
+    const url = `https://api.open-meteo.com/v1/elevation?latitude=${chunk.map(c => c.lat.toFixed(6)).join(',')}&longitude=${chunk.map(c => c.lon.toFixed(6)).join(',')}`;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { elevation?: number[] };
+      if (!Array.isArray(data.elevation) || data.elevation.length !== chunk.length) return null;
+      out.push(...data.elevation);
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return out;
+}
+
+// Replace a span's elevations with real DEM values. Where an end of the span is
+// an existing track point (pinned), the GPX↔DEM offset is blended out along the
+// span so the chart profile stays continuous at the seams.
+async function withDemElevation(span: GpsTrackPoint[], pinStart: boolean, pinEnd: boolean): Promise<GpsTrackPoint[]> {
+  if (span.length === 0) return span;
+  const dem = await fetchElevations(span.map(p => ({ lat: p.lat, lon: p.lon })));
+  if (!dem) return span;
+  const cum: number[] = [0];
+  for (let i = 1; i < span.length; i++) {
+    cum.push(cum[i - 1] + haversineClient(span[i - 1].lat, span[i - 1].lon, span[i].lat, span[i].lon));
+  }
+  const total = cum[cum.length - 1] || 1;
+  const offStart = pinStart ? span[0].ele - dem[0] : 0;
+  const offEnd = pinEnd ? span[span.length - 1].ele - dem[dem.length - 1] : 0;
+  return span.map((p, i) => {
+    const t = cum[i] / total;
+    return { ...p, ele: dem[i] + offStart * (1 - t) + offEnd * t };
+  });
+}
+
+// ─── Reverse geocoding (Nominatim, click-driven so well within fair use) ─────
+interface NominatimReverse {
+  name?: string;
+  display_name?: string;
+  address?: Record<string, string>;
+}
+
+async function reverseGeocode(lat: number, lon: number): Promise<string | null> {
+  const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&format=jsonv2&zoom=16`;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) return null;
+    const data = (await res.json()) as NominatimReverse;
+    const a = data.address ?? {};
+    const main = data.name || a.road || a.path || a.hamlet || a.isolated_dwelling;
+    const locality = a.village || a.town || a.city || a.municipality || a.county;
+    const label = [main, locality].filter(Boolean).join(', ');
+    return label || data.display_name?.split(',').slice(0, 2).join(',').trim() || null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Approximate distance (m) from a point to a segment, equirectangular projection
+function distToSegmentM(p: { lat: number; lon: number }, a: GpsTrackPoint, b: GpsTrackPoint): number {
+  const kx = Math.cos((p.lat * Math.PI) / 180) * 111320;
+  const ky = 110540;
+  const ax = a.lon * kx, ay = a.lat * ky;
+  const bx = b.lon * kx, by = b.lat * ky;
+  const px = p.lon * kx, py = p.lat * ky;
+  const dx = bx - ax, dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  const t = l2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2)) : 0;
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
 function simplifyLeg(line: Array<{ lat: number; lon: number }>): Array<{ lat: number; lon: number }> {
@@ -137,28 +255,41 @@ function interpolateEle(line: Array<{ lat: number; lon: number }>, eleStart: num
   return line.map((p, i) => ({ lat: p.lat, lon: p.lon, ele: eleStart + (eleEnd - eleStart) * (cum[i] / total) }));
 }
 
-// Build the replacement span [anchorPrev?, …leg1, wp, …leg2, anchorNext?] from routed geometry
+// Build the replacement span [anchorPrev?, …leg1, wp, …leg2, anchorNext?] from
+// routed legs. Elevation is linearly interpolated as a baseline; callers then
+// swap in real DEM values via withDemElevation.
 function buildRoutedSpan(
   anchorPrev: GpsTrackPoint | null,
   anchorNext: GpsTrackPoint | null,
   wpEle: number,
-  routedPts: Array<{ lat: number; lon: number }>,
-  via: { lat: number; lon: number },
+  legs: Array<Array<{ lat: number; lon: number }>>,
 ): { span: GpsTrackPoint[]; wpPoint: GpsTrackPoint } {
-  const wpPoint: GpsTrackPoint = { lat: via.lat, lon: via.lon, ele: wpEle };
   if (anchorPrev && anchorNext) {
-    let splitIdx = findNearestPoint(routedPts, via.lat, via.lon);
-    splitIdx = Math.max(1, Math.min(routedPts.length - 2, splitIdx));
-    const leg1 = interpolateEle(simplifyLeg(routedPts.slice(0, splitIdx + 1)), anchorPrev.ele, wpEle).slice(1, -1);
-    const leg2 = interpolateEle(simplifyLeg(routedPts.slice(splitIdx)), wpEle, anchorNext.ele).slice(1, -1);
+    const via = legs[1][0];
+    const wpPoint: GpsTrackPoint = { lat: via.lat, lon: via.lon, ele: wpEle };
+    const leg1 = interpolateEle(simplifyLeg(legs[0]), anchorPrev.ele, wpEle).slice(1, -1);
+    const leg2 = interpolateEle(simplifyLeg(legs[1]), wpEle, anchorNext.ele).slice(1, -1);
     return { span: [anchorPrev, ...leg1, wpPoint, ...leg2, anchorNext], wpPoint };
   }
   if (anchorPrev) {
-    const leg = interpolateEle(simplifyLeg(routedPts), anchorPrev.ele, wpEle).slice(1, -1);
+    const via = legs[0][legs[0].length - 1];
+    const wpPoint: GpsTrackPoint = { lat: via.lat, lon: via.lon, ele: wpEle };
+    const leg = interpolateEle(simplifyLeg(legs[0]), anchorPrev.ele, wpEle).slice(1, -1);
     return { span: [anchorPrev, ...leg, wpPoint], wpPoint };
   }
-  const leg = interpolateEle(simplifyLeg(routedPts), wpEle, anchorNext!.ele).slice(1, -1);
+  const via = legs[0][0];
+  const wpPoint: GpsTrackPoint = { lat: via.lat, lon: via.lon, ele: wpEle };
+  const leg = interpolateEle(simplifyLeg(legs[0]), wpEle, anchorNext!.ele).slice(1, -1);
   return { span: [wpPoint, ...leg, anchorNext!], wpPoint };
+}
+
+function createClickPinIcon(): L.DivIcon {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:16px;height:16px;border-radius:50%;background:#5e4dbb;border:3px solid #fff;box-shadow:0 0 0 4px rgba(94,77,187,0.22), 0 2px 8px rgba(0,0,0,0.25);box-sizing:border-box;"></div>`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+  });
 }
 
 function createWpIcon(offRoad: boolean): L.DivIcon {
@@ -230,6 +361,14 @@ function EditElevationChart({ points, trimStart, trimEnd, hoveredIdx, onHover, o
     const maxE = Math.max(...elev);
     const range = maxE - minE || 1;
     return { elev, minE, maxE, range };
+  }, [points]);
+
+  const cumDist = useMemo(() => {
+    const cum: number[] = [0];
+    for (let i = 1; i < points.length; i++) {
+      cum.push(cum[i - 1] + haversineClient(points[i - 1].lat, points[i - 1].lon, points[i].lat, points[i].lon));
+    }
+    return cum;
   }, [points]);
 
   const toX = (idx: number) => PAD.l + (n > 1 ? (idx / (n - 1)) : 0) * cw;
@@ -384,6 +523,20 @@ function EditElevationChart({ points, trimStart, trimEnd, hoveredIdx, onHover, o
       }}>
         {Math.round(elevData.minE)}–{Math.round(elevData.maxE)} m
       </div>
+
+      {/* Hover readout — distance + elevation at the cursor */}
+      {hovX != null && hoveredIdx != null && !dragging && points[hoveredIdx] && (
+        <div style={{
+          position: 'absolute', top: 6,
+          left: Math.min(Math.max(hovX + 10, PAD.l), Math.max(PAD.l, dims.w - 130)),
+          background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: '4px 9px',
+          border: '1px solid rgba(94,77,187,0.15)', boxShadow: '0 2px 10px rgba(94,77,187,0.12)',
+          fontSize: 10.5, fontFamily: 'Inter, sans-serif', pointerEvents: 'none', whiteSpace: 'nowrap',
+        }}>
+          <span style={{ color: '#787584' }}>{fmtDist(cumDist[hoveredIdx] ?? 0)}</span>
+          <span style={{ color: '#1c1b22', fontWeight: 700, marginLeft: 8 }}>{Math.round(points[hoveredIdx].ele)} m</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -411,12 +564,17 @@ export default function GPSEditScreen() {
   // Snap-to-ways routing + edited waypoints
   const [waypoints, setWaypoints] = useState<EditWaypoint[]>([]);
   const [snapEnabled, setSnapEnabled] = useState(true);
-  const [snapProfile, setSnapProfile] = useState<RoutingProfile>('bike');
-  const [routingBusy, setRoutingBusy] = useState(false);
+  const [snapProfile, setSnapProfile] = useState<RoutingProfile>('mtb');
+  const [busy, setBusy] = useState<string | null>(null);
   const [routingError, setRoutingError] = useState<string | null>(null);
   const [activeWpId, setActiveWpId] = useState<string | null>(null);
   const [popupXY, setPopupXY] = useState<{ x: number; y: number } | null>(null);
   const [coordsCopied, setCoordsCopied] = useState(false);
+  const routingBusy = busy != null;
+
+  // Map-click popup (place name + elevation + add-to-route)
+  const [mapClick, setMapClick] = useState<{ lat: number; lon: number; ele: number | null; name: string | null; loading: boolean } | null>(null);
+  const [mapClickXY, setMapClickXY] = useState<{ x: number; y: number } | null>(null);
 
   // Refs — used in Leaflet event handlers to avoid stale closures
   const editPointsRef = useRef<GpsTrackPoint[] | null>(null);
@@ -426,7 +584,7 @@ export default function GPSEditScreen() {
   const historyIdxRef = useRef(-1);
   const waypointsRef = useRef<EditWaypoint[]>([]);
   const snapEnabledRef = useRef(true);
-  const snapProfileRef = useRef<RoutingProfile>('bike');
+  const snapProfileRef = useRef<RoutingProfile>('mtb');
   const dragWpIdRef = useRef<string | null>(null);
   const routingErrTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -439,6 +597,9 @@ export default function GPSEditScreen() {
   const trimPolyAfterRef = useRef<L.Polyline | null>(null);
   const waypointMarkersRef = useRef<L.Marker[]>([]);
   const pendingFitRef = useRef<L.LatLngBounds | null>(null);
+  const hoverMarkerRef = useRef<L.CircleMarker | null>(null);
+  const clickPinRef = useRef<L.Marker | null>(null);
+  const mapClickHandlerRef = useRef<((e: L.LeafletMouseEvent) => void) | null>(null);
 
   // Keep refs in sync with state
   useEffect(() => { editPointsRef.current = editPoints; }, [editPoints]);
@@ -500,7 +661,7 @@ export default function GPSEditScreen() {
         subdomains: 'abcd',
         maxZoom: 19,
       }).addTo(map);
-      map.on('click', () => setActiveWpId(null));
+      map.on('click', e => mapClickHandlerRef.current?.(e as L.LeafletMouseEvent));
       leafletRef.current = map;
       setTimeout(() => map.invalidateSize(), 100);
       const ro = new ResizeObserver(() => {
@@ -604,11 +765,25 @@ export default function GPSEditScreen() {
     const syncAfterChange = () => {
       const lls = poly.getLatLngs() as L.LatLng[];
       const prevActive = editPointsRef.current!.slice(trimStartRef.current, trimEndRef.current + 1);
-      const newActive: GpsTrackPoint[] = lls.map((ll, i) => ({
-        ...(prevActive[i] ?? prevActive[prevActive.length - 1] ?? { lat: ll.lat, lon: ll.lng, ele: 0 }),
-        lat: ll.lat,
-        lon: ll.lng,
-      }));
+      // Match unchanged vertices to their previous track points by exact
+      // position, so ele/time stay aligned across an insert or delete
+      let j = 0;
+      const freshIdx: number[] = [];
+      const newActive: GpsTrackPoint[] = lls.map((ll, i) => {
+        let k = j;
+        while (k < prevActive.length && (prevActive[k].lat !== ll.lat || prevActive[k].lon !== ll.lng)) k++;
+        if (k < prevActive.length) { j = k + 1; return prevActive[k]; }
+        freshIdx.push(i);
+        return { lat: ll.lat, lon: ll.lng, ele: NaN };
+      });
+      // Baseline elevation for new points: mean of the nearest known neighbours
+      for (const i of freshIdx) {
+        let p = i - 1; while (p >= 0 && Number.isNaN(newActive[p].ele)) p--;
+        let q = i + 1; while (q < newActive.length && Number.isNaN(newActive[q].ele)) q++;
+        const a = p >= 0 ? newActive[p].ele : null;
+        const b = q < newActive.length ? newActive[q].ele : null;
+        newActive[i] = { ...newActive[i], ele: a != null && b != null ? (a + b) / 2 : a ?? b ?? 0 };
+      }
       const newPts = [
         ...editPointsRef.current!.slice(0, trimStartRef.current),
         ...newActive,
@@ -628,6 +803,10 @@ export default function GPSEditScreen() {
       pushHistoryRef.current?.(newPts, liveWps);
       // Rebuild trim visualization (not full rebuild)
       updateTrimPolysRef.current?.(newPts, trimStartRef.current, newTe);
+      // Real DEM elevation for newly added points — patches the chart when done
+      if (freshIdx.length > 0) {
+        patchDemElevationsRef.current?.(freshIdx.map(i => ({ lat: newActive[i].lat, lon: newActive[i].lon })));
+      }
     };
 
     map.on('editable:vertex:deleted', syncAfterChange);
@@ -702,6 +881,7 @@ export default function GPSEditScreen() {
   const pushHistoryRef = useRef<((pts: GpsTrackPoint[], wps: EditWaypoint[]) => void) | null>(null);
   const handleVertexDragEndRef = useRef<((vertexIdx: number) => void) | null>(null);
   const openWpPopupRef = useRef<((wpId: string) => void) | null>(null);
+  const patchDemElevationsRef = useRef<((targets: Array<{ lat: number; lon: number }>) => void) | null>(null);
 
   // ── Update trim polylines (light — doesn't touch edit poly or markers) ───
   const updateTrimPolys = useCallback((pts: GpsTrackPoint[], ts: number, te: number) => {
@@ -743,6 +923,35 @@ export default function GPSEditScreen() {
 
   // eslint-disable-next-line react-hooks/immutability
   useEffect(() => { pushHistoryRef.current = pushHistory; }, [pushHistory]);
+
+  // ── Patch freshly added points with real DEM elevation ───────────────────
+  const patchDemElevations = useCallback(async (targets: Array<{ lat: number; lon: number }>) => {
+    const eles = await fetchElevations(targets);
+    if (!eles) return;
+    const cur = editPointsRef.current;
+    if (!cur) return;
+    let changed = false;
+    const next = cur.map(p => {
+      const k = targets.findIndex(t => t.lat === p.lat && t.lon === p.lon);
+      if (k >= 0 && p.ele !== eles[k]) { changed = true; return { ...p, ele: eles[k] }; }
+      return p;
+    });
+    if (!changed) return;
+    // Amend the history entry this edit produced, so undo/redo keeps the value
+    const hIdx = historyIdxRef.current;
+    const hArr = historyArrRef.current;
+    if (hArr[hIdx]?.points === cur) {
+      const amended = [...hArr];
+      amended[hIdx] = { ...amended[hIdx], points: next };
+      historyArrRef.current = amended;
+      setHistory(amended);
+    }
+    editPointsRef.current = next;
+    setEditPoints(next);
+  }, []);
+
+  // eslint-disable-next-line react-hooks/immutability
+  useEffect(() => { patchDemElevationsRef.current = patchDemElevations; }, [patchDemElevations]);
 
   function restoreHistoryEntry(newIdx: number) {
     const entry = historyArrRef.current[newIdx];
@@ -830,17 +1039,22 @@ export default function GPSEditScreen() {
       rebuildMapRef.current?.(newPts, ts, newTe, { fit: false });
     };
 
-    const finishStraight = () => {
+    // Straight connection — the moved point still gets a real DEM elevation
+    const finishStraight = async () => {
       const span = [
         ...(anchorPrev ? [anchorPrev] : []),
         dragged,
         ...(anchorNext ? [anchorNext] : []),
       ];
-      finish([...pts.slice(0, spanStart), ...span, ...pts.slice(spanEnd + 1)], dragged);
+      setBusy('Elevation…');
+      const span2 = await withDemElevation(span, !!anchorPrev, !!anchorNext);
+      setBusy(null);
+      if (editPointsRef.current !== pts) return;
+      finish([...pts.slice(0, spanStart), ...span2, ...pts.slice(spanEnd + 1)], dragged);
     };
 
     if (offRoad || (!anchorPrev && !anchorNext)) {
-      finishStraight();
+      await finishStraight();
       return;
     }
 
@@ -849,28 +1063,33 @@ export default function GPSEditScreen() {
       (anchorNext ? haversineClient(dragged.lat, dragged.lon, anchorNext.lat, anchorNext.lon) : 0);
     if (straightDist > 50000) {
       flashRoutingError('Segment too long to snap — kept straight line');
-      finishStraight();
+      await finishStraight();
       return;
     }
 
-    setRoutingBusy(true);
-    const coords = [anchorPrev, dragged, anchorNext].filter((p): p is GpsTrackPoint => !!p);
-    const routed = await fetchRoutedPath(coords, snapProfileRef.current);
-    setRoutingBusy(false);
+    setBusy('Routing…');
+    try {
+      const coords = [anchorPrev, dragged, anchorNext].filter((p): p is GpsTrackPoint => !!p);
+      const routed = await fetchRoutedPath(coords, snapProfileRef.current);
 
-    // Track changed while routing was in flight — discard to avoid corrupting state
-    if (editPointsRef.current !== pts) return;
+      // Track changed while routing was in flight — discard to avoid corrupting state
+      if (editPointsRef.current !== pts) return;
 
-    if (!routed || routed.points.length < 2) {
-      flashRoutingError('Routing unavailable — kept straight line');
-      finishStraight();
-      return;
+      if (!routed) {
+        setBusy(null);
+        flashRoutingError('Routing unavailable — kept straight line');
+        await finishStraight();
+        return;
+      }
+
+      const { span, wpPoint } = buildRoutedSpan(anchorPrev, anchorNext, dragged.ele, routed.legs);
+      const wpIdxInSpan = span.indexOf(wpPoint);
+      const span2 = await withDemElevation(span, !!anchorPrev, !!anchorNext);
+      if (editPointsRef.current !== pts) return;
+      finish([...pts.slice(0, spanStart), ...span2, ...pts.slice(spanEnd + 1)], span2[wpIdxInSpan]);
+    } finally {
+      setBusy(null);
     }
-
-    const wpPos = anchorPrev ? 1 : 0;
-    const via = routed.snapped[wpPos] ?? { lat: dragged.lat, lon: dragged.lon };
-    const { span, wpPoint } = buildRoutedSpan(anchorPrev, anchorNext, dragged.ele, routed.points, via);
-    finish([...pts.slice(0, spanStart), ...span, ...pts.slice(spanEnd + 1)], wpPoint);
   }, [flashRoutingError]);
 
   // eslint-disable-next-line react-hooks/immutability
@@ -884,6 +1103,7 @@ export default function GPSEditScreen() {
     const pt = map.latLngToContainerPoint([wp.lat, wp.lon]);
     setPopupXY({ x: pt.x, y: pt.y });
     setCoordsCopied(false);
+    setMapClick(null);
     setActiveWpId(wpId);
   }, []);
 
@@ -991,19 +1211,159 @@ export default function GPSEditScreen() {
       return;
     }
 
-    setRoutingBusy(true);
-    const coords = [anchorPrev, wpPt, anchorNext].filter((p): p is GpsTrackPoint => !!p);
-    const routed = await fetchRoutedPath(coords, snapProfileRef.current);
-    setRoutingBusy(false);
-    if (editPointsRef.current !== pts) return;
-    if (!routed || routed.points.length < 2) {
-      flashRoutingError('Routing unavailable — waypoint kept off-road');
+    setBusy('Routing…');
+    try {
+      const coords = [anchorPrev, wpPt, anchorNext].filter((p): p is GpsTrackPoint => !!p);
+      const routed = await fetchRoutedPath(coords, snapProfileRef.current);
+      if (editPointsRef.current !== pts) return;
+      if (!routed) {
+        flashRoutingError('Routing unavailable — waypoint kept off-road');
+        return;
+      }
+      const { span, wpPoint } = buildRoutedSpan(anchorPrev, anchorNext, wpPt.ele, routed.legs);
+      const wpIdxInSpan = span.indexOf(wpPoint);
+      const span2 = await withDemElevation(span, !!anchorPrev, !!anchorNext);
+      if (editPointsRef.current !== pts) return;
+      apply([...pts.slice(0, spanStart), ...span2, ...pts.slice(spanEnd + 1)], span2[wpIdxInSpan]);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // ── Map click: dismiss an open waypoint popup, or drop an inspection pin ──
+  const handleMapClick = useCallback((e: L.LeafletMouseEvent) => {
+    if ((e.originalEvent?.detail ?? 1) > 1) return; // second click of a dblclick zoom
+    if (activeWpId) { setActiveWpId(null); return; }
+    const map = leafletRef.current;
+    if (!map) return;
+    const lat = e.latlng.lat, lon = e.latlng.lng;
+    const cp = map.latLngToContainerPoint([lat, lon]);
+    setMapClickXY({ x: cp.x, y: cp.y });
+    setMapClick({ lat, lon, ele: null, name: null, loading: true });
+    Promise.all([fetchElevations([{ lat, lon }]), reverseGeocode(lat, lon)]).then(([eles, name]) => {
+      setMapClick(prev => prev && prev.lat === lat && prev.lon === lon
+        ? { ...prev, ele: eles?.[0] ?? null, name, loading: false }
+        : prev);
+    });
+  }, [activeWpId]);
+
+  useEffect(() => { mapClickHandlerRef.current = handleMapClick; }, [handleMapClick]);
+
+  // Inspection pin + keep the click popup glued to its spot while panning/zooming
+  const mcLat = mapClick?.lat, mcLon = mapClick?.lon;
+  useEffect(() => {
+    const map = leafletRef.current;
+    if (!map || mcLat == null || mcLon == null) return;
+    const pin = L.marker([mcLat, mcLon], { icon: createClickPinIcon(), interactive: false, zIndexOffset: 400 }).addTo(map);
+    clickPinRef.current = pin;
+    const update = () => {
+      const cp = map.latLngToContainerPoint([mcLat, mcLon]);
+      setMapClickXY({ x: cp.x, y: cp.y });
+    };
+    map.on('move', update);
+    map.on('zoomend', update);
+    return () => {
+      map.off('move', update);
+      map.off('zoomend', update);
+      pin.remove();
+      clickPinRef.current = null;
+    };
+  }, [mcLat, mcLon]);
+
+  // ── Chart hover → position marker on the map ──────────────────────────────
+  useEffect(() => {
+    const map = leafletRef.current;
+    if (!map) return;
+    const p = hoveredIdx != null && editPoints ? editPoints[hoveredIdx] : null;
+    if (!p) {
+      hoverMarkerRef.current?.setStyle({ opacity: 0, fillOpacity: 0 });
       return;
     }
-    const wpPos = anchorPrev ? 1 : 0;
-    const via = routed.snapped[wpPos] ?? { lat: wpPt.lat, lon: wpPt.lon };
-    const { span, wpPoint } = buildRoutedSpan(anchorPrev, anchorNext, wpPt.ele, routed.points, via);
-    apply([...pts.slice(0, spanStart), ...span, ...pts.slice(spanEnd + 1)], wpPoint);
+    const ll: L.LatLngTuple = [p.lat, p.lon];
+    if (hoverMarkerRef.current) {
+      hoverMarkerRef.current.setLatLng(ll);
+      hoverMarkerRef.current.setStyle({ opacity: 1, fillOpacity: 1 });
+    } else {
+      hoverMarkerRef.current = L.circleMarker(ll, {
+        radius: 8, fillColor: '#5e4dbb', color: '#fff', weight: 2.5, fillOpacity: 1, interactive: false,
+      }).addTo(map);
+    }
+  }, [hoveredIdx, editPoints]);
+
+  // ── Add a clicked map point into the route (nearest-segment insertion) ────
+  async function addClickedPointToRoute() {
+    const mc = mapClick;
+    const pts = editPointsRef.current;
+    if (!mc || !pts || routingBusy) return;
+    const ts = trimStartRef.current, te = trimEndRef.current;
+    if (te - ts < 1) return;
+    // Find the active segment closest to the clicked point
+    let best = ts, bestD = Infinity;
+    for (let i = ts; i < te; i++) {
+      const d = distToSegmentM(mc, pts[i], pts[i + 1]);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    const anchorPrev = pts[best];
+    const anchorNext = pts[best + 1];
+    const newPt: GpsTrackPoint = { lat: mc.lat, lon: mc.lon, ele: mc.ele ?? (anchorPrev.ele + anchorNext.ele) / 2 };
+    const offRoad = !snapEnabledRef.current;
+    const wpId = `wp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    setMapClick(null);
+
+    const finish = (newPts: GpsTrackPoint[], wpPoint: GpsTrackPoint) => {
+      const newTe = te + (newPts.length - pts.length);
+      const wp: EditWaypoint = {
+        id: wpId, lat: wpPoint.lat, lon: wpPoint.lon, offRoad,
+        anchorPrev: { lat: anchorPrev.lat, lon: anchorPrev.lon },
+        anchorNext: { lat: anchorNext.lat, lon: anchorNext.lon },
+      };
+      const newWps = [...waypointsRef.current, wp];
+      editPointsRef.current = newPts;
+      trimEndRef.current = newTe;
+      waypointsRef.current = newWps;
+      setEditPoints(newPts);
+      setTrimEnd(newTe);
+      setWaypoints(newWps);
+      pushHistory(newPts, newWps);
+      rebuildMap(newPts, ts, newTe, { fit: false });
+    };
+
+    const finishStraight = async () => {
+      const span = [anchorPrev, newPt, anchorNext];
+      setBusy('Elevation…');
+      const span2 = await withDemElevation(span, true, true);
+      setBusy(null);
+      if (editPointsRef.current !== pts) return;
+      finish([...pts.slice(0, best), ...span2, ...pts.slice(best + 2)], newPt);
+    };
+
+    const straightDist =
+      haversineClient(anchorPrev.lat, anchorPrev.lon, newPt.lat, newPt.lon) +
+      haversineClient(newPt.lat, newPt.lon, anchorNext.lat, anchorNext.lon);
+    if (offRoad || straightDist > 50000) {
+      if (straightDist > 50000) flashRoutingError('Point too far to snap — connected with straight lines');
+      await finishStraight();
+      return;
+    }
+
+    setBusy('Routing…');
+    try {
+      const routed = await fetchRoutedPath([anchorPrev, newPt, anchorNext], snapProfileRef.current);
+      if (editPointsRef.current !== pts) return;
+      if (!routed) {
+        setBusy(null);
+        flashRoutingError('Routing unavailable — connected with straight lines');
+        await finishStraight();
+        return;
+      }
+      const { span, wpPoint } = buildRoutedSpan(anchorPrev, anchorNext, newPt.ele, routed.legs);
+      const wpIdxInSpan = span.indexOf(wpPoint);
+      const span2 = await withDemElevation(span, true, true);
+      if (editPointsRef.current !== pts) return;
+      finish([...pts.slice(0, best), ...span2, ...pts.slice(best + 2)], span2[wpIdxInSpan]);
+    } finally {
+      setBusy(null);
+    }
   }
 
   // ── Build map once editPoints are loaded ──────────────────────────────────
@@ -1234,34 +1594,46 @@ export default function GPSEditScreen() {
               </div>
             </button>
             {snapEnabled && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginTop: 8 }}>
-                {([
-                  { value: 'bike' as const, label: 'Bike', icon: 'directions_bike' },
-                  { value: 'foot' as const, label: 'Foot', icon: 'directions_walk' },
-                  { value: 'car' as const, label: 'Car', icon: 'directions_car' },
-                ]).map(opt => {
-                  const active = snapProfile === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      onClick={() => setSnapProfile(opt.value)}
-                      style={{
-                        padding: '6px 0', borderRadius: 8, cursor: 'pointer',
-                        border: `1.5px solid ${active ? '#5e4dbb' : '#e8e4f0'}`,
-                        background: active ? '#f5f3ff' : '#fff',
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                        transition: 'all 150ms',
-                      }}
-                    >
-                      <Icon name={opt.icon} size={14} color={active ? '#5e4dbb' : '#b0acbe'} />
-                      <span style={{ fontSize: 10, fontWeight: 600, color: active ? '#5e4dbb' : '#787584', fontFamily: 'Hanken Grotesk, sans-serif' }}>{opt.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8 }}>
+                  {([
+                    { value: 'mtb' as const, label: 'MTB', icon: 'directions_bike', desc: 'All available paths & trails' },
+                    { value: 'gravel' as const, label: 'Gravel', icon: 'terrain', desc: 'Gravel tracks, no MTB trails' },
+                    { value: 'road' as const, label: 'Road', icon: 'pedal_bike', desc: 'Paved roads for road cycling' },
+                    { value: 'hike' as const, label: 'Hike', icon: 'hiking', desc: 'Hiking paths & alpine trails' },
+                  ]).map(opt => {
+                    const active = snapProfile === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => setSnapProfile(opt.value)}
+                        title={opt.desc}
+                        style={{
+                          padding: '7px 0', borderRadius: 8, cursor: 'pointer',
+                          border: `1.5px solid ${active ? '#5e4dbb' : '#e8e4f0'}`,
+                          background: active ? '#f5f3ff' : '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          transition: 'all 150ms',
+                        }}
+                      >
+                        <Icon name={opt.icon} size={14} color={active ? '#5e4dbb' : '#b0acbe'} />
+                        <span style={{ fontSize: 11, fontWeight: 600, color: active ? '#5e4dbb' : '#787584', fontFamily: 'Hanken Grotesk, sans-serif' }}>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 10, color: '#9c6bde', marginTop: 6, fontWeight: 500 }}>
+                  {({
+                    mtb: 'All available paths & trails',
+                    gravel: 'Gravel tracks, no MTB trails',
+                    road: 'Paved roads for road cycling',
+                    hike: 'Hiking paths & alpine trails',
+                  })[snapProfile]}
+                </div>
+              </>
             )}
             <div style={{ fontSize: 10.5, color: '#b0acbe', marginTop: 8, lineHeight: 1.5 }}>
-              Dragged points connect along mapped ways. Click a waypoint dot on the map to switch it to off-road.
+              Dragged points connect along mapped ways. Click a waypoint dot to switch it to off-road, or click anywhere on the map to add a point.
             </div>
           </div>
 
@@ -1320,8 +1692,10 @@ export default function GPSEditScreen() {
               <div style={{ fontSize: 11, fontWeight: 600, color: '#5e4dbb', marginBottom: 4 }}>How to edit</div>
               <div style={{ fontSize: 11, color: '#5e4dbb', lineHeight: 1.65, opacity: 0.8 }}>
                 • Drag any point — it snaps to mapped ways<br />
-                • Click midpoint dots to add a new point<br />
+                • Click anywhere on the map to add a point<br />
+                • Click midpoint dots for a quick insert<br />
                 • Click a waypoint dot for details &amp; off-road<br />
+                • Hover the chart to find the spot on the map<br />
                 • Drag the green/red markers to trim
               </div>
             </div>
@@ -1463,7 +1837,7 @@ export default function GPSEditScreen() {
               <Icon name="remove" size={16} color="#5e4dbb" />
             </button>
 
-            {routingBusy && (
+            {busy && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(16px)',
@@ -1477,7 +1851,7 @@ export default function GPSEditScreen() {
                   border: '2px solid rgba(94,77,187,0.25)', borderTopColor: '#5e4dbb',
                   animation: 'wpSpin 700ms linear infinite',
                 }} />
-                Routing…
+                {busy}
               </div>
             )}
             {routingError && (
@@ -1606,6 +1980,107 @@ export default function GPSEditScreen() {
                     </span>
                   </div>
                 )}
+              </div>
+
+              {/* Pointer */}
+              <div style={{
+                position: 'absolute', bottom: -6, left: '50%',
+                width: 12, height: 12, background: 'rgba(255,255,255,0.92)',
+                borderRight: '1px solid rgba(255,255,255,0.75)',
+                borderBottom: '1px solid rgba(255,255,255,0.75)',
+                transform: 'translateX(-50%) rotate(45deg)',
+              }} />
+            </div>
+          )}
+
+          {/* Map click popup — place name, elevation, add-to-route */}
+          {mapClick && mapClickXY && (
+            <div style={{
+              position: 'absolute', left: mapClickXY.x, top: mapClickXY.y - 16, zIndex: 1100,
+              transform: 'translate(-50%, -100%)', width: 272, boxSizing: 'border-box',
+              background: 'rgba(255,255,255,0.92)',
+              backdropFilter: 'blur(20px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+              border: '1px solid rgba(255,255,255,0.75)', borderRadius: 14,
+              boxShadow: '0 8px 32px rgba(94,77,187,0.18), inset 0 1px 0 rgba(255,255,255,0.90)',
+              padding: '12px 14px', fontFamily: 'Inter, sans-serif',
+              animation: 'wpPopIn 180ms ease both',
+            }}>
+              {/* Header — place name from reverse geocoding */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                <span style={{
+                  fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14.5, fontWeight: 700,
+                  color: mapClick.loading ? '#b0acbe' : '#1c1b22', lineHeight: 1.3,
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                }}>
+                  {mapClick.loading ? 'Looking up place…' : mapClick.name ?? 'Dropped pin'}
+                </span>
+                <button
+                  onClick={() => setMapClick(null)}
+                  style={{
+                    width: 24, height: 24, borderRadius: 7, border: 'none',
+                    background: 'transparent', cursor: 'pointer', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#f0edf8'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <Icon name="close" size={15} color="#787584" />
+                </button>
+              </div>
+
+              {/* Coordinates + copy */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                <span style={{ fontSize: 11.5, color: '#787584' }}>
+                  {mapClick.lat.toFixed(6)}, {mapClick.lon.toFixed(6)}
+                </span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard?.writeText(`${mapClick.lat.toFixed(6)}, ${mapClick.lon.toFixed(6)}`).catch(() => {});
+                    setCoordsCopied(true);
+                    setTimeout(() => setCoordsCopied(false), 1500);
+                  }}
+                  title="Copy coordinates"
+                  style={{
+                    width: 22, height: 22, borderRadius: 6, border: 'none',
+                    background: 'transparent', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#f0edf8'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <Icon name={coordsCopied ? 'check' : 'content_copy'} size={13} color={coordsCopied ? '#22c55e' : '#787584'} />
+                </button>
+              </div>
+
+              {/* Elevation */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>Elevation:</span>
+                <span style={{ fontSize: 12, color: '#484552' }}>
+                  {mapClick.ele != null ? `${Math.round(mapClick.ele)} m` : mapClick.loading ? '…' : '—'}
+                </span>
+              </div>
+
+              {/* Add to route */}
+              <button
+                onClick={addClickedPointToRoute}
+                disabled={routingBusy}
+                style={{
+                  width: '100%', padding: '8px 0', borderRadius: 9, border: 'none',
+                  background: routingBusy ? '#c4b8f0' : '#5e4dbb', color: '#fff',
+                  fontSize: 12, fontWeight: 600, cursor: routingBusy ? 'default' : 'pointer',
+                  fontFamily: 'Hanken Grotesk, sans-serif',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  transition: 'background 150ms',
+                }}
+                onMouseEnter={e => { if (!routingBusy) e.currentTarget.style.background = '#4d3da8'; }}
+                onMouseLeave={e => { if (!routingBusy) e.currentTarget.style.background = '#5e4dbb'; }}
+              >
+                <Icon name="add_location_alt" size={14} color="#fff" />
+                Add to route
+              </button>
+              <div style={{ fontSize: 10, color: '#b0acbe', marginTop: 6, textAlign: 'center' }}>
+                {snapEnabled ? 'Snaps along mapped ways into the nearest section' : 'Connects with straight lines (snap off)'}
               </div>
 
               {/* Pointer */}
