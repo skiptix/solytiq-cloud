@@ -81,7 +81,7 @@ router.post('/', async (req: Request, res: Response) => {
       `INSERT INTO folders (id, user_id, name, emoji, color, position, is_public, workspace_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [folderId, req.userId, name, emoji ?? null, color ?? null, nextPos, isPublic ?? true, workspaceId ?? null]
+      [folderId, req.userId, name, emoji ?? null, color ?? null, nextPos, isPublic ?? false, workspaceId ?? null]
     );
     res.status(201).json({ folder: sanitizeFolder(result.rows[0]) });
     broadcastToUser(req.userId!, 'folders');

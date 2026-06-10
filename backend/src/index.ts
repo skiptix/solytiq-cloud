@@ -141,8 +141,11 @@ app.get('/api/share/:token/download', async (req, res) => {
     }
     const filePath = path.join(path.resolve(UPLOAD_DIR), file.file_path);
     if (!require('fs').existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(file.original_name)}"`);
-    res.setHeader('Content-Type', file.mime_type);
+
+    const sanitizedName = file.original_name.replace(/[^\w\s\-_.]/g, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(sanitizedName)}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', 'application/octet-stream');
     res.sendFile(filePath);
   } catch (err) {
     console.error('share download error:', err);
@@ -204,12 +207,17 @@ async function runMigrations() {
       password_hash VARCHAR(255) NOT NULL,
       full_name     VARCHAR(255),
       is_admin      BOOLEAN NOT NULL DEFAULT false,
+      token_version INTEGER NOT NULL DEFAULT 0,
       created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
   await pool.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0
   `);
 
   await pool.query(`
@@ -237,13 +245,14 @@ async function runMigrations() {
       color      VARCHAR(50),
       position   INTEGER      NOT NULL DEFAULT 0,
       collapsed  BOOLEAN      NOT NULL DEFAULT false,
-      created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+      is_public  BOOLEAN      NOT NULL DEFAULT false
     )
   `);
 
   await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS folder_id VARCHAR(100) REFERENCES folders(id) ON DELETE SET NULL`);
 
-  await pool.query(`ALTER TABLE folders ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT true`);
+  await pool.query(`ALTER TABLE folders ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS shared_files (
@@ -253,13 +262,15 @@ async function runMigrations() {
       mime_type     VARCHAR(100) NOT NULL DEFAULT 'application/octet-stream',
       file_size     BIGINT       NOT NULL DEFAULT 0,
       file_path     VARCHAR(500) NOT NULL,
-      is_public     BOOLEAN      NOT NULL DEFAULT true,
+      is_public     BOOLEAN      NOT NULL DEFAULT false,
       password_hash VARCHAR(255),
       expires_at    TIMESTAMPTZ,
       share_token   VARCHAR(100) UNIQUE NOT NULL,
       created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
   `);
+
+  await pool.query(`ALTER TABLE shared_files ALTER COLUMN is_public SET DEFAULT false`);
 
   await pool.query(`ALTER TABLE shared_files ADD COLUMN IF NOT EXISTS title VARCHAR(500)`);
 

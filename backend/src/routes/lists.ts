@@ -825,6 +825,33 @@ router.get('/:listId/progress', async (req: Request, res: Response) => {
   try {
     const { listId } = req.params;
 
+    // FIND-01: Check list access before progress calculation
+    const listCheck = await query<{ user_id: string; workspace_id: string | null; is_public: boolean }>(
+      'SELECT user_id, workspace_id, is_public FROM lists WHERE id = $1',
+      [listId]
+    );
+    if (listCheck.rows.length === 0) {
+      res.status(404).json({ error: 'List not found' });
+      return;
+    }
+    const listObj = listCheck.rows[0];
+    const isOwner = listObj.user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+
+    // Check workspace membership if list belongs to a workspace
+    let hasWorkspaceAccess = false;
+    if (listObj.workspace_id) {
+       const wsMemberCheck = await query('SELECT 1 FROM workspace_members WHERE workspace_id = $1 AND user_id = $2', [listObj.workspace_id, req.userId]);
+       hasWorkspaceAccess = wsMemberCheck.rows.length > 0;
+    }
+
+    const canAccess = isOwner || isAdmin || listObj.is_public || hasWorkspaceAccess;
+
+    if (!canAccess) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
     // Recursively collect all list IDs (this list + sublists)
     async function collectSublistIds(id: string): Promise<string[]> {
       const subResult = await query<{ id: string }>(

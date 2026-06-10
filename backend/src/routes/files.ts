@@ -149,7 +149,7 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
     const id          = crypto.randomUUID();
     const shareToken  = crypto.randomBytes(24).toString('hex');
     const pwHash      = password ? await hashPassword(password) : null;
-    const pub         = isPublic !== 'false';
+    const pub         = isPublic === 'true';
     const expiry      = expiresAt || null;
 
     const result = await query<FileRow>(
@@ -258,11 +258,32 @@ router.get('/:id/preview', async (req: Request, res: Response) => {
       [id, req.userId]
     );
     if (result.rows.length === 0) { res.status(404).json({ error: 'File not found' }); return; }
-    const { file_path, mime_type, original_name } = result.rows[0];
+    const { file_path, mime_type: untrustedMime, original_name } = result.rows[0];
     const filePath = path.join(path.resolve(UPLOAD_DIR), file_path);
     if (!fs.existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(original_name)}"`);
-    res.setHeader('Content-Type', mime_type);
+
+    // FIND-02: Secure file preview. Only allow safe types inline.
+    const safeMimeTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'text/plain'];
+    const isSafe = safeMimeTypes.includes(untrustedMime);
+
+    const disposition = isSafe ? 'inline' : 'attachment';
+    const sanitizedName = original_name.replace(/[^\w\s\-_.]/g, '_');
+
+    res.setHeader('Content-Disposition', `${disposition}; filename="${encodeURIComponent(sanitizedName)}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+
+    if (isSafe) {
+      res.setHeader('Content-Type', untrustedMime);
+      if (untrustedMime === 'text/plain') {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      }
+      // Content-Security-Policy: sandbox to prevent any script execution even in images (e.g. SVG if allowed later)
+      res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'; img-src 'self' data: blob:;");
+    } else {
+      res.setHeader('Content-Type', 'application/octet-stream');
+    }
+
     res.sendFile(filePath);
   } catch (err) {
     console.error('files preview error:', err);

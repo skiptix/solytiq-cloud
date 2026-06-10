@@ -100,7 +100,12 @@ router.put('/users/:id', authenticate, requireAdmin, async (req: Request, res: R
     let idx = 1;
 
     if (username?.trim()) { sets.push(`username = $${idx++}`); values.push(username.trim()); }
-    if (password) { sets.push(`password_hash = $${idx++}`); values.push(await hashPassword(password)); }
+    if (password) {
+      sets.push(`password_hash = $${idx++}`);
+      values.push(await hashPassword(password));
+      // FIND-03: Invalidate sessions when admin changes user password
+      sets.push(`token_version = token_version + 1`);
+    }
     values.push(id);
 
     const result = await query<UserRow>(

@@ -27,9 +27,9 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 export const apiCheckSetupRequired = () =>
   apiFetch<{ required: boolean }>('/auth/setup-required');
 
-export const apiRegister = (username: string, email: string, password: string) =>
-  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string } }>(
-    '/auth/register', { method: 'POST', body: JSON.stringify({ username, email, password }) }
+export const apiRegister = (username: string, email: string, password: string, setupToken?: string) =>
+  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; token_version?: number } }>(
+    '/auth/register', { method: 'POST', body: JSON.stringify({ username, email, password, setupToken }) }
   );
 
 export const apiLogin = (username: string, password: string) =>

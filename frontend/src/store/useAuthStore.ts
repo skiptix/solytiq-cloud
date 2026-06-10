@@ -17,8 +17,8 @@ const useAuthStore = create<AuthState>()(
       token: null,
       totpEnabled: false,
 
-      register: async ({ username, email, password }) => {
-        const data = await apiRegister(username, email, password);
+      register: async ({ username, email, password, setupToken }) => {
+        const data = await apiRegister(username, email, password, setupToken);
         localStorage.setItem('solytiq_token', data.token);
         set({
           adminRegistered: true,
