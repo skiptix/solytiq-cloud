@@ -18,6 +18,7 @@ interface UserRow {
   created_at: string;
   totp_secret: string | null;
   totp_enabled: boolean;
+  token_version: number;
 }
 
 function sanitizeUser(user: UserRow) {
@@ -48,11 +49,12 @@ router.get('/setup-required', async (_req: Request, res: Response) => {
 // POST /api/auth/register
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { username, email, password, fullName } = req.body as {
+    const { username, email, password, fullName, setupToken } = req.body as {
       username?: string;
       email?: string;
       password?: string;
       fullName?: string;
+      setupToken?: string;
     };
 
     if (!username || !email || !password) {
@@ -68,10 +70,29 @@ router.post('/register', async (req: Request, res: Response) => {
       const existingCount = await client.query<{ count: string }>(
         'SELECT COUNT(*) AS count FROM users'
       );
-      if (parseInt(existingCount.rows[0].count, 10) > 0) {
+      const userCount = parseInt(existingCount.rows[0].count, 10);
+      if (userCount > 0) {
         await client.query('ROLLBACK');
         res.status(403).json({ error: 'Admin already registered' });
         return;
+      }
+
+      // FIND-04: Secure first-user-admin registration with INITIAL_SETUP_TOKEN
+      const INITIAL_SETUP_TOKEN = process.env.INITIAL_SETUP_TOKEN;
+      if (!INITIAL_SETUP_TOKEN || INITIAL_SETUP_TOKEN.length < 8) {
+         await client.query('ROLLBACK');
+         res.status(500).json({ error: 'System not properly configured: INITIAL_SETUP_TOKEN is missing or too short.' });
+         return;
+      }
+
+      // Timing-safe comparison (optional but good practice)
+      const crypto = require('crypto');
+      const safeToken = Buffer.from(INITIAL_SETUP_TOKEN);
+      const providedToken = Buffer.from(setupToken || '');
+      if (providedToken.length !== safeToken.length || !crypto.timingSafeEqual(providedToken, safeToken)) {
+         await client.query('ROLLBACK');
+         res.status(401).json({ error: 'Invalid setup token' });
+         return;
       }
 
       const passwordHash = await hashPassword(password);
@@ -85,7 +106,7 @@ router.post('/register', async (req: Request, res: Response) => {
       await client.query('COMMIT');
 
       const user = inserted.rows[0];
-      const token = generateToken(user.id);
+      const token = generateToken(user.id, user.token_version);
 
       res.status(201).json({ token, user: sanitizeUser(user) });
     } catch (err) {
@@ -144,7 +165,7 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    const token = generateToken(user.id);
+    const token = generateToken(user.id, user.token_version);
     res.json({ token, user: sanitizeUser(user) });
   } catch (err) {
     console.error('login error:', err);
@@ -299,7 +320,8 @@ router.post('/2fa/enable', authenticate, async (req: Request, res: Response) => 
       res.status(400).json({ error: 'Invalid code — please try again' }); return;
     }
 
-    await query('UPDATE users SET totp_enabled = true WHERE id = $1', [req.userId]);
+    // FIND-03: Increment token_version on 2FA enable
+    await query('UPDATE users SET totp_enabled = true, token_version = token_version + 1 WHERE id = $1', [req.userId]);
     res.json({ success: true });
   } catch (err) {
     console.error('2fa enable error:', err);
@@ -325,7 +347,8 @@ router.post('/2fa/disable', authenticate, async (req: Request, res: Response) =>
       res.status(400).json({ error: 'Invalid code — please try again' }); return;
     }
 
-    await query('UPDATE users SET totp_enabled = false, totp_secret = NULL WHERE id = $1', [req.userId]);
+    // FIND-03: Increment token_version on 2FA disable
+    await query('UPDATE users SET totp_enabled = false, totp_secret = NULL, token_version = token_version + 1 WHERE id = $1', [req.userId]);
     res.json({ success: true });
   } catch (err) {
     console.error('2fa disable error:', err);
@@ -358,7 +381,7 @@ router.post('/2fa/verify', async (req: Request, res: Response) => {
       res.status(401).json({ error: 'Invalid code — please try again' }); return;
     }
 
-    const token = generateToken(user.id);
+    const token = generateToken(user.id, user.token_version);
     res.json({ token, user: sanitizeUser(user) });
   } catch (err) {
     console.error('2fa verify error:', err);
@@ -384,7 +407,8 @@ router.put('/password', authenticate, async (req: Request, res: Response) => {
     if (!valid) { res.status(400).json({ error: 'Current password is incorrect' }); return; }
 
     const newHash = await hashPassword(newPassword);
-    await query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, req.userId]);
+    // FIND-03: Increment token_version on password change
+    await query('UPDATE users SET password_hash = $1, token_version = token_version + 1 WHERE id = $2', [newHash, req.userId]);
     res.json({ success: true });
   } catch (err) {
     console.error('password change error:', err);

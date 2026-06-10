@@ -28,10 +28,10 @@ export async function authenticate(
   const token = authHeader.slice(7);
 
   try {
-    const { userId } = verifyToken(token);
+    const { userId, tokenVersion } = verifyToken(token);
 
-    const userResult = await query<{ is_admin: boolean }>(
-      'SELECT is_admin FROM users WHERE id = $1',
+    const userResult = await query<{ is_admin: boolean; token_version: number }>(
+      'SELECT is_admin, token_version FROM users WHERE id = $1',
       [userId]
     );
 
@@ -40,8 +40,16 @@ export async function authenticate(
       return;
     }
 
+    const user = userResult.rows[0];
+
+    // FIND-03: Session Invalidation
+    if (user.token_version !== tokenVersion) {
+      res.status(401).json({ error: 'Session expired - please log in again' });
+      return;
+    }
+
     req.userId = userId;
-    req.user = { isAdmin: userResult.rows[0].is_admin };
+    req.user = { isAdmin: user.is_admin };
 
     // fire-and-forget: only update if last_online is null or older than 5 min
     query(

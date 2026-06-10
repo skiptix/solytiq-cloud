@@ -145,7 +145,7 @@ export interface AuthState {
   isAdmin: boolean;
   token: string | null;
   totpEnabled: boolean;
-  register: (creds: { username: string; email: string; password: string }) => Promise<void>;
+  register: (creds: { username: string; email: string; password: string; setupToken?: string }) => Promise<void>;
   signIn: (username: string, password: string) => Promise<boolean>;
   signOut: () => void;
   setProfile: (data: { username?: string; email?: string; fullName?: string; profileImage?: string | null }) => void;

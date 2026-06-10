@@ -9,13 +9,13 @@ if (process.env.NODE_ENV === 'production') {
 }
 const JWT_SECRET = JWT_SECRET_ENV || 'changeme-secret';
 
-export function generateToken(userId: string): string {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
+export function generateToken(userId: string, tokenVersion: number = 0): string {
+  return jwt.sign({ userId, tokenVersion }, JWT_SECRET, { expiresIn: '7d' });
 }
 
-export function verifyToken(token: string): { userId: string } {
-  const payload = jwt.verify(token, JWT_SECRET) as { userId: string };
-  return { userId: payload.userId };
+export function verifyToken(token: string): { userId: string; tokenVersion: number } {
+  const payload = jwt.verify(token, JWT_SECRET) as { userId: string; tokenVersion?: number };
+  return { userId: payload.userId, tokenVersion: payload.tokenVersion ?? 0 };
 }
 
 export function generatePendingToken(userId: string): string {

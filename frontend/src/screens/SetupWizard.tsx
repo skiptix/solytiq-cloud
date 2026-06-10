@@ -17,7 +17,7 @@ const w: Record<string, CSSProperties> = {
 function ProgressDots({ step }: { step: number }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
-      {[0, 1, 2, 3].map(i => (
+      {[0, 1, 2, 3, 4].map(i => (
         <div key={i} style={{ height: 4, borderRadius: 9999, background: step > i ? '#9d8dff' : step === i ? '#5e4dbb' : '#ebe6f0', width: step === i ? 32 : 12, transition: 'all 300ms ease' }} />
       ))}
     </div>
@@ -55,6 +55,7 @@ export default function SetupWizard() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [setupToken, setSetupToken] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -63,17 +64,23 @@ export default function SetupWizard() {
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const passwordValid = password.length >= 8;
   const confirmValid = confirm === password && confirm.length > 0;
+  const setupTokenValid = setupToken.length >= 8;
 
-  const stepValid = step === 0 ? true : step === 1 ? usernameValid : step === 2 ? emailValid : passwordValid && confirmValid;
+  const stepValid =
+    step === 0 ? true :
+    step === 1 ? usernameValid :
+    step === 2 ? emailValid :
+    step === 3 ? (passwordValid && confirmValid) :
+    setupTokenValid;
 
   const goNext = async () => {
     if (!stepValid) return;
     setError('');
-    if (step === 3) {
+    if (step === 4) {
       setLoading(true);
       try {
-        await register({ username, email, password });
-        setStep(4);
+        await register({ username, email, password, setupToken });
+        setStep(5);
         setTimeout(() => navigate('/dashboard'), 1600);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Registration failed');
@@ -136,7 +143,13 @@ export default function SetupWizard() {
         </>)}
       </div>
     );
-    if (step === 4) return (
+    if (step === 4) return fieldGroup(<>
+      <label style={w.label}>Setup Token</label>
+      <input autoFocus type="password" value={setupToken} onChange={e => setSetupToken(e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} placeholder="Enter INITIAL_SETUP_TOKEN"
+        style={{ ...w.input, borderColor: setupToken && !setupTokenValid ? '#ba1a1a' : '#ececf3' }} />
+      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: setupToken && !setupTokenValid ? '#ba1a1a' : '#787584' }}>Required for initial admin registration.</div>
+    </>);
+    if (step === 5) return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, padding: '20px 0' }}>
         <style>{`@keyframes scIn{0%{transform:scale(0);opacity:0}60%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:1}} @keyframes scDraw{from{stroke-dashoffset:40}to{stroke-dashoffset:0}}`}</style>
         <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(16,185,129,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'scIn 420ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
@@ -150,8 +163,8 @@ export default function SetupWizard() {
     return null;
   };
 
-  const titleText = ['Welcome to Solytiq Cloud', 'Pick a username', 'Your email address', 'Set a password', `All set, @${username}!`][step];
-  const subText = ["Let's set up your admin account. This takes less than a minute.", "This is how you'll be identified inside Solytiq Cloud.", "We'll use this for account recovery and notifications.", 'Keep your admin account secure. Use at least 8 characters.', 'Your admin account is ready. Taking you to your dashboard…'][step];
+  const titleText = ['Welcome to Solytiq Cloud', 'Pick a username', 'Your email address', 'Set a password', 'Security Verification', `All set, @${username}!`][step];
+  const subText = ["Let's set up your admin account. This takes less than a minute.", "This is how you'll be identified inside Solytiq Cloud.", "We'll use this for account recovery and notifications.", 'Keep your admin account secure. Use at least 8 characters.', 'Verify your identity using the initial setup token.', 'Your admin account is ready. Taking you to your dashboard…'][step];
 
   return (
     <div style={w.wrap}>
@@ -168,7 +181,7 @@ export default function SetupWizard() {
         </div>
         {stepContent()}
         {error && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a', textAlign: 'center' }}>{error}</div>}
-        {step !== 4 && (
+        {step !== 5 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: step === 0 ? 'center' : 'space-between' }}>
             {step > 0 && (
               <button onClick={() => setStep(s => s - 1)}
@@ -178,7 +191,7 @@ export default function SetupWizard() {
             )}
             <button onClick={goNext} disabled={!stepValid || loading}
               style={{ ...w.primaryBtn, background: !stepValid || loading ? '#c9c4d5' : '#5e4dbb', cursor: !stepValid || loading ? 'not-allowed' : 'pointer', flex: step === 0 ? '0 1 auto' : 1, padding: step === 0 ? '12px 32px' : '12px 0' }}>
-              {loading ? 'Creating account…' : step === 0 ? 'Get Started' : step === 3 ? 'Create Account' : 'Continue'}
+              {loading ? 'Creating account…' : step === 0 ? 'Get Started' : step === 4 ? 'Create Account' : 'Continue'}
               {!loading && stepValid && <Icon name="arrow_forward" size={14} color="#fff" />}
             </button>
           </div>
