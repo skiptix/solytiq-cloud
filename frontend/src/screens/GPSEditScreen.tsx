@@ -644,6 +644,7 @@ export default function GPSEditScreen() {
   >(null);
   const [popupXY, setPopupXY] = useState<{ x: number; y: number } | null>(null);
   const [coordsCopied, setCoordsCopied] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
   const routingBusy = busy != null;
 
   // Map-click popup (place name + elevation + add-to-route)
@@ -750,6 +751,7 @@ export default function GPSEditScreen() {
 
       map.on('click', e => mapClickHandlerRef.current?.(e as L.LeafletMouseEvent));
       leafletRef.current = map;
+      setMapReady(true);
       setTimeout(() => map.invalidateSize(), 100);
       const ro = new ResizeObserver(() => {
         const m = leafletRef.current;
@@ -1639,7 +1641,7 @@ export default function GPSEditScreen() {
       if (poiFetchTimerRef.current) clearTimeout(poiFetchTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePoi]);
+  }, [activePoi, mapReady]);
 
   async function doFetch(bounds: L.LatLngBounds) {
     poiFetchControllerRef.current?.abort();
@@ -1647,9 +1649,11 @@ export default function GPSEditScreen() {
     poiFetchControllerRef.current = ctrl;
     setPoiLoading(true);
     try {
+      // Add small buffer (approx 100m) to catch POIs right at the edge
+      const PAD = 0.001;
       const result = await queryOverpass(
-        bounds.getSouth(), bounds.getWest(),
-        bounds.getNorth(), bounds.getEast(),
+        bounds.getSouth() - PAD, bounds.getWest() - PAD,
+        bounds.getNorth() + PAD, bounds.getEast() + PAD,
         [...activePoi], ctrl.signal,
       );
       if (ctrl.signal.aborted) return;
@@ -2448,7 +2452,7 @@ export default function GPSEditScreen() {
           {/* POI Category Toggle Buttons */}
           <div style={{
             position: 'absolute',
-            top: 16, right: 56, // links von den Action-Icons
+            top: 72, left: '50%', transform: 'translateX(-50%)',
             zIndex: 1000,
             display: 'flex',
             gap: 6,
