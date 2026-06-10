@@ -231,3 +231,56 @@ export interface AppState {
   moveTaskToList: (taskId: number, targetListId: string) => void;
   loadFromApi: (workspaceId?: string) => Promise<void>;
 }
+
+// ─── POI / Waypoint Types ─────────────────────────────────────────────────────
+
+export type PoiCategory = 'food' | 'fuel' | 'bicycle' | 'shopping' | 'kiosk';
+
+export interface OverpassPoi {
+  id: string;               // z.B. "osm-12345"
+  lat: number;
+  lon: number;
+  category: PoiCategory;
+  name: string;             // OSM name oder brand
+  tags: Record<string, string>; // alle OSM-Tags (opening_hours, phone, website, addr:*)
+}
+
+export interface NominatimResult {
+  place_id: number;
+  display_name: string;
+  lat: string;
+  lon: string;
+  type: string;
+  address?: {
+    road?: string;
+    city?: string;
+    town?: string;
+    village?: string;
+    country?: string;
+    postcode?: string;
+  };
+}
+
+// Named Pin = persistenter Wegpunkt der als <wpt> in GPX exportiert wird
+export interface NamedPin {
+  id: string;
+  lat: number;
+  lon: number;
+  ele?: number;
+  name: string;
+  description?: string;
+  sym: PoiCategory | 'flag' | 'generic';
+  highlighted: boolean;  // visuell hervorgehoben auf Karte + Sidebar
+  addedToRoute: boolean; // true = auch als EditWaypoint eingefügt (Route fährt durch diesen Punkt)
+}
+
+// Für Backend-Request
+export interface NamedPinInput {
+  lat: number;
+  lon: number;
+  ele?: number;
+  name: string;
+  description?: string;
+  sym: string;
+  highlighted?: boolean;
+}
