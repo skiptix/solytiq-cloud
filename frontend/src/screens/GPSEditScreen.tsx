@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet-editable';
 import L from 'leaflet';
 import type { GpsFile, GpsTrackPoint } from '../types';
-import { apiGetGpsFiles, apiGetGpsTrackData, apiSaveEditedGpsTrack } from '../api/client';
+import { apiGetGpsFiles, apiGetGpsTrackData, apiSaveEditedGpsTrack, apiGpsRoute } from '../api/client';
 import useGpsStore from '../store/useGpsStore';
 import Icon from '../components/Icon';
 
@@ -103,6 +103,7 @@ interface HistoryEntry {
 
 interface EditableVertexEvent extends L.LeafletEvent {
   vertex: L.Marker & { getIndex: () => number };
+  cancel: () => void;
 }
 
 interface ValhallaResponse {
@@ -126,25 +127,22 @@ function decodePolyline6(str: string): Array<{ lat: number; lon: number }> {
 }
 
 // One leg per consecutive location pair, so the via point is exactly the
-// boundary between legs[0] and legs[1] — no nearest-point splitting needed
+// boundary between legs[0] and legs[1] — no nearest-point splitting needed.
+// Goes through the backend proxy: the public Valhalla server's CORS policy
+// blocks direct browser requests from third-party origins.
 async function fetchRoutedPath(
   coords: Array<{ lat: number; lon: number }>,
   profile: RoutingProfile,
 ): Promise<{ legs: Array<Array<{ lat: number; lon: number }>> } | null> {
   const prof = ROUTING_PROFILES[profile];
-  const req = {
-    locations: coords.map(c => ({ lat: c.lat, lon: c.lon })),
-    costing: prof.costing,
-    costing_options: { [prof.costing]: prof.options },
-  };
-  // GET keeps this a "simple" CORS request (no preflight)
-  const url = `https://valhalla1.openstreetmap.de/route?json=${encodeURIComponent(JSON.stringify(req))}`;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 12000);
+  const timer = setTimeout(() => ctrl.abort(), 15000);
   try {
-    const res = await fetch(url, { signal: ctrl.signal });
-    if (!res.ok) return null;
-    const data = (await res.json()) as ValhallaResponse;
+    const data = (await apiGpsRoute({
+      locations: coords.map(c => ({ lat: c.lat, lon: c.lon })),
+      costing: prof.costing,
+      costing_options: { [prof.costing]: prof.options },
+    }, ctrl.signal)) as ValhallaResponse;
     const legs = (data.trip?.legs ?? []).map(l => decodePolyline6(l.shape));
     if (legs.length !== coords.length - 1 || legs.some(l => l.length < 2)) return null;
     return { legs };
@@ -281,6 +279,16 @@ function buildRoutedSpan(
   const wpPoint: GpsTrackPoint = { lat: via.lat, lon: via.lon, ele: wpEle };
   const leg = interpolateEle(simplifyLeg(legs[0]), wpEle, anchorNext!.ele).slice(1, -1);
   return { span: [wpPoint, ...leg, anchorNext!], wpPoint };
+}
+
+// Simplified route-point dot — sits beneath the leaflet-editable vertex handle
+function createPtDotIcon(): L.DivIcon {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #8a7ad6;box-shadow:0 1px 6px rgba(94,77,187,0.30);box-sizing:border-box;"></div>`,
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  });
 }
 
 function createClickPinIcon(): L.DivIcon {
@@ -567,7 +575,12 @@ export default function GPSEditScreen() {
   const [snapProfile, setSnapProfile] = useState<RoutingProfile>('mtb');
   const [busy, setBusy] = useState<string | null>(null);
   const [routingError, setRoutingError] = useState<string | null>(null);
-  const [activeWpId, setActiveWpId] = useState<string | null>(null);
+  // Popup target: an edited waypoint (by id) or a plain route point (by position)
+  const [activeSel, setActiveSel] = useState<
+    | { kind: 'wp'; id: string }
+    | { kind: 'pt'; lat: number; lon: number }
+    | null
+  >(null);
   const [popupXY, setPopupXY] = useState<{ x: number; y: number } | null>(null);
   const [coordsCopied, setCoordsCopied] = useState(false);
   const routingBusy = busy != null;
@@ -596,6 +609,7 @@ export default function GPSEditScreen() {
   const trimPolyBeforeRef = useRef<L.Polyline | null>(null);
   const trimPolyAfterRef = useRef<L.Polyline | null>(null);
   const waypointMarkersRef = useRef<L.Marker[]>([]);
+  const ptDotMarkersRef = useRef<L.Marker[]>([]);
   const pendingFitRef = useRef<L.LatLngBounds | null>(null);
   const hoverMarkerRef = useRef<L.CircleMarker | null>(null);
   const clickPinRef = useRef<L.Marker | null>(null);
@@ -735,6 +749,15 @@ export default function GPSEditScreen() {
     map.off('editable:vertex:dragend');
     map.off('editable:vertex:deleted');
     map.off('editable:vertex:new');
+    map.off('editable:vertex:rawclick');
+
+    // Clicking a vertex opens the point popup instead of leaflet-editable's
+    // default behaviour (instantly deleting the vertex)
+    map.on('editable:vertex:rawclick', (e) => {
+      const ev = e as EditableVertexEvent;
+      ev.cancel();
+      openPtPopupRef.current?.(trimStartRef.current + ev.vertex.getIndex());
+    });
 
     // Remember whether the grabbed vertex is an existing edited waypoint
     map.on('editable:vertex:dragstart', (e) => {
@@ -826,6 +849,21 @@ export default function GPSEditScreen() {
       waypointMarkersRef.current.push(mkr);
     }
 
+    // Simplified set of visible route-point dots. They sit beneath the vertex
+    // handles purely as visual anchors — clicks land on the vertex handle,
+    // which the rawclick interception routes to the point popup.
+    ptDotMarkersRef.current.forEach(m => m.remove());
+    ptDotMarkersRef.current = [];
+    const activePts = pts.slice(ts, te + 1);
+    const dotPts = activePts.length > 50 ? simplifyTrack(activePts, 0.0006) : activePts;
+    for (const p of dotPts) {
+      if (p === pts[ts] || p === pts[te]) continue;
+      if (waypointsRef.current.some(w => w.lat === p.lat && w.lon === p.lon)) continue;
+      const mkr = L.marker([p.lat, p.lon], { icon: createPtDotIcon(), interactive: false, zIndexOffset: -400 });
+      mkr.addTo(map);
+      ptDotMarkersRef.current.push(mkr);
+    }
+
     // Draggable start marker
     const sMkr = L.marker([pts[ts].lat, pts[ts].lon], {
       icon: createDotIcon('#22c55e'),
@@ -881,6 +919,7 @@ export default function GPSEditScreen() {
   const pushHistoryRef = useRef<((pts: GpsTrackPoint[], wps: EditWaypoint[]) => void) | null>(null);
   const handleVertexDragEndRef = useRef<((vertexIdx: number) => void) | null>(null);
   const openWpPopupRef = useRef<((wpId: string) => void) | null>(null);
+  const openPtPopupRef = useRef<((gi: number) => void) | null>(null);
   const patchDemElevationsRef = useRef<((targets: Array<{ lat: number; lon: number }>) => void) | null>(null);
 
   // ── Update trim polylines (light — doesn't touch edit poly or markers) ───
@@ -1095,7 +1134,7 @@ export default function GPSEditScreen() {
   // eslint-disable-next-line react-hooks/immutability
   useEffect(() => { handleVertexDragEndRef.current = handleVertexDragEnd; }, [handleVertexDragEnd]);
 
-  // ── Waypoint popup ────────────────────────────────────────────────────────
+  // ── Waypoint / route-point popup ──────────────────────────────────────────
   const openWpPopup = useCallback((wpId: string) => {
     const map = leafletRef.current;
     const wp = waypointsRef.current.find(w => w.id === wpId);
@@ -1104,20 +1143,44 @@ export default function GPSEditScreen() {
     setPopupXY({ x: pt.x, y: pt.y });
     setCoordsCopied(false);
     setMapClick(null);
-    setActiveWpId(wpId);
+    setActiveSel({ kind: 'wp', id: wpId });
   }, []);
 
   // eslint-disable-next-line react-hooks/immutability
   useEffect(() => { openWpPopupRef.current = openWpPopup; }, [openWpPopup]);
 
-  // Keep the popup glued to its waypoint while panning/zooming
+  // Plain route points open the same popup; edited waypoints take precedence
+  const openPtPopup = useCallback((gi: number) => {
+    const map = leafletRef.current;
+    const pts = editPointsRef.current;
+    const p = pts?.[gi];
+    if (!map || !p) return;
+    const wp = waypointsRef.current.find(w => w.lat === p.lat && w.lon === p.lon);
+    if (wp) { openWpPopup(wp.id); return; }
+    const cp = map.latLngToContainerPoint([p.lat, p.lon]);
+    setPopupXY({ x: cp.x, y: cp.y });
+    setCoordsCopied(false);
+    setMapClick(null);
+    setActiveSel({ kind: 'pt', lat: p.lat, lon: p.lon });
+  }, [openWpPopup]);
+
+  // eslint-disable-next-line react-hooks/immutability
+  useEffect(() => { openPtPopupRef.current = openPtPopup; }, [openPtPopup]);
+
+  // Keep the popup glued to its point while panning/zooming
   useEffect(() => {
     const map = leafletRef.current;
-    if (!map || !activeWpId) return;
+    if (!map || !activeSel) return;
     const update = () => {
-      const wp = waypointsRef.current.find(w => w.id === activeWpId);
-      if (!wp) return;
-      const pt = map.latLngToContainerPoint([wp.lat, wp.lon]);
+      let lat: number, lon: number;
+      if (activeSel.kind === 'wp') {
+        const wp = waypointsRef.current.find(w => w.id === activeSel.id);
+        if (!wp) return;
+        lat = wp.lat; lon = wp.lon;
+      } else {
+        lat = activeSel.lat; lon = activeSel.lon;
+      }
+      const pt = map.latLngToContainerPoint([lat, lon]);
       setPopupXY({ x: pt.x, y: pt.y });
     };
     map.on('move', update);
@@ -1126,15 +1189,21 @@ export default function GPSEditScreen() {
       map.off('move', update);
       map.off('zoomend', update);
     };
-  }, [activeWpId]);
+  }, [activeSel]);
 
   const popupData = useMemo(() => {
-    if (!activeWpId || !editPoints) return null;
-    const wp = waypoints.find(w => w.id === activeWpId);
-    if (!wp) return null;
-    const idx = findNearestPoint(editPoints, wp.lat, wp.lon);
+    if (!activeSel || !editPoints) return null;
+    let lat: number, lon: number, wp: EditWaypoint | null = null;
+    if (activeSel.kind === 'wp') {
+      wp = waypoints.find(w => w.id === activeSel.id) ?? null;
+      if (!wp) return null;
+      lat = wp.lat; lon = wp.lon;
+    } else {
+      lat = activeSel.lat; lon = activeSel.lon;
+    }
+    const idx = findNearestPoint(editPoints, lat, lon);
     const p = editPoints[idx];
-    if (!p || p.lat !== wp.lat || p.lon !== wp.lon) return null;
+    if (!p || p.lat !== lat || p.lon !== lon) return null;
     let dist = 0, gain = 0;
     for (let i = trimStart + 1; i <= idx; i++) {
       dist += haversineClient(editPoints[i - 1].lat, editPoints[i - 1].lon, editPoints[i].lat, editPoints[i].lon);
@@ -1148,7 +1217,37 @@ export default function GPSEditScreen() {
       if (Number.isFinite(d) && d > 0) durationS = d;
     }
     return { wp, point: p, idx, dist, gain, durationS, grade: gradeAt(editPoints, idx) };
-  }, [activeWpId, editPoints, waypoints, trimStart]);
+  }, [activeSel, editPoints, waypoints, trimStart]);
+
+  // ── Delete the popup's point from the route ───────────────────────────────
+  function deleteActivePoint() {
+    const sel = activeSel;
+    const pts = editPointsRef.current;
+    if (!sel || !pts || routingBusy) return;
+    let lat: number, lon: number;
+    if (sel.kind === 'wp') {
+      const wp = waypointsRef.current.find(w => w.id === sel.id);
+      if (!wp) return;
+      lat = wp.lat; lon = wp.lon;
+    } else {
+      lat = sel.lat; lon = sel.lon;
+    }
+    const idx = pts.findIndex(p => p.lat === lat && p.lon === lon);
+    const ts = trimStartRef.current, te = trimEndRef.current;
+    if (idx < ts || idx > te || te - ts < 2) return;
+    const newPts = [...pts.slice(0, idx), ...pts.slice(idx + 1)];
+    const newTe = te - 1;
+    const newWps = waypointsRef.current.filter(w => !(w.lat === lat && w.lon === lon));
+    editPointsRef.current = newPts;
+    trimEndRef.current = newTe;
+    waypointsRef.current = newWps;
+    setEditPoints(newPts);
+    setTrimEnd(newTe);
+    setWaypoints(newWps);
+    setActiveSel(null);
+    pushHistory(newPts, newWps);
+    rebuildMap(newPts, ts, newTe, { fit: false });
+  }
 
   // ── Toggle a waypoint between follow-ways and off-road ────────────────────
   async function toggleWaypointMode(wpId: string) {
@@ -1233,7 +1332,7 @@ export default function GPSEditScreen() {
   // ── Map click: dismiss an open waypoint popup, or drop an inspection pin ──
   const handleMapClick = useCallback((e: L.LeafletMouseEvent) => {
     if ((e.originalEvent?.detail ?? 1) > 1) return; // second click of a dblclick zoom
-    if (activeWpId) { setActiveWpId(null); return; }
+    if (activeSel) { setActiveSel(null); return; }
     const map = leafletRef.current;
     if (!map) return;
     const lat = e.latlng.lat, lon = e.latlng.lng;
@@ -1245,7 +1344,7 @@ export default function GPSEditScreen() {
         ? { ...prev, ele: eles?.[0] ?? null, name, loading: false }
         : prev);
     });
-  }, [activeWpId]);
+  }, [activeSel]);
 
   useEffect(() => { mapClickHandlerRef.current = handleMapClick; }, [handleMapClick]);
 
@@ -1671,7 +1770,7 @@ export default function GPSEditScreen() {
                 trimStartRef.current = 0; trimEndRef.current = te;
                 setWaypoints([]);
                 waypointsRef.current = [];
-                setActiveWpId(null);
+                setActiveSel(null);
                 setHistory([{ points: originalPoints, waypoints: [] }]);
                 setHistoryIdx(0);
                 historyArrRef.current = [{ points: originalPoints, waypoints: [] }];
@@ -1694,7 +1793,7 @@ export default function GPSEditScreen() {
                 • Drag any point — it snaps to mapped ways<br />
                 • Click anywhere on the map to add a point<br />
                 • Click midpoint dots for a quick insert<br />
-                • Click a waypoint dot for details &amp; off-road<br />
+                • Click any point for details, off-road &amp; delete<br />
                 • Hover the chart to find the spot on the map<br />
                 • Drag the green/red markers to trim
               </div>
@@ -1884,10 +1983,10 @@ export default function GPSEditScreen() {
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                 <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22' }}>
-                  Waypoint
+                  {popupData.wp ? 'Waypoint' : 'Route Point'}
                 </span>
                 <button
-                  onClick={() => setActiveWpId(null)}
+                  onClick={() => setActiveSel(null)}
                   style={{
                     width: 24, height: 24, borderRadius: 7, border: 'none',
                     background: 'transparent', cursor: 'pointer',
@@ -1903,11 +2002,11 @@ export default function GPSEditScreen() {
               {/* Coordinates + copy */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
                 <span style={{ fontSize: 11.5, color: '#787584' }}>
-                  {popupData.wp.lat.toFixed(6)}, {popupData.wp.lon.toFixed(6)}
+                  {popupData.point.lat.toFixed(6)}, {popupData.point.lon.toFixed(6)}
                 </span>
                 <button
                   onClick={() => {
-                    navigator.clipboard?.writeText(`${popupData.wp.lat.toFixed(6)}, ${popupData.wp.lon.toFixed(6)}`).catch(() => {});
+                    navigator.clipboard?.writeText(`${popupData.point.lat.toFixed(6)}, ${popupData.point.lon.toFixed(6)}`).catch(() => {});
                     setCoordsCopied(true);
                     setTimeout(() => setCoordsCopied(false), 1500);
                   }}
@@ -1924,18 +2023,19 @@ export default function GPSEditScreen() {
                 </button>
               </div>
 
-              {/* Mode toggle */}
+              {/* Mode toggle — only for edited waypoints */}
+              {popupData.wp && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
                 {([
                   { off: false, label: 'Follow ways', icon: 'alt_route' },
                   { off: true, label: 'Off-road', icon: 'do_not_step' },
                 ]).map(opt => {
-                  const active = popupData.wp.offRoad === opt.off;
+                  const active = popupData.wp!.offRoad === opt.off;
                   return (
                     <button
                       key={opt.label}
                       disabled={routingBusy || active}
-                      onClick={() => toggleWaypointMode(popupData.wp.id)}
+                      onClick={() => toggleWaypointMode(popupData.wp!.id)}
                       style={{
                         padding: '7px 0', borderRadius: 8,
                         border: `1.5px solid ${active ? '#5e4dbb' : '#e8e4f0'}`,
@@ -1954,6 +2054,7 @@ export default function GPSEditScreen() {
                   );
                 })}
               </div>
+              )}
 
               {/* Stats rows — label left, value right */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -1981,6 +2082,26 @@ export default function GPSEditScreen() {
                   </div>
                 )}
               </div>
+
+              {/* Delete point */}
+              <button
+                onClick={deleteActivePoint}
+                disabled={routingBusy}
+                style={{
+                  width: '100%', marginTop: 10, padding: '7px 0', borderRadius: 8,
+                  border: '1px solid #fca5a5', background: '#fff', color: '#ba1a1a',
+                  fontSize: 11.5, fontWeight: 600,
+                  cursor: routingBusy ? 'default' : 'pointer',
+                  fontFamily: 'Hanken Grotesk, sans-serif',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                  transition: 'background 150ms', opacity: routingBusy ? 0.55 : 1,
+                }}
+                onMouseEnter={e => { if (!routingBusy) e.currentTarget.style.background = '#fff5f5'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+              >
+                <Icon name="delete" size={13} color="#ba1a1a" />
+                Delete point
+              </button>
 
               {/* Pointer */}
               <div style={{

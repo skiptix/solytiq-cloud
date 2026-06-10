@@ -542,4 +542,43 @@ router.delete('/:id', async (req, res) => {
   } catch (err) { console.error('GPS delete:', err); res.status(500).json({ error: 'Failed to delete' }); }
 });
 
+// POST /api/gps/route — proxy to the FOSSGIS Valhalla routing service.
+// The public server's CORS policy blocks browser requests from third-party
+// origins, so the backend forwards them instead. No API key; fair-use applies.
+router.post('/route', async (req, res) => {
+  const { locations, costing, costing_options: costingOptions } = (req.body ?? {}) as {
+    locations?: Array<{ lat?: unknown; lon?: unknown }>;
+    costing?: unknown;
+    costing_options?: unknown;
+  };
+  if (
+    !Array.isArray(locations) || locations.length < 2 || locations.length > 3 ||
+    locations.some(l => typeof l?.lat !== 'number' || typeof l?.lon !== 'number') ||
+    (costing !== 'bicycle' && costing !== 'pedestrian')
+  ) {
+    return res.status(400).json({ error: 'Invalid routing request' });
+  }
+  try {
+    const upstream = await fetch('https://valhalla1.openstreetmap.de/route', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Client-Id': 'solytiq-cloud' },
+      body: JSON.stringify({
+        locations: locations.map(l => ({ lat: l.lat, lon: l.lon })),
+        costing,
+        ...(costingOptions && typeof costingOptions === 'object' ? { costing_options: costingOptions } : {}),
+      }),
+      signal: AbortSignal.timeout(12000),
+    });
+    const data = await upstream.json().catch(() => null);
+    if (!upstream.ok || !data) {
+      console.error('Valhalla routing failed:', upstream.status, JSON.stringify(data)?.slice(0, 300));
+      return res.status(502).json({ error: 'Routing service unavailable' });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('Valhalla routing error:', err);
+    res.status(502).json({ error: 'Routing service unavailable' });
+  }
+});
+
 export default router;

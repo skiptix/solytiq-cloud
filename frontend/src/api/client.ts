@@ -540,6 +540,11 @@ export async function apiSaveEditedGpsTrack(
   return data.file;
 }
 
+export const apiGpsRoute = (
+  body: { locations: Array<{ lat: number; lon: number }>; costing: string; costing_options: Record<string, unknown> },
+  signal?: AbortSignal,
+) => apiFetch<unknown>('/gps/route', { method: 'POST', body: JSON.stringify(body), signal });
+
 export async function apiRenameGpsFile(id: string, name: string): Promise<GpsFile> {
   const token = getToken();
   const res = await fetch(`/api/gps/${encodeURIComponent(id)}/rename`, {
