@@ -253,7 +253,7 @@ export default function GPSScreen() {
       return;
     }
     if (!leafletRef.current) {
-      const map = L.map(node, { zoomControl: true }).setView([47, 10], 5);
+      const map = L.map(node, { zoomControl: false }).setView([47, 10], 5);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd',
@@ -501,7 +501,7 @@ export default function GPSScreen() {
           {selectedFile && (
             <div style={{
               position: 'absolute', top: 16, left: 16, zIndex: 1000,
-              width: 268,
+              width: 300, boxSizing: 'border-box',
               background: 'rgba(255,255,255,0.88)',
               backdropFilter: 'blur(20px) saturate(180%)',
               WebkitBackdropFilter: 'blur(20px) saturate(180%)',
@@ -620,7 +620,7 @@ export default function GPSScreen() {
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   >
                     <Icon name="delete" size={12} color="#ba1a1a" />
-                    Del
+                    Delete
                   </button>
                 </div>
               )}
@@ -663,6 +663,25 @@ export default function GPSScreen() {
               style={mapCtrlBtn()}
             >
               <Icon name="upload" size={16} color="#5e4dbb" />
+            </button>
+
+            {/* Zoom controls — replaces the default Leaflet control (was hidden under the info card) */}
+            <div style={{ height: 1, background: 'rgba(94,77,187,0.18)', margin: '4px 6px' }} />
+            <button
+              className="gps-map-ctrl"
+              onClick={() => leafletRef.current?.zoomIn()}
+              title="Zoom In"
+              style={mapCtrlBtn()}
+            >
+              <Icon name="add" size={16} color="#5e4dbb" />
+            </button>
+            <button
+              className="gps-map-ctrl"
+              onClick={() => leafletRef.current?.zoomOut()}
+              title="Zoom Out"
+              style={mapCtrlBtn()}
+            >
+              <Icon name="remove" size={16} color="#5e4dbb" />
             </button>
           </div>
 
