@@ -30,7 +30,7 @@ export async function queryOverpass(
   const bbox = `${south.toFixed(5)},${west.toFixed(5)},${north.toFixed(5)},${east.toFixed(5)}`;
   const lines = categories.map(cat => `${OVERPASS_QUERIES[cat]}(${bbox});`).join('\n  ');
 
-  const query = `[out:json][timeout:12];\n(\n  ${lines}\n);\nout body;`;
+  const query = `[out:json][timeout:25];\n(\n  ${lines}\n);\nout body;`;
 
   const res = await fetch('https://overpass-api.de/api/interpreter', {
     method: 'POST',
