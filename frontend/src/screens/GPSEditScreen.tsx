@@ -137,15 +137,20 @@ async function fetchRoutedPath(
   const prof = ROUTING_PROFILES[profile];
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15000);
-  try {
+
+  const attempt = async (opts: Record<string, number | string>) => {
     const data = (await apiGpsRoute({
       locations: coords.map(c => ({ lat: c.lat, lon: c.lon })),
       costing: prof.costing,
-      costing_options: { [prof.costing]: prof.options },
+      costing_options: { [prof.costing]: opts },
     }, ctrl.signal)) as ValhallaResponse;
     const legs = (data.trip?.legs ?? []).map(l => decodePolyline6(l.shape));
-    if (legs.length !== coords.length - 1 || legs.some(l => l.length < 2)) return null;
-    return { legs };
+    return legs.length === coords.length - 1 && !legs.some(l => l.length < 2) ? { legs } : null;
+  };
+
+  try {
+    // Try with profile-specific options; fall back to costing defaults if rejected
+    return (await attempt(prof.options)) ?? (await attempt({}));
   } catch {
     return null;
   } finally {
@@ -599,6 +604,7 @@ export default function GPSEditScreen() {
   const snapEnabledRef = useRef(true);
   const snapProfileRef = useRef<RoutingProfile>('mtb');
   const dragWpIdRef = useRef<string | null>(null);
+  const dragWpMarkerRef = useRef<L.Marker | null>(null);
   const routingErrTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Leaflet refs
@@ -762,11 +768,20 @@ export default function GPSEditScreen() {
     // Remember whether the grabbed vertex is an existing edited waypoint
     map.on('editable:vertex:dragstart', (e) => {
       const ll = (e as EditableVertexEvent).vertex.getLatLng();
-      dragWpIdRef.current = waypointsRef.current.find(w => w.lat === ll.lat && w.lon === ll.lng)?.id ?? null;
+      const wp = waypointsRef.current.find(w => w.lat === ll.lat && w.lon === ll.lng);
+      dragWpIdRef.current = wp?.id ?? null;
+      // Cache the marker so the drag handler can move it in real-time
+      dragWpMarkerRef.current = wp
+        ? (waypointMarkersRef.current.find(m => {
+            const mll = m.getLatLng();
+            return mll.lat === ll.lat && mll.lng === ll.lng;
+          }) ?? null)
+        : null;
     });
 
     // Vertex drag — update state on each move for live stats
-    map.on('editable:vertex:drag', () => {
+    map.on('editable:vertex:drag', (e) => {
+      const ev = e as EditableVertexEvent;
       const lls = poly.getLatLngs() as L.LatLng[];
       const newPts = [...editPointsRef.current!];
       lls.forEach((ll, i) => {
@@ -777,6 +792,12 @@ export default function GPSEditScreen() {
       });
       editPointsRef.current = newPts;
       setEditPoints(newPts);
+      // Keep the waypoint dot marker in sync with the vertex handle during drag
+      if (dragWpMarkerRef.current) {
+        const vi = ev.vertex.getIndex();
+        const ll = lls[vi];
+        if (ll) dragWpMarkerRef.current.setLatLng(ll);
+      }
     });
 
     // Vertex drag end — snap to ways / register waypoint / push history
