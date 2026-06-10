@@ -227,6 +227,7 @@ export default function GPSScreen() {
 
   const selectedIdRef = useRef<string | null>(null);
   const leafletRef = useRef<L.Map | null>(null);
+  const pendingFitRef = useRef<L.LatLngBounds | null>(null);
   const polylineRef = useRef<L.Polyline | null>(null);
   const startMarkerRef = useRef<L.CircleMarker | null>(null);
   const endMarkerRef = useRef<L.CircleMarker | null>(null);
@@ -262,7 +263,21 @@ export default function GPSScreen() {
       leafletRef.current = map;
       setTimeout(() => map.invalidateSize(), 100);
       setTimeout(() => map.invalidateSize(), 400);
-      const ro = new ResizeObserver(() => leafletRef.current?.invalidateSize());
+      const ro = new ResizeObserver(() => {
+        const m = leafletRef.current;
+        if (!m) return;
+        m.invalidateSize();
+        // A fitBounds requested while the container had zero size (e.g. on a hard
+        // page refresh) is deferred until the map actually has dimensions —
+        // fitting a 0×0 map poisons the view with NaN and blanks it permanently.
+        if (pendingFitRef.current) {
+          const s = m.getSize();
+          if (s.x > 0 && s.y > 0) {
+            m.fitBounds(pendingFitRef.current, { padding: [30, 30], maxZoom: 16 });
+            pendingFitRef.current = null;
+          }
+        }
+      });
       ro.observe(node);
     }
   }, []);
@@ -349,7 +364,14 @@ export default function GPSScreen() {
     if (lls.length > 1) {
       endMarkerRef.current = L.circleMarker(lls[lls.length - 1], { radius: 9, fillColor: '#ef4444', color: '#fff', weight: 3, fillOpacity: 1 }).addTo(map);
     }
-    map.fitBounds(L.latLngBounds(lls), { padding: [30, 30], maxZoom: 16 });
+    const bounds = L.latLngBounds(lls);
+    const size = map.getSize();
+    if (size.x > 0 && size.y > 0) {
+      map.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
+    } else {
+      // Container not laid out yet (hard refresh) — defer until it has a size
+      pendingFitRef.current = bounds;
+    }
     setTimeout(() => map.invalidateSize(), 80);
   }, [trackData]);
 
