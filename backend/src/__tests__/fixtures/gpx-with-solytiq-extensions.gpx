@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Solytiq Cloud" xmlns="http://www.topografix.com/GPX/1/1" xmlns:solytiq="https://solytiq.cloud/gpx/1/0">
+  <metadata><name>Saved Tour</name></metadata>
+  <wpt lat="47.5000000" lon="11.0000000">
+    <ele>820.00</ele>
+    <name>Alm Hütte</name>
+    <desc>Lunch stop</desc>
+    <sym>Restaurant</sym>
+    <type>User Waypoint</type>
+    <extensions>
+      <solytiq:poi id="poi_123" addedToRoute="true" highlighted="true" linkedControlPointId="ctrl_456" originalLat="47.5000100" originalLon="11.0000200" distanceAlongRouteM="15320" />
+    </extensions>
+  </wpt>
+  <wpt lat="47.5100000" lon="11.0100000">
+    <name>Viewpoint</name>
+    <sym>Flag</sym>
+    <type>User Waypoint</type>
+    <extensions>
+      <solytiq:waypoint id="legacy_pin_1" addedToRoute="false" highlighted="false" />
+    </extensions>
+  </wpt>
+  <trk>
+    <name>Saved Tour</name>
+    <trkseg>
+      <trkpt lat="47.4900000" lon="10.9900000"><ele>800.00</ele></trkpt>
+      <trkpt lat="47.5000000" lon="11.0000000"><ele>820.00</ele></trkpt>
+      <trkpt lat="47.5100000" lon="11.0100000"><ele>835.00</ele></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

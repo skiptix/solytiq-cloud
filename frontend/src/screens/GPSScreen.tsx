@@ -12,7 +12,8 @@ import useGpsStore from '../store/useGpsStore';
 import Icon from '../components/Icon';
 import GPSMergeWizard from '../components/GPSMergeWizard';
 import { searchNominatim, parseCoordInput } from '../utils/nominatim';
-import { POI_CATEGORY_CONFIG, createPoiDivIcon } from '../utils/poiCategories';
+import { POI_CATEGORY_CONFIG, createPoiDivIcon, createPinDivIcon } from '../utils/poiCategories';
+import { diffPoiMarkers } from '../utils/routeState';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDist(m?: number | null) {
@@ -255,6 +256,10 @@ export default function GPSScreen() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialLoadDone = useRef(false);
   const poiLayerRef = useRef<L.LayerGroup | null>(null);
+  // Fetched POI markers by POI ID — diffed per response instead of clearing the layer
+  const poiMarkersRef = useRef<Map<string, L.Marker>>(new Map());
+  // Saved route POIs (from the persisted route state)
+  const savedPinMarkersRef = useRef<L.Marker[]>([]);
   const poiFetchControllerRef = useRef<AbortController | null>(null);
   const poiFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchPinRef = useRef<L.Marker | null>(null);
@@ -314,6 +319,7 @@ export default function GPSScreen() {
   }, []);
 
   useEffect(() => {
+    const poiMarkers = poiMarkersRef.current;
     return () => {
       leafletRef.current?.remove();
       leafletRef.current = null;
@@ -323,6 +329,7 @@ export default function GPSScreen() {
       cursorMarkerRef.current = null;
       searchPinRef.current?.remove();
       poiLayerRef.current?.clearLayers();
+      poiMarkers.clear();
       poiFetchControllerRef.current?.abort();
       searchControllerRef.current?.abort();
       clearTimeout(poiFetchTimerRef.current!);
@@ -394,6 +401,35 @@ export default function GPSScreen() {
     startMarkerRef.current?.remove(); startMarkerRef.current = null;
     endMarkerRef.current?.remove(); endMarkerRef.current = null;
     cursorMarkerRef.current?.remove(); cursorMarkerRef.current = null;
+    savedPinMarkersRef.current.forEach(m => m.remove());
+    savedPinMarkersRef.current = [];
+
+    // Saved route POIs — original coordinates, names and categories from the
+    // persisted route state (GPX waypoints as fallback for older files)
+    if (trackData) {
+      const savedPois = trackData.routeState?.poiMarkers?.length
+        ? trackData.routeState.poiMarkers
+        : (trackData.waypoints ?? []).map(w => ({
+            id: w.id, lat: w.lat, lon: w.lon, name: w.name,
+            description: w.description, category: w.sym, highlighted: w.highlighted,
+          }));
+      for (const poi of savedPois) {
+        const icon = L.divIcon({ className: '', html: createPinDivIcon(poi.category, poi.highlighted ?? false, 28), iconSize: [28, 28], iconAnchor: [14, 14] });
+        const marker = L.marker([poi.lat, poi.lon], { icon, zIndexOffset: 250 });
+        const cfg = (POI_CATEGORY_CONFIG as Record<string, typeof POI_CATEGORY_CONFIG[PoiCategory]>)[poi.category];
+        marker.bindPopup(
+          `<div style="font-family:Inter,sans-serif;min-width:160px;max-width:240px;">`
+          + (cfg ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><span style="background:${cfg.bg};color:${cfg.fg};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Hanken Grotesk',sans-serif;white-space:nowrap;">${cfg.label}</span></div>` : '')
+          + `<div style="font-size:13px;font-weight:700;color:#1c1b22;font-family:'Hanken Grotesk',sans-serif;">${poi.name.replace(/</g, '&lt;')}</div>`
+          + (poi.description ? `<div style="font-size:11px;color:#787584;margin-top:4px;">${String(poi.description).replace(/</g, '&lt;')}</div>` : '')
+          + `</div>`,
+          { maxWidth: 260, className: 'solytiq-poi-popup' },
+        );
+        marker.addTo(map);
+        savedPinMarkersRef.current.push(marker);
+      }
+    }
+
     if (!trackData || trackData.points.length === 0) return;
     const lls: L.LatLngTuple[] = trackData.points.map(p => [p.lat, p.lon]);
     polylineRef.current = L.polyline(lls, { color: '#5e4dbb', weight: 5, opacity: 0.95, lineJoin: 'round', lineCap: 'round' }).addTo(map);
@@ -454,8 +490,20 @@ export default function GPSScreen() {
       if (ctrl.signal.aborted) return;
       const layer = poiLayerRef.current;
       if (!layer) return;
-      layer.clearLayers();
-      result.forEach(poi => {
+      // Diff by POI ID — only add/move/remove what actually changed
+      const existing = new Map([...poiMarkersRef.current].map(([poiId, m]) => {
+        const ll = m.getLatLng();
+        return [poiId, { lat: ll.lat, lon: ll.lng }] as const;
+      }));
+      const { toAdd, toMove, toRemove } = diffPoiMarkers(existing, result);
+      for (const poiId of toRemove) {
+        const m = poiMarkersRef.current.get(poiId);
+        if (m) { layer.removeLayer(m); poiMarkersRef.current.delete(poiId); }
+      }
+      for (const poi of toMove) {
+        poiMarkersRef.current.get(poi.id)?.setLatLng([poi.lat, poi.lon]);
+      }
+      toAdd.forEach(poi => {
         const icon = L.divIcon({ className: '', html: createPoiDivIcon(poi.category), iconSize: [28, 28], iconAnchor: [14, 14] });
         const marker = L.marker([poi.lat, poi.lon], { icon });
         const tags = poi.tags;
@@ -466,6 +514,7 @@ export default function GPSScreen() {
         const cfg = POI_CATEGORY_CONFIG[poi.category as PoiCategory];
         marker.bindPopup(`<div style="font-family:Inter,sans-serif;min-width:180px;max-width:240px;"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><span style="background:${cfg.bg};color:${cfg.fg};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Hanken Grotesk',sans-serif;white-space:nowrap;">${cfg.label}</span></div><div style="font-size:13px;font-weight:700;color:#1c1b22;font-family:'Hanken Grotesk',sans-serif;margin-bottom:6px;">${poi.name}</div>${address ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">📍 ${address}</div>` : ''}${tags['opening_hours'] ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">🕐 ${tags['opening_hours']}</div>` : ''}${tags['phone'] || tags['contact:phone'] ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">📞 ${tags['phone'] || tags['contact:phone']}</div>` : ''}${tags['website'] || tags['contact:website'] ? `<div style="font-size:11px;margin-top:4px;"><a href="${tags['website'] || tags['contact:website']}" target="_blank" rel="noopener" style="color:#5e4dbb;text-decoration:none;">🌐 Website</a></div>` : ''}</div>`, { maxWidth: 260, className: 'solytiq-poi-popup' });
         layer.addLayer(marker);
+        poiMarkersRef.current.set(poi.id, marker);
       });
     } catch (err) {
       if ((err as DOMException)?.name !== 'AbortError') console.error('📍 POI fetch failed:', err);
@@ -480,6 +529,7 @@ export default function GPSScreen() {
       poiFetchTimerRef.current = setTimeout(() => {
         if (activePoisRef.current.size === 0 || map.getZoom() < 13) {
           poiLayerRef.current?.clearLayers();
+          poiMarkersRef.current.clear();
           return;
         }
         doPoiFetch(map.getBounds(), map.getZoom());

@@ -195,12 +195,105 @@ export interface GpsMetricPoint {
 export interface GpsTrackData {
   points: GpsTrackPoint[];
   waypoints: NamedPin[];
+  routeState: GpsRouteStateV1 | null;
   elevationProfile: Array<{ distance: number; elevation: number; idx: number }>;
-  metadata: GpsFileMetadata;
+  metadata: GpsFileMetadata | null;
   metricsAvailable: { hr: boolean; cadence: boolean; power: boolean };
   hrProfile: GpsMetricPoint[] | null;
   cadenceProfile: GpsMetricPoint[] | null;
   powerProfile: GpsMetricPoint[] | null;
+}
+
+// ─── Route Planner State v1 ───────────────────────────────────────────────────
+export type RouteControlKind =
+  | 'start'
+  | 'destination'
+  | 'stop'
+  | 'via'
+  | 'through'
+  | 'offgrid';
+
+export type RouteProfile = 'road' | 'gravel' | 'mtb' | 'hike';
+
+export interface TrackPoint {
+  id: string;
+  lat: number;
+  lon: number;
+  ele: number;
+  time?: string;
+  hr?: number;
+  cadence?: number;
+  power?: number;
+  distanceM?: number;
+}
+
+export interface RouteControlPoint {
+  id: string;
+  order: number;
+  kind: RouteControlKind;
+  profile: RouteProfile;
+  originalLat: number;
+  originalLon: number;
+  snappedLat?: number;
+  snappedLon?: number;
+  followWays: boolean;
+  linkedPoiId?: string | null;
+  spanBeforeId?: string | null;
+  spanAfterId?: string | null;
+}
+
+export interface PoiMarker {
+  id: string;
+  source: 'custom' | 'osm' | 'imported_gpx' | 'search';
+  sourceId?: string;
+  lat: number;
+  lon: number;
+  ele?: number;
+  name: string;
+  description?: string;
+  category: 'food' | 'fuel' | 'bicycle' | 'shopping' | 'kiosk' | 'flag' | 'generic';
+  highlighted: boolean;
+  addedToRoute: boolean;
+  linkedControlPointId?: string | null;
+  showLabel?: boolean;
+}
+
+export interface RouteSpan {
+  id: string;
+  fromControlId: string;
+  toControlId: string;
+  profile: RouteProfile;
+  followWays: boolean;
+  status: 'routed' | 'offgrid' | 'failed';
+  points: TrackPoint[];
+  distanceM: number;
+  elevationGainM: number;
+  error?: string;
+}
+
+export interface CoursePoint {
+  id: string;
+  poiId?: string;
+  controlPointId?: string;
+  distanceAlongRouteM: number;
+  snappedTrackPointId?: string;
+  name: string;
+  category: string;
+}
+
+export interface GpsRouteStateV1 {
+  version: 1;
+  trackPoints: TrackPoint[];
+  routeControls: RouteControlPoint[];
+  routeSpans: RouteSpan[];
+  poiMarkers: PoiMarker[];
+  coursePoints: CoursePoint[];
+  metadata: {
+    totalDistance?: number;
+    totalElevationGain?: number;
+    duration?: number | null;
+    pointCount?: number;
+  };
 }
 
 export interface AppState {
@@ -277,6 +370,8 @@ export interface NamedPin {
   pointId?: string | null;
   originalLat?: number;
   originalLon?: number;
+  linkedControlPointId?: string | null;
+  distanceAlongRouteM?: number;
 }
 
 export interface NamedPinInput {
@@ -293,4 +388,6 @@ export interface NamedPinInput {
   pointId?: string | null;
   originalLat?: number;
   originalLon?: number;
+  linkedControlPointId?: string | null;
+  distanceAlongRouteM?: number;
 }
