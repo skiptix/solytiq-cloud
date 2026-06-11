@@ -2333,14 +2333,15 @@ export default function GPSEditScreen() {
             style={{ position: 'absolute', inset: 0, bottom: 150 }}
           />
 
-          {/* ── Search Bar (top-center) ─────────────────────────────────── */}
-          <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 1001, width: 300 }}>
+          {/* ── Search + POI toggles (unified card, top-center) ─────────────── */}
+          <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 1001, width: 340 }}>
             <div style={{
               background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px) saturate(180%)',
               border: `1px solid ${searchOpen ? '#c4b8f0' : 'rgba(255,255,255,0.75)'}`,
-              borderRadius: 12, boxShadow: '0 4px 20px rgba(94,77,187,0.12)',
+              borderRadius: 14, boxShadow: '0 4px 20px rgba(94,77,187,0.12)',
               transition: 'border-color 150ms', overflow: 'hidden',
             }}>
+              {/* Search row */}
               <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', gap: 8 }}>
                 <Icon name={searchLoading ? 'progress_activity' : 'search'} size={16} color="#787584" />
                 <input
@@ -2348,7 +2349,7 @@ export default function GPSEditScreen() {
                   onChange={e => { setSearchQuery(e.target.value); handleSearchChangeEdit(e.target.value); }}
                   onFocus={() => setSearchOpen(true)}
                   onBlur={() => setTimeout(() => setSearchOpen(false), 200)}
-                  placeholder="Ort, Adresse oder 53.123, 10.456"
+                  placeholder="Place, address or 53.123, 10.456"
                   style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: '#1c1b22', fontFamily: 'Inter, sans-serif', padding: '10px 0' }}
                 />
                 {searchQuery && (
@@ -2360,6 +2361,26 @@ export default function GPSEditScreen() {
                   </button>
                 )}
               </div>
+              {/* Divider */}
+              <div style={{ height: 1, background: '#ede9ff', margin: '0 10px' }} />
+              {/* POI category toggles row */}
+              <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', gap: 4 }}>
+                {(Object.entries(POI_CATEGORY_CONFIG) as Array<[PoiCategory, typeof POI_CATEGORY_CONFIG[PoiCategory]]>).map(([cat, cfg]) => {
+                  const active = activePoi.has(cat);
+                  return (
+                    <button
+                      key={cat}
+                      title={cfg.label}
+                      onClick={() => setActivePoi(prev => { const next = new Set(prev); active ? next.delete(cat) : next.add(cat); return next; })}
+                      style={{ flex: 1, height: 30, borderRadius: 7, background: active ? cfg.bg : 'transparent', border: active ? `1.5px solid ${cfg.borderColor}` : '1.5px solid #f0ecfa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', opacity: active ? 1 : 0.5 }}
+                    >
+                      <span style={{ fontFamily: "'Material Symbols Outlined'", fontSize: 15, color: active ? cfg.fg : '#b0acbe', lineHeight: 1, fontVariationSettings: "'FILL' 1,'wght' 400" }}>{cfg.icon}</span>
+                    </button>
+                  );
+                })}
+                {poiLoading && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#5e4dbb', opacity: 0.7, animation: 'pulse 1s ease-in-out infinite', marginLeft: 4, flexShrink: 0 }} />}
+              </div>
+              {/* Search results dropdown */}
               {searchOpen && searchResults.length > 0 && (
                 <div style={{ borderTop: '1px solid #e8e4f0', maxHeight: 220, overflowY: 'auto' }}>
                   {searchResults.map(r => (
@@ -2381,8 +2402,8 @@ export default function GPSEditScreen() {
 
           {/* Zoom hint when zoomed out with POIs active */}
           {activePoi.size > 0 && mapZoom < 13 && (
-            <div style={{ position: 'absolute', top: 62, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(12px)', border: '1px solid #e8e4f0', borderRadius: 8, padding: '6px 14px', fontSize: 11, color: '#787584', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>
-              Weiter reinzoomen um POIs zu sehen
+            <div style={{ position: 'absolute', top: 110, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(12px)', border: '1px solid #e8e4f0', borderRadius: 8, padding: '6px 14px', fontSize: 11, color: '#787584', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>
+              Zoom in to see POIs
             </div>
           )}
 
@@ -2391,31 +2412,6 @@ export default function GPSEditScreen() {
             position: 'absolute', top: 14, right: 14, zIndex: 1000,
             display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8,
           }}>
-            {/* POI Category Toggles */}
-            <div style={{
-              display: 'flex', gap: 4,
-              background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(16px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-              border: '1px solid rgba(255,255,255,0.75)', borderRadius: 10,
-              padding: '4px 6px', boxShadow: '0 2px 12px rgba(94,77,187,0.10)',
-              alignItems: 'center',
-            }}>
-              {(Object.entries(POI_CATEGORY_CONFIG) as Array<[PoiCategory, typeof POI_CATEGORY_CONFIG[PoiCategory]]>).map(([cat, cfg]) => {
-                const active = activePoi.has(cat);
-                return (
-                  <button
-                    key={cat}
-                    title={cfg.label}
-                    onClick={() => setActivePoi(prev => { const next = new Set(prev); active ? next.delete(cat) : next.add(cat); return next; })}
-                    style={{ width: 28, height: 28, borderRadius: 7, background: active ? cfg.bg : 'transparent', border: active ? `1.5px solid ${cfg.borderColor}` : '1.5px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', opacity: active ? 1 : 0.45 }}
-                  >
-                    <span style={{ fontFamily: "'Material Symbols Outlined'", fontSize: 14, color: active ? cfg.fg : '#787584', lineHeight: 1, fontVariationSettings: "'FILL' 1,'wght' 400" }}>{cfg.icon}</span>
-                  </button>
-                );
-              })}
-              {poiLoading && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#5e4dbb', opacity: 0.7, animation: 'pulse 1s ease-in-out infinite', marginLeft: 2 }} />}
-            </div>
-
             <div style={{
               background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(16px)',
               WebkitBackdropFilter: 'blur(16px)',
