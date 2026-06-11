@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="External Planner" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>Coastal Loop</name></metadata>
+  <wpt lat="54.3100000" lon="10.1300000">
+    <ele>12.00</ele>
+    <name>Cafe Stop</name>
+    <desc>Coffee and refill</desc>
+    <sym>Restaurant</sym>
+    <type>User Waypoint</type>
+  </wpt>
+  <wpt lat="54.3200000" lon="10.1400000">
+    <name>Bike Shop Kiel</name>
+    <sym>Bike Shop</sym>
+  </wpt>
+  <trk>
+    <name>Coastal Loop</name>
+    <trkseg>
+      <trkpt lat="54.3000000" lon="10.1200000"><ele>10.00</ele></trkpt>
+      <trkpt lat="54.3050000" lon="10.1250000"><ele>14.00</ele></trkpt>
+      <trkpt lat="54.3100000" lon="10.1300000"><ele>12.00</ele></trkpt>
+      <trkpt lat="54.3150000" lon="10.1350000"><ele>18.00</ele></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

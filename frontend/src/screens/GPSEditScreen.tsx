@@ -9,6 +9,10 @@ import useGpsStore from '../store/useGpsStore';
 import Icon from '../components/Icon';
 import { searchNominatim, parseCoordInput } from '../utils/nominatim';
 import { POI_CATEGORY_CONFIG, createPoiDivIcon, createPinDivIcon } from '../utils/poiCategories';
+import {
+  WAYPOINT_ATTACH_TOLERANCE_M, findNearestPointWithinMeters, haversineM,
+  poiMarkerToNamedPin, buildRouteStateFromEditor, diffPoiMarkers,
+} from '../utils/routeState';
 import { fetchSurfaceBreakdown } from '../utils/surfaceData';
 import type { SurfaceBreakdown } from '../utils/surfaceData';
 
@@ -615,7 +619,8 @@ export default function GPSEditScreen() {
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [snapProfile, setSnapProfile] = useState<RoutingProfile>('mtb');
   const [busy, setBusy] = useState<string | null>(null);
-  const [routingError, setRoutingError] = useState<string | null>(null);
+  // warning = route kept usable via a manual/offgrid segment; error = unusable
+  const [routingNotice, setRoutingNotice] = useState<{ kind: 'warning' | 'error'; msg: string } | null>(null);
   // Popup target: an edited waypoint (by id) or a plain route point (by position)
   const [activeSel, setActiveSel] = useState<
     | { kind: 'wp'; id: string }
@@ -661,6 +666,9 @@ export default function GPSEditScreen() {
   const [trimCollapsed, setTrimCollapsed] = useState(true);
   const [poiLoading, setPoiLoading] = useState(false);
   const poiLayerRef = useRef<L.LayerGroup | null>(null);
+  // Fetched POI markers by POI ID — diffed against each response instead of
+  // clearing and recreating the whole layer
+  const poiMarkersRef = useRef<Map<string, L.Marker>>(new Map());
   const poiFetchControllerRef = useRef<AbortController | null>(null);
   const poiFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activePoisRef = useRef<Set<PoiCategory>>(new Set());
@@ -748,7 +756,17 @@ export default function GPSEditScreen() {
         if (!file) { navigate('/gps'); return; }
         setFileInfo(file);
         setEditName(file.name.replace(/\.(gpx|fit)$/i, ''));
-        // Empty route (new plan from scratch) — start with no points
+
+        // Hydrate POI pins from the persisted route state (IDs, original
+        // coordinates, categories, route links) — GPX waypoints as fallback.
+        const routeState = trackData?.routeState ?? null;
+        const loadedPins: NamedPin[] = routeState?.poiMarkers?.length
+          ? routeState.poiMarkers.map(poiMarkerToNamedPin)
+          : (trackData?.waypoints ?? []);
+        setNamedPins(loadedPins);
+        namedPinsRef.current = loadedPins;
+
+        // Empty route (new plan from scratch) — no points, but pins still show
         if (!trackData || trackData.points.length === 0) {
           const empty: GpsTrackPoint[] = [];
           setOriginalPoints(empty);
@@ -777,27 +795,35 @@ export default function GPSEditScreen() {
         trimStartRef.current = 0;
         trimEndRef.current = te;
 
-        // Hydrate waypoints
-        const loadedWps = trackData.waypoints || [];
-        setNamedPins(loadedWps);
-        namedPinsRef.current = loadedWps;
+        // Hydrate route shaping points from persisted route controls (IDs and
+        // snapped coordinates); fall back to route-linked pins for older files.
+        const controlWps: EditWaypoint[] = routeState?.routeControls?.length
+          ? routeState.routeControls
+              .filter(c => c.kind === 'via' || c.kind === 'stop' || c.kind === 'through' || c.kind === 'offgrid')
+              .map(c => ({
+                id: c.id,
+                lat: c.snappedLat ?? c.originalLat,
+                lon: c.snappedLon ?? c.originalLon,
+                offRoad: c.kind === 'offgrid' || !c.followWays,
+                anchorPrev: null, // Anchors will be recalculated on first move if needed
+                anchorNext: null,
+              }))
+          : loadedPins
+              .filter(wp => wp.addedToRoute)
+              .map(wp => ({
+                id: wp.linkedControlPointId ?? wp.id,
+                lat: wp.lat,
+                lon: wp.lon,
+                offRoad: wp.offRoad ?? false,
+                anchorPrev: null,
+                anchorNext: null,
+              }));
+        setWaypoints(controlWps);
+        waypointsRef.current = controlWps;
 
-        const editWps: EditWaypoint[] = loadedWps
-          .filter(wp => wp.addedToRoute)
-          .map(wp => ({
-            id: wp.id,
-            lat: wp.lat,
-            lon: wp.lon,
-            offRoad: wp.offRoad ?? false,
-            anchorPrev: null, // Anchors will be recalculated on first move if needed
-            anchorNext: null,
-          }));
-        setWaypoints(editWps);
-        waypointsRef.current = editWps;
-
-        setHistory([{ points: simplified, waypoints: editWps }]);
+        setHistory([{ points: simplified, waypoints: controlWps }]);
         setHistoryIdx(0);
-        historyArrRef.current = [{ points: simplified, waypoints: editWps }];
+        historyArrRef.current = [{ points: simplified, waypoints: controlWps }];
         historyIdxRef.current = 0;
       })
       .catch(() => navigate('/gps'))
@@ -807,12 +833,15 @@ export default function GPSEditScreen() {
 
   // ── Cleanup on unmount ────────────────────────────────────────────────────
   useEffect(() => {
+    const namedPinMarkers = namedPinMarkersRef.current;
+    const poiMarkers = poiMarkersRef.current;
     return () => {
       leafletRef.current?.remove();
       leafletRef.current = null;
       searchPinRef.current?.remove();
-      namedPinMarkersRef.current.forEach(m => m.remove());
+      namedPinMarkers.forEach(m => m.remove());
       poiLayerRef.current?.clearLayers();
+      poiMarkers.clear();
       poiFetchControllerRef.current?.abort();
       searchControllerRef.current?.abort();
       surfaceFetchCtrlRef.current?.abort();
@@ -923,21 +952,21 @@ export default function GPSEditScreen() {
       openPtPopupRef.current?.(trimStartRef.current + ev.vertex.getIndex());
     });
 
-    // Remember whether the grabbed vertex is an existing edited waypoint
+    // Remember whether the grabbed vertex is an existing edited waypoint.
+    // Identity is nearest-within-tolerance, never exact coordinate equality.
     map.on('editable:vertex:dragstart', (e) => {
       const ev = e as EditableVertexEvent;
       const ll = ev.vertex.getLatLng();
 
-      // Prefer matching by exact coordinate for waypoints (Komoot style)
-      // but also support meter tolerance if needed.
-      const wp = waypointsRef.current.find(w => w.lat === ll.lat && w.lon === ll.lng);
+      const wpIdx = findNearestPointWithinMeters(waypointsRef.current, ll.lat, ll.lng, WAYPOINT_ATTACH_TOLERANCE_M);
+      const wp = wpIdx >= 0 ? waypointsRef.current[wpIdx] : null;
 
       dragWpIdRef.current = wp?.id ?? null;
       // Cache the marker so the drag handler can move it in real-time
       dragWpMarkerRef.current = wp
         ? (waypointMarkersRef.current.find(m => {
             const mll = m.getLatLng();
-            return mll.lat === ll.lat && mll.lng === ll.lng;
+            return haversineM(mll.lat, mll.lng, ll.lat, ll.lng) <= WAYPOINT_ATTACH_TOLERANCE_M;
           }) ?? null)
         : null;
     });
@@ -972,13 +1001,14 @@ export default function GPSEditScreen() {
     const syncAfterChange = () => {
       const lls = poly.getLatLngs() as L.LatLng[];
       const prevActive = editPointsRef.current!.slice(trimStartRef.current, trimEndRef.current + 1);
-      // Match unchanged vertices to their previous track points by exact
-      // position, so ele/time stay aligned across an insert or delete
+      // Match unchanged vertices to their previous track points (sub-meter
+      // tolerance, not exact equality), so ele/time stay aligned across an
+      // insert or delete
       let j = 0;
       const freshIdx: number[] = [];
       const newActive: GpsTrackPoint[] = lls.map((ll, i) => {
         let k = j;
-        while (k < prevActive.length && (prevActive[k].lat !== ll.lat || prevActive[k].lon !== ll.lng)) k++;
+        while (k < prevActive.length && haversineM(prevActive[k].lat, prevActive[k].lon, ll.lat, ll.lng) > 0.01) k++;
         if (k < prevActive.length) { j = k + 1; return prevActive[k]; }
         freshIdx.push(i);
         return { id: crypto.randomUUID(), lat: ll.lat, lon: ll.lng, ele: NaN };
@@ -1002,16 +1032,11 @@ export default function GPSEditScreen() {
       setEditPoints(newPts);
       setTrimEnd(newTe);
 
-      // Drop waypoints whose track point no longer exists (deleted vertex)
-      // Use a meter tolerance for safety
-      const WAYPOINT_ATTACH_TOLERANCE_M = 5;
-      const liveWps = waypointsRef.current.filter(w => {
-        const nearestIdx = findNearestPoint(newPts, w.lat, w.lon);
-        const nearest = newPts[nearestIdx];
-        if (!nearest) return false;
-        const dist = haversineClient(w.lat, w.lon, nearest.lat, nearest.lon);
-        return dist <= WAYPOINT_ATTACH_TOLERANCE_M;
-      });
+      // Drop route shaping points whose track point no longer exists (deleted
+      // vertex). Named POI pins are NOT touched — only route controls.
+      const liveWps = waypointsRef.current.filter(w =>
+        findNearestPointWithinMeters(newPts, w.lat, w.lon, WAYPOINT_ATTACH_TOLERANCE_M) >= 0,
+      );
 
       if (liveWps.length !== waypointsRef.current.length) {
         waypointsRef.current = liveWps;
@@ -1032,13 +1057,10 @@ export default function GPSEditScreen() {
     // Edited waypoint markers — sit beneath the vertex handles, click opens popup
     waypointMarkersRef.current.forEach(m => m.remove());
     waypointMarkersRef.current = [];
-    const WAYPOINT_ATTACH_TOLERANCE_M = 5;
     for (const wp of waypointsRef.current) {
-      const idx = findNearestPoint(pts, wp.lat, wp.lon);
+      const idx = findNearestPointWithinMeters(pts, wp.lat, wp.lon, WAYPOINT_ATTACH_TOLERANCE_M);
+      if (idx < 0) continue;
       const p = pts[idx];
-      if (!p) continue;
-      const dist = haversineClient(wp.lat, wp.lon, p.lat, p.lon);
-      if (dist > WAYPOINT_ATTACH_TOLERANCE_M) continue;
       if (idx < ts || idx > te) continue;
       const mkr = L.marker([p.lat, p.lon], { icon: createWpIcon(wp.offRoad), zIndexOffset: -200 });
       mkr.on('click', () => openWpPopupRef.current?.(wp.id));
@@ -1055,7 +1077,7 @@ export default function GPSEditScreen() {
     const dotPts = activePts.length > 50 ? simplifyTrack(activePts, 0.0006) : activePts;
     for (const p of dotPts) {
       if (p === pts[ts] || p === pts[te]) continue;
-      if (waypointsRef.current.some(w => w.lat === p.lat && w.lon === p.lon)) continue;
+      if (findNearestPointWithinMeters(waypointsRef.current, p.lat, p.lon, WAYPOINT_ATTACH_TOLERANCE_M) >= 0) continue;
       const mkr = L.marker([p.lat, p.lon], { icon: createPtDotIcon(), interactive: false, zIndexOffset: -400 });
       mkr.addTo(map);
       ptDotMarkersRef.current.push(mkr);
@@ -1168,7 +1190,7 @@ export default function GPSEditScreen() {
     if (!cur) return;
     let changed = false;
     const next = cur.map(p => {
-      const k = targets.findIndex(t => t.lat === p.lat && t.lon === p.lon);
+      const k = findNearestPointWithinMeters(targets, p.lat, p.lon, 0.01);
       if (k >= 0 && p.ele !== eles[k]) { changed = true; return { ...p, ele: eles[k] }; }
       return p;
     });
@@ -1217,11 +1239,12 @@ export default function GPSEditScreen() {
   }
 
   // ── Snap-to-ways drag handling ────────────────────────────────────────────
-  const flashRoutingError = useCallback((msg: string) => {
-    setRoutingError(msg);
+  const flashNotice = useCallback((kind: 'warning' | 'error', msg: string) => {
+    setRoutingNotice({ kind, msg });
     if (routingErrTimerRef.current) clearTimeout(routingErrTimerRef.current);
-    routingErrTimerRef.current = setTimeout(() => setRoutingError(null), 4000);
+    routingErrTimerRef.current = setTimeout(() => setRoutingNotice(null), 4000);
   }, []);
+  const flashRoutingWarning = useCallback((msg: string) => flashNotice('warning', msg), [flashNotice]);
 
   const handleVertexDragEnd = useCallback(async (vertexIdx: number) => {
     const pts = editPointsRef.current;
@@ -1313,7 +1336,7 @@ export default function GPSEditScreen() {
       (anchorPrev ? haversineClient(anchorPrev.lat, anchorPrev.lon, dragged.lat, dragged.lon) : 0) +
       (anchorNext ? haversineClient(dragged.lat, dragged.lon, anchorNext.lat, anchorNext.lon) : 0);
     if (straightDist > 50000) {
-      flashRoutingError('Segment too long to snap — kept straight line');
+      flashRoutingWarning('Manual segment — too long to snap');
       await finishStraight();
       return;
     }
@@ -1328,7 +1351,7 @@ export default function GPSEditScreen() {
 
       if (!routed) {
         setBusy(null);
-        flashRoutingError('Routing unavailable — kept straight line');
+        flashRoutingWarning('Manual segment — routing unavailable');
         await finishStraight();
         return;
       }
@@ -1341,7 +1364,7 @@ export default function GPSEditScreen() {
     } finally {
       setBusy(null);
     }
-  }, [flashRoutingError]);
+  }, [flashRoutingWarning]);
 
   // eslint-disable-next-line react-hooks/immutability
   useEffect(() => { handleVertexDragEndRef.current = handleVertexDragEnd; }, [handleVertexDragEnd]);
@@ -1367,8 +1390,7 @@ export default function GPSEditScreen() {
     const pts = editPointsRef.current;
     const p = pts?.[gi];
     if (!map || !p) return;
-    const WAYPOINT_ATTACH_TOLERANCE_M = 5;
-    const wp = waypointsRef.current.find(w => haversineClient(w.lat, w.lon, p.lat, p.lon) <= WAYPOINT_ATTACH_TOLERANCE_M);
+    const wp = waypointsRef.current.find(w => haversineM(w.lat, w.lon, p.lat, p.lon) <= WAYPOINT_ATTACH_TOLERANCE_M);
     if (wp) { openWpPopup(wp.id); return; }
     const cp = map.latLngToContainerPoint([p.lat, p.lon]);
     setPopupXY({ x: cp.x, y: cp.y });
@@ -1414,9 +1436,9 @@ export default function GPSEditScreen() {
     } else {
       lat = activeSel.lat; lon = activeSel.lon;
     }
-    const idx = findNearestPoint(editPoints, lat, lon);
-    const p = editPoints[idx];
-    if (!p || p.lat !== lat || p.lon !== lon) return null;
+    const idx = findNearestPointWithinMeters(editPoints, lat, lon, WAYPOINT_ATTACH_TOLERANCE_M);
+    const p = idx >= 0 ? editPoints[idx] : null;
+    if (!p) return null;
     let dist = 0, gain = 0;
     for (let i = trimStart + 1; i <= idx; i++) {
       dist += haversineClient(editPoints[i - 1].lat, editPoints[i - 1].lon, editPoints[i].lat, editPoints[i].lon);
@@ -1445,13 +1467,13 @@ export default function GPSEditScreen() {
     } else {
       lat = sel.lat; lon = sel.lon;
     }
-    const idx = pts.findIndex(p => p.lat === lat && p.lon === lon);
+    const idx = findNearestPointWithinMeters(pts, lat, lon, WAYPOINT_ATTACH_TOLERANCE_M);
     const ts = trimStartRef.current, te = trimEndRef.current;
     if (idx < ts || idx > te || te - ts < 2) return;
     const newPts = [...pts.slice(0, idx), ...pts.slice(idx + 1)];
     const newTe = te - 1;
-    const WAYPOINT_ATTACH_TOLERANCE_M = 5;
-    const newWps = waypointsRef.current.filter(w => haversineClient(w.lat, w.lon, lat, lon) > WAYPOINT_ATTACH_TOLERANCE_M);
+    // Only the route control is removed — its linked POI pin (if any) stays
+    const newWps = waypointsRef.current.filter(w => haversineM(w.lat, w.lon, lat, lon) > WAYPOINT_ATTACH_TOLERANCE_M);
     editPointsRef.current = newPts;
     trimEndRef.current = newTe;
     waypointsRef.current = newWps;
@@ -1530,7 +1552,7 @@ export default function GPSEditScreen() {
       const routed = await fetchRoutedPath(coords, snapProfileRef.current);
       if (editPointsRef.current !== pts) return;
       if (!routed) {
-        flashRoutingError('Routing unavailable — waypoint kept off-road');
+        flashRoutingWarning('Manual segment — waypoint kept off-road');
         return;
       }
       const { span, wpPoint } = buildRoutedSpan(anchorPrev, anchorNext, wpPt.ele, routed.legs);
@@ -1733,7 +1755,7 @@ export default function GPSEditScreen() {
       haversineClient(anchorPrev.lat, anchorPrev.lon, newPt.lat, newPt.lon) +
       haversineClient(newPt.lat, newPt.lon, anchorNext.lat, anchorNext.lon);
     if (offRoad || straightDist > 200000) {
-      if (straightDist > 200000) flashRoutingError('Leg too long to snap — connected with straight lines');
+      if (straightDist > 200000) flashRoutingWarning('Manual segment — leg too long to snap');
       await finishStraight();
       return;
     }
@@ -1744,7 +1766,7 @@ export default function GPSEditScreen() {
       if (editPointsRef.current !== pts) return;
       if (!routed) {
         setBusy(null);
-        flashRoutingError('Routing unavailable — connected with straight lines');
+        flashRoutingWarning('Manual segment — routing unavailable');
         await finishStraight();
         return;
       }
@@ -1787,17 +1809,30 @@ export default function GPSEditScreen() {
       if (ctrl.signal.aborted) return;
       const layer = poiLayerRef.current;
       if (!layer) return;
-      layer.clearLayers();
-      result.forEach(poi => {
+      // Diff by POI ID — only add/move/remove what actually changed
+      const existing = new Map([...poiMarkersRef.current].map(([poiId, m]) => {
+        const ll = m.getLatLng();
+        return [poiId, { lat: ll.lat, lon: ll.lng }] as const;
+      }));
+      const { toAdd, toMove, toRemove } = diffPoiMarkers(existing, result);
+      for (const poiId of toRemove) {
+        const m = poiMarkersRef.current.get(poiId);
+        if (m) { layer.removeLayer(m); poiMarkersRef.current.delete(poiId); }
+      }
+      for (const poi of toMove) {
+        poiMarkersRef.current.get(poi.id)?.setLatLng([poi.lat, poi.lon]);
+      }
+      for (const poi of toAdd) {
         const icon = L.divIcon({ className: '', html: createPoiDivIcon(poi.category), iconSize: [28, 28], iconAnchor: [14, 14] });
-        L.marker([poi.lat, poi.lon], { icon })
+        const marker = L.marker([poi.lat, poi.lon], { icon })
           .on('click', () => {
             setAddPinDialog({ lat: poi.lat, lon: poi.lon, suggestedName: poi.name, suggestedSym: poi.category, poi });
             setAddPinName(poi.name);
             setAddPinMode('pin');
           })
           .addTo(layer);
-      });
+        poiMarkersRef.current.set(poi.id, marker);
+      }
     } catch (err) {
       if ((err as DOMException)?.name !== 'AbortError') console.error('📍 POI fetch failed:', err);
     } finally { if (!ctrl.signal.aborted) setPoiLoading(false); }
@@ -1811,6 +1846,8 @@ export default function GPSEditScreen() {
       poiFetchTimerRef.current = setTimeout(() => {
         if (activePoisRef.current.size === 0 || map.getZoom() < 13) {
           poiLayerRef.current?.clearLayers();
+          poiMarkersRef.current.clear();
+      poiMarkersRef.current.clear();
           return;
         }
         doPoiFetchEdit(map.getBounds(), map.getZoom());
@@ -1844,6 +1881,19 @@ export default function GPSEditScreen() {
     namedPinMarkersRef.current.delete(pinId);
   }
 
+  // Keep pin markers in sync with state — renders pins hydrated from the
+  // saved route state on load, and drops markers whose pin was deleted.
+  useEffect(() => {
+    if (!leafletRef.current) return;
+    for (const [pinId, marker] of namedPinMarkersRef.current) {
+      if (!namedPins.some(p => p.id === pinId)) {
+        marker.remove();
+        namedPinMarkersRef.current.delete(pinId);
+      }
+    }
+    namedPins.forEach(renderNamedPinMarker);
+  }, [namedPins, loading]);
+
   function computePinDistance(pin: NamedPin, points: GpsTrackPoint[]): number | null {
     if (points.length === 0) return null;
     const nearestIdx = findNearestPoint(points, pin.lat, pin.lon);
@@ -1854,12 +1904,14 @@ export default function GPSEditScreen() {
     return Math.round(dist);
   }
 
-  // Insert a pin position into the route as a waypoint (same mechanism as map-click add)
-  async function insertWaypointAtPosition(lat: number, lon: number) {
+  // Insert a pin position into the route as a waypoint (same mechanism as
+  // map-click add). Returns the created control's ID so the caller can link
+  // the POI to it.
+  async function insertWaypointAtPosition(lat: number, lon: number): Promise<string | null> {
     const pts = editPointsRef.current;
-    if (!pts) return;
+    if (!pts) return null;
     const ts = trimStartRef.current, te = trimEndRef.current;
-    if (te - ts < 1) return;
+    if (te - ts < 1) return null;
     let best = ts, bestD = Infinity;
     for (let i = ts; i < te; i++) {
       const d = distToSegmentM({ lat, lon }, pts[i], pts[i + 1]);
@@ -1900,20 +1952,30 @@ export default function GPSEditScreen() {
       setBusy('Elevation…');
       const span2 = await withDemElevation(span, true, true);
       setBusy(null);
-      if (editPointsRef.current !== pts) return;
+      if (editPointsRef.current !== pts) return null;
       finish([...pts.slice(0, aPrevIdx), ...span2, ...pts.slice(aNextIdx + 1)], newPt);
-      return;
+      return wpId;
     }
     setBusy('Routing…');
     try {
       const routed = await fetchRoutedPath([anchorPrev, newPt, anchorNext], snapProfileRef.current);
-      if (editPointsRef.current !== pts) return;
-      if (!routed) { setBusy(null); return; }
+      if (editPointsRef.current !== pts) return null;
+      if (!routed) {
+        // Routing failed — keep the stop as a manual/offgrid segment instead
+        // of dropping it, so the route stays usable.
+        flashRoutingWarning('Manual segment — routing unavailable');
+        setBusy('Elevation…');
+        const span2 = await withDemElevation([anchorPrev, newPt, anchorNext], true, true);
+        if (editPointsRef.current !== pts) return null;
+        finish([...pts.slice(0, aPrevIdx), ...span2, ...pts.slice(aNextIdx + 1)], newPt);
+        return wpId;
+      }
       const { span, wpPoint } = buildRoutedSpan(anchorPrev, anchorNext, newPt.ele, routed.legs);
       const wpIdxInSpan = span.indexOf(wpPoint);
       const span2 = await withDemElevation(span, true, true);
-      if (editPointsRef.current !== pts) return;
+      if (editPointsRef.current !== pts) return null;
       finish([...pts.slice(0, aPrevIdx), ...span2, ...pts.slice(aNextIdx + 1)], span2[wpIdxInSpan]);
+      return wpId;
     } finally {
       setBusy(null);
     }
@@ -1930,11 +1992,18 @@ export default function GPSEditScreen() {
       sym: d.suggestedSym,
       highlighted: false,
       addedToRoute: addPinMode === 'route',
+      // The POI keeps its original coordinates even when the route control
+      // it creates gets snapped onto a way
+      originalLat: d.lat,
+      originalLon: d.lon,
     };
     setNamedPins(prev => [...prev, pin]);
     renderNamedPinMarker(pin);
     if (addPinMode === 'route') {
-      await insertWaypointAtPosition(d.lat, d.lon);
+      const ctrlId = await insertWaypointAtPosition(d.lat, d.lon);
+      if (ctrlId) {
+        setNamedPins(prev => prev.map(p => p.id === pin.id ? { ...p, linkedControlPointId: ctrlId } : p));
+      }
     }
     setAddPinDialog(null);
     setAddPinName('');
@@ -2016,9 +2085,18 @@ export default function GPSEditScreen() {
     setSaveMenuOpen(false);
     try {
       const finalPoints = editPoints.slice(trimStart, trimEnd + 1);
+      // Persist both: GPX (interoperable, wpt before trk) and Route Planner
+      // State v1 (rich editing state — POIs, route controls, links).
+      const routeState = buildRouteStateFromEditor({
+        points: finalPoints,
+        waypoints: waypointsRef.current,
+        pins: namedPins,
+        profile: snapProfile,
+      });
       const result = await apiSaveEditedGpsTrack(id, finalPoints, {
         saveAs: mode,
         name: mode === 'new' ? editName.trim() || undefined : undefined,
+        routeState,
         waypoints: namedPins.map(p => ({
           id: p.id,
           lat: p.originalLat ?? p.lat,
@@ -2033,6 +2111,7 @@ export default function GPSEditScreen() {
           pointId: p.pointId,
           originalLat: p.originalLat,
           originalLon: p.originalLon,
+          linkedControlPointId: p.linkedControlPointId,
         })),
       });
       // Update store
@@ -2709,6 +2788,52 @@ export default function GPSEditScreen() {
                 })}
                 {poiLoading && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#5e4dbb', opacity: 0.7, animation: 'pulse 1s ease-in-out infinite', marginLeft: 4, flexShrink: 0 }} />}
               </div>
+              {/* Divider */}
+              <div style={{ height: 1, background: '#ede9ff', margin: '0 10px' }} />
+              {/* Route mode pill group — snap profile or manual drawing */}
+              <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', gap: 4 }}>
+                {([
+                  { profile: 'road' as const, label: 'Road' },
+                  { profile: 'gravel' as const, label: 'Gravel' },
+                  { profile: 'mtb' as const, label: 'MTB' },
+                  { profile: 'hike' as const, label: 'Hike' },
+                ]).map(opt => {
+                  const active = snapEnabled && snapProfile === opt.profile;
+                  return (
+                    <button
+                      key={opt.profile}
+                      title={`Snap new points to ways (${opt.label})`}
+                      onClick={() => { setSnapEnabled(true); setSnapProfile(opt.profile); }}
+                      style={{
+                        flex: 1, height: 26, borderRadius: 9999, cursor: 'pointer',
+                        background: active ? '#5e4dbb' : '#F5F3FF',
+                        border: active ? '1px solid #5e4dbb' : '1px solid #e8e4f0',
+                        color: active ? '#fff' : '#787584',
+                        fontSize: 11, fontWeight: 600,
+                        fontFamily: 'Hanken Grotesk, sans-serif',
+                        transition: 'all 160ms',
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+                <button
+                  title="Manual — connect points with straight lines"
+                  onClick={() => setSnapEnabled(false)}
+                  style={{
+                    flex: 1, height: 26, borderRadius: 9999, cursor: 'pointer',
+                    background: !snapEnabled ? '#5e4dbb' : 'transparent',
+                    border: !snapEnabled ? '1px solid #5e4dbb' : '1px solid #e8e4f0',
+                    color: !snapEnabled ? '#fff' : '#787584',
+                    fontSize: 11, fontWeight: 600,
+                    fontFamily: 'Hanken Grotesk, sans-serif',
+                    transition: 'all 160ms',
+                  }}
+                >
+                  Manual
+                </button>
+              </div>
               {/* Search results dropdown */}
               {searchOpen && searchResults.length > 0 && (
                 <div style={{ borderTop: '1px solid #e8e4f0', maxHeight: 220, overflowY: 'auto' }}>
@@ -2792,16 +2917,23 @@ export default function GPSEditScreen() {
                 {busy}
               </div>
             )}
-            {routingError && (
+            {routingNotice && (
               <div style={{
-                background: 'rgba(255,245,245,0.92)', backdropFilter: 'blur(16px)',
+                display: 'flex', alignItems: 'center', gap: 5,
+                background: routingNotice.kind === 'warning' ? 'rgba(255,247,237,0.92)' : 'rgba(255,245,245,0.92)',
+                backdropFilter: 'blur(16px)',
                 WebkitBackdropFilter: 'blur(16px)',
-                border: '1px solid #fca5a5', borderRadius: 10,
-                padding: '6px 10px', fontSize: 11, color: '#ba1a1a', fontWeight: 500,
-                boxShadow: '0 2px 12px rgba(186,26,26,0.10)', fontFamily: 'Inter, sans-serif',
-                maxWidth: 230, textAlign: 'right',
+                border: routingNotice.kind === 'warning' ? '1px solid #fdba74' : '1px solid #fca5a5',
+                borderRadius: 9999,
+                padding: '5px 12px', fontSize: 11, fontWeight: 600,
+                color: routingNotice.kind === 'warning' ? '#ea580c' : '#ba1a1a',
+                boxShadow: routingNotice.kind === 'warning' ? '0 2px 12px rgba(234,88,12,0.10)' : '0 2px 12px rgba(186,26,26,0.10)',
+                fontFamily: 'Hanken Grotesk, sans-serif',
+                maxWidth: 240, textAlign: 'right',
+                animation: 'wpPopIn 180ms ease both',
               }}>
-                {routingError}
+                <Icon name={routingNotice.kind === 'warning' ? 'alt_route' : 'warning'} size={13} color={routingNotice.kind === 'warning' ? '#ea580c' : '#ba1a1a'} />
+                {routingNotice.msg}
               </div>
             )}
           </div>

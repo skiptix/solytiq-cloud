@@ -1,4 +1,4 @@
-import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GapMode, NamedPinInput, OverpassPoi } from '../types';
+import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -535,7 +535,12 @@ export async function apiSmoothAndSaveGpsFile(id: string, sigma: number, mode: '
 export async function apiSaveEditedGpsTrack(
   id: string,
   points: GpsTrackPoint[],
-  options: { saveAs: 'new' | 'replace'; name?: string; waypoints?: NamedPinInput[] },
+  options: {
+    saveAs: 'new' | 'replace';
+    name?: string;
+    waypoints?: NamedPinInput[];
+    routeState?: GpsRouteStateV1;
+  },
 ): Promise<GpsFile> {
   const data = await apiFetch<{ file: GpsFile }>(`/gps/${id}/points`, {
     method: 'PUT',
@@ -545,13 +550,32 @@ export async function apiSaveEditedGpsTrack(
       saveAs: options.saveAs,
       name: options.name,
       waypoints: options.waypoints ?? [],
+      routeState: options.routeState,
     }),
   });
   return data.file;
 }
 
+export async function apiSaveGpsRouteState(id: string, routeState: GpsRouteStateV1): Promise<void> {
+  await apiFetch<{ ok: boolean }>(`/gps/${id}/route-state`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ routeState }),
+  });
+}
+
+export interface GpsRouteLocation {
+  id?: string;
+  lat: number;
+  lon: number;
+  display_lat?: number;
+  display_lon?: number;
+  type?: 'break' | 'through' | 'via' | 'break_through';
+  name?: string;
+}
+
 export const apiGpsRoute = (
-  body: { locations: Array<{ lat: number; lon: number }>; costing: string; costing_options: Record<string, unknown> },
+  body: { locations: GpsRouteLocation[]; costing: string; costing_options?: Record<string, unknown> },
   signal?: AbortSignal,
 ) => apiFetch<unknown>('/gps/route', { method: 'POST', body: JSON.stringify(body), signal });
 
