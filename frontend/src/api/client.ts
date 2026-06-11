@@ -530,11 +530,7 @@ export async function apiSmoothAndSaveGpsFile(id: string, sigma: number, mode: '
 export async function apiSaveEditedGpsTrack(
   id: string,
   points: GpsTrackPoint[],
-  options: {
-    saveAs: 'new' | 'replace';
-    name?: string;
-    waypoints?: NamedPinInput[];  // NEU
-  },
+  options: { saveAs: 'new' | 'replace'; name?: string; waypoints?: NamedPinInput[] },
 ): Promise<GpsFile> {
   const data = await apiFetch<{ file: GpsFile }>(`/gps/${id}/points`, {
     method: 'PUT',
@@ -543,7 +539,7 @@ export async function apiSaveEditedGpsTrack(
       points,
       saveAs: options.saveAs,
       name: options.name,
-      waypoints: options.waypoints ?? [],  // NEU
+      waypoints: options.waypoints ?? [],
     }),
   });
   return data.file;

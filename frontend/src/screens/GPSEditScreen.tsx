@@ -5,11 +5,11 @@ import 'leaflet-editable';
 import L from 'leaflet';
 import type { GpsFile, GpsTrackPoint, PoiCategory, OverpassPoi, NominatimResult, NamedPin } from '../types';
 import { apiGetGpsFiles, apiGetGpsTrackData, apiSaveEditedGpsTrack, apiGpsRoute } from '../api/client';
+import useGpsStore from '../store/useGpsStore';
+import Icon from '../components/Icon';
 import { queryOverpass } from '../utils/overpass';
 import { searchNominatim, parseCoordInput } from '../utils/nominatim';
 import { POI_CATEGORY_CONFIG, createPoiDivIcon, createPinDivIcon } from '../utils/poiCategories';
-import useGpsStore from '../store/useGpsStore';
-import Icon from '../components/Icon';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmtDist(m: number) {
@@ -599,37 +599,6 @@ export default function GPSEditScreen() {
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // ── Named Pins
-  const [namedPins, setNamedPins] = useState<NamedPin[]>([]);
-  const namedPinsRef = useRef<NamedPin[]>([]);
-  const namedPinMarkersRef = useRef<Map<string, L.Marker>>(new Map());
-  const [editingPin, setEditingPin] = useState<string | null>(null); // id des Pins im Rename-Mode
-
-  // ── POI Layer
-  const [activePoi, setActivePoi] = useState<Set<PoiCategory>>(new Set());
-  const [poiLoading, setPoiLoading] = useState(false);
-  const poiLayerRef = useRef<L.LayerGroup | null>(null);
-  const poiFetchControllerRef = useRef<AbortController | null>(null);
-  const poiFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // ── Add-Pin Dialog (erscheint wenn POI oder Suche-Ergebnis angeklickt)
-  const [addPinDialog, setAddPinDialog] = useState<{
-    lat: number; lon: number; ele?: number;
-    suggestedName: string; suggestedSym: PoiCategory | 'flag' | 'generic';
-    poi?: OverpassPoi;  // original POI data für Popup-Infos
-  } | null>(null);
-  const [addPinName, setAddPinName] = useState('');
-  const [addPinMode, setAddPinMode] = useState<'pin' | 'route'>('pin');
-
-  // ── Search (identisch zu GPSScreen)
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<NominatimResult[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const searchPinRef = useRef<L.Marker | null>(null);
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const searchControllerRef = useRef<AbortController | null>(null);
-
   // Snap-to-ways routing + edited waypoints
   const [waypoints, setWaypoints] = useState<EditWaypoint[]>([]);
   const [snapEnabled, setSnapEnabled] = useState(true);
@@ -644,8 +613,40 @@ export default function GPSEditScreen() {
   >(null);
   const [popupXY, setPopupXY] = useState<{ x: number; y: number } | null>(null);
   const [coordsCopied, setCoordsCopied] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
   const routingBusy = busy != null;
+
+  // ── Named Pins
+  const [namedPins, setNamedPins] = useState<NamedPin[]>([]);
+  const namedPinsRef = useRef<NamedPin[]>([]);
+  const namedPinMarkersRef = useRef<Map<string, L.Marker>>(new Map());
+  const [editingPin, setEditingPin] = useState<string | null>(null);
+  // ── Add-Pin Dialog
+  const [addPinDialog, setAddPinDialog] = useState<{
+    lat: number; lon: number; ele?: number;
+    suggestedName: string; suggestedSym: PoiCategory | 'flag' | 'generic';
+    poi?: OverpassPoi;
+  } | null>(null);
+  const [addPinName, setAddPinName] = useState('');
+  const [addPinMode, setAddPinMode] = useState<'pin' | 'route'>('pin');
+  // ── POI Layer
+  const [activePoi, setActivePoi] = useState<Set<PoiCategory>>(new Set());
+  const [poiLoading, setPoiLoading] = useState(false);
+  const poiLayerRef = useRef<L.LayerGroup | null>(null);
+  const poiFetchControllerRef = useRef<AbortController | null>(null);
+  const poiFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activePoisRef = useRef<Set<PoiCategory>>(new Set());
+  // ── Search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<NominatimResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [mapZoom, setMapZoom] = useState(5);
+  const searchPinRef = useRef<L.Marker | null>(null);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => { namedPinsRef.current = namedPins; }, [namedPins]);
+  useEffect(() => { activePoisRef.current = activePoi; }, [activePoi]);
 
   // Map-click popup (place name + elevation + add-to-route)
   const [mapClick, setMapClick] = useState<{ lat: number; lon: number; ele: number | null; name: string | null; loading: boolean } | null>(null);
@@ -687,7 +688,6 @@ export default function GPSEditScreen() {
   useEffect(() => { waypointsRef.current = waypoints; }, [waypoints]);
   useEffect(() => { snapEnabledRef.current = snapEnabled; }, [snapEnabled]);
   useEffect(() => { snapProfileRef.current = snapProfile; }, [snapProfile]);
-  useEffect(() => { namedPinsRef.current = namedPins; }, [namedPins]);
 
   // ── Load data on mount ────────────────────────────────────────────────────
   useEffect(() => {
@@ -723,11 +723,12 @@ export default function GPSEditScreen() {
       leafletRef.current?.remove();
       leafletRef.current = null;
       searchPinRef.current?.remove();
+      namedPinMarkersRef.current.forEach(m => m.remove());
       poiLayerRef.current?.clearLayers();
       poiFetchControllerRef.current?.abort();
       searchControllerRef.current?.abort();
-      if (poiFetchTimerRef.current) clearTimeout(poiFetchTimerRef.current);
-      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      clearTimeout(poiFetchTimerRef.current!);
+      clearTimeout(searchDebounceRef.current!);
     };
   }, []);
 
@@ -745,13 +746,11 @@ export default function GPSEditScreen() {
         subdomains: 'abcd',
         maxZoom: 19,
       }).addTo(map);
-
       const poiLayer = L.layerGroup().addTo(map);
       poiLayerRef.current = poiLayer;
-
       map.on('click', e => mapClickHandlerRef.current?.(e as L.LeafletMouseEvent));
+      map.on('zoomend', () => setMapZoom(map.getZoom()));
       leafletRef.current = map;
-      setMapReady(true);
       setTimeout(() => map.invalidateSize(), 100);
       const ro = new ResizeObserver(() => {
         const m = leafletRef.current;
@@ -1586,185 +1585,119 @@ export default function GPSEditScreen() {
     }
   }
 
-  function renderEditPoiMarkers(poiList: OverpassPoi[]) {
-    const layer = poiLayerRef.current;
-    if (!layer) return;
-    layer.clearLayers();
-
-    poiList.forEach(poi => {
-      const icon = L.divIcon({
-        className: '',
-        html: createPoiDivIcon(poi.category),
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
-      });
-      L.marker([poi.lat, poi.lon], { icon })
-        .on('click', () => {
-          setAddPinDialog({
-            lat: poi.lat, lon: poi.lon,
-            suggestedName: poi.name,
-            suggestedSym: poi.category,
-            poi,
-          });
-          setAddPinName(poi.name);
-          setAddPinMode('pin');
-        })
-        .addTo(layer);
-    });
-  }
-
-  // Fetch POIs wenn Karte bewegt wird oder Kategorien sich ändern (identisch zu GPSScreen)
+  // ── Build map once editPoints are loaded ──────────────────────────────────
+  const mapBuiltRef = useRef(false);
   useEffect(() => {
-    const map = leafletRef.current;
-    if (!map) return;
+    // leafletRef.current is set synchronously by mapCallbackRef before effects run
+    if (!editPoints || !leafletRef.current || mapBuiltRef.current) return;
+    mapBuiltRef.current = true;
+    rebuildMap(editPoints, trimStart, trimEnd);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editPoints]);
 
-    function scheduleFetch() {
-      if (poiFetchTimerRef.current) clearTimeout(poiFetchTimerRef.current);
-      poiFetchTimerRef.current = setTimeout(() => {
-        const zoom = map?.getZoom();
-        if (!zoom || zoom < 13 || activePoi.size === 0) {
-          poiLayerRef.current?.clearLayers();
-          return;
-        }
-        if (map) doFetch(map.getBounds());
-      }, 600);
-    }
-
-    map.on('moveend', scheduleFetch);
-    map.on('zoomend', scheduleFetch);
-
-    scheduleFetch();
-
-    return () => {
-      map.off('moveend', scheduleFetch);
-      map.off('zoomend', scheduleFetch);
-      if (poiFetchTimerRef.current) clearTimeout(poiFetchTimerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePoi, mapReady]);
-
-  async function doFetch(bounds: L.LatLngBounds) {
+  // ── POI Layer (Edit Screen: click opens Add-Pin dialog) ─────────────────
+  const doPoiFetchEdit = useCallback(async (bounds: L.LatLngBounds) => {
     poiFetchControllerRef.current?.abort();
     const ctrl = new AbortController();
     poiFetchControllerRef.current = ctrl;
     setPoiLoading(true);
     try {
-      // Add small buffer (approx 100m) to catch POIs right at the edge
-      const PAD = 0.001;
       const result = await queryOverpass(
-        bounds.getSouth() - PAD, bounds.getWest() - PAD,
-        bounds.getNorth() + PAD, bounds.getEast() + PAD,
-        [...activePoi], ctrl.signal,
+        bounds.getSouth(), bounds.getWest(),
+        bounds.getNorth(), bounds.getEast(),
+        [...activePoisRef.current], ctrl.signal,
       );
       if (ctrl.signal.aborted) return;
-      renderEditPoiMarkers(result);
+      const layer = poiLayerRef.current;
+      if (!layer) return;
+      layer.clearLayers();
+      result.forEach(poi => {
+        const icon = L.divIcon({ className: '', html: createPoiDivIcon(poi.category), iconSize: [28, 28], iconAnchor: [14, 14] });
+        L.marker([poi.lat, poi.lon], { icon })
+          .on('click', () => {
+            setAddPinDialog({ lat: poi.lat, lon: poi.lon, suggestedName: poi.name, suggestedSym: poi.category, poi });
+            setAddPinName(poi.name);
+            setAddPinMode('pin');
+          })
+          .addTo(layer);
+      });
     } catch { /* ignore */ }
     finally { if (!ctrl.signal.aborted) setPoiLoading(false); }
-  }
+  }, []);
 
-  function handleSearchChange(q: string) {
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    if (!q.trim()) { setSearchResults([]); return; }
-
-    const coords = parseCoordInput(q);
-    if (coords) {
-      setSearchResults([]);
-      const map = leafletRef.current;
-      if (map) map.flyTo([coords[0], coords[1]], 15, { animate: true, duration: 1.2 });
-      setAddPinDialog({
-        lat: coords[0], lon: coords[1],
-        suggestedName: `${coords[0].toFixed(5)}, ${coords[1].toFixed(5)}`,
-        suggestedSym: 'generic',
-      });
-      setAddPinName(`${coords[0].toFixed(5)}, ${coords[1].toFixed(5)}`);
-      setAddPinMode('pin');
-      return;
-    }
-
-    searchDebounceRef.current = setTimeout(async () => {
-      searchControllerRef.current?.abort();
-      const ctrl = new AbortController();
-      searchControllerRef.current = ctrl;
-      setSearchLoading(true);
-      try {
-        const map = leafletRef.current;
-        const bounds = map?.getBounds();
-        const results = await searchNominatim(q, bounds ? {
-          south: bounds.getSouth(), west: bounds.getWest(),
-          north: bounds.getNorth(), east: bounds.getEast(),
-        } : undefined, ctrl.signal);
-        if (!ctrl.signal.aborted) setSearchResults(results.slice(0, 5));
-      } catch { /* ignore */ }
-      finally { if (!ctrl.signal.aborted) setSearchLoading(false); }
-    }, 400);
-  }
-
-  function handleSearchSelectEdit(r: NominatimResult) {
-    const lat = parseFloat(r.lat), lon = parseFloat(r.lon);
+  useEffect(() => {
     const map = leafletRef.current;
-    if (!map || isNaN(lat) || isNaN(lon)) return;
-    map.flyTo([lat, lon], 15, { animate: true, duration: 1.2 });
-
-    setAddPinDialog({
-      lat, lon,
-      suggestedName: r.display_name.split(',')[0],
-      suggestedSym: 'generic',
-    });
-    setAddPinName(r.display_name.split(',')[0]);
-    setAddPinMode('pin');
-
-    setSearchResults([]);
-    setSearchOpen(false);
-  }
-
-  function handleAddPin() {
-    const d = addPinDialog;
-    if (!d) return;
-
-    const pin: NamedPin = {
-      id: crypto.randomUUID(),
-      lat: d.lat, lon: d.lon, ele: d.ele,
-      name: addPinName.trim() || d.suggestedName,
-      sym: d.suggestedSym,
-      highlighted: false,
-      addedToRoute: addPinMode === 'route',
+    if (!map) return;
+    const scheduleFetch = () => {
+      clearTimeout(poiFetchTimerRef.current!);
+      poiFetchTimerRef.current = setTimeout(() => {
+        if (activePoisRef.current.size === 0 || map.getZoom() < 13) {
+          poiLayerRef.current?.clearLayers();
+          return;
+        }
+        doPoiFetchEdit(map.getBounds());
+      }, 600);
     };
+    map.on('moveend', scheduleFetch);
+    map.on('zoomend', scheduleFetch);
+    scheduleFetch();
+    return () => {
+      map.off('moveend', scheduleFetch);
+      map.off('zoomend', scheduleFetch);
+      clearTimeout(poiFetchTimerRef.current!);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePoi, doPoiFetchEdit]);
 
-    setNamedPins(prev => [...prev, pin]);
-    renderNamedPinMarker(pin);
-
-    if (addPinMode === 'route') {
-      // Den nächstgelegenen Punkt auf der Route finden und als Waypoint einfügen
-      insertWaypointAt(d.lat, d.lon, d.ele);
-    }
-
-    setAddPinDialog(null);
-    setAddPinName('');
+  // ── Named Pin markers ─────────────────────────────────────────────────────
+  function renderNamedPinMarker(pin: NamedPin) {
+    const map = leafletRef.current;
+    if (!map) return;
+    namedPinMarkersRef.current.get(pin.id)?.remove();
+    const icon = L.divIcon({ className: '', html: createPinDivIcon(pin.sym, pin.highlighted, 30), iconSize: [30, 30], iconAnchor: [15, 15] });
+    const marker = L.marker([pin.lat, pin.lon], { icon, zIndexOffset: 200 })
+      .on('click', () => setEditingPin(pin.id))
+      .addTo(map);
+    namedPinMarkersRef.current.set(pin.id, marker);
   }
 
-  async function insertWaypointAt(lat: number, lon: number, ele?: number) {
+  function removeNamedPinMarker(pinId: string) {
+    namedPinMarkersRef.current.get(pinId)?.remove();
+    namedPinMarkersRef.current.delete(pinId);
+  }
+
+  function computePinDistance(pin: NamedPin, points: GpsTrackPoint[]): number | null {
+    if (points.length === 0) return null;
+    const nearestIdx = findNearestPoint(points, pin.lat, pin.lon);
+    let dist = 0;
+    for (let i = 1; i <= nearestIdx; i++) {
+      dist += haversineClient(points[i - 1].lat, points[i - 1].lon, points[i].lat, points[i].lon);
+    }
+    return Math.round(dist);
+  }
+
+  // Insert a pin position into the route as a waypoint (same mechanism as map-click add)
+  async function insertWaypointAtPosition(lat: number, lon: number) {
     const pts = editPointsRef.current;
-    if (!pts || routingBusy) return;
+    if (!pts) return;
     const ts = trimStartRef.current, te = trimEndRef.current;
     if (te - ts < 1) return;
-
     let best = ts, bestD = Infinity;
     for (let i = ts; i < te; i++) {
       const d = distToSegmentM({ lat, lon }, pts[i], pts[i + 1]);
       if (d < bestD) { bestD = d; best = i; }
     }
-
     const { aPrevIdx, aNextIdx } = findLegAnchors(pts, waypointsRef.current, ts, te, best, best + 1);
     const anchorPrev = pts[aPrevIdx];
     const anchorNext = pts[aNextIdx];
-
-    const newPt: GpsTrackPoint = { lat, lon, ele: ele ?? (anchorPrev.ele + anchorNext.ele) / 2 };
+    const newPt: GpsTrackPoint = { lat, lon, ele: (anchorPrev.ele + anchorNext.ele) / 2 };
+    const offRoad = !snapEnabledRef.current;
     const wpId = `wp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-    const apply = (newPts: GpsTrackPoint[], wpPoint: GpsTrackPoint) => {
+    const finish = (newPts: GpsTrackPoint[], wpPoint: GpsTrackPoint) => {
       const newTe = te + (newPts.length - pts.length);
       const wp: EditWaypoint = {
-        id: wpId, lat: wpPoint.lat, lon: wpPoint.lon, offRoad: !snapEnabledRef.current,
+        id: wpId, lat: wpPoint.lat, lon: wpPoint.lon, offRoad,
         anchorPrev: { lat: anchorPrev.lat, lon: anchorPrev.lon },
         anchorNext: { lat: anchorNext.lat, lon: anchorNext.lon },
       };
@@ -1782,79 +1715,97 @@ export default function GPSEditScreen() {
       rebuildMap(newPts, ts, newTe, { fit: false });
     };
 
-    if (!snapEnabledRef.current) {
+    if (offRoad) {
       const span = [anchorPrev, newPt, anchorNext];
+      setBusy('Elevation…');
       const span2 = await withDemElevation(span, true, true);
-      apply([...pts.slice(0, aPrevIdx), ...span2, ...pts.slice(aNextIdx + 1)], newPt);
+      setBusy(null);
+      if (editPointsRef.current !== pts) return;
+      finish([...pts.slice(0, aPrevIdx), ...span2, ...pts.slice(aNextIdx + 1)], newPt);
       return;
     }
-
     setBusy('Routing…');
     try {
       const routed = await fetchRoutedPath([anchorPrev, newPt, anchorNext], snapProfileRef.current);
       if (editPointsRef.current !== pts) return;
-      if (!routed) {
-        const span = [anchorPrev, newPt, anchorNext];
-        const span2 = await withDemElevation(span, true, true);
-        apply([...pts.slice(0, aPrevIdx), ...span2, ...pts.slice(aNextIdx + 1)], newPt);
-        return;
-      }
+      if (!routed) { setBusy(null); return; }
       const { span, wpPoint } = buildRoutedSpan(anchorPrev, anchorNext, newPt.ele, routed.legs);
-      const span2 = await withDemElevation(span, true, true);
       const wpIdxInSpan = span.indexOf(wpPoint);
+      const span2 = await withDemElevation(span, true, true);
       if (editPointsRef.current !== pts) return;
-      apply([...pts.slice(0, aPrevIdx), ...span2, ...pts.slice(aNextIdx + 1)], span2[wpIdxInSpan]);
+      finish([...pts.slice(0, aPrevIdx), ...span2, ...pts.slice(aNextIdx + 1)], span2[wpIdxInSpan]);
     } finally {
       setBusy(null);
     }
   }
 
-  function renderNamedPinMarker(pin: NamedPin) {
+  // ── Add-Pin dialog handler ────────────────────────────────────────────────
+  async function handleAddPin() {
+    const d = addPinDialog;
+    if (!d) return;
+    const pin: NamedPin = {
+      id: crypto.randomUUID(),
+      lat: d.lat, lon: d.lon, ele: d.ele,
+      name: addPinName.trim() || d.suggestedName,
+      sym: d.suggestedSym,
+      highlighted: false,
+      addedToRoute: addPinMode === 'route',
+    };
+    setNamedPins(prev => [...prev, pin]);
+    renderNamedPinMarker(pin);
+    if (addPinMode === 'route') {
+      await insertWaypointAtPosition(d.lat, d.lon);
+    }
+    setAddPinDialog(null);
+    setAddPinName('');
+  }
+
+  // ── Search ────────────────────────────────────────────────────────────────
+  function placeSearchPinEdit(lat: number, lon: number, label: string) {
     const map = leafletRef.current;
     if (!map) return;
-
-    namedPinMarkersRef.current.get(pin.id)?.remove();
-
-    const icon = L.divIcon({
-      className: '',
-      html: createPinDivIcon(pin.sym, pin.highlighted, 30),
-      iconSize: [30, 30],
-      iconAnchor: [15, 15],
-    });
-
-    const marker = L.marker([pin.lat, pin.lon], { icon, zIndexOffset: 200 })
-      .on('click', () => {
-        setEditingPin(pin.id);
-      })
-      .addTo(map);
-
-    namedPinMarkersRef.current.set(pin.id, marker);
+    searchPinRef.current?.remove();
+    const icon = L.divIcon({ className: '', html: `<div style="background:#5e4dbb;border:2px solid #fff;border-radius:50%;width:14px;height:14px;box-shadow:0 2px 8px rgba(94,77,187,0.4);"></div>`, iconSize: [14, 14], iconAnchor: [7, 7] });
+    searchPinRef.current = L.marker([lat, lon], { icon }).bindTooltip(label, { permanent: false, direction: 'top' }).addTo(map);
   }
 
-  function removeNamedPinMarker(pinId: string) {
-    namedPinMarkersRef.current.get(pinId)?.remove();
-    namedPinMarkersRef.current.delete(pinId);
-  }
-
-  function computePinDistance(pin: NamedPin, points: GpsTrackPoint[]): number | null {
-    if (points.length === 0) return null;
-    const nearestIdx = findNearestPoint(points, pin.lat, pin.lon);
-    let dist = 0;
-    for (let i = 1; i <= nearestIdx; i++) {
-      dist += haversineClient(points[i-1].lat, points[i-1].lon, points[i].lat, points[i].lon);
+  function handleSearchChangeEdit(q: string) {
+    clearTimeout(searchDebounceRef.current!);
+    if (!q.trim()) { setSearchResults([]); return; }
+    const coords = parseCoordInput(q);
+    if (coords) {
+      setSearchResults([]);
+      leafletRef.current?.flyTo(coords, 15, { animate: true, duration: 1.2 });
+      placeSearchPinEdit(coords[0], coords[1], `${coords[0].toFixed(5)}, ${coords[1].toFixed(5)}`);
+      return;
     }
-    return Math.round(dist);
+    searchDebounceRef.current = setTimeout(async () => {
+      searchControllerRef.current?.abort();
+      const ctrl = new AbortController();
+      searchControllerRef.current = ctrl;
+      setSearchLoading(true);
+      try {
+        const map = leafletRef.current;
+        const bounds = map?.getBounds();
+        const results = await searchNominatim(q, bounds ? { south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast() } : undefined, ctrl.signal);
+        if (!ctrl.signal.aborted) setSearchResults(results.slice(0, 5));
+      } catch { /* ignore */ }
+      finally { if (!ctrl.signal.aborted) setSearchLoading(false); }
+    }, 400);
   }
 
-  // ── Build map once editPoints are loaded ──────────────────────────────────
-  const mapBuiltRef = useRef(false);
-  useEffect(() => {
-    // leafletRef.current is set synchronously by mapCallbackRef before effects run
-    if (!editPoints || !leafletRef.current || mapBuiltRef.current) return;
-    mapBuiltRef.current = true;
-    rebuildMap(editPoints, trimStart, trimEnd);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editPoints]);
+  function handleSearchSelectEdit(r: NominatimResult) {
+    const lat = parseFloat(r.lat), lon = parseFloat(r.lon);
+    const map = leafletRef.current;
+    if (!map || isNaN(lat) || isNaN(lon)) return;
+    map.flyTo([lat, lon], 15, { animate: true, duration: 1.2 });
+    // Open Add-Pin dialog so user can optionally save as named pin
+    setAddPinDialog({ lat, lon, suggestedName: r.display_name.split(',')[0], suggestedSym: 'generic' });
+    setAddPinName(r.display_name.split(',')[0]);
+    setAddPinMode('pin');
+    setSearchResults([]);
+    setSearchOpen(false);
+  }
 
   // ── Save ──────────────────────────────────────────────────────────────────
   async function handleSave(mode: 'new' | 'replace') {
@@ -1869,10 +1820,8 @@ export default function GPSEditScreen() {
         name: mode === 'new' ? editName.trim() || undefined : undefined,
         waypoints: namedPins.map(p => ({
           lat: p.lat, lon: p.lon, ele: p.ele,
-          name: p.name,
-          description: p.description,
-          sym: p.sym,
-          highlighted: p.highlighted,
+          name: p.name, description: p.description,
+          sym: p.sym, highlighted: p.highlighted,
         })),
       });
       // Update store
@@ -2124,160 +2073,95 @@ export default function GPSEditScreen() {
             </div>
           </div>
 
-          {/* ── NAMED PINS / WEGPUNKTE ─────────────────────────── */}
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#b0acbe', letterSpacing: '0.06em', marginBottom: 8 }}>
-              WEGPUNKTE {namedPins.length > 0 && `(${namedPins.length})`}
+          {/* Named Pins */}
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid #e8e4f0', flexShrink: 0, maxHeight: 260, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexShrink: 0 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#b0acbe', letterSpacing: '0.06em' }}>PINS</div>
+              <button
+                onClick={() => {
+                  const map = leafletRef.current;
+                  if (!map) return;
+                  const c = map.getCenter();
+                  setAddPinDialog({ lat: c.lat, lon: c.lng, suggestedName: '', suggestedSym: 'flag' });
+                  setAddPinName('');
+                  setAddPinMode('pin');
+                }}
+                style={{ ...secBtnStyle, width: 'auto', padding: '4px 8px', fontSize: 10, gap: 4 }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+              >
+                <Icon name="add_location_alt" size={12} color="#5e4dbb" />
+                Kartenmitte
+              </button>
             </div>
-
             {namedPins.length === 0 ? (
-              <div style={{ fontSize: 11, color: '#b0acbe', fontStyle: 'italic', marginBottom: 8 }}>
-                Noch keine Wegpunkte. Klicke auf einen POI oder nutze die Suche.
+              <div style={{ fontSize: 10.5, color: '#b0acbe', lineHeight: 1.55 }}>
+                Klick auf einen POI oder Suchergebnis, um einen benannten Pin hinzuzufügen.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
-                {namedPins.map((pin) => {
-                  const cfg = POI_CATEGORY_CONFIG[pin.sym as PoiCategory];
-                  const isEditing = editingPin === pin.id;
-                  // Distanz vom Track-Start berechnen
-                  const dist = computePinDistance(pin, editPoints ?? []);
-
+              <div style={{ overflowY: 'auto', flex: 1 }}>
+                {namedPins.map(pin => {
+                  const dist = editPoints ? computePinDistance(pin, editPoints.slice(trimStart, trimEnd + 1)) : null;
+                  const cfg = (POI_CATEGORY_CONFIG as Record<string, typeof POI_CATEGORY_CONFIG[PoiCategory]>)[pin.sym] ?? null;
                   return (
                     <div key={pin.id} style={{
-                      background: pin.highlighted ? '#faf7ff' : '#fff',
+                      background: '#fff', borderRadius: 8,
                       border: `1px solid ${pin.highlighted ? '#c4b8f0' : '#e8e4f0'}`,
-                      borderRadius: 8, padding: '8px 10px',
+                      padding: '7px 8px', marginBottom: 5, transition: 'border-color 150ms',
                     }}>
-                      {isEditing ? (
-                        /* Rename Mode */
-                        <div>
-                          <input
-                            autoFocus
-                            value={pin.name}
-                            onChange={e => setNamedPins(prev => prev.map(p => p.id === pin.id ? { ...p, name: e.target.value } : p))}
-                            onBlur={() => setEditingPin(null)}
-                            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') setEditingPin(null); }}
-                            style={{
-                              width: '100%', boxSizing: 'border-box',
-                              padding: '5px 8px', borderRadius: 6,
-                              border: '1px solid #5e4dbb', fontSize: 12,
-                              fontFamily: 'Inter, sans-serif', color: '#1c1b22',
-                              outline: 'none',
-                            }}
-                          />
-                        </div>
+                      {editingPin === pin.id ? (
+                        <input
+                          autoFocus
+                          defaultValue={pin.name}
+                          onBlur={e => {
+                            const newName = e.target.value.trim() || pin.name;
+                            setNamedPins(prev => prev.map(p => p.id === pin.id ? { ...p, name: newName } : p));
+                            setEditingPin(null);
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') e.currentTarget.blur();
+                            if (e.key === 'Escape') setEditingPin(null);
+                          }}
+                          style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #c4b8f0', borderRadius: 6, padding: '4px 7px', fontSize: 11, outline: 'none', fontFamily: 'Inter, sans-serif' }}
+                        />
                       ) : (
-                        /* Display Mode */
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {/* Category Icon */}
-                          <span
-                            className="material-symbols-outlined"
-                            style={{ fontSize: 14, color: cfg?.fg ?? '#5e4dbb', flexShrink: 0,
-                              fontVariationSettings: "'FILL' 1,'wght' 400" }}
-                          >
-                            {cfg?.icon ?? 'push_pin'}
-                          </span>
-
-                          {/* Name + Distance */}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif',
-                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {pin.name}
-                            </div>
-                            <div style={{ fontSize: 10, color: '#b0acbe', display: 'flex', gap: 4, alignItems: 'center' }}>
-                              {dist != null && <span>@ {fmtDist(dist)}</span>}
-                              <span style={{
-                                background: pin.addedToRoute ? '#ede9ff' : '#f1f5f9',
-                                color: pin.addedToRoute ? '#5e4dbb' : '#64748b',
-                                borderRadius: 3, padding: '1px 4px', fontSize: 9, fontWeight: 600,
-                              }}>
-                                {pin.addedToRoute ? 'Route-Stop' : 'Pin'}
-                              </span>
-                            </div>
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+                            {cfg && <span style={{ fontFamily: "'Material Symbols Outlined'", fontSize: 13, color: cfg.fg, lineHeight: 1, fontVariationSettings: "'FILL' 1,'wght' 400" }}>{cfg.icon}</span>}
+                            <span style={{ fontSize: 11, fontWeight: 600, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pin.name}</span>
                           </div>
-
-                          {/* Actions */}
-                          <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-                            {/* Highlight Toggle */}
+                          {dist != null && <div style={{ fontSize: 9, color: '#b0acbe', marginBottom: 4 }}>{fmtDist(dist)} vom Start</div>}
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button title="Auf Karte zeigen" onClick={() => leafletRef.current?.flyTo([pin.lat, pin.lon], Math.max(leafletRef.current?.getZoom() ?? 14, 14), { animate: true, duration: 0.8 })} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid #e8e4f0', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                              <Icon name="my_location" size={11} color="#5e4dbb" />
+                            </button>
+                            <button title="Umbenennen" onClick={() => setEditingPin(pin.id)} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid #e8e4f0', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                              <Icon name="edit" size={11} color="#787584" />
+                            </button>
                             <button
+                              title={pin.highlighted ? 'Star entfernen' : 'Als Highlight markieren'}
                               onClick={() => {
                                 const updated = { ...pin, highlighted: !pin.highlighted };
                                 setNamedPins(prev => prev.map(p => p.id === pin.id ? updated : p));
-                                // Marker neu rendern
                                 renderNamedPinMarker(updated);
                               }}
-                              title={pin.highlighted ? 'Highlight entfernen' : 'Hervorheben'}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', borderRadius: 4 }}
+                              style={{ flex: 1, height: 22, borderRadius: 5, border: `1px solid ${pin.highlighted ? '#c4b8f0' : '#e8e4f0'}`, background: pin.highlighted ? '#ede9ff' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              onMouseEnter={e => { e.currentTarget.style.background = pin.highlighted ? '#e0daff' : '#f5f3ff'; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = pin.highlighted ? '#ede9ff' : 'transparent'; }}
                             >
-                              <Icon name="star" size={13} color={pin.highlighted ? '#5e4dbb' : '#c4b8f0'} />
+                              <Icon name="star" size={11} color={pin.highlighted ? '#5e4dbb' : '#b0acbe'} />
                             </button>
-
-                            {/* Rename */}
-                            <button
-                              onClick={() => setEditingPin(pin.id)}
-                              title="Umbenennen"
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', borderRadius: 4 }}
-                            >
-                              <Icon name="edit" size={13} color="#b0acbe" />
-                            </button>
-
-                            {/* Auf Karte fokussieren */}
-                            <button
-                              onClick={() => leafletRef.current?.flyTo([pin.lat, pin.lon], 16, { animate: true, duration: 0.8 })}
-                              title="Auf Karte anzeigen"
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', borderRadius: 4 }}
-                            >
-                              <Icon name="my_location" size={13} color="#b0acbe" />
-                            </button>
-
-                            {/* Löschen */}
-                            <button
-                              onClick={() => {
-                                setNamedPins(prev => prev.filter(p => p.id !== pin.id));
-                                removeNamedPinMarker(pin.id);
-                              }}
-                              title="Entfernen"
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', borderRadius: 4 }}
-                            >
-                              <Icon name="delete" size={13} color="#fca5a5" />
+                            <button title="Löschen" onClick={() => { removeNamedPinMarker(pin.id); setNamedPins(prev => prev.filter(p => p.id !== pin.id)); }} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid #fca5a5', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                              <Icon name="delete" size={11} color="#ba1a1a" />
                             </button>
                           </div>
-                        </div>
+                        </>
                       )}
                     </div>
                   );
                 })}
               </div>
             )}
-
-            {/* Manuellen Wegpunkt an Karten-Mitte setzen */}
-            <button
-              onClick={() => {
-                const map = leafletRef.current;
-                if (!map) return;
-                const center = map.getCenter();
-                setAddPinDialog({
-                  lat: center.lat, lon: center.lng,
-                  suggestedName: 'Wegpunkt',
-                  suggestedSym: 'generic',
-                });
-                setAddPinName('Wegpunkt');
-                setAddPinMode('pin');
-              }}
-              style={{
-                width: '100%', padding: '7px 0', borderRadius: 8,
-                border: '1px dashed #c4b8f0', background: 'transparent', color: '#5e4dbb',
-                fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                fontFamily: 'Hanken Grotesk, sans-serif',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                transition: 'all 150ms',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-            >
-              <Icon name="add_location" size={13} color="#5e4dbb" />
-              Wegpunkt an Kartenmitte
-            </button>
           </div>
 
           {/* Undo/Redo */}
@@ -2449,149 +2333,45 @@ export default function GPSEditScreen() {
             style={{ position: 'absolute', inset: 0, bottom: 150 }}
           />
 
-          {/* POI Category Toggle Buttons */}
-          <div style={{
-            position: 'absolute',
-            top: 72, left: '50%', transform: 'translateX(-50%)',
-            zIndex: 1000,
-            display: 'flex',
-            gap: 6,
-            background: 'rgba(255,255,255,0.88)',
-            backdropFilter: 'blur(16px) saturate(180%)',
-            border: '1px solid rgba(255,255,255,0.75)',
-            borderRadius: 10,
-            padding: '6px 8px',
-            boxShadow: '0 4px 16px rgba(94,77,187,0.10)',
-          }}>
-            {(Object.entries(POI_CATEGORY_CONFIG) as Array<[PoiCategory, typeof POI_CATEGORY_CONFIG[PoiCategory]]>).map(([cat, cfg]) => {
-              const active = activePoi.has(cat);
-              return (
-                <button
-                  key={cat}
-                  title={cfg.label}
-                  onClick={() => setActivePoi(prev => {
-                    const next = new Set(prev);
-                    active ? next.delete(cat) : next.add(cat);
-                    return next;
-                  })}
-                  style={{
-                    width: 32, height: 32, borderRadius: 8,
-                    background: active ? cfg.bg : 'transparent',
-                    border: active ? `1.5px solid ${cfg.borderColor}` : '1.5px solid transparent',
-                    cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'all 150ms',
-                    opacity: active ? 1 : 0.45,
-                  }}
-                >
-                  {/* Material Symbol direkt im HTML — das funktioniert da Schriftart global geladen */}
-                  <span
-                    className="material-symbols-outlined"
-                    style={{ fontSize: 16, color: active ? cfg.fg : '#787584', lineHeight: 1,
-                      fontVariationSettings: "'FILL' 1, 'wght' 400" }}
-                  >
-                    {cfg.icon}
-                  </span>
-                </button>
-              );
-            })}
-
-            {/* Loading-Indicator */}
-            {poiLoading && (
-              <div style={{
-                width: 6, height: 6, borderRadius: '50%',
-                background: '#5e4dbb', opacity: 0.7,
-                alignSelf: 'center', marginLeft: 2,
-                animation: 'pulse 1s ease-in-out infinite',
-              }} />
-            )}
-          </div>
-
-          {/* Zoom-Hinweis wenn Zoom zu niedrig */}
-          {activePoi.size > 0 && leafletRef.current && leafletRef.current.getZoom() < 13 && (
+          {/* ── Search Bar (top-center) ─────────────────────────────────── */}
+          <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 1001, width: 300 }}>
             <div style={{
-              position: 'absolute',
-              top: 60, left: '50%', transform: 'translateX(-50%)',
-              zIndex: 1000,
-              background: 'rgba(255,255,255,0.88)',
-              backdropFilter: 'blur(12px)',
-              border: '1px solid #e8e4f0',
-              borderRadius: 8, padding: '6px 14px',
-              fontSize: 11, color: '#787584', fontFamily: 'Inter, sans-serif',
-              whiteSpace: 'nowrap',
-            }}>
-              Weiter reinzoomen um POIs zu sehen
-            </div>
-          )}
-
-          {/* Search Bar — floating, top-center */}
-          <div style={{
-            position: 'absolute',
-            top: 16,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 1001,
-            width: Math.min(360, window.innerWidth - 200),
-          }}>
-            <div style={{
-              background: 'rgba(255,255,255,0.95)',
-              backdropFilter: 'blur(20px) saturate(180%)',
+              background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px) saturate(180%)',
               border: `1px solid ${searchOpen ? '#c4b8f0' : 'rgba(255,255,255,0.75)'}`,
-              borderRadius: 12,
-              boxShadow: '0 4px 20px rgba(94,77,187,0.12)',
-              transition: 'border-color 150ms',
-              overflow: 'hidden',
+              borderRadius: 12, boxShadow: '0 4px 20px rgba(94,77,187,0.12)',
+              transition: 'border-color 150ms', overflow: 'hidden',
             }}>
-              {/* Input Row */}
               <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', gap: 8 }}>
                 <Icon name={searchLoading ? 'progress_activity' : 'search'} size={16} color="#787584" />
                 <input
                   value={searchQuery}
-                  onChange={e => {
-                    const q = e.target.value;
-                    setSearchQuery(q);
-                    handleSearchChange(q);
-                  }}
+                  onChange={e => { setSearchQuery(e.target.value); handleSearchChangeEdit(e.target.value); }}
                   onFocus={() => setSearchOpen(true)}
                   onBlur={() => setTimeout(() => setSearchOpen(false), 200)}
                   placeholder="Ort, Adresse oder 53.123, 10.456"
-                  style={{
-                    flex: 1, border: 'none', outline: 'none', background: 'transparent',
-                    fontSize: 13, color: '#1c1b22', fontFamily: 'Inter, sans-serif',
-                    padding: '10px 0',
-                  }}
+                  style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: '#1c1b22', fontFamily: 'Inter, sans-serif', padding: '10px 0' }}
                 />
                 {searchQuery && (
                   <button
-                    onMouseDown={e => { e.preventDefault(); setSearchQuery(''); setSearchResults([]); }}
+                    onMouseDown={e => { e.preventDefault(); setSearchQuery(''); setSearchResults([]); searchPinRef.current?.remove(); searchPinRef.current = null; }}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                   >
                     <Icon name="close" size={14} color="#b0acbe" />
                   </button>
                 )}
               </div>
-
-              {/* Results Dropdown */}
               {searchOpen && searchResults.length > 0 && (
-                <div style={{ borderTop: '1px solid #e8e4f0', maxHeight: 240, overflowY: 'auto' }}>
+                <div style={{ borderTop: '1px solid #e8e4f0', maxHeight: 220, overflowY: 'auto' }}>
                   {searchResults.map(r => (
                     <button
                       key={r.place_id}
                       onMouseDown={() => handleSearchSelectEdit(r)}
-                      style={{
-                        width: '100%', padding: '8px 14px', textAlign: 'left',
-                        background: 'transparent', border: 'none', cursor: 'pointer',
-                        borderBottom: '1px solid #f5f3ff', transition: 'background 100ms',
-                      }}
+                      style={{ width: '100%', padding: '8px 14px', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: '1px solid #f5f3ff', transition: 'background 100ms' }}
                       onMouseEnter={e => { e.currentTarget.style.background = '#faf9ff'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                     >
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>
-                        {r.display_name.split(',')[0]}
-                      </div>
-                      <div style={{ fontSize: 10, color: '#b0acbe', marginTop: 1 }}>
-                        {r.display_name.split(',').slice(1, 3).join(',').trim()}
-                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>{r.display_name.split(',')[0]}</div>
+                      <div style={{ fontSize: 10, color: '#b0acbe', marginTop: 1 }}>{r.display_name.split(',').slice(1, 3).join(',').trim()}</div>
                     </button>
                   ))}
                 </div>
@@ -2599,11 +2379,43 @@ export default function GPSEditScreen() {
             </div>
           </div>
 
-          {/* Edit mode badge + zoom controls (top-right) */}
+          {/* Zoom hint when zoomed out with POIs active */}
+          {activePoi.size > 0 && mapZoom < 13 && (
+            <div style={{ position: 'absolute', top: 62, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(12px)', border: '1px solid #e8e4f0', borderRadius: 8, padding: '6px 14px', fontSize: 11, color: '#787584', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>
+              Weiter reinzoomen um POIs zu sehen
+            </div>
+          )}
+
+          {/* Edit mode badge + POI toggles + zoom controls (top-right) */}
           <div style={{
             position: 'absolute', top: 14, right: 14, zIndex: 1000,
             display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8,
           }}>
+            {/* POI Category Toggles */}
+            <div style={{
+              display: 'flex', gap: 4,
+              background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(16px) saturate(180%)',
+              WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+              border: '1px solid rgba(255,255,255,0.75)', borderRadius: 10,
+              padding: '4px 6px', boxShadow: '0 2px 12px rgba(94,77,187,0.10)',
+              alignItems: 'center',
+            }}>
+              {(Object.entries(POI_CATEGORY_CONFIG) as Array<[PoiCategory, typeof POI_CATEGORY_CONFIG[PoiCategory]]>).map(([cat, cfg]) => {
+                const active = activePoi.has(cat);
+                return (
+                  <button
+                    key={cat}
+                    title={cfg.label}
+                    onClick={() => setActivePoi(prev => { const next = new Set(prev); active ? next.delete(cat) : next.add(cat); return next; })}
+                    style={{ width: 28, height: 28, borderRadius: 7, background: active ? cfg.bg : 'transparent', border: active ? `1.5px solid ${cfg.borderColor}` : '1.5px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', opacity: active ? 1 : 0.45 }}
+                  >
+                    <span style={{ fontFamily: "'Material Symbols Outlined'", fontSize: 14, color: active ? cfg.fg : '#787584', lineHeight: 1, fontVariationSettings: "'FILL' 1,'wght' 400" }}>{cfg.icon}</span>
+                  </button>
+                );
+              })}
+              {poiLoading && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#5e4dbb', opacity: 0.7, animation: 'pulse 1s ease-in-out infinite', marginLeft: 2 }} />}
+            </div>
+
             <div style={{
               background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(16px)',
               WebkitBackdropFilter: 'blur(16px)',
@@ -2808,127 +2620,6 @@ export default function GPSEditScreen() {
             </div>
           )}
 
-          {addPinDialog && (
-            <div style={{
-              position: 'absolute',
-              // Mittig über der Karte positioniert
-              top: '50%', left: '50%',
-              transform: 'translate(-50%, -50%)',
-              zIndex: 1200,
-              width: 300,
-              background: 'rgba(255,255,255,0.97)',
-              backdropFilter: 'blur(20px)',
-              border: '1px solid #e8e4f0',
-              borderRadius: 14,
-              padding: 20,
-              boxShadow: '0 8px 32px rgba(94,77,187,0.18)',
-              fontFamily: 'Inter, sans-serif',
-            }}>
-              {/* Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {addPinDialog.poi && (
-                    <span
-                      className="material-symbols-outlined"
-                      style={{ fontSize: 18, color: POI_CATEGORY_CONFIG[addPinDialog.suggestedSym as PoiCategory]?.fg ?? '#5e4dbb',
-                        fontVariationSettings: "'FILL' 1,'wght' 400" }}
-                    >
-                      {POI_CATEGORY_CONFIG[addPinDialog.suggestedSym as PoiCategory]?.icon ?? 'push_pin'}
-                    </span>
-                  )}
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>
-                    Wegpunkt hinzufügen
-                  </span>
-                </div>
-                <button
-                  onClick={() => setAddPinDialog(null)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                >
-                  <Icon name="close" size={16} color="#b0acbe" />
-                </button>
-              </div>
-
-              {/* POI-Infos wenn von POI-Klick */}
-              {addPinDialog.poi && (() => {
-                const tags = addPinDialog.poi!.tags;
-                const addr = [tags['addr:street'], tags['addr:housenumber']].filter(Boolean).join(' ');
-                const hours = tags['opening_hours'];
-                return (
-                  <div style={{ background: '#f8f7ff', borderRadius: 8, padding: '8px 10px', marginBottom: 12, fontSize: 11, color: '#787584' }}>
-                    {addr && <div>📍 {addr}</div>}
-                    {hours && <div>🕐 {hours}</div>}
-                  </div>
-                );
-              })()}
-
-              {/* Name Input */}
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: '#484552', marginBottom: 5 }}>Name</div>
-                <input
-                  autoFocus
-                  value={addPinName}
-                  onChange={e => setAddPinName(e.target.value)}
-                  placeholder="Wegpunkt benennen..."
-                  style={{
-                    width: '100%', boxSizing: 'border-box',
-                    padding: '7px 10px', borderRadius: 8,
-                    border: '1px solid #e8e4f0', fontSize: 13,
-                    fontFamily: 'Inter, sans-serif', color: '#1c1b22',
-                    outline: 'none', background: '#faf9ff',
-                  }}
-                  onFocus={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
-                  onBlur={e => { e.currentTarget.style.borderColor = '#e8e4f0'; }}
-                />
-              </div>
-
-              {/* Mode Auswahl */}
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: '#484552', marginBottom: 6 }}>Typ</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                  {([
-                    { mode: 'pin', icon: 'push_pin', label: 'Informativer Pin', desc: 'Erscheint im GPX als POI, ändert die Route nicht' },
-                    { mode: 'route', icon: 'route', label: 'Route-Stop', desc: 'Route fährt durch diesen Punkt' },
-                  ] as const).map(opt => (
-                    <button
-                      key={opt.mode}
-                      onClick={() => setAddPinMode(opt.mode)}
-                      style={{
-                        padding: '10px 8px', borderRadius: 9, cursor: 'pointer', textAlign: 'left',
-                        border: `2px solid ${addPinMode === opt.mode ? '#5e4dbb' : '#e8e4f0'}`,
-                        background: addPinMode === opt.mode ? '#F5F3FF' : '#fff',
-                        transition: 'all 150ms',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
-                        <Icon name={opt.icon} size={13} color={addPinMode === opt.mode ? '#5e4dbb' : '#b0acbe'} />
-                        <span style={{ fontSize: 11, fontWeight: 700, color: addPinMode === opt.mode ? '#5e4dbb' : '#484552', fontFamily: 'Hanken Grotesk, sans-serif' }}>
-                          {opt.label}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 9.5, color: '#b0acbe', lineHeight: 1.4 }}>{opt.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Buttons */}
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => setAddPinDialog(null)}
-                  style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: '1px solid #e8e4f0', background: '#fff', color: '#484552', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif' }}
-                >
-                  Abbrechen
-                </button>
-                <button
-                  onClick={() => handleAddPin()}
-                  style={{ flex: 2, padding: '8px 0', borderRadius: 8, border: 'none', background: '#5e4dbb', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif' }}
-                >
-                  Hinzufügen
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Map click popup — place name, elevation, add-to-route */}
           {mapClick && mapClickXY && (
             <div style={{
@@ -3027,6 +2718,81 @@ export default function GPSEditScreen() {
                 borderBottom: '1px solid rgba(255,255,255,0.75)',
                 transform: 'translateX(-50%) rotate(45deg)',
               }} />
+            </div>
+          )}
+
+          {/* ── Add-Pin Dialog ──────────────────────────────────────────── */}
+          {addPinDialog && (
+            <div
+              style={{ position: 'absolute', inset: 0, zIndex: 1200, background: 'rgba(8,5,18,0.40)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              onClick={e => { if (e.target === e.currentTarget) setAddPinDialog(null); }}
+            >
+              <div style={{ background: '#fff', borderRadius: 16, padding: '20px', width: 340, boxShadow: '0 20px 60px rgba(0,0,0,0.18)', border: '1px solid #e8e4f0', fontFamily: 'Inter, sans-serif', animation: 'wpPopIn 180ms ease both' }}>
+                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22', marginBottom: 4 }}>
+                  {addPinDialog.poi ? addPinDialog.poi.name : 'Neuer Pin'}
+                </div>
+                {addPinDialog.poi && (
+                  <div style={{ fontSize: 11, color: '#787584', marginBottom: 12 }}>
+                    {(POI_CATEGORY_CONFIG as Record<string, typeof POI_CATEGORY_CONFIG[PoiCategory]>)[addPinDialog.poi.category]?.label ?? addPinDialog.poi.category}
+                    {addPinDialog.poi.tags['addr:street'] && ` · ${addPinDialog.poi.tags['addr:street']}${addPinDialog.poi.tags['addr:housenumber'] ? ` ${addPinDialog.poi.tags['addr:housenumber']}` : ''}`}
+                  </div>
+                )}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#787584', marginBottom: 4 }}>NAME</div>
+                  <input
+                    value={addPinName}
+                    onChange={e => setAddPinName(e.target.value)}
+                    placeholder={addPinDialog.suggestedName || 'Pin-Name'}
+                    autoFocus
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid #e8e4f0', borderRadius: 8, fontSize: 13, fontFamily: 'Inter, sans-serif', outline: 'none', color: '#1c1b22' }}
+                    onFocus={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
+                    onBlur={e => { e.currentTarget.style.borderColor = '#e8e4f0'; }}
+                    onKeyDown={e => { if (e.key === 'Enter') handleAddPin(); if (e.key === 'Escape') setAddPinDialog(null); }}
+                  />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#787584', marginBottom: 6 }}>HINZUFÜGEN ALS</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    {([
+                      { value: 'pin' as const, label: 'Nur Pin', icon: 'push_pin', desc: 'Als Wegpunkt im GPX Export (Wahoo)' },
+                      { value: 'route' as const, label: 'Route-Stop', icon: 'alt_route', desc: 'Fügt zur Route hinzu & plant neu' },
+                    ]).map(opt => {
+                      const active = addPinMode === opt.value;
+                      return (
+                        <button
+                          key={opt.value}
+                          onClick={() => setAddPinMode(opt.value)}
+                          title={opt.desc}
+                          style={{ padding: '8px 10px', borderRadius: 8, cursor: 'pointer', border: `1.5px solid ${active ? '#5e4dbb' : '#e8e4f0'}`, background: active ? '#f5f3ff' : '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all 150ms' }}
+                        >
+                          <Icon name={opt.icon} size={16} color={active ? '#5e4dbb' : '#b0acbe'} />
+                          <span style={{ fontSize: 11, fontWeight: 600, color: active ? '#5e4dbb' : '#787584', fontFamily: 'Hanken Grotesk, sans-serif' }}>{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: 10, color: '#b0acbe', marginTop: 6 }}>
+                    {addPinMode === 'pin' ? 'Wegpunkt erscheint auf dem Wahoo als POI auf der Karte.' : 'Route wird durch diesen Punkt umgeplant — alte Zwischenpunkte werden ersetzt.'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => setAddPinDialog(null)}
+                    style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid #e8e4f0', background: '#fff', color: '#484552', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif' }}
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    onClick={handleAddPin}
+                    disabled={routingBusy}
+                    style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', background: routingBusy ? '#c4b8f0' : '#5e4dbb', color: '#fff', fontSize: 12, fontWeight: 600, cursor: routingBusy ? 'default' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', transition: 'background 150ms' }}
+                    onMouseEnter={e => { if (!routingBusy) e.currentTarget.style.background = '#4d3da8'; }}
+                    onMouseLeave={e => { if (!routingBusy) e.currentTarget.style.background = routingBusy ? '#c4b8f0' : '#5e4dbb'; }}
+                  >
+                    {addPinMode === 'route' && routingBusy ? 'Routing…' : 'Hinzufügen'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

@@ -233,16 +233,15 @@ export interface AppState {
 }
 
 // ─── POI / Waypoint Types ─────────────────────────────────────────────────────
-
 export type PoiCategory = 'food' | 'fuel' | 'bicycle' | 'shopping' | 'kiosk';
 
 export interface OverpassPoi {
-  id: string;               // z.B. "osm-12345"
+  id: string;
   lat: number;
   lon: number;
   category: PoiCategory;
-  name: string;             // OSM name oder brand
-  tags: Record<string, string>; // alle OSM-Tags (opening_hours, phone, website, addr:*)
+  name: string;
+  tags: Record<string, string>;
 }
 
 export interface NominatimResult {
@@ -261,7 +260,6 @@ export interface NominatimResult {
   };
 }
 
-// Named Pin = persistenter Wegpunkt der als <wpt> in GPX exportiert wird
 export interface NamedPin {
   id: string;
   lat: number;
@@ -270,11 +268,10 @@ export interface NamedPin {
   name: string;
   description?: string;
   sym: PoiCategory | 'flag' | 'generic';
-  highlighted: boolean;  // visuell hervorgehoben auf Karte + Sidebar
-  addedToRoute: boolean; // true = auch als EditWaypoint eingefügt (Route fährt durch diesen Punkt)
+  highlighted: boolean;
+  addedToRoute: boolean;
 }
 
-// Für Backend-Request
 export interface NamedPinInput {
   lat: number;
   lon: number;

@@ -2,7 +2,6 @@ import type { NominatimResult } from '../types';
 
 const BASE = 'https://nominatim.openstreetmap.org';
 
-// Detect "lat, lon" input pattern
 export function parseCoordInput(input: string): [number, number] | null {
   const m = input.trim().match(/^(-?\d+\.?\d*)\s*[,\s]\s*(-?\d+\.?\d*)$/);
   if (!m) return null;
@@ -23,7 +22,6 @@ export async function searchNominatim(
     addressdetails: '1',
   });
   if (viewbox) {
-    // viewbox format: west,south,east,north
     params.set('viewbox', `${viewbox.west},${viewbox.south},${viewbox.east},${viewbox.north}`);
     params.set('bounded', '0');
   }

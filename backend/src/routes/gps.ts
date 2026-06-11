@@ -52,17 +52,6 @@ interface GpsPoint {
   lat: number; lon: number; ele: number; time?: string;
   hr?: number; cadence?: number; power?: number;
 }
-
-interface WaypointInput {
-  lat: number;
-  lon: number;
-  ele?: number;
-  name: string;
-  description?: string;
-  sym?: string;  // 'food' | 'fuel' | 'bicycle' | 'shopping' | 'kiosk' | 'flag' | 'generic'
-  highlighted?: boolean;
-}
-
 interface GpsFileRow {
   id: string; user_id: string; original_name: string; file_type: string;
   file_path: string; file_size: number; metadata: Record<string, unknown> | null;
@@ -123,7 +112,17 @@ function buildElevationProfile(points: GpsPoint[]) {
   });
 }
 
-// SYM-Mapping (Solytiq-intern → GPX-Standard für Wahoo)
+// Named waypoint input (from frontend route editor)
+interface WaypointInput {
+  lat: number;
+  lon: number;
+  ele?: number;
+  name: string;
+  description?: string;
+  sym?: string;
+  highlighted?: boolean;
+}
+
 const GPX_SYM_MAP: Record<string, string> = {
   food: 'Restaurant',
   fuel: 'Gas Station',
@@ -140,32 +139,19 @@ function escXml(s: string): string {
 
 function writeGpx(points: GpsPoint[], name = 'Route', waypoints: WaypointInput[] = []): string {
   const safeName = escXml(name);
-
-  // Waypoints als <wpt> Elemente (müssen VOR dem <trk> Tag stehen — GPX 1.1 Spec!)
+  // <wpt> elements MUST appear before <trk> per GPX 1.1 spec (required for Wahoo)
   const wptXml = waypoints.map(w => {
     const elePart = w.ele != null ? `\n      <ele>${Number(w.ele).toFixed(2)}</ele>` : '';
     const descPart = w.description ? `\n      <desc>${escXml(w.description)}</desc>` : '';
     const symPart = w.sym ? `\n      <sym>${GPX_SYM_MAP[w.sym] ?? 'Waypoint'}</sym>` : '';
-    const typePart = `\n      <type>User Waypoint</type>`;
-    return `  <wpt lat="${w.lat.toFixed(7)}" lon="${w.lon.toFixed(7)}">${elePart}\n      <name>${escXml(w.name)}</name>${descPart}${symPart}${typePart}\n  </wpt>`;
+    return `  <wpt lat="${w.lat.toFixed(7)}" lon="${w.lon.toFixed(7)}">${elePart}\n      <name>${escXml(w.name)}</name>${descPart}${symPart}\n      <type>User Waypoint</type>\n  </wpt>`;
   }).join('\n');
-
   const trkpts = points.map(p => {
     const eleLine = `        <ele>${p.ele.toFixed(2)}</ele>`;
     const timeLine = p.time ? `\n        <time>${p.time}</time>` : '';
     return `      <trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}">\n${eleLine}${timeLine}\n      </trkpt>`;
   }).join('\n');
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Solytiq Cloud" xmlns="http://www.topografix.com/GPX/1/1">
-  <metadata><name>${safeName}</name></metadata>
-${wptXml ? wptXml + '\n' : ''}  <trk>
-    <name>${safeName}</name>
-    <trkseg>
-${trkpts}
-    </trkseg>
-  </trk>
-</gpx>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Solytiq Cloud" xmlns="http://www.topografix.com/GPX/1/1">\n  <metadata><name>${safeName}</name></metadata>\n${wptXml ? wptXml + '\n' : ''}  <trk>\n    <name>${safeName}</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>`;
 }
 
 // ─── Parsers ─────────────────────────────────────────────────────────────────
@@ -531,6 +517,13 @@ router.put('/:id/points', async (req, res) => {
       }
     }
 
+    const validWaypoints: WaypointInput[] = Array.isArray(waypoints)
+      ? waypoints.filter(w =>
+          typeof w.lat === 'number' && typeof w.lon === 'number' &&
+          typeof w.name === 'string' && w.name.trim().length > 0,
+        )
+      : [];
+
     const origResult = await query<GpsFileRow>(
       'SELECT * FROM gps_files WHERE id = $1 AND user_id = $2',
       [id, userId],
@@ -544,14 +537,6 @@ router.put('/:id/points', async (req, res) => {
     const outputName = saveAs === 'new'
       ? (name?.trim() || `${baseName}_edited`)
       : baseName;
-
-    // Waypoints validieren (NEU, optional — keine Fehlermeldung wenn leer)
-    const validWaypoints: WaypointInput[] = Array.isArray(waypoints)
-      ? waypoints.filter(w =>
-          typeof w.lat === 'number' && typeof w.lon === 'number' &&
-          typeof w.name === 'string' && w.name.trim().length > 0
-        )
-      : [];
 
     const gpxContent = writeGpx(points, outputName, validWaypoints);
     const newFileName = `gps_${crypto.randomUUID()}.gpx`;

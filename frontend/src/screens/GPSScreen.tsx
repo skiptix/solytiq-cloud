@@ -2,17 +2,17 @@ import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import type { GpsTrackData, GpsMetricPoint, PoiCategory, OverpassPoi, NominatimResult } from '../types';
+import type { GpsTrackData, GpsMetricPoint, PoiCategory, NominatimResult } from '../types';
 import {
   apiGetGpsFiles, apiUploadGpsFile, apiGetGpsTrackData,
   apiDownloadGpsFile, apiDeleteGpsFile, apiSmoothAndSaveGpsFile,
 } from '../api/client';
-import { queryOverpass } from '../utils/overpass';
-import { searchNominatim, parseCoordInput } from '../utils/nominatim';
-import { POI_CATEGORY_CONFIG, createPoiDivIcon } from '../utils/poiCategories';
 import useGpsStore from '../store/useGpsStore';
 import Icon from '../components/Icon';
 import GPSMergeWizard from '../components/GPSMergeWizard';
+import { queryOverpass } from '../utils/overpass';
+import { searchNominatim, parseCoordInput } from '../utils/nominatim';
+import { POI_CATEGORY_CONFIG, createPoiDivIcon } from '../utils/poiCategories';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDist(m?: number | null) {
@@ -221,7 +221,6 @@ export default function GPSScreen() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [mergeWizardOpen, setMergeWizardOpen] = useState(false);
   const [chartCollapsed, setChartCollapsed] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
 
   const [smoothWizardOpen, setSmoothWizardOpen] = useState(false);
   const [smoothSigma, setSmoothSigma] = useState(5);
@@ -232,19 +231,12 @@ export default function GPSScreen() {
   // ── POI Layer
   const [activePoi, setActivePoi] = useState<Set<PoiCategory>>(new Set());
   const [poiLoading, setPoiLoading] = useState(false);
-  const poiLayerRef = useRef<L.LayerGroup | null>(null);
-  const poiFetchControllerRef = useRef<AbortController | null>(null);
-  const poiFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const [mapZoom, setMapZoom] = useState(5);
   // ── Search
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<NominatimResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const searchPinRef = useRef<L.Marker | null>(null);
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const searchControllerRef = useRef<AbortController | null>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const selectedIdRef = useRef<string | null>(null);
   const leafletRef = useRef<L.Map | null>(null);
@@ -255,6 +247,14 @@ export default function GPSScreen() {
   const cursorMarkerRef = useRef<L.CircleMarker | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialLoadDone = useRef(false);
+  const poiLayerRef = useRef<L.LayerGroup | null>(null);
+  const poiFetchControllerRef = useRef<AbortController | null>(null);
+  const poiFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchPinRef = useRef<L.Marker | null>(null);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchControllerRef = useRef<AbortController | null>(null);
+  const activePoisRef = useRef<Set<PoiCategory>>(new Set());
+  useEffect(() => { activePoisRef.current = activePoi; }, [activePoi]);
 
   useEffect(() => {
     if (initialLoadDone.current) return;
@@ -281,13 +281,10 @@ export default function GPSScreen() {
         subdomains: 'abcd',
         maxZoom: 19,
       }).addTo(map);
-
-      // POI LayerGroup anlegen
       const poiLayer = L.layerGroup().addTo(map);
       poiLayerRef.current = poiLayer;
-
+      map.on('zoomend', () => setMapZoom(map.getZoom()));
       leafletRef.current = map;
-      setMapReady(true);
       setTimeout(() => map.invalidateSize(), 100);
       setTimeout(() => map.invalidateSize(), 400);
       const ro = new ResizeObserver(() => {
@@ -431,128 +428,84 @@ export default function GPSScreen() {
     }
   }, [hoveredIdx, trackData]);
 
-  // Fetch POIs wenn Karte bewegt wird oder Kategorien sich ändern
-  useEffect(() => {
-    const map = leafletRef.current;
-    if (!map) return;
-
-    function scheduleFetch() {
-      if (poiFetchTimerRef.current) clearTimeout(poiFetchTimerRef.current);
-      poiFetchTimerRef.current = setTimeout(() => {
-        const zoom = map?.getZoom();
-        if (!zoom || zoom < 13 || activePoi.size === 0) {
-          poiLayerRef.current?.clearLayers();
-          return;
-        }
-        if (map) doFetch(map.getBounds());
-      }, 600);
-    }
-
-    map.on('moveend', scheduleFetch);
-    map.on('zoomend', scheduleFetch);
-
-    // Initial fetch bei Kategorie-Änderung
-    scheduleFetch();
-
-    return () => {
-      map.off('moveend', scheduleFetch);
-      map.off('zoomend', scheduleFetch);
-      if (poiFetchTimerRef.current) clearTimeout(poiFetchTimerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePoi, mapReady]);
-
-  async function doFetch(bounds: L.LatLngBounds) {
+  // ── POI Layer fetch & render ──────────────────────────────────────────────
+  const doPoiFetch = useCallback(async (bounds: L.LatLngBounds) => {
     poiFetchControllerRef.current?.abort();
     const ctrl = new AbortController();
     poiFetchControllerRef.current = ctrl;
     setPoiLoading(true);
     try {
-      // Add small buffer (approx 100m) to catch POIs right at the edge
-      const PAD = 0.001;
       const result = await queryOverpass(
-        bounds.getSouth() - PAD, bounds.getWest() - PAD,
-        bounds.getNorth() + PAD, bounds.getEast() + PAD,
-        [...activePoi], ctrl.signal,
+        bounds.getSouth(), bounds.getWest(),
+        bounds.getNorth(), bounds.getEast(),
+        [...activePoisRef.current], ctrl.signal,
       );
       if (ctrl.signal.aborted) return;
-      renderPoiMarkers(result);
-    } catch {
-      // Silently ignore (network errors, aborted requests)
-    } finally {
-      if (!ctrl.signal.aborted) setPoiLoading(false);
-    }
-  }
-
-  function renderPoiMarkers(poiList: OverpassPoi[]) {
-    const layer = poiLayerRef.current;
-    if (!layer) return;
-    layer.clearLayers();
-
-    poiList.forEach(poi => {
-      const icon = L.divIcon({
-        className: '',
-        html: createPoiDivIcon(poi.category),
-        iconSize: [28, 28],
-        iconAnchor: [14, 14],
+      const layer = poiLayerRef.current;
+      if (!layer) return;
+      layer.clearLayers();
+      result.forEach(poi => {
+        const icon = L.divIcon({ className: '', html: createPoiDivIcon(poi.category), iconSize: [28, 28], iconAnchor: [14, 14] });
+        const marker = L.marker([poi.lat, poi.lon], { icon });
+        const tags = poi.tags;
+        const address = [
+          tags['addr:street'] && tags['addr:housenumber'] ? `${tags['addr:street']} ${tags['addr:housenumber']}` : tags['addr:street'],
+          tags['addr:city'] || tags['addr:town'],
+        ].filter(Boolean).join(', ');
+        const cfg = POI_CATEGORY_CONFIG[poi.category];
+        marker.bindPopup(`<div style="font-family:Inter,sans-serif;min-width:180px;max-width:240px;"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><span style="background:${cfg.bg};color:${cfg.fg};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Hanken Grotesk',sans-serif;white-space:nowrap;">${cfg.label}</span></div><div style="font-size:13px;font-weight:700;color:#1c1b22;font-family:'Hanken Grotesk',sans-serif;margin-bottom:6px;">${poi.name}</div>${address ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">📍 ${address}</div>` : ''}${tags['opening_hours'] ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">🕐 ${tags['opening_hours']}</div>` : ''}${tags['phone'] || tags['contact:phone'] ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">📞 ${tags['phone'] || tags['contact:phone']}</div>` : ''}${tags['website'] || tags['contact:website'] ? `<div style="font-size:11px;margin-top:4px;"><a href="${tags['website'] || tags['contact:website']}" target="_blank" rel="noopener" style="color:#5e4dbb;text-decoration:none;">🌐 Website</a></div>` : ''}</div>`, { maxWidth: 260, className: 'solytiq-poi-popup' });
+        layer.addLayer(marker);
       });
+    } catch { /* ignore */ }
+    finally { if (!ctrl.signal.aborted) setPoiLoading(false); }
+  }, []);
 
-      const marker = L.marker([poi.lat, poi.lon], { icon });
+  useEffect(() => {
+    const map = leafletRef.current;
+    if (!map) return;
+    const scheduleFetch = () => {
+      clearTimeout(poiFetchTimerRef.current!);
+      poiFetchTimerRef.current = setTimeout(() => {
+        if (activePoisRef.current.size === 0 || map.getZoom() < 13) {
+          poiLayerRef.current?.clearLayers();
+          return;
+        }
+        doPoiFetch(map.getBounds());
+      }, 600);
+    };
+    map.on('moveend', scheduleFetch);
+    map.on('zoomend', scheduleFetch);
+    scheduleFetch();
+    return () => {
+      map.off('moveend', scheduleFetch);
+      map.off('zoomend', scheduleFetch);
+      clearTimeout(poiFetchTimerRef.current!);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePoi, doPoiFetch]);
 
-      // Popup-Inhalt mit allen verfügbaren Infos
-      const tags = poi.tags;
-      const address = [
-        tags['addr:street'] && tags['addr:housenumber']
-          ? `${tags['addr:street']} ${tags['addr:housenumber']}`
-          : tags['addr:street'],
-        tags['addr:city'] || tags['addr:town'],
-      ].filter(Boolean).join(', ');
-
-      const hours = tags['opening_hours'];
-      const phone = tags['phone'] || tags['contact:phone'];
-      const website = tags['website'] || tags['contact:website'];
-      const cfg = POI_CATEGORY_CONFIG[poi.category];
-
-      marker.bindPopup(`
-        <div style="font-family:Inter,sans-serif;min-width:180px;max-width:240px;">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-            <span style="
-              background:${cfg.bg};color:${cfg.fg};
-              border-radius:5px;padding:2px 7px;
-              font-size:10px;font-weight:700;font-family:'Hanken Grotesk',sans-serif;
-              white-space:nowrap;
-            ">${cfg.label}</span>
-          </div>
-          <div style="font-size:13px;font-weight:700;color:#1c1b22;font-family:'Hanken Grotesk',sans-serif;margin-bottom:6px;">
-            ${poi.name}
-          </div>
-          ${address ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">📍 ${address}</div>` : ''}
-          ${hours ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">🕐 ${hours}</div>` : ''}
-          ${phone ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">📞 ${phone}</div>` : ''}
-          ${website ? `<div style="font-size:11px;margin-top:4px;"><a href="${website}" target="_blank" rel="noopener" style="color:#5e4dbb;text-decoration:none;">🌐 Website</a></div>` : ''}
-        </div>
-      `, {
-        maxWidth: 260,
-        className: 'solytiq-poi-popup',
-      });
-
-      layer.addLayer(marker);
-    });
+  // ── Search ────────────────────────────────────────────────────────────────
+  function placeSearchPin(lat: number, lon: number, label: string) {
+    const map = leafletRef.current;
+    if (!map) return;
+    searchPinRef.current?.remove();
+    const icon = L.divIcon({ className: '', html: `<div style="background:#5e4dbb;color:#fff;border:2px solid #fff;border-radius:50%;width:14px;height:14px;box-shadow:0 2px 8px rgba(94,77,187,0.4);"></div>`, iconSize: [14, 14], iconAnchor: [7, 7] });
+    searchPinRef.current = L.marker([lat, lon], { icon }).bindTooltip(label, { permanent: false, direction: 'top' }).addTo(map);
   }
 
   function handleSearchChange(q: string) {
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    clearTimeout(searchDebounceRef.current!);
     if (!q.trim()) { setSearchResults([]); return; }
-
-    // Koordinatenerkennung
     const coords = parseCoordInput(q);
     if (coords) {
       setSearchResults([]);
-      flyToCoords(coords[0], coords[1]);
+      const map = leafletRef.current;
+      if (map) {
+        map.flyTo(coords, 15, { animate: true, duration: 1.2 });
+        placeSearchPin(coords[0], coords[1], `${coords[0].toFixed(5)}, ${coords[1].toFixed(5)}`);
+      }
       return;
     }
-
-    // Text-Suche mit Debounce
     searchDebounceRef.current = setTimeout(async () => {
       searchControllerRef.current?.abort();
       const ctrl = new AbortController();
@@ -561,21 +514,11 @@ export default function GPSScreen() {
       try {
         const map = leafletRef.current;
         const bounds = map?.getBounds();
-        const results = await searchNominatim(q, bounds ? {
-          south: bounds.getSouth(), west: bounds.getWest(),
-          north: bounds.getNorth(), east: bounds.getEast(),
-        } : undefined, ctrl.signal);
+        const results = await searchNominatim(q, bounds ? { south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast() } : undefined, ctrl.signal);
         if (!ctrl.signal.aborted) setSearchResults(results.slice(0, 5));
       } catch { /* ignore */ }
       finally { if (!ctrl.signal.aborted) setSearchLoading(false); }
     }, 400);
-  }
-
-  function flyToCoords(lat: number, lon: number) {
-    const map = leafletRef.current;
-    if (!map) return;
-    map.flyTo([lat, lon], 15, { animate: true, duration: 1.2 });
-    placeSearchPin(lat, lon, `${lat.toFixed(5)}, ${lon.toFixed(5)}`);
   }
 
   function handleSearchSelect(r: NominatimResult) {
@@ -586,30 +529,6 @@ export default function GPSScreen() {
     placeSearchPin(lat, lon, r.display_name.split(',')[0]);
     setSearchResults([]);
     setSearchOpen(false);
-  }
-
-  function placeSearchPin(lat: number, lon: number, label: string) {
-    const map = leafletRef.current;
-    if (!map) return;
-    searchPinRef.current?.remove();
-    const icon = L.divIcon({
-      className: '',
-      html: `<div style="
-        background:#5e4dbb;color:#fff;
-        border:2px solid #fff;border-radius:50%;
-        width:14px;height:14px;
-        box-shadow:0 2px 8px rgba(94,77,187,0.4);
-      "></div>`,
-      iconSize: [14, 14], iconAnchor: [7, 7],
-    });
-    searchPinRef.current = L.marker([lat, lon], { icon })
-      .bindTooltip(label, { permanent: false, direction: 'top' })
-      .addTo(map);
-  }
-
-  function clearSearchPin() {
-    searchPinRef.current?.remove();
-    searchPinRef.current = null;
   }
 
   async function selectFile(id: string) {
@@ -732,157 +651,6 @@ export default function GPSScreen() {
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden', isolation: 'isolate' }}>
           {/* Leaflet map */}
           <div ref={mapCallbackRef} style={{ position: 'absolute', inset: 0, zIndex: 0 }} />
-
-          {/* POI Category Toggle Buttons */}
-          <div style={{
-            position: 'absolute',
-            top: 72, left: '50%', transform: 'translateX(-50%)',
-            zIndex: 1000,
-            display: 'flex',
-            gap: 6,
-            background: 'rgba(255,255,255,0.88)',
-            backdropFilter: 'blur(16px) saturate(180%)',
-            border: '1px solid rgba(255,255,255,0.75)',
-            borderRadius: 10,
-            padding: '6px 8px',
-            boxShadow: '0 4px 16px rgba(94,77,187,0.10)',
-          }}>
-            {(Object.entries(POI_CATEGORY_CONFIG) as Array<[PoiCategory, typeof POI_CATEGORY_CONFIG[PoiCategory]]>).map(([cat, cfg]) => {
-              const active = activePoi.has(cat);
-              return (
-                <button
-                  key={cat}
-                  title={cfg.label}
-                  onClick={() => setActivePoi(prev => {
-                    const next = new Set(prev);
-                    active ? next.delete(cat) : next.add(cat);
-                    return next;
-                  })}
-                  style={{
-                    width: 32, height: 32, borderRadius: 8,
-                    background: active ? cfg.bg : 'transparent',
-                    border: active ? `1.5px solid ${cfg.borderColor}` : '1.5px solid transparent',
-                    cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'all 150ms',
-                    opacity: active ? 1 : 0.45,
-                  }}
-                >
-                  {/* Material Symbol direkt im HTML — das funktioniert da Schriftart global geladen */}
-                  <span
-                    className="material-symbols-outlined"
-                    style={{ fontSize: 16, color: active ? cfg.fg : '#787584', lineHeight: 1,
-                      fontVariationSettings: "'FILL' 1, 'wght' 400" }}
-                  >
-                    {cfg.icon}
-                  </span>
-                </button>
-              );
-            })}
-
-            {/* Loading-Indicator */}
-            {poiLoading && (
-              <div style={{
-                width: 6, height: 6, borderRadius: '50%',
-                background: '#5e4dbb', opacity: 0.7,
-                alignSelf: 'center', marginLeft: 2,
-                animation: 'pulse 1s ease-in-out infinite',
-              }} />
-            )}
-          </div>
-
-          {/* Zoom-Hinweis wenn Zoom zu niedrig */}
-          {activePoi.size > 0 && leafletRef.current && leafletRef.current.getZoom() < 13 && (
-            <div style={{
-              position: 'absolute',
-              top: 60, left: '50%', transform: 'translateX(-50%)',
-              zIndex: 1000,
-              background: 'rgba(255,255,255,0.88)',
-              backdropFilter: 'blur(12px)',
-              border: '1px solid #e8e4f0',
-              borderRadius: 8, padding: '6px 14px',
-              fontSize: 11, color: '#787584', fontFamily: 'Inter, sans-serif',
-              whiteSpace: 'nowrap',
-            }}>
-              Weiter reinzoomen um POIs zu sehen
-            </div>
-          )}
-
-          {/* Search Bar — floating, top-center */}
-          <div style={{
-            position: 'absolute',
-            top: 16,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 1001,
-            width: Math.min(360, window.innerWidth - 200),
-          }}>
-            <div style={{
-              background: 'rgba(255,255,255,0.95)',
-              backdropFilter: 'blur(20px) saturate(180%)',
-              border: `1px solid ${searchOpen ? '#c4b8f0' : 'rgba(255,255,255,0.75)'}`,
-              borderRadius: 12,
-              boxShadow: '0 4px 20px rgba(94,77,187,0.12)',
-              transition: 'border-color 150ms',
-              overflow: 'hidden',
-            }}>
-              {/* Input Row */}
-              <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', gap: 8 }}>
-                <Icon name={searchLoading ? 'progress_activity' : 'search'} size={16} color="#787584" />
-                <input
-                  ref={searchInputRef}
-                  value={searchQuery}
-                  onChange={e => {
-                    const q = e.target.value;
-                    setSearchQuery(q);
-                    handleSearchChange(q);
-                  }}
-                  onFocus={() => setSearchOpen(true)}
-                  onBlur={() => setTimeout(() => setSearchOpen(false), 200)}
-                  placeholder="Ort, Adresse oder 53.123, 10.456"
-                  style={{
-                    flex: 1, border: 'none', outline: 'none', background: 'transparent',
-                    fontSize: 13, color: '#1c1b22', fontFamily: 'Inter, sans-serif',
-                    padding: '10px 0',
-                  }}
-                />
-                {searchQuery && (
-                  <button
-                    onMouseDown={e => { e.preventDefault(); setSearchQuery(''); setSearchResults([]); clearSearchPin(); }}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                  >
-                    <Icon name="close" size={14} color="#b0acbe" />
-                  </button>
-                )}
-              </div>
-
-              {/* Results Dropdown */}
-              {searchOpen && searchResults.length > 0 && (
-                <div style={{ borderTop: '1px solid #e8e4f0', maxHeight: 240, overflowY: 'auto' }}>
-                  {searchResults.map(r => (
-                    <button
-                      key={r.place_id}
-                      onMouseDown={() => handleSearchSelect(r)}
-                      style={{
-                        width: '100%', padding: '8px 14px', textAlign: 'left',
-                        background: 'transparent', border: 'none', cursor: 'pointer',
-                        borderBottom: '1px solid #f5f3ff', transition: 'background 100ms',
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#faf9ff'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                    >
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>
-                        {r.display_name.split(',')[0]}
-                      </div>
-                      <div style={{ fontSize: 10, color: '#b0acbe', marginTop: 1 }}>
-                        {r.display_name.split(',').slice(1, 3).join(',').trim()}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
 
           {/* ── Floating Info Card (top-left, only when file selected) ─────── */}
           {selectedFile && (
@@ -1021,6 +789,61 @@ export default function GPSScreen() {
                   <span style={{ fontSize: 10, color: '#787584', whiteSpace: 'nowrap' }}>{uploadProgress}%</span>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── Search Bar (top-center) ───────────────────────────────────── */}
+          <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 1001, width: 320 }}>
+            <div style={{
+              background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px) saturate(180%)',
+              border: `1px solid ${searchOpen ? '#c4b8f0' : 'rgba(255,255,255,0.75)'}`,
+              borderRadius: 12, boxShadow: '0 4px 20px rgba(94,77,187,0.12)',
+              transition: 'border-color 150ms', overflow: 'hidden',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', gap: 8 }}>
+                <Icon name={searchLoading ? 'progress_activity' : 'search'} size={16} color="#787584" />
+                <input
+                  value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); handleSearchChange(e.target.value); }}
+                  onFocus={() => setSearchOpen(true)}
+                  onBlur={() => setTimeout(() => setSearchOpen(false), 200)}
+                  placeholder="Ort, Adresse oder 53.123, 10.456"
+                  style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: '#1c1b22', fontFamily: 'Inter, sans-serif', padding: '10px 0' }}
+                />
+                {searchQuery && (
+                  <button onMouseDown={e => { e.preventDefault(); setSearchQuery(''); setSearchResults([]); searchPinRef.current?.remove(); searchPinRef.current = null; }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                    <Icon name="close" size={14} color="#b0acbe" />
+                  </button>
+                )}
+              </div>
+              {searchOpen && searchResults.length > 0 && (
+                <div style={{ borderTop: '1px solid #e8e4f0', maxHeight: 240, overflowY: 'auto' }}>
+                  {searchResults.map(r => (
+                    <button key={r.place_id} onMouseDown={() => handleSearchSelect(r)} style={{ width: '100%', padding: '8px 14px', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: '1px solid #f5f3ff', transition: 'background 100ms' }} onMouseEnter={e => { e.currentTarget.style.background = '#faf9ff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>{r.display_name.split(',')[0]}</div>
+                      <div style={{ fontSize: 10, color: '#b0acbe', marginTop: 1 }}>{r.display_name.split(',').slice(1, 3).join(',').trim()}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── POI Category Toggles (top-right, above action controls) ──────── */}
+          <div style={{ position: 'absolute', top: 16, right: 68, zIndex: 1000, display: 'flex', gap: 5, background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(16px) saturate(180%)', border: '1px solid rgba(255,255,255,0.75)', borderRadius: 10, padding: '5px 7px', boxShadow: '0 4px 16px rgba(94,77,187,0.10)', alignItems: 'center' }}>
+            {(Object.entries(POI_CATEGORY_CONFIG) as Array<[PoiCategory, typeof POI_CATEGORY_CONFIG[PoiCategory]]>).map(([cat, cfg]) => {
+              const active = activePoi.has(cat);
+              return (
+                <button key={cat} title={cfg.label} onClick={() => setActivePoi(prev => { const next = new Set(prev); active ? next.delete(cat) : next.add(cat); return next; })} style={{ width: 30, height: 30, borderRadius: 7, background: active ? cfg.bg : 'transparent', border: active ? `1.5px solid ${cfg.borderColor}` : '1.5px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', opacity: active ? 1 : 0.45 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 15, color: active ? cfg.fg : '#787584', lineHeight: 1, fontVariationSettings: "'FILL' 1, 'wght' 400" }}>{cfg.icon}</span>
+                </button>
+              );
+            })}
+            {poiLoading && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#5e4dbb', opacity: 0.7, animation: 'pulse 1s ease-in-out infinite', marginLeft: 2 }} />}
+          </div>
+          {activePoi.size > 0 && mapZoom < 13 && (
+            <div style={{ position: 'absolute', top: 58, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(12px)', border: '1px solid #e8e4f0', borderRadius: 8, padding: '6px 14px', fontSize: 11, color: '#787584', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>
+              Weiter reinzoomen um POIs zu sehen
             </div>
           )}
 
