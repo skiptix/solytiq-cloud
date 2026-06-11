@@ -112,14 +112,46 @@ function buildElevationProfile(points: GpsPoint[]) {
   });
 }
 
-function writeGpx(points: GpsPoint[], name = 'Route'): string {
-  const safeName = name.replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c] ?? c));
+// Named waypoint input (from frontend route editor)
+interface WaypointInput {
+  lat: number;
+  lon: number;
+  ele?: number;
+  name: string;
+  description?: string;
+  sym?: string;
+  highlighted?: boolean;
+}
+
+const GPX_SYM_MAP: Record<string, string> = {
+  food: 'Restaurant',
+  fuel: 'Gas Station',
+  bicycle: 'Bike Shop',
+  shopping: 'Grocery Store',
+  kiosk: 'Convenience Store',
+  flag: 'Flag',
+  generic: 'Waypoint',
+};
+
+function escXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function writeGpx(points: GpsPoint[], name = 'Route', waypoints: WaypointInput[] = []): string {
+  const safeName = escXml(name);
+  // <wpt> elements MUST appear before <trk> per GPX 1.1 spec (required for Wahoo)
+  const wptXml = waypoints.map(w => {
+    const elePart = w.ele != null ? `\n      <ele>${Number(w.ele).toFixed(2)}</ele>` : '';
+    const descPart = w.description ? `\n      <desc>${escXml(w.description)}</desc>` : '';
+    const symPart = w.sym ? `\n      <sym>${GPX_SYM_MAP[w.sym] ?? 'Waypoint'}</sym>` : '';
+    return `  <wpt lat="${w.lat.toFixed(7)}" lon="${w.lon.toFixed(7)}">${elePart}\n      <name>${escXml(w.name)}</name>${descPart}${symPart}\n      <type>User Waypoint</type>\n  </wpt>`;
+  }).join('\n');
   const trkpts = points.map(p => {
     const eleLine = `        <ele>${p.ele.toFixed(2)}</ele>`;
     const timeLine = p.time ? `\n        <time>${p.time}</time>` : '';
     return `      <trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}">\n${eleLine}${timeLine}\n      </trkpt>`;
   }).join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Solytiq Cloud" xmlns="http://www.topografix.com/GPX/1/1">\n  <metadata><name>${safeName}</name></metadata>\n  <trk>\n    <name>${safeName}</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Solytiq Cloud" xmlns="http://www.topografix.com/GPX/1/1">\n  <metadata><name>${safeName}</name></metadata>\n${wptXml ? wptXml + '\n' : ''}  <trk>\n    <name>${safeName}</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>`;
 }
 
 // ─── Parsers ─────────────────────────────────────────────────────────────────
@@ -469,10 +501,11 @@ router.put('/:id/points', async (req, res) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const userId = (req as any).userId as string;
     const { id } = req.params;
-    const { points, saveAs = 'new', name } = req.body as {
+    const { points, saveAs = 'new', name, waypoints = [] } = req.body as {
       points: GpsPoint[];
       saveAs?: 'new' | 'replace';
       name?: string;
+      waypoints?: WaypointInput[];
     };
 
     if (!Array.isArray(points) || points.length < 2) {
@@ -483,6 +516,13 @@ router.put('/:id/points', async (req, res) => {
         return res.status(400).json({ error: 'Each point must have lat, lon, ele as numbers' });
       }
     }
+
+    const validWaypoints: WaypointInput[] = Array.isArray(waypoints)
+      ? waypoints.filter(w =>
+          typeof w.lat === 'number' && typeof w.lon === 'number' &&
+          typeof w.name === 'string' && w.name.trim().length > 0,
+        )
+      : [];
 
     const origResult = await query<GpsFileRow>(
       'SELECT * FROM gps_files WHERE id = $1 AND user_id = $2',
@@ -498,7 +538,7 @@ router.put('/:id/points', async (req, res) => {
       ? (name?.trim() || `${baseName}_edited`)
       : baseName;
 
-    const gpxContent = writeGpx(points, outputName);
+    const gpxContent = writeGpx(points, outputName, validWaypoints);
     const newFileName = `gps_${crypto.randomUUID()}.gpx`;
     const newFilePath = path.join(UPLOAD_DIR, newFileName);
     fs.writeFileSync(newFilePath, gpxContent, 'utf8');

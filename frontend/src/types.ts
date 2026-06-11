@@ -231,3 +231,53 @@ export interface AppState {
   moveTaskToList: (taskId: number, targetListId: string) => void;
   loadFromApi: (workspaceId?: string) => Promise<void>;
 }
+
+// ─── POI / Waypoint Types ─────────────────────────────────────────────────────
+export type PoiCategory = 'food' | 'fuel' | 'bicycle' | 'shopping' | 'kiosk';
+
+export interface OverpassPoi {
+  id: string;
+  lat: number;
+  lon: number;
+  category: PoiCategory;
+  name: string;
+  tags: Record<string, string>;
+}
+
+export interface NominatimResult {
+  place_id: number;
+  display_name: string;
+  lat: string;
+  lon: string;
+  type: string;
+  address?: {
+    road?: string;
+    city?: string;
+    town?: string;
+    village?: string;
+    country?: string;
+    postcode?: string;
+  };
+}
+
+export interface NamedPin {
+  id: string;
+  lat: number;
+  lon: number;
+  ele?: number;
+  name: string;
+  description?: string;
+  sym: PoiCategory | 'flag' | 'generic';
+  highlighted: boolean;
+  addedToRoute: boolean;
+}
+
+export interface NamedPinInput {
+  lat: number;
+  lon: number;
+  ele?: number;
+  name: string;
+  description?: string;
+  sym: string;
+  highlighted?: boolean;
+}
