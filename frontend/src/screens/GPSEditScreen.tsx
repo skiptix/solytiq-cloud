@@ -10,6 +10,8 @@ import Icon from '../components/Icon';
 import { queryOverpass } from '../utils/overpass';
 import { searchNominatim, parseCoordInput } from '../utils/nominatim';
 import { POI_CATEGORY_CONFIG, createPoiDivIcon, createPinDivIcon } from '../utils/poiCategories';
+import { fetchSurfaceBreakdown } from '../utils/surfaceData';
+import type { SurfaceBreakdown } from '../utils/surfaceData';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmtDist(m: number) {
@@ -636,6 +638,18 @@ export default function GPSEditScreen() {
   useEffect(() => { localStorage.setItem('gps_active_poi', JSON.stringify([...activePoi])); }, [activePoi]);
   const [mapType, setMapType] = useState<'street' | 'satellite'>('street');
   const baseTileRef = useRef<L.TileLayer | null>(null);
+  // Surface data
+  const [surfaceData, setSurfaceData] = useState<SurfaceBreakdown | null>(null);
+  const [surfaceLoading, setSurfaceLoading] = useState(false);
+  const surfaceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const surfaceFetchCtrlRef = useRef<AbortController | null>(null);
+  // Route stats: speed profile for time estimate
+  const [speedProfile, setSpeedProfile] = useState<'road' | 'gravel' | 'custom'>('gravel');
+  const [customSpeedKmh, setCustomSpeedKmh] = useState(18);
+  // Waypoints list expansion
+  const [pinsExpanded, setPinsExpanded] = useState(false);
+  // Trim section collapsed
+  const [trimCollapsed, setTrimCollapsed] = useState(true);
   const [poiLoading, setPoiLoading] = useState(false);
   const poiLayerRef = useRef<L.LayerGroup | null>(null);
   const poiFetchControllerRef = useRef<AbortController | null>(null);
@@ -653,6 +667,26 @@ export default function GPSEditScreen() {
 
   useEffect(() => { namedPinsRef.current = namedPins; }, [namedPins]);
   useEffect(() => { activePoisRef.current = activePoi; }, [activePoi]);
+
+  // Surface data fetch — debounced 2s after route changes
+  useEffect(() => {
+    if (!editPoints || editPoints.length < 10) { setSurfaceData(null); return; }
+    clearTimeout(surfaceTimerRef.current!);
+    surfaceTimerRef.current = setTimeout(async () => {
+      surfaceFetchCtrlRef.current?.abort();
+      const ctrl = new AbortController();
+      surfaceFetchCtrlRef.current = ctrl;
+      setSurfaceLoading(true);
+      try {
+        const trimmed = editPoints.slice(trimStart, trimEnd + 1);
+        const result = await fetchSurfaceBreakdown(trimmed, ctrl.signal);
+        if (!ctrl.signal.aborted && result) setSurfaceData(result);
+      } catch { /* ignore */ }
+      finally { if (!ctrl.signal.aborted) setSurfaceLoading(false); }
+    }, 2000);
+    return () => clearTimeout(surfaceTimerRef.current!);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editPoints, trimStart, trimEnd]);
 
   // Map-click popup (place name + elevation + add-to-route)
   const [mapClick, setMapClick] = useState<{ lat: number; lon: number; ele: number | null; name: string | null; loading: boolean } | null>(null);
@@ -698,12 +732,28 @@ export default function GPSEditScreen() {
   // ── Load data on mount ────────────────────────────────────────────────────
   useEffect(() => {
     if (!id) return;
-    Promise.all([apiGetGpsFiles(), apiGetGpsTrackData(id)])
+    Promise.all([apiGetGpsFiles(), apiGetGpsTrackData(id).catch(() => null)])
       .then(([files, trackData]) => {
         const file = files.find(f => f.id === id);
         if (!file) { navigate('/gps'); return; }
         setFileInfo(file);
         setEditName(file.name.replace(/\.(gpx|fit)$/i, ''));
+        // Empty route (new plan from scratch) — start with no points
+        if (!trackData || trackData.points.length === 0) {
+          const empty: GpsTrackPoint[] = [];
+          setOriginalPoints(empty);
+          setEditPoints(empty);
+          editPointsRef.current = empty;
+          setTrimStart(0);
+          setTrimEnd(0);
+          trimStartRef.current = 0;
+          trimEndRef.current = 0;
+          setHistory([{ points: empty, waypoints: [] }]);
+          setHistoryIdx(0);
+          historyArrRef.current = [{ points: empty, waypoints: [] }];
+          historyIdxRef.current = 0;
+          return;
+        }
         const simplified = simplifyTrack(trackData.points, 0.00015);
         setOriginalPoints(simplified);
         setEditPoints(simplified);
@@ -733,8 +783,10 @@ export default function GPSEditScreen() {
       poiLayerRef.current?.clearLayers();
       poiFetchControllerRef.current?.abort();
       searchControllerRef.current?.abort();
+      surfaceFetchCtrlRef.current?.abort();
       clearTimeout(poiFetchTimerRef.current!);
       clearTimeout(searchDebounceRef.current!);
+      clearTimeout(surfaceTimerRef.current!);
     };
   }, []);
 
@@ -1510,7 +1562,64 @@ export default function GPSEditScreen() {
     const pts = editPointsRef.current;
     if (!mc || !pts || routingBusy) return;
     const ts = trimStartRef.current, te = trimEndRef.current;
-    if (te - ts < 1) return;
+
+    // Create mode: no points → place the very first point
+    if (pts.length === 0) {
+      setMapClick(null);
+      setBusy('Elevation…');
+      const raw: GpsTrackPoint = { lat: mc.lat, lon: mc.lon, ele: 0 };
+      const [elevated] = await withDemElevation([raw], true, false);
+      setBusy(null);
+      if (editPointsRef.current !== pts) return;
+      editPointsRef.current = [elevated];
+      trimEndRef.current = 0;
+      setEditPoints([elevated]);
+      setTrimEnd(0);
+      pushHistory([elevated], []);
+      rebuildMap([elevated], 0, 0, { fit: true });
+      return;
+    }
+
+    // Extend mode: only one point or click is being used to extend the route end
+    if (te - ts < 1) {
+      const lastPt = pts[te];
+      const newPt: GpsTrackPoint = { lat: mc.lat, lon: mc.lon, ele: lastPt.ele };
+      const wpId = `wp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      setMapClick(null);
+
+      const finishExtend = (newPts: GpsTrackPoint[]) => {
+        const newTe = newPts.length - 1;
+        const wp: EditWaypoint = { id: wpId, lat: newPt.lat, lon: newPt.lon, offRoad: !snapEnabledRef.current, anchorPrev: { lat: lastPt.lat, lon: lastPt.lon }, anchorNext: null };
+        editPointsRef.current = newPts;
+        trimEndRef.current = newTe;
+        waypointsRef.current = [...waypointsRef.current, wp];
+        setEditPoints(newPts);
+        setTrimEnd(newTe);
+        setWaypoints(waypointsRef.current);
+        pushHistory(newPts, waypointsRef.current);
+        rebuildMap(newPts, 0, newTe, { fit: false });
+      };
+
+      if (snapEnabledRef.current) {
+        setBusy('Routing…');
+        const routed = await fetchRoutedPath([lastPt, newPt], snapProfileRef.current);
+        setBusy(null);
+        if (editPointsRef.current !== pts) return;
+        if (routed?.legs[0]) {
+          const shape = routed.legs[0].map((p: {lat:number;lon:number}) => ({ lat: p.lat, lon: p.lon, ele: newPt.ele }));
+          const full = [...pts.slice(0, te + 1), ...shape.slice(1)];
+          const elev = await withDemElevation(full, false, false);
+          if (editPointsRef.current === pts) finishExtend(elev);
+        } else {
+          const span = await withDemElevation([lastPt, newPt], false, false);
+          if (editPointsRef.current === pts) finishExtend([...pts.slice(0, te), ...span]);
+        }
+      } else {
+        const span = await withDemElevation([lastPt, newPt], false, false);
+        if (editPointsRef.current === pts) finishExtend([...pts.slice(0, te), ...span]);
+      }
+      return;
+    }
 
     // Find the active segment closest to the clicked point
     let best = ts, bestD = Infinity;
@@ -1867,17 +1976,37 @@ export default function GPSEditScreen() {
   }
 
   // ── Live stats ────────────────────────────────────────────────────────────
-  const liveStats = useMemo(() => {
-    if (!editPoints) return null;
+  const routeStats = useMemo(() => {
+    if (!editPoints || editPoints.length === 0) return null;
     const trimmed = editPoints.slice(trimStart, trimEnd + 1);
-    let dist = 0, elev = 0;
-    for (let i = 1; i < trimmed.length; i++) {
-      dist += haversineClient(trimmed[i - 1].lat, trimmed[i - 1].lon, trimmed[i].lat, trimmed[i].lon);
-      const δ = trimmed[i].ele - trimmed[i - 1].ele;
-      if (δ > 0) elev += δ;
+    let dist = 0, gain = 0;
+    let maxEle = -Infinity, minEle = Infinity;
+    for (let i = 0; i < trimmed.length; i++) {
+      if (trimmed[i].ele > maxEle) maxEle = trimmed[i].ele;
+      if (trimmed[i].ele < minEle) minEle = trimmed[i].ele;
+      if (i > 0) {
+        dist += haversineClient(trimmed[i-1].lat, trimmed[i-1].lon, trimmed[i].lat, trimmed[i].lon);
+        const δ = trimmed[i].ele - trimmed[i-1].ele;
+        if (δ > 0) gain += δ;
+      }
     }
-    return { distance: Math.round(dist), elevGain: Math.round(elev), points: trimmed.length };
+    return {
+      distance: dist,
+      gain: Math.round(gain),
+      maxEle: maxEle > -Infinity ? Math.round(maxEle) : null,
+      minEle: minEle < Infinity ? Math.round(minEle) : null,
+      points: trimmed.length,
+    };
   }, [editPoints, trimStart, trimEnd]);
+
+  const timeEstimate = useMemo(() => {
+    if (!routeStats || routeStats.distance === 0) return null;
+    const speed = speedProfile === 'road' ? 28 : speedProfile === 'gravel' ? 20 : Math.max(1, customSpeedKmh);
+    const hours = routeStats.distance / 1000 / speed;
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ''}` : `${m}m`;
+  }, [routeStats, speedProfile, customSpeedKmh]);
 
   const canUndo = historyIdx > 0;
   const canRedo = historyIdx < history.length - 1;
@@ -1967,14 +2096,15 @@ export default function GPSEditScreen() {
             />
           </div>
 
-          {/* Live Stats */}
+          {/* Stats + Surface + Time */}
           <div style={{ padding: '10px 16px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#b0acbe', letterSpacing: '0.06em', marginBottom: 8 }}>CURRENT STATS</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#b0acbe', letterSpacing: '0.06em', marginBottom: 8 }}>DETAILS</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
               {([
-                { label: 'Distance', value: liveStats ? fmtDist(liveStats.distance) : '—' },
-                { label: 'Elev Gain', value: liveStats ? fmtElev(liveStats.elevGain) : '—' },
-                { label: 'Points', value: liveStats ? String(liveStats.points) : '—' },
+                { label: 'Distance', value: routeStats ? fmtDist(routeStats.distance) : '—' },
+                { label: 'Elev Gain', value: routeStats ? fmtElev(routeStats.gain) : '—' },
+                { label: 'Highest', value: routeStats?.maxEle != null ? `${routeStats.maxEle} m` : '—' },
+                { label: 'Lowest', value: routeStats?.minEle != null ? `${routeStats.minEle} m` : '—' },
               ]).map(s => (
                 <div key={s.label} style={{ background: '#fff', borderRadius: 8, padding: '7px 8px', border: '1px solid #e8e4f0' }}>
                   <div style={{ fontSize: 9, color: '#b0acbe', marginBottom: 3 }}>{s.label}</div>
@@ -1982,11 +2112,97 @@ export default function GPSEditScreen() {
                 </div>
               ))}
             </div>
+
+            {/* Time estimate */}
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 9, color: '#b0acbe', marginBottom: 4 }}>ESTIMATED TIME</div>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+                {(['road', 'gravel', 'custom'] as const).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setSpeedProfile(p)}
+                    style={{
+                      flex: 1, padding: '5px 0', borderRadius: 7, border: `1.5px solid ${speedProfile === p ? '#5e4dbb' : '#e8e4f0'}`,
+                      background: speedProfile === p ? '#f5f3ff' : '#fff', cursor: 'pointer',
+                      fontSize: 10, fontWeight: 600, color: speedProfile === p ? '#5e4dbb' : '#787584',
+                      fontFamily: 'Hanken Grotesk, sans-serif', transition: 'all 140ms',
+                    }}
+                  >
+                    {p === 'road' ? 'Road' : p === 'gravel' ? 'Gravel' : 'Custom'}
+                  </button>
+                ))}
+              </div>
+              {speedProfile === 'custom' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <input
+                    type="number" min={1} max={120}
+                    value={customSpeedKmh}
+                    onChange={e => setCustomSpeedKmh(Math.max(1, Math.min(120, Number(e.target.value))))}
+                    style={{ width: 60, padding: '4px 8px', border: '1px solid #e8e4f0', borderRadius: 7, fontSize: 12, outline: 'none', fontFamily: 'Inter, sans-serif' }}
+                    onFocus={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
+                    onBlur={e => { e.currentTarget.style.borderColor = '#e8e4f0'; }}
+                  />
+                  <span style={{ fontSize: 11, color: '#787584' }}>km/h</span>
+                </div>
+              )}
+              <div style={{ background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #e8e4f0', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon name="schedule" size={14} color="#5e4dbb" />
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>
+                  {timeEstimate ?? '—'}
+                </span>
+                <span style={{ fontSize: 10, color: '#b0acbe', marginLeft: 'auto' }}>
+                  @ {speedProfile === 'road' ? '28' : speedProfile === 'gravel' ? '20' : customSpeedKmh} km/h
+                </span>
+              </div>
+            </div>
+
+            {/* Surface breakdown bar */}
+            <div>
+              <div style={{ fontSize: 9, color: '#b0acbe', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 4 }}>
+                SURFACE
+                {surfaceLoading && <span style={{ fontSize: 9, color: '#9c6bde', animation: 'wpSpin 1s linear infinite', display: 'inline-block', fontFamily: "'Material Symbols Outlined'" }}>progress_activity</span>}
+              </div>
+              {surfaceData ? (
+                <>
+                  <div style={{ height: 10, borderRadius: 5, overflow: 'hidden', display: 'flex', gap: 1, marginBottom: 6 }}>
+                    {surfaceData.road > 0 && <div style={{ flex: surfaceData.road, background: '#5e4dbb' }} title={`Road ${surfaceData.road}%`} />}
+                    {surfaceData.gravel > 0 && <div style={{ flex: surfaceData.gravel, background: '#f59e0b' }} title={`Gravel ${surfaceData.gravel}%`} />}
+                    {surfaceData.path > 0 && <div style={{ flex: surfaceData.path, background: '#22c55e' }} title={`Path ${surfaceData.path}%`} />}
+                    {surfaceData.unknown > 0 && <div style={{ flex: surfaceData.unknown, background: '#d8d4e4' }} title={`Unknown ${surfaceData.unknown}%`} />}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {([
+                      { key: 'road', label: 'Road', color: '#5e4dbb', pct: surfaceData.road },
+                      { key: 'gravel', label: 'Gravel', color: '#f59e0b', pct: surfaceData.gravel },
+                      { key: 'path', label: 'Path', color: '#22c55e', pct: surfaceData.path },
+                      { key: 'unknown', label: 'Unknown', color: '#d8d4e4', pct: surfaceData.unknown },
+                    ]).filter(s => s.pct > 0).map(s => (
+                      <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: 2, background: s.color, flexShrink: 0 }} />
+                        <span style={{ fontSize: 9.5, color: '#484552' }}>{s.label} {s.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 10, color: '#b0acbe' }}>
+                  {editPoints && editPoints.length >= 10 ? (surfaceLoading ? 'Fetching…' : 'Will appear soon') : 'No route data yet'}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Trim section */}
           <div style={{ padding: '10px 16px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#b0acbe', letterSpacing: '0.06em', marginBottom: 6 }}>TRIM ROUTE</div>
+            <button
+              onClick={() => setTrimCollapsed(v => !v)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, marginBottom: trimCollapsed ? 0 : 6 }}
+            >
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#b0acbe', letterSpacing: '0.06em' }}>TRIM ROUTE</div>
+              <Icon name={trimCollapsed ? 'expand_more' : 'expand_less'} size={14} color="#b0acbe" />
+            </button>
+            {!trimCollapsed && (
+            <>
             <div style={{ fontSize: 11, color: '#787584', marginBottom: 10, lineHeight: 1.5 }}>
               Drag the green/red handles on the map or chart to trim start/end.
             </div>
@@ -2028,6 +2244,8 @@ export default function GPSEditScreen() {
             >
               Reset Trim
             </button>
+            </>
+            )}
           </div>
 
           {/* Routing */}
@@ -2117,16 +2335,16 @@ export default function GPSEditScreen() {
                 onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
               >
                 <Icon name="add_location_alt" size={12} color="#5e4dbb" />
-                Kartenmitte
+                Map Center
               </button>
             </div>
             {namedPins.length === 0 ? (
               <div style={{ fontSize: 10.5, color: '#b0acbe', lineHeight: 1.55 }}>
-                Klick auf einen POI oder Suchergebnis, um einen benannten Pin hinzuzufügen.
+                Click a POI or search result to add a named pin.
               </div>
             ) : (
               <div style={{ overflowY: 'auto', flex: 1 }}>
-                {namedPins.map(pin => {
+                {(pinsExpanded ? namedPins.slice(0, 100) : namedPins.slice(0, 3)).map(pin => {
                   const dist = editPoints ? computePinDistance(pin, editPoints.slice(trimStart, trimEnd + 1)) : null;
                   const cfg = (POI_CATEGORY_CONFIG as Record<string, typeof POI_CATEGORY_CONFIG[PoiCategory]>)[pin.sym] ?? null;
                   return (
@@ -2156,16 +2374,16 @@ export default function GPSEditScreen() {
                             {cfg && <span style={{ fontFamily: "'Material Symbols Outlined'", fontSize: 13, color: cfg.fg, lineHeight: 1, fontVariationSettings: "'FILL' 1,'wght' 400" }}>{cfg.icon}</span>}
                             <span style={{ fontSize: 11, fontWeight: 600, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pin.name}</span>
                           </div>
-                          {dist != null && <div style={{ fontSize: 9, color: '#b0acbe', marginBottom: 4 }}>{fmtDist(dist)} vom Start</div>}
+                          {dist != null && <div style={{ fontSize: 9, color: '#b0acbe', marginBottom: 4 }}>{fmtDist(dist)} from start</div>}
                           <div style={{ display: 'flex', gap: 4 }}>
-                            <button title="Auf Karte zeigen" onClick={() => leafletRef.current?.flyTo([pin.lat, pin.lon], Math.max(leafletRef.current?.getZoom() ?? 14, 14), { animate: true, duration: 0.8 })} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid #e8e4f0', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                            <button title="Show on map" onClick={() => leafletRef.current?.flyTo([pin.lat, pin.lon], Math.max(leafletRef.current?.getZoom() ?? 14, 14), { animate: true, duration: 0.8 })} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid #e8e4f0', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                               <Icon name="my_location" size={11} color="#5e4dbb" />
                             </button>
-                            <button title="Umbenennen" onClick={() => setEditingPin(pin.id)} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid #e8e4f0', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                            <button title="Rename" onClick={() => setEditingPin(pin.id)} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid #e8e4f0', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                               <Icon name="edit" size={11} color="#787584" />
                             </button>
                             <button
-                              title={pin.highlighted ? 'Star entfernen' : 'Als Highlight markieren'}
+                              title={pin.highlighted ? 'Remove star' : 'Mark as highlight'}
                               onClick={() => {
                                 const updated = { ...pin, highlighted: !pin.highlighted };
                                 setNamedPins(prev => prev.map(p => p.id === pin.id ? updated : p));
@@ -2177,7 +2395,7 @@ export default function GPSEditScreen() {
                             >
                               <Icon name="star" size={11} color={pin.highlighted ? '#5e4dbb' : '#b0acbe'} />
                             </button>
-                            <button title="Löschen" onClick={() => { removeNamedPinMarker(pin.id); setNamedPins(prev => prev.filter(p => p.id !== pin.id)); }} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid #fca5a5', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                            <button title="Delete" onClick={() => { removeNamedPinMarker(pin.id); setNamedPins(prev => prev.filter(p => p.id !== pin.id)); }} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid #fca5a5', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                               <Icon name="delete" size={11} color="#ba1a1a" />
                             </button>
                           </div>
@@ -2186,6 +2404,15 @@ export default function GPSEditScreen() {
                     </div>
                   );
                 })}
+                {namedPins.length > 3 && (
+                  <button
+                    onClick={() => setPinsExpanded(v => !v)}
+                    style={{ width: '100%', padding: '5px 0', borderRadius: 7, border: '1px dashed #d8d4e4', background: 'transparent', cursor: 'pointer', fontSize: 10, color: '#787584', fontFamily: 'Hanken Grotesk, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+                  >
+                    <Icon name={pinsExpanded ? 'expand_less' : 'expand_more'} size={12} color="#787584" />
+                    {pinsExpanded ? 'Show less' : `Show all ${namedPins.length} pins`}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -2781,11 +3008,11 @@ export default function GPSEditScreen() {
                   />
                 </div>
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: '#787584', marginBottom: 6 }}>HINZUFÜGEN ALS</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#787584', marginBottom: 6 }}>ADD AS</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                     {([
-                      { value: 'pin' as const, label: 'Nur Pin', icon: 'push_pin', desc: 'Als Wegpunkt im GPX Export (Wahoo)' },
-                      { value: 'route' as const, label: 'Route-Stop', icon: 'alt_route', desc: 'Fügt zur Route hinzu & plant neu' },
+                      { value: 'pin' as const, label: 'Pin Only', icon: 'push_pin', desc: 'Waypoint in GPX export (Wahoo compatible)' },
+                      { value: 'route' as const, label: 'Route Stop', icon: 'alt_route', desc: 'Add to route & re-plan' },
                     ]).map(opt => {
                       const active = addPinMode === opt.value;
                       return (
@@ -2802,7 +3029,7 @@ export default function GPSEditScreen() {
                     })}
                   </div>
                   <div style={{ fontSize: 10, color: '#b0acbe', marginTop: 6 }}>
-                    {addPinMode === 'pin' ? 'Wegpunkt erscheint auf dem Wahoo als POI auf der Karte.' : 'Route wird durch diesen Punkt umgeplant — alte Zwischenpunkte werden ersetzt.'}
+                    {addPinMode === 'pin' ? 'Waypoint appears on your Wahoo as a POI on the map.' : 'Route will be re-planned through this point — intermediate points are replaced.'}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -2810,7 +3037,7 @@ export default function GPSEditScreen() {
                     onClick={() => setAddPinDialog(null)}
                     style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid #e8e4f0', background: '#fff', color: '#484552', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif' }}
                   >
-                    Abbrechen
+                    Cancel
                   </button>
                   <button
                     onClick={handleAddPin}
@@ -2819,7 +3046,7 @@ export default function GPSEditScreen() {
                     onMouseEnter={e => { if (!routingBusy) e.currentTarget.style.background = '#4d3da8'; }}
                     onMouseLeave={e => { if (!routingBusy) e.currentTarget.style.background = routingBusy ? '#c4b8f0' : '#5e4dbb'; }}
                   >
-                    {addPinMode === 'route' && routingBusy ? 'Routing…' : 'Hinzufügen'}
+                    {addPinMode === 'route' && routingBusy ? 'Routing…' : 'Add'}
                   </button>
                 </div>
               </div>

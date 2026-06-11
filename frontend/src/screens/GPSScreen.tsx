@@ -5,7 +5,7 @@ import L from 'leaflet';
 import type { GpsTrackData, GpsMetricPoint, PoiCategory, NominatimResult } from '../types';
 import {
   apiGetGpsFiles, apiUploadGpsFile, apiGetGpsTrackData,
-  apiDownloadGpsFile, apiDeleteGpsFile, apiSmoothAndSaveGpsFile,
+  apiDownloadGpsFile, apiDeleteGpsFile, apiSmoothAndSaveGpsFile, apiCreateNewGpsRoute,
 } from '../api/client';
 import useGpsStore from '../store/useGpsStore';
 import Icon from '../components/Icon';
@@ -246,6 +246,7 @@ export default function GPSScreen() {
   const leafletRef = useRef<L.Map | null>(null);
   const pendingFitRef = useRef<L.LatLngBounds | null>(null);
   const [mapType, setMapType] = useState<'street' | 'satellite'>('street');
+  const [planningNew, setPlanningNew] = useState(false);
   const baseTileRef = useRef<L.TileLayer | null>(null);
   const polylineRef = useRef<L.Polyline | null>(null);
   const startMarkerRef = useRef<L.CircleMarker | null>(null);
@@ -535,6 +536,15 @@ export default function GPSScreen() {
     placeSearchPin(lat, lon, r.display_name.split(',')[0]);
     setSearchResults([]);
     setSearchOpen(false);
+  }
+
+  async function handlePlanNewRoute() {
+    setPlanningNew(true);
+    try {
+      const file = await apiCreateNewGpsRoute('New Route');
+      navigate(`/gps/${file.id}/edit`);
+    } catch (err) { console.error('Failed to create route:', err); }
+    finally { setPlanningNew(false); }
   }
 
   function handleMapTypeToggle() {
@@ -910,6 +920,15 @@ export default function GPSScreen() {
               style={{ ...mapCtrlBtn(), ...(mapType === 'satellite' ? { background: '#5e4dbb', border: '1px solid #4a3da8' } : {}) }}
             >
               <Icon name={mapType === 'street' ? 'satellite_alt' : 'map'} size={16} color={mapType === 'satellite' ? '#fff' : '#5e4dbb'} />
+            </button>
+            <button
+              className="gps-map-ctrl"
+              onClick={handlePlanNewRoute}
+              disabled={planningNew}
+              title="Plan new route"
+              style={{ ...mapCtrlBtn(!planningNew) }}
+            >
+              <Icon name={planningNew ? 'progress_activity' : 'add_road'} size={16} color="#5e4dbb" />
             </button>
 
             {/* Zoom controls — replaces the default Leaflet control (was hidden under the info card) */}

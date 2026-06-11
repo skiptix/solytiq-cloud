@@ -515,6 +515,11 @@ export async function apiDeleteGpsFile(id: string): Promise<void> {
   await apiFetch<void>(`/gps/${id}`, { method: 'DELETE' });
 }
 
+export async function apiCreateNewGpsRoute(name: string): Promise<GpsFile> {
+  const data = await apiFetch<{ file: GpsFile }>('/gps/new', { method: 'POST', body: JSON.stringify({ name }) });
+  return data.file;
+}
+
 export async function apiSmoothAndSaveGpsFile(id: string, sigma: number, mode: 'new' | 'replace', name?: string): Promise<GpsFile> {
   const token = getToken();
   const res = await fetch(`/api/gps/${encodeURIComponent(id)}/smooth-save`, {
