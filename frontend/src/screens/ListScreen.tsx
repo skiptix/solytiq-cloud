@@ -84,7 +84,7 @@ export default function ListScreen() {
       const sublistName = (data as Record<string,unknown>).__sublistName as string;
       const parentDepth = list.depth ?? 0;
       try {
-        const res = await apiCreateSublistTask(listId!, sectionId, data.title, sublistName, parentDepth + 1);
+        const res = await apiCreateSublistTask(listId!, sectionId, data.title, sublistName, parentDepth + 1, list.workspaceId);
         const savedTask: Task = { ...res.task, id: Number(res.task.id) };
         setLists(prev => [
           ...prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: [...s.tasks, savedTask] }) }),
@@ -102,7 +102,7 @@ export default function ListScreen() {
     // Handle link to existing list via /link command
     if (data.linkedListType === 'link' && data.linkedListId) {
       try {
-        const res = await apiLinkListAsTask(listId!, sectionId, data.title, data.linkedListId);
+        const res = await apiLinkListAsTask(listId!, sectionId, data.title, data.linkedListId, list.workspaceId);
         const savedTask: Task = { ...res.task, id: Number(res.task.id) };
         setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: [...s.tasks, savedTask] }) }));
       } catch (e) {
@@ -115,7 +115,7 @@ export default function ListScreen() {
     const tempTask: Task = { id: tempId, title: data.title, checked: false, deadline: data.deadline, priority: data.priority, badge: data.badge, note: data.note };
     setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: [...s.tasks, tempTask] }) }));
     try {
-      const res = await apiAddListTask(listId!, sectionId, data);
+      const res = await apiAddListTask(listId!, sectionId, { ...data, workspaceId: list.workspaceId });
       const savedTask: Task = { ...res.task, id: Number(res.task.id) };
       setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, tasks: s.tasks.map(t => t.id === tempId ? savedTask : t) }) }));
     } catch (e) {

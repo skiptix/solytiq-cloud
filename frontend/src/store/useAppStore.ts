@@ -385,6 +385,7 @@ const useAppStore = create<AppState>()(
               deadline: task.deadline,
               priority: task.priority,
               badge: task.badge,
+              workspaceId: targetList.workspaceId,
             });
             const realId = Number(res.task.id);
             set(s => ({

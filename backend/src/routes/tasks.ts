@@ -55,13 +55,20 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
     const params: unknown[] = [req.userId];
-    const wsClause = workspaceId ? `AND t.workspace_id = $2` : '';
+
+    // Improved query to handle workspace context for both dashboard and list tasks.
+    // If workspaceId is provided, we filter tasks that are explicitly in that workspace,
+    // OR list tasks whose parent list belongs to that workspace.
+    const wsClause = workspaceId
+      ? `AND (t.workspace_id = $2 OR (t.source = 'list' AND l.workspace_id = $2))`
+      : '';
     if (workspaceId) params.push(workspaceId);
+
     const result = await query<TaskRow>(
       `SELECT t.* FROM tasks t
        LEFT JOIN lists l ON t.list_id = l.id
-       WHERE (t.user_id = $1 AND t.source = 'dash')
-          OR (t.source = 'list' AND (l.user_id = $1 OR l.is_public = true))
+       WHERE ((t.user_id = $1 AND t.source = 'dash')
+          OR (t.source = 'list' AND (l.user_id = $1 OR l.is_public = true)))
        ${wsClause}
        ORDER BY t.position ASC, t.created_at ASC`,
       params

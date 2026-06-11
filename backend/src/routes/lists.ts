@@ -628,7 +628,7 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
   try {
     const { listId, sectionId } = req.params;
     console.log(`[list task POST] listId=${listId} sectionId=${sectionId} title=${req.body?.title}`);
-    const { id, title, note, deadline, priority, badge, linked_list_id, linked_list_type } = req.body as {
+    const { id, title, note, deadline, priority, badge, linked_list_id, linked_list_type, workspaceId } = req.body as {
       id?: number;
       title?: string;
       note?: string;
@@ -637,6 +637,7 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
       badge?: string;
       linked_list_id?: string;
       linked_list_type?: 'sublist' | 'link';
+      workspaceId?: string;
     };
 
     if (!title) {
@@ -645,8 +646,8 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
     }
 
     // Only owner or admin can add tasks
-    const ownerCheck = await query<{ user_id: string }>(
-      `SELECT l.user_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
+    const ownerCheck = await query<{ user_id: string; workspace_id: string | null }>(
+      `SELECT l.user_id, l.workspace_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
       [sectionId, listId]
     );
     if (ownerCheck.rows.length === 0) {
@@ -671,10 +672,10 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
 
     const result = await query<TaskRow>(
       `INSERT INTO tasks
-         (id, user_id, title, note, deadline, priority, badge, source, list_id, section_id, position, linked_list_id, linked_list_type)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'list', $8, $9, $10, $11, $12)
+         (id, user_id, title, note, deadline, priority, badge, source, list_id, section_id, position, linked_list_id, linked_list_type, workspace_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'list', $8, $9, $10, $11, $12, $13)
        RETURNING *`,
-      [taskId, req.userId, title, note ?? null, deadline ?? null, priority ?? null, badge ?? null, listId, sectionId, nextPos, linked_list_id ?? null, linked_list_type ?? null]
+      [taskId, req.userId, title, note ?? null, deadline ?? null, priority ?? null, badge ?? null, listId, sectionId, nextPos, linked_list_id ?? null, linked_list_type ?? null, workspaceId ?? ownerCheck.rows[0].workspace_id ?? null]
     );
 
     console.log(`[list task POST] ✓ created taskId=${result.rows[0].id} in section=${sectionId}`);
@@ -890,7 +891,7 @@ router.get('/:listId/progress', async (req: Request, res: Response) => {
 router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, res: Response) => {
   try {
     const { listId, sectionId } = req.params;
-    const { title, sublistName, depth } = req.body as { title?: string; sublistName?: string; depth?: number };
+    const { title, sublistName, depth, workspaceId } = req.body as { title?: string; sublistName?: string; depth?: number; workspaceId?: string };
 
     if (!title || !sublistName) {
       res.status(400).json({ error: 'title and sublistName are required' });
@@ -910,10 +911,11 @@ router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, r
       return;
     }
 
-    // Get parent list depth for calculating new depth
-    const parentListRes = await query<{ depth: number }>('SELECT depth FROM lists WHERE id = $1', [listId]);
+    // Get parent list depth and workspace for calculating new depth and inheriting workspace
+    const parentListRes = await query<{ depth: number; workspace_id: string | null }>('SELECT depth, workspace_id FROM lists WHERE id = $1', [listId]);
     const parentDepth = parentListRes.rows[0]?.depth ?? 0;
     const newDepth = depth ?? parentDepth + 1;
+    const finalWorkspaceId = workspaceId ?? parentListRes.rows[0]?.workspace_id ?? null;
 
     // 1. Create the new sublist
     const newListId = `list_${uuidv4()}`;
@@ -921,8 +923,8 @@ router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, r
     const nextPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
 
     const newList = await query<ListRow>(
-      `INSERT INTO lists (id, user_id, name, is_public, position, depth) VALUES ($1, $2, $3, false, $4, $5) RETURNING *`,
-      [newListId, req.userId, sublistName, nextPos, newDepth]
+      `INSERT INTO lists (id, user_id, name, is_public, position, depth, workspace_id) VALUES ($1, $2, $3, false, $4, $5, $6) RETURNING *`,
+      [newListId, req.userId, sublistName, nextPos, newDepth, finalWorkspaceId]
     );
 
     // 2. Create a default section in the new list
@@ -938,9 +940,9 @@ router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, r
     const taskPos = taskPosResult.rows[0].max !== null ? parseInt(taskPosResult.rows[0].max, 10) + 1 : 0;
 
     const newTask = await query<TaskRow>(
-      `INSERT INTO tasks (id, user_id, title, source, list_id, section_id, position, linked_list_id, linked_list_type)
-       VALUES ($1, $2, $3, 'list', $4, $5, $6, $7, 'sublist') RETURNING *`,
-      [taskId, req.userId, title, listId, sectionId, taskPos, newListId]
+      `INSERT INTO tasks (id, user_id, title, source, list_id, section_id, position, linked_list_id, linked_list_type, workspace_id)
+       VALUES ($1, $2, $3, 'list', $4, $5, $6, $7, 'sublist', $8) RETURNING *`,
+      [taskId, req.userId, title, listId, sectionId, taskPos, newListId, finalWorkspaceId]
     );
 
     // 4. Update the sublist with the parent_task_id
@@ -959,7 +961,7 @@ router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, r
 router.post('/:listId/sections/:sectionId/tasks/link', async (req: Request, res: Response) => {
   try {
     const { listId, sectionId } = req.params;
-    const { title, linkedListId } = req.body as { title?: string; linkedListId?: string };
+    const { title, linkedListId, workspaceId } = req.body as { title?: string; linkedListId?: string; workspaceId?: string };
 
     if (!title || !linkedListId) {
       res.status(400).json({ error: 'title and linkedListId are required' });
@@ -990,10 +992,14 @@ router.post('/:listId/sections/:sectionId/tasks/link', async (req: Request, res:
     const posResult = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM tasks WHERE section_id = $1', [sectionId]);
     const taskPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
 
+    // Get workspace from parent list if not provided
+    const parentListRes = await query<{ workspace_id: string | null }>('SELECT workspace_id FROM lists WHERE id = $1', [listId]);
+    const finalWorkspaceId = workspaceId ?? parentListRes.rows[0]?.workspace_id ?? null;
+
     const newTask = await query<TaskRow>(
-      `INSERT INTO tasks (id, user_id, title, source, list_id, section_id, position, linked_list_id, linked_list_type)
-       VALUES ($1, $2, $3, 'list', $4, $5, $6, $7, 'link') RETURNING *`,
-      [taskId, req.userId, title, listId, sectionId, taskPos, linkedListId]
+      `INSERT INTO tasks (id, user_id, title, source, list_id, section_id, position, linked_list_id, linked_list_type, workspace_id)
+       VALUES ($1, $2, $3, 'list', $4, $5, $6, $7, 'link', $8) RETURNING *`,
+      [taskId, req.userId, title, listId, sectionId, taskPos, linkedListId, finalWorkspaceId]
     );
 
     res.status(201).json({ task: sanitizeTask(newTask.rows[0]) });

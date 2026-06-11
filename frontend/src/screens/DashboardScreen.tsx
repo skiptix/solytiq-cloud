@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Task, List } from '../types';
 import useAppStore from '../store/useAppStore';
+import useWorkspaceStore from '../store/useWorkspaceStore';
 import { apiCreateTask } from '../api/client';
 import TaskItem, { QuickAdd } from '../components/TaskItem';
 import TaskDialog from '../components/TaskDialog';
@@ -315,11 +316,12 @@ export default function DashboardScreen() {
         <section>
           <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 12, overflow: 'hidden' }}>
             <QuickAdd onAdd={async data => {
+              const { currentWorkspaceId } = useWorkspaceStore.getState();
               const tempId = Date.now();
               const tempTask: Task = { id: tempId, checked: false, ...data };
               setDashTasks(ts => [tempTask, ...ts]);
               try {
-                const res = await apiCreateTask(data);
+                const res = await apiCreateTask({ ...data, workspaceId: currentWorkspaceId ?? undefined });
                 setDashTasks(ts => ts.map(t => t.id === tempId ? { ...tempTask, id: Number(res.task.id) } : t));
               } catch (e) {
                 console.error('createTask failed', e);
