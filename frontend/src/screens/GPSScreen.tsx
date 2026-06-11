@@ -230,7 +230,7 @@ export default function GPSScreen() {
 
   // ── POI Layer
   const [activePoi, setActivePoi] = useState<Set<PoiCategory>>(() => {
-    try { const s = localStorage.getItem('gps_active_poi'); if (s) return new Set(JSON.parse(s) as PoiCategory[]); } catch { /* ignore */ }
+    try { const s = localStorage.getItem('gps_active_poi'); if (s) return new Set(JSON.parse(s) as PoiCategory[]); } catch (err) { console.error('📍 Failed to parse active POI from localStorage:', err); }
     return new Set();
   });
   useEffect(() => { localStorage.setItem('gps_active_poi', JSON.stringify([...activePoi])); }, [activePoi]);
@@ -266,11 +266,11 @@ export default function GPSScreen() {
   useEffect(() => {
     if (initialLoadDone.current) return;
     initialLoadDone.current = true;
-    apiGetGpsFiles().then(data => setFiles(data)).catch(() => {});
+    apiGetGpsFiles().then(data => setFiles(data)).catch(err => console.error('📍 Failed to load GPS files:', err));
   }, [setFiles]);
 
   useEffect(() => {
-    const handler = () => { apiGetGpsFiles().then(data => setFiles(data)).catch(() => {}); };
+    const handler = () => { apiGetGpsFiles().then(data => setFiles(data)).catch(err => console.error('📍 Failed to reload GPS files:', err)); };
     window.addEventListener('gps-files-changed', handler);
     return () => window.removeEventListener('gps-files-changed', handler);
   }, [setFiles]);
@@ -463,8 +463,9 @@ export default function GPSScreen() {
         marker.bindPopup(`<div style="font-family:Inter,sans-serif;min-width:180px;max-width:240px;"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><span style="background:${cfg.bg};color:${cfg.fg};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Hanken Grotesk',sans-serif;white-space:nowrap;">${cfg.label}</span></div><div style="font-size:13px;font-weight:700;color:#1c1b22;font-family:'Hanken Grotesk',sans-serif;margin-bottom:6px;">${poi.name}</div>${address ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">📍 ${address}</div>` : ''}${tags['opening_hours'] ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">🕐 ${tags['opening_hours']}</div>` : ''}${tags['phone'] || tags['contact:phone'] ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">📞 ${tags['phone'] || tags['contact:phone']}</div>` : ''}${tags['website'] || tags['contact:website'] ? `<div style="font-size:11px;margin-top:4px;"><a href="${tags['website'] || tags['contact:website']}" target="_blank" rel="noopener" style="color:#5e4dbb;text-decoration:none;">🌐 Website</a></div>` : ''}</div>`, { maxWidth: 260, className: 'solytiq-poi-popup' });
         layer.addLayer(marker);
       });
-    } catch { /* ignore */ }
-    finally { if (!ctrl.signal.aborted) setPoiLoading(false); }
+    } catch (err) {
+      if ((err as DOMException)?.name !== 'AbortError') console.error('📍 POI fetch failed:', err);
+    } finally { if (!ctrl.signal.aborted) setPoiLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -523,8 +524,9 @@ export default function GPSScreen() {
         const bounds = map?.getBounds();
         const results = await searchNominatim(q, bounds ? { south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast() } : undefined, ctrl.signal);
         if (!ctrl.signal.aborted) setSearchResults(results.slice(0, 5));
-      } catch { /* ignore */ }
-      finally { if (!ctrl.signal.aborted) setSearchLoading(false); }
+      } catch (err) {
+        if ((err as DOMException)?.name !== 'AbortError') console.error('📍 Search failed:', err);
+      } finally { if (!ctrl.signal.aborted) setSearchLoading(false); }
     }, 400);
   }
 
@@ -608,7 +610,12 @@ export default function GPSScreen() {
 
   async function handleDeleteSelected() {
     if (!selectedId) return;
-    await apiDeleteGpsFile(selectedId);
+    try {
+      await apiDeleteGpsFile(selectedId);
+    } catch (err) {
+      console.error('📍 Failed to delete GPS file:', err);
+      return;
+    }
     setFiles(prev => prev.filter(f => f.id !== selectedId));
     window.dispatchEvent(new CustomEvent('gps-files-changed'));
     selectedIdRef.current = null;
@@ -633,7 +640,7 @@ export default function GPSScreen() {
         setFiles(prev => prev.map(f => f.id === selectedId ? file : f));
         setTrackLoading(true);
         setTrackData(null);
-        try { const data = await apiGetGpsTrackData(selectedId); setTrackData(data); } catch { /* ignore */ }
+        try { const data = await apiGetGpsTrackData(selectedId); setTrackData(data); } catch (err) { console.error('📍 Failed to reload track data after smooth:', err); }
         setTrackLoading(false);
       }
       window.dispatchEvent(new CustomEvent('gps-files-changed'));
