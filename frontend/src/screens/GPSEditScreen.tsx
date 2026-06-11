@@ -156,7 +156,8 @@ async function fetchRoutedPath(
   try {
     // Try with profile-specific options; fall back to costing defaults if rejected
     return (await attempt(prof.options)) ?? (await attempt({}));
-  } catch {
+  } catch (err) {
+    console.error('📍 fetchRoutedPath failed:', err);
     return null;
   } finally {
     clearTimeout(timer);
@@ -178,7 +179,8 @@ async function fetchElevations(coords: Array<{ lat: number; lon: number }>): Pro
       const data = (await res.json()) as { elevation?: number[] };
       if (!Array.isArray(data.elevation) || data.elevation.length !== chunk.length) return null;
       out.push(...data.elevation);
-    } catch {
+    } catch (err) {
+      console.error('📍 fetchElevations failed:', err);
       return null;
     } finally {
       clearTimeout(timer);
@@ -227,7 +229,8 @@ async function reverseGeocode(lat: number, lon: number): Promise<string | null> 
     const locality = a.village || a.town || a.city || a.municipality || a.county;
     const label = [main, locality].filter(Boolean).join(', ');
     return label || data.display_name?.split(',').slice(0, 2).join(',').trim() || null;
-  } catch {
+  } catch (err) {
+    console.error('📍 reverseGeocode failed:', err);
     return null;
   } finally {
     clearTimeout(timer);
@@ -632,7 +635,7 @@ export default function GPSEditScreen() {
   const [addPinMode, setAddPinMode] = useState<'pin' | 'route'>('pin');
   // ── POI Layer
   const [activePoi, setActivePoi] = useState<Set<PoiCategory>>(() => {
-    try { const s = localStorage.getItem('gps_active_poi'); if (s) return new Set(JSON.parse(s) as PoiCategory[]); } catch { /* ignore */ }
+    try { const s = localStorage.getItem('gps_active_poi'); if (s) return new Set(JSON.parse(s) as PoiCategory[]); } catch (err) { console.error('📍 Failed to parse active POI from localStorage:', err); }
     return new Set();
   });
   useEffect(() => { localStorage.setItem('gps_active_poi', JSON.stringify([...activePoi])); }, [activePoi]);
@@ -681,8 +684,9 @@ export default function GPSEditScreen() {
         const trimmed = editPoints.slice(trimStart, trimEnd + 1);
         const result = await fetchSurfaceBreakdown(trimmed, ctrl.signal);
         if (!ctrl.signal.aborted && result) setSurfaceData(result);
-      } catch { /* ignore */ }
-      finally { if (!ctrl.signal.aborted) setSurfaceLoading(false); }
+      } catch (err) {
+        if ((err as DOMException)?.name !== 'AbortError') console.error('📍 Surface data fetch failed:', err);
+      } finally { if (!ctrl.signal.aborted) setSurfaceLoading(false); }
     }, 2000);
     return () => clearTimeout(surfaceTimerRef.current!);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1505,7 +1509,7 @@ export default function GPSEditScreen() {
       setMapClick(prev => prev && prev.lat === lat && prev.lon === lon
         ? { ...prev, ele: eles?.[0] ?? null, name, loading: false }
         : prev);
-    });
+    }).catch(err => console.error('📍 Map click elevation/geocode failed:', err));
   }, [activeSel]);
 
   useEffect(() => { mapClickHandlerRef.current = handleMapClick; }, [handleMapClick]);
@@ -1741,8 +1745,9 @@ export default function GPSEditScreen() {
           })
           .addTo(layer);
       });
-    } catch { /* ignore */ }
-    finally { if (!ctrl.signal.aborted) setPoiLoading(false); }
+    } catch (err) {
+      if ((err as DOMException)?.name !== 'AbortError') console.error('📍 POI fetch failed:', err);
+    } finally { if (!ctrl.signal.aborted) setPoiLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -1911,8 +1916,9 @@ export default function GPSEditScreen() {
         const bounds = map?.getBounds();
         const results = await searchNominatim(q, bounds ? { south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast() } : undefined, ctrl.signal);
         if (!ctrl.signal.aborted) setSearchResults(results.slice(0, 5));
-      } catch { /* ignore */ }
-      finally { if (!ctrl.signal.aborted) setSearchLoading(false); }
+      } catch (err) {
+        if ((err as DOMException)?.name !== 'AbortError') console.error('📍 Search failed:', err);
+      } finally { if (!ctrl.signal.aborted) setSearchLoading(false); }
     }, 400);
   }
 
