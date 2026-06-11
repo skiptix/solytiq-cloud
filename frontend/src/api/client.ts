@@ -1,4 +1,4 @@
-import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GapMode, NamedPinInput } from '../types';
+import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GapMode, NamedPinInput, OverpassPoi } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -554,6 +554,11 @@ export const apiGpsRoute = (
   body: { locations: Array<{ lat: number; lon: number }>; costing: string; costing_options: Record<string, unknown> },
   signal?: AbortSignal,
 ) => apiFetch<unknown>('/gps/route', { method: 'POST', body: JSON.stringify(body), signal });
+
+export const apiGetGpsPois = (
+  body: { bbox: { south: number; west: number; north: number; east: number }; categories: string[]; zoom: number },
+  signal?: AbortSignal,
+) => apiFetch<{ pois: OverpassPoi[]; truncated: boolean; cached: boolean }>('/gps/pois', { method: 'POST', body: JSON.stringify(body), signal });
 
 export async function apiRenameGpsFile(id: string, name: string): Promise<GpsFile> {
   const token = getToken();

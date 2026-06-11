@@ -4,10 +4,9 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet-editable';
 import L from 'leaflet';
 import type { GpsFile, GpsTrackPoint, PoiCategory, OverpassPoi, NominatimResult, NamedPin } from '../types';
-import { apiGetGpsFiles, apiGetGpsTrackData, apiSaveEditedGpsTrack, apiGpsRoute } from '../api/client';
+import { apiGetGpsFiles, apiGetGpsTrackData, apiSaveEditedGpsTrack, apiGpsRoute, apiGetGpsPois } from '../api/client';
 import useGpsStore from '../store/useGpsStore';
 import Icon from '../components/Icon';
-import { queryOverpass } from '../utils/overpass';
 import { searchNominatim, parseCoordInput } from '../utils/nominatim';
 import { POI_CATEGORY_CONFIG, createPoiDivIcon, createPinDivIcon } from '../utils/poiCategories';
 import { fetchSurfaceBreakdown } from '../utils/surfaceData';
@@ -144,18 +143,25 @@ async function fetchRoutedPath(
   const timer = setTimeout(() => ctrl.abort(), 15000);
 
   const attempt = async (opts: Record<string, number | string>) => {
-    const data = (await apiGpsRoute({
-      locations: coords.map(c => ({ lat: c.lat, lon: c.lon })),
-      costing: prof.costing,
-      costing_options: { [prof.costing]: opts },
-    }, ctrl.signal)) as ValhallaResponse;
-    const legs = (data.trip?.legs ?? []).map(l => decodePolyline6(l.shape));
-    return legs.length === coords.length - 1 && !legs.some(l => l.length < 2) ? { legs } : null;
+    try {
+      const data = (await apiGpsRoute({
+        locations: coords.map(c => ({ lat: c.lat, lon: c.lon })),
+        costing: prof.costing,
+        costing_options: { [prof.costing]: opts },
+      }, ctrl.signal)) as ValhallaResponse;
+      const legs = (data.trip?.legs ?? []).map(l => decodePolyline6(l.shape));
+      return legs.length === coords.length - 1 && !legs.some(l => l.length < 2) ? { legs } : null;
+    } catch (err) {
+      if ((err as DOMException)?.name === 'AbortError') throw err;
+      return null;
+    }
   };
 
   try {
     // Try with profile-specific options; fall back to costing defaults if rejected
-    return (await attempt(prof.options)) ?? (await attempt({}));
+    const first = await attempt(prof.options);
+    if (first) return first;
+    return await attempt({});
   } catch (err) {
     console.error('📍 fetchRoutedPath failed:', err);
     return null;
@@ -758,7 +764,10 @@ export default function GPSEditScreen() {
           historyIdxRef.current = 0;
           return;
         }
-        const simplified = simplifyTrack(trackData.points, 0.00015);
+        const simplified = simplifyTrack(trackData.points.map((p, i) => ({
+          ...p,
+          id: p.id || `pt-${i}-${p.lat.toFixed(7)}-${p.lon.toFixed(7)}`
+        })), 0.00015);
         setOriginalPoints(simplified);
         setEditPoints(simplified);
         editPointsRef.current = simplified;
@@ -767,9 +776,28 @@ export default function GPSEditScreen() {
         setTrimEnd(te);
         trimStartRef.current = 0;
         trimEndRef.current = te;
-        setHistory([{ points: simplified, waypoints: [] }]);
+
+        // Hydrate waypoints
+        const loadedWps = trackData.waypoints || [];
+        setNamedPins(loadedWps);
+        namedPinsRef.current = loadedWps;
+
+        const editWps: EditWaypoint[] = loadedWps
+          .filter(wp => wp.addedToRoute)
+          .map(wp => ({
+            id: wp.id,
+            lat: wp.lat,
+            lon: wp.lon,
+            offRoad: wp.offRoad ?? false,
+            anchorPrev: null, // Anchors will be recalculated on first move if needed
+            anchorNext: null,
+          }));
+        setWaypoints(editWps);
+        waypointsRef.current = editWps;
+
+        setHistory([{ points: simplified, waypoints: editWps }]);
         setHistoryIdx(0);
-        historyArrRef.current = [{ points: simplified, waypoints: [] }];
+        historyArrRef.current = [{ points: simplified, waypoints: editWps }];
         historyIdxRef.current = 0;
       })
       .catch(() => navigate('/gps'))
@@ -897,8 +925,13 @@ export default function GPSEditScreen() {
 
     // Remember whether the grabbed vertex is an existing edited waypoint
     map.on('editable:vertex:dragstart', (e) => {
-      const ll = (e as EditableVertexEvent).vertex.getLatLng();
+      const ev = e as EditableVertexEvent;
+      const ll = ev.vertex.getLatLng();
+
+      // Prefer matching by exact coordinate for waypoints (Komoot style)
+      // but also support meter tolerance if needed.
       const wp = waypointsRef.current.find(w => w.lat === ll.lat && w.lon === ll.lng);
+
       dragWpIdRef.current = wp?.id ?? null;
       // Cache the marker so the drag handler can move it in real-time
       dragWpMarkerRef.current = wp
@@ -948,7 +981,7 @@ export default function GPSEditScreen() {
         while (k < prevActive.length && (prevActive[k].lat !== ll.lat || prevActive[k].lon !== ll.lng)) k++;
         if (k < prevActive.length) { j = k + 1; return prevActive[k]; }
         freshIdx.push(i);
-        return { lat: ll.lat, lon: ll.lng, ele: NaN };
+        return { id: crypto.randomUUID(), lat: ll.lat, lon: ll.lng, ele: NaN };
       });
       // Baseline elevation for new points: mean of the nearest known neighbours
       for (const i of freshIdx) {
@@ -968,8 +1001,18 @@ export default function GPSEditScreen() {
       trimEndRef.current = newTe;
       setEditPoints(newPts);
       setTrimEnd(newTe);
+
       // Drop waypoints whose track point no longer exists (deleted vertex)
-      const liveWps = waypointsRef.current.filter(w => newPts.some(p => p.lat === w.lat && p.lon === w.lon));
+      // Use a meter tolerance for safety
+      const WAYPOINT_ATTACH_TOLERANCE_M = 5;
+      const liveWps = waypointsRef.current.filter(w => {
+        const nearestIdx = findNearestPoint(newPts, w.lat, w.lon);
+        const nearest = newPts[nearestIdx];
+        if (!nearest) return false;
+        const dist = haversineClient(w.lat, w.lon, nearest.lat, nearest.lon);
+        return dist <= WAYPOINT_ATTACH_TOLERANCE_M;
+      });
+
       if (liveWps.length !== waypointsRef.current.length) {
         waypointsRef.current = liveWps;
         setWaypoints(liveWps);
@@ -989,12 +1032,15 @@ export default function GPSEditScreen() {
     // Edited waypoint markers — sit beneath the vertex handles, click opens popup
     waypointMarkersRef.current.forEach(m => m.remove());
     waypointMarkersRef.current = [];
+    const WAYPOINT_ATTACH_TOLERANCE_M = 5;
     for (const wp of waypointsRef.current) {
       const idx = findNearestPoint(pts, wp.lat, wp.lon);
       const p = pts[idx];
-      if (!p || p.lat !== wp.lat || p.lon !== wp.lon) continue;
+      if (!p) continue;
+      const dist = haversineClient(wp.lat, wp.lon, p.lat, p.lon);
+      if (dist > WAYPOINT_ATTACH_TOLERANCE_M) continue;
       if (idx < ts || idx > te) continue;
-      const mkr = L.marker([wp.lat, wp.lon], { icon: createWpIcon(wp.offRoad), zIndexOffset: -200 });
+      const mkr = L.marker([p.lat, p.lon], { icon: createWpIcon(wp.offRoad), zIndexOffset: -200 });
       mkr.on('click', () => openWpPopupRef.current?.(wp.id));
       mkr.addTo(map);
       waypointMarkersRef.current.push(mkr);
@@ -1321,7 +1367,8 @@ export default function GPSEditScreen() {
     const pts = editPointsRef.current;
     const p = pts?.[gi];
     if (!map || !p) return;
-    const wp = waypointsRef.current.find(w => w.lat === p.lat && w.lon === p.lon);
+    const WAYPOINT_ATTACH_TOLERANCE_M = 5;
+    const wp = waypointsRef.current.find(w => haversineClient(w.lat, w.lon, p.lat, p.lon) <= WAYPOINT_ATTACH_TOLERANCE_M);
     if (wp) { openWpPopup(wp.id); return; }
     const cp = map.latLngToContainerPoint([p.lat, p.lon]);
     setPopupXY({ x: cp.x, y: cp.y });
@@ -1403,7 +1450,8 @@ export default function GPSEditScreen() {
     if (idx < ts || idx > te || te - ts < 2) return;
     const newPts = [...pts.slice(0, idx), ...pts.slice(idx + 1)];
     const newTe = te - 1;
-    const newWps = waypointsRef.current.filter(w => !(w.lat === lat && w.lon === lon));
+    const WAYPOINT_ATTACH_TOLERANCE_M = 5;
+    const newWps = waypointsRef.current.filter(w => haversineClient(w.lat, w.lon, lat, lon) > WAYPOINT_ATTACH_TOLERANCE_M);
     editPointsRef.current = newPts;
     trimEndRef.current = newTe;
     waypointsRef.current = newWps;
@@ -1593,7 +1641,8 @@ export default function GPSEditScreen() {
 
       const finishExtend = (newPts: GpsTrackPoint[]) => {
         const newTe = newPts.length - 1;
-        const wp: EditWaypoint = { id: wpId, lat: newPt.lat, lon: newPt.lon, offRoad: !snapEnabledRef.current, anchorPrev: { lat: lastPt.lat, lon: lastPt.lon }, anchorNext: null };
+      const wpPoint = newPts[newTe];
+      const wp: EditWaypoint = { id: wpId, lat: wpPoint.lat, lon: wpPoint.lon, offRoad: !snapEnabledRef.current, anchorPrev: { lat: lastPt.lat, lon: lastPt.lon }, anchorNext: null };
         editPointsRef.current = newPts;
         trimEndRef.current = newTe;
         waypointsRef.current = [...waypointsRef.current, wp];
@@ -1720,17 +1769,21 @@ export default function GPSEditScreen() {
   }, [editPoints]);
 
   // ── POI Layer (Edit Screen: click opens Add-Pin dialog) ─────────────────
-  const doPoiFetchEdit = useCallback(async (bounds: L.LatLngBounds) => {
+  const doPoiFetchEdit = useCallback(async (bounds: L.LatLngBounds, zoom: number) => {
     poiFetchControllerRef.current?.abort();
     const ctrl = new AbortController();
     poiFetchControllerRef.current = ctrl;
     setPoiLoading(true);
     try {
-      const result = await queryOverpass(
-        bounds.getSouth(), bounds.getWest(),
-        bounds.getNorth(), bounds.getEast(),
-        [...activePoisRef.current], ctrl.signal,
-      );
+      const { pois: result } = await apiGetGpsPois({
+        bbox: {
+          south: bounds.getSouth(), west: bounds.getWest(),
+          north: bounds.getNorth(), east: bounds.getEast(),
+        },
+        categories: [...activePoisRef.current],
+        zoom,
+      }, ctrl.signal);
+
       if (ctrl.signal.aborted) return;
       const layer = poiLayerRef.current;
       if (!layer) return;
@@ -1760,7 +1813,7 @@ export default function GPSEditScreen() {
           poiLayerRef.current?.clearLayers();
           return;
         }
-        doPoiFetchEdit(map.getBounds());
+        doPoiFetchEdit(map.getBounds(), map.getZoom());
       }, 600);
     };
     map.on('moveend', scheduleFetch);
@@ -1967,9 +2020,19 @@ export default function GPSEditScreen() {
         saveAs: mode,
         name: mode === 'new' ? editName.trim() || undefined : undefined,
         waypoints: namedPins.map(p => ({
-          lat: p.lat, lon: p.lon, ele: p.ele,
-          name: p.name, description: p.description,
-          sym: p.sym, highlighted: p.highlighted,
+          id: p.id,
+          lat: p.originalLat ?? p.lat,
+          lon: p.originalLon ?? p.lon,
+          ele: p.ele,
+          name: p.name,
+          description: p.description,
+          sym: p.sym,
+          highlighted: p.highlighted,
+          addedToRoute: p.addedToRoute,
+          offRoad: p.offRoad,
+          pointId: p.pointId,
+          originalLat: p.originalLat,
+          originalLon: p.originalLon,
         })),
       });
       // Update store
