@@ -176,6 +176,7 @@ export interface GpsFile {
 }
 
 export interface GpsTrackPoint {
+  id?: string;
   lat: number;
   lon: number;
   ele: number;
@@ -193,6 +194,7 @@ export interface GpsMetricPoint {
 
 export interface GpsTrackData {
   points: GpsTrackPoint[];
+  waypoints: NamedPin[];
   elevationProfile: Array<{ distance: number; elevation: number; idx: number }>;
   metadata: GpsFileMetadata;
   metricsAvailable: { hr: boolean; cadence: boolean; power: boolean };
@@ -271,9 +273,14 @@ export interface NamedPin {
   sym: PoiCategory | 'flag' | 'generic';
   highlighted: boolean;
   addedToRoute: boolean;
+  offRoad?: boolean;
+  pointId?: string | null;
+  originalLat?: number;
+  originalLon?: number;
 }
 
 export interface NamedPinInput {
+  id?: string;
   lat: number;
   lon: number;
   ele?: number;
@@ -281,4 +288,9 @@ export interface NamedPinInput {
   description?: string;
   sym: string;
   highlighted?: boolean;
+  addedToRoute?: boolean;
+  offRoad?: boolean;
+  pointId?: string | null;
+  originalLat?: number;
+  originalLon?: number;
 }

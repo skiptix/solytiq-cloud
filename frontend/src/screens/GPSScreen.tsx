@@ -6,11 +6,11 @@ import type { GpsTrackData, GpsMetricPoint, PoiCategory, NominatimResult } from 
 import {
   apiGetGpsFiles, apiUploadGpsFile, apiGetGpsTrackData,
   apiDownloadGpsFile, apiDeleteGpsFile, apiSmoothAndSaveGpsFile, apiCreateNewGpsRoute,
+  apiGetGpsPois,
 } from '../api/client';
 import useGpsStore from '../store/useGpsStore';
 import Icon from '../components/Icon';
 import GPSMergeWizard from '../components/GPSMergeWizard';
-import { queryOverpass } from '../utils/overpass';
 import { searchNominatim, parseCoordInput } from '../utils/nominatim';
 import { POI_CATEGORY_CONFIG, createPoiDivIcon } from '../utils/poiCategories';
 
@@ -436,17 +436,21 @@ export default function GPSScreen() {
   }, [hoveredIdx, trackData]);
 
   // ── POI Layer fetch & render ──────────────────────────────────────────────
-  const doPoiFetch = useCallback(async (bounds: L.LatLngBounds) => {
+  const doPoiFetch = useCallback(async (bounds: L.LatLngBounds, zoom: number) => {
     poiFetchControllerRef.current?.abort();
     const ctrl = new AbortController();
     poiFetchControllerRef.current = ctrl;
     setPoiLoading(true);
     try {
-      const result = await queryOverpass(
-        bounds.getSouth(), bounds.getWest(),
-        bounds.getNorth(), bounds.getEast(),
-        [...activePoisRef.current], ctrl.signal,
-      );
+      const { pois: result } = await apiGetGpsPois({
+        bbox: {
+          south: bounds.getSouth(), west: bounds.getWest(),
+          north: bounds.getNorth(), east: bounds.getEast(),
+        },
+        categories: [...activePoisRef.current],
+        zoom,
+      }, ctrl.signal);
+
       if (ctrl.signal.aborted) return;
       const layer = poiLayerRef.current;
       if (!layer) return;
@@ -459,7 +463,7 @@ export default function GPSScreen() {
           tags['addr:street'] && tags['addr:housenumber'] ? `${tags['addr:street']} ${tags['addr:housenumber']}` : tags['addr:street'],
           tags['addr:city'] || tags['addr:town'],
         ].filter(Boolean).join(', ');
-        const cfg = POI_CATEGORY_CONFIG[poi.category];
+        const cfg = POI_CATEGORY_CONFIG[poi.category as PoiCategory];
         marker.bindPopup(`<div style="font-family:Inter,sans-serif;min-width:180px;max-width:240px;"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><span style="background:${cfg.bg};color:${cfg.fg};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Hanken Grotesk',sans-serif;white-space:nowrap;">${cfg.label}</span></div><div style="font-size:13px;font-weight:700;color:#1c1b22;font-family:'Hanken Grotesk',sans-serif;margin-bottom:6px;">${poi.name}</div>${address ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">📍 ${address}</div>` : ''}${tags['opening_hours'] ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">🕐 ${tags['opening_hours']}</div>` : ''}${tags['phone'] || tags['contact:phone'] ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">📞 ${tags['phone'] || tags['contact:phone']}</div>` : ''}${tags['website'] || tags['contact:website'] ? `<div style="font-size:11px;margin-top:4px;"><a href="${tags['website'] || tags['contact:website']}" target="_blank" rel="noopener" style="color:#5e4dbb;text-decoration:none;">🌐 Website</a></div>` : ''}</div>`, { maxWidth: 260, className: 'solytiq-poi-popup' });
         layer.addLayer(marker);
       });
@@ -478,7 +482,7 @@ export default function GPSScreen() {
           poiLayerRef.current?.clearLayers();
           return;
         }
-        doPoiFetch(map.getBounds());
+        doPoiFetch(map.getBounds(), map.getZoom());
       }, 600);
     };
     map.on('moveend', scheduleFetch);

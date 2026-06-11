@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { XMLParser } from 'fast-xml-parser';
+import { LRUCache } from 'lru-cache';
 import { query } from '../db';
 import { authenticate } from '../middleware';
 
@@ -52,6 +53,21 @@ interface GpsPoint {
   lat: number; lon: number; ele: number; time?: string;
   hr?: number; cadence?: number; power?: number;
 }
+interface GpsWaypoint {
+  id: string;
+  lat: number;
+  lon: number;
+  ele?: number;
+  name: string;
+  description?: string;
+  sym: string;
+  highlighted?: boolean;
+  addedToRoute?: boolean;
+  offRoad?: boolean;
+  pointId?: string | null;
+  originalLat?: number;
+  originalLon?: number;
+}
 interface GpsFileRow {
   id: string; user_id: string; original_name: string; file_type: string;
   file_path: string; file_size: number; metadata: Record<string, unknown> | null;
@@ -59,7 +75,7 @@ interface GpsFileRow {
 }
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
-function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+export function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
   const φ1 = (lat1 * Math.PI) / 180, φ2 = (lat2 * Math.PI) / 180;
   const Δφ = ((lat2 - lat1) * Math.PI) / 180;
@@ -104,7 +120,7 @@ function gaussianSmooth(points: GpsPoint[], sigma: number): GpsPoint[] {
   });
 }
 
-function buildElevationProfile(points: GpsPoint[]) {
+export function buildElevationProfile(points: GpsPoint[]) {
   let cum = 0;
   return points.map((p, i) => {
     if (i > 0) cum += haversine(points[i - 1].lat, points[i - 1].lon, p.lat, p.lon);
@@ -114,6 +130,7 @@ function buildElevationProfile(points: GpsPoint[]) {
 
 // Named waypoint input (from frontend route editor)
 interface WaypointInput {
+  id?: string;
   lat: number;
   lon: number;
   ele?: number;
@@ -121,6 +138,11 @@ interface WaypointInput {
   description?: string;
   sym?: string;
   highlighted?: boolean;
+  addedToRoute?: boolean;
+  offRoad?: boolean;
+  pointId?: string | null;
+  originalLat?: number;
+  originalLon?: number;
 }
 
 const GPX_SYM_MAP: Record<string, string> = {
@@ -133,63 +155,142 @@ const GPX_SYM_MAP: Record<string, string> = {
   generic: 'Waypoint',
 };
 
+const GPX_SYM_TO_APP: Record<string, string> = {
+  'Restaurant': 'food',
+  'Gas Station': 'fuel',
+  'Bike Shop': 'bicycle',
+  'Grocery Store': 'shopping',
+  'Convenience Store': 'kiosk',
+  'Flag': 'flag',
+  'Waypoint': 'generic',
+};
+
 function escXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function writeGpx(points: GpsPoint[], name = 'Route', waypoints: WaypointInput[] = []): string {
+export function writeGpx(points: GpsPoint[], name = 'Route', waypoints: WaypointInput[] = []): string {
   const safeName = escXml(name);
   // <wpt> elements MUST appear before <trk> per GPX 1.1 spec (required for Wahoo)
   const wptXml = waypoints.map(w => {
     const elePart = w.ele != null ? `\n      <ele>${Number(w.ele).toFixed(2)}</ele>` : '';
     const descPart = w.description ? `\n      <desc>${escXml(w.description)}</desc>` : '';
     const symPart = w.sym ? `\n      <sym>${GPX_SYM_MAP[w.sym] ?? 'Waypoint'}</sym>` : '';
-    return `  <wpt lat="${w.lat.toFixed(7)}" lon="${w.lon.toFixed(7)}">${elePart}\n      <name>${escXml(w.name)}</name>${descPart}${symPart}\n      <type>User Waypoint</type>\n  </wpt>`;
+
+    // Solytiq extensions for full roundtrip
+    const extAttrs: string[] = [];
+    if (w.id) extAttrs.push(`id="${escXml(w.id)}"`);
+    if (w.addedToRoute !== undefined) extAttrs.push(`addedToRoute="${w.addedToRoute}"`);
+    if (w.highlighted !== undefined) extAttrs.push(`highlighted="${w.highlighted}"`);
+    if (w.offRoad !== undefined) extAttrs.push(`offRoad="${w.offRoad}"`);
+    if (w.pointId) extAttrs.push(`pointId="${escXml(w.pointId)}"`);
+    if (w.originalLat !== undefined) extAttrs.push(`originalLat="${w.originalLat.toFixed(7)}"`);
+    if (w.originalLon !== undefined) extAttrs.push(`originalLon="${w.originalLon.toFixed(7)}"`);
+
+    const extensions = extAttrs.length > 0
+      ? `\n      <extensions>\n        <solytiq:waypoint ${extAttrs.join(' ')} />\n      </extensions>`
+      : '';
+
+    return `  <wpt lat="${w.lat.toFixed(7)}" lon="${w.lon.toFixed(7)}">${elePart}\n      <name>${escXml(w.name)}</name>${descPart}${symPart}\n      <type>User Waypoint</type>${extensions}\n  </wpt>`;
   }).join('\n');
   const trkpts = points.map(p => {
     const eleLine = `        <ele>${p.ele.toFixed(2)}</ele>`;
     const timeLine = p.time ? `\n        <time>${p.time}</time>` : '';
     return `      <trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}">\n${eleLine}${timeLine}\n      </trkpt>`;
   }).join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Solytiq Cloud" xmlns="http://www.topografix.com/GPX/1/1">\n  <metadata><name>${safeName}</name></metadata>\n${wptXml ? wptXml + '\n' : ''}  <trk>\n    <name>${safeName}</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Solytiq Cloud" xmlns="http://www.topografix.com/GPX/1/1" xmlns:solytiq="https://solytiq.cloud/gpx/1/0">\n  <metadata><name>${safeName}</name></metadata>\n${wptXml ? wptXml + '\n' : ''}  <trk>\n    <name>${safeName}</name>\n    <trkseg>\n${trkpts}\n    </trkseg>\n  </trk>\n</gpx>`;
 }
 
 // ─── Parsers ─────────────────────────────────────────────────────────────────
+interface ParsedGpxData {
+  points: GpsPoint[];
+  waypoints: GpsWaypoint[];
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function parseGpx(content: string): GpsPoint[] {
+export function parseGpx(content: string): ParsedGpxData {
   const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
-    isArray: (name) => ['trkpt', 'trkseg', 'trk'].includes(name),
+    isArray: (name) => ['trkpt', 'trkseg', 'trk', 'wpt'].includes(name),
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result: any = parser.parse(content);
   const gpx = result.gpx ?? result;
-  if (!gpx?.trk) return [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const trks: any[] = Array.isArray(gpx.trk) ? gpx.trk : [gpx.trk];
+
+  const waypoints: GpsWaypoint[] = [];
+  if (gpx?.wpt) {
+    const wpts = Array.isArray(gpx.wpt) ? gpx.wpt : [gpx.wpt];
+    wpts.forEach((wp: any, index: number) => {
+      const lat = parseFloat(wp['@_lat']);
+      const lon = parseFloat(wp['@_lon']);
+      if (isNaN(lat) || isNaN(lon)) return;
+
+      const name = wp.name ? String(wp.name) : 'Waypoint';
+      const sym = wp.sym ? (GPX_SYM_TO_APP[wp.sym] ?? 'generic') : 'generic';
+
+      // Fallback stable ID if Solytiq extension is missing
+      let id = crypto.createHash('sha1').update(`${lat}:${lon}:${name}:${index}`).digest('hex');
+      let addedToRoute = false;
+      let highlighted = false;
+      let offRoad = false;
+      let pointId = null;
+      let originalLat = undefined;
+      let originalLon = undefined;
+
+      const ext = wp.extensions?.['solytiq:waypoint'];
+      if (ext) {
+        if (ext['@_id']) id = ext['@_id'];
+        if (ext['@_addedToRoute']) addedToRoute = ext['@_addedToRoute'] === 'true';
+        if (ext['@_highlighted']) highlighted = ext['@_highlighted'] === 'true';
+        if (ext['@_offRoad']) offRoad = ext['@_offRoad'] === 'true';
+        if (ext['@_pointId']) pointId = ext['@_pointId'];
+        if (ext['@_originalLat']) originalLat = parseFloat(ext['@_originalLat']);
+        if (ext['@_originalLon']) originalLon = parseFloat(ext['@_originalLon']);
+      }
+
+      waypoints.push({
+        id, lat, lon,
+        ele: parseFloat(wp.ele) || 0,
+        name,
+        description: wp.desc ? String(wp.desc) : undefined,
+        sym,
+        addedToRoute,
+        highlighted,
+        offRoad,
+        pointId,
+        originalLat,
+        originalLon,
+      });
+    });
+  }
+
   const points: GpsPoint[] = [];
-  for (const trk of trks) {
-    if (!trk?.trkseg) continue;
+  if (gpx?.trk) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const segs: any[] = Array.isArray(trk.trkseg) ? trk.trkseg : [trk.trkseg];
-    for (const seg of segs) {
-      if (!seg?.trkpt) continue;
+    const trks: any[] = Array.isArray(gpx.trk) ? gpx.trk : [gpx.trk];
+    for (const trk of trks) {
+      if (!trk?.trkseg) continue;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const trkpts: any[] = Array.isArray(seg.trkpt) ? seg.trkpt : [seg.trkpt];
-      for (const pt of trkpts) {
-        const lat = parseFloat(pt['@_lat']);
-        const lon = parseFloat(pt['@_lon']);
-        if (isNaN(lat) || isNaN(lon)) continue;
-        points.push({
-          lat, lon,
-          ele: parseFloat(pt.ele) || 0,
-          time: pt.time ? String(pt.time) : undefined,
-        });
+      const segs: any[] = Array.isArray(trk.trkseg) ? trk.trkseg : [trk.trkseg];
+      for (const seg of segs) {
+        if (!seg?.trkpt) continue;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const trkpts: any[] = Array.isArray(seg.trkpt) ? seg.trkpt : [seg.trkpt];
+        for (const pt of trkpts) {
+          const lat = parseFloat(pt['@_lat']);
+          const lon = parseFloat(pt['@_lon']);
+          if (isNaN(lat) || isNaN(lon)) continue;
+          points.push({
+            lat, lon,
+            ele: parseFloat(pt.ele) || 0,
+            time: pt.time ? String(pt.time) : undefined,
+          });
+        }
       }
     }
   }
-  return points;
+  return { points, waypoints };
 }
 
 function parseFit(buffer: Buffer): Promise<GpsPoint[]> {
@@ -222,9 +323,12 @@ function parseFit(buffer: Buffer): Promise<GpsPoint[]> {
   });
 }
 
-async function readAndParse(filePath: string, fileType: string): Promise<GpsPoint[]> {
+async function readAndParse(filePath: string, fileType: string): Promise<ParsedGpxData> {
   const abs = path.join(UPLOAD_DIR, filePath);
-  if (fileType === 'fit') return parseFit(fs.readFileSync(abs));
+  if (fileType === 'fit') {
+    const points = await parseFit(fs.readFileSync(abs));
+    return { points, waypoints: [] };
+  }
   return parseGpx(fs.readFileSync(abs, 'utf-8'));
 }
 
@@ -263,9 +367,12 @@ router.post('/upload', upload.single('file'), async (req, res) => {
   try {
     let points: GpsPoint[];
     try {
-      points = fileType === 'fit'
-        ? await parseFit(fs.readFileSync(file.path))
-        : parseGpx(fs.readFileSync(file.path, 'utf-8'));
+      if (fileType === 'fit') {
+        points = await parseFit(fs.readFileSync(file.path));
+      } else {
+        const parsed = parseGpx(fs.readFileSync(file.path, 'utf-8'));
+        points = parsed.points;
+      }
     } catch {
       points = [];
     }
@@ -292,8 +399,9 @@ router.get('/:id/data', async (req, res) => {
     const result = await query<GpsFileRow>('SELECT * FROM gps_files WHERE id = $1 AND user_id = $2', [req.params.id, userId]);
     const row = result.rows[0];
     if (!row) return res.status(404).json({ error: 'File not found' });
-    const points = await readAndParse(row.file_path, row.file_type);
-    if (points.length === 0) return res.status(422).json({ error: 'No GPS points found in file' });
+
+    const { points, waypoints } = await readAndParse(row.file_path, row.file_type);
+
     const elevationProfile = buildElevationProfile(points);
     const metadata = computeMetadata(points);
     const metricsAvailable = {
@@ -310,7 +418,17 @@ router.get('/:id/data', async (req, res) => {
     const powerProfile = metricsAvailable.power
       ? points.map((p, i) => ({ idx: i, distance: elevationProfile[i].distance, value: p.power ?? null }))
       : null;
-    res.json({ points, elevationProfile, metadata, metricsAvailable, hrProfile, cadenceProfile, powerProfile });
+
+    res.json({
+      points,
+      waypoints,
+      elevationProfile,
+      metadata,
+      metricsAvailable,
+      hrProfile,
+      cadenceProfile,
+      powerProfile,
+    });
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return res.status(404).json({ error: 'GPS file not found on disk' });
     console.error('GPS data:', err); res.status(500).json({ error: 'Failed to parse GPS file' });
@@ -326,7 +444,7 @@ router.post('/:id/smooth', async (req, res) => {
     const result = await query<GpsFileRow>('SELECT * FROM gps_files WHERE id = $1 AND user_id = $2', [req.params.id, userId]);
     const row = result.rows[0];
     if (!row) return res.status(404).json({ error: 'File not found' });
-    const points = await readAndParse(row.file_path, row.file_type);
+    const { points } = await readAndParse(row.file_path, row.file_type);
     if (points.length === 0) return res.status(422).json({ error: 'No GPS points found' });
     const smoothed = gaussianSmooth(points, sigma);
     const baseName = path.basename(row.original_name, path.extname(row.original_name));
@@ -356,7 +474,7 @@ router.post('/:id/smooth-save', async (req, res) => {
     const row = result.rows[0];
     const filePath = path.join(UPLOAD_DIR, row.file_path);
 
-    const points = await readAndParse(row.file_path, row.file_type);
+    const { points } = await readAndParse(row.file_path, row.file_type);
     const smoothed = gaussianSmooth(points, sigmaNum);
     const baseName = row.original_name.replace(/\.(gpx|fit)$/i, '');
 
@@ -453,7 +571,8 @@ router.post('/combine', async (req, res) => {
     const orderedRows = ids.map(id => rowMap.get(id)).filter(Boolean) as GpsFileRow[];
     const segments: GpsPoint[][] = [];
     for (const row of orderedRows) {
-      segments.push(await readAndParse(row.file_path, row.file_type));
+      const { points } = await readAndParse(row.file_path, row.file_type);
+      segments.push(points);
     }
     const allPoints: GpsPoint[] = [];
     for (let i = 0; i < segments.length; i++) {
@@ -605,6 +724,16 @@ router.delete('/:id', async (req, res) => {
   } catch (err) { console.error('GPS delete:', err); res.status(500).json({ error: 'Failed to delete' }); }
 });
 
+const routeCache = new LRUCache<string, any>({
+  max: 1000,
+  ttl: 1000 * 60 * 30, // 30 minutes
+});
+
+const poiCache = new LRUCache<string, any>({
+  max: 1000,
+  ttl: 1000 * 60 * 30, // 30 minutes
+});
+
 // POST /api/gps/route — proxy to the FOSSGIS Valhalla routing service.
 // The public server's CORS policy blocks browser requests from third-party
 // origins, so the backend forwards them instead. No API key; fair-use applies.
@@ -615,33 +744,173 @@ router.post('/route', async (req, res) => {
     costing_options?: unknown;
   };
   if (
-    !Array.isArray(locations) || locations.length < 2 || locations.length > 3 ||
-    locations.some(l => typeof l?.lat !== 'number' || typeof l?.lon !== 'number') ||
+    !Array.isArray(locations) || locations.length < 2 || locations.length > 25 ||
+    locations.some(l => typeof l?.lat !== 'number' || typeof l?.lon !== 'number' || l.lat < -90 || l.lat > 90 || l.lon < -180 || l.lon > 180) ||
     (costing !== 'bicycle' && costing !== 'pedestrian')
   ) {
     return res.status(400).json({ error: 'Invalid routing request' });
   }
-  try {
-    const upstream = await fetch('https://valhalla1.openstreetmap.de/route', {
+
+  const roundedLocs = locations.map(l => ({
+    lat: Number((l.lat as number).toFixed(6)),
+    lon: Number((l.lon as number).toFixed(6)),
+  }));
+
+  const cacheKey = JSON.stringify({ roundedLocs, costing, costingOptions });
+  const cached = routeCache.get(cacheKey);
+  if (cached) return res.json(cached);
+
+  const VALHALLA_URL = process.env.VALHALLA_URL ?? 'https://valhalla1.openstreetmap.de/route';
+
+  const callValhalla = async (locs: Array<{ lat: number; lon: number }>) => {
+    const upstream = await fetch(VALHALLA_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Client-Id': 'solytiq-cloud' },
       body: JSON.stringify({
-        locations: locations.map(l => ({ lat: l.lat, lon: l.lon })),
+        locations: locs,
         costing,
         ...(costingOptions && typeof costingOptions === 'object' ? { costing_options: costingOptions } : {}),
       }),
       signal: AbortSignal.timeout(12000),
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = (await upstream.json().catch(() => null)) as any;
     if (!upstream.ok || !data || !data.trip) {
-      console.error('Valhalla routing failed:', upstream.status, JSON.stringify(data)?.slice(0, 300));
-      return res.status(502).json({ error: 'Routing service unavailable' });
+      throw new Error(`Valhalla error ${upstream.status}`);
     }
-    res.json(data);
+    return data;
+  };
+
+  try {
+    let finalData: any;
+    if (locations.length <= 3) {
+      finalData = await callValhalla(roundedLocs);
+    } else {
+      // Chunking for more than 3 locations if needed, or try all at once first
+      try {
+        finalData = await callValhalla(roundedLocs);
+      } catch (err) {
+        console.warn('Valhalla full route failed, trying chunks:', err);
+        // Overlapping triplets: [0,1,2], [2,3,4], [4,5,6]...
+        const allLegs: any[] = [];
+        let tripMeta: any = null;
+        for (let i = 0; i < roundedLocs.length - 1; i += 2) {
+          const chunk = roundedLocs.slice(i, i + 3);
+          if (chunk.length < 2) break;
+          const data = await callValhalla(chunk);
+          if (!tripMeta) tripMeta = data.trip;
+          allLegs.push(...data.trip.legs);
+        }
+        finalData = { trip: { ...tripMeta, legs: allLegs } };
+      }
+    }
+
+    routeCache.set(cacheKey, finalData);
+    res.json(finalData);
   } catch (err) {
     console.error('Valhalla routing error:', err);
     res.status(502).json({ error: 'Routing service unavailable' });
+  }
+});
+
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
+
+const OVERPASS_QUERIES: Record<string, string> = {
+  food:     'node["amenity"~"cafe|restaurant|bar|fast_food"]',
+  fuel:     'node["amenity"="fuel"]',
+  bicycle:  'node["shop"="bicycle"]',
+  shopping: 'node["shop"~"supermarket|convenience"]',
+  kiosk:    'node["shop"="kiosk"]',
+};
+
+function detectCategory(tags: Record<string, string>): string {
+  if (tags.amenity === 'fuel') return 'fuel';
+  if (tags.shop === 'bicycle') return 'bicycle';
+  if (tags.shop === 'kiosk') return 'kiosk';
+  if (tags.shop === 'supermarket' || tags.shop === 'convenience') return 'shopping';
+  return 'food';
+}
+
+router.post('/pois', async (req, res) => {
+  const { bbox, categories, zoom } = (req.body ?? {}) as {
+    bbox?: { south: number; west: number; north: number; east: number };
+    categories?: string[];
+    zoom?: number;
+  };
+
+  if (!bbox || !Array.isArray(categories) || categories.length === 0 || zoom === undefined) {
+    return res.status(400).json({ error: 'Invalid POI request' });
+  }
+
+  if (zoom < 13) return res.json({ pois: [], truncated: false, cached: false });
+
+  // Guard bbox area to prevent huge queries
+  const area = (bbox.north - bbox.south) * (bbox.east - bbox.west);
+  if (area > 0.1) { // roughly 30x30km max
+    return res.status(400).json({ error: 'BBox area too large' });
+  }
+
+  // Round bbox for better caching
+  const roundedBbox = {
+    south: Number(bbox.south.toFixed(4)),
+    west: Number(bbox.west.toFixed(4)),
+    north: Number(bbox.north.toFixed(4)),
+    east: Number(bbox.east.toFixed(4)),
+  };
+
+  const cacheKey = JSON.stringify({ roundedBbox, categories: [...categories].sort(), zoomBucket: Math.floor(zoom) });
+  const cached = poiCache.get(cacheKey);
+  if (cached) return res.json({ ...cached, cached: true });
+
+  const overpassBbox = `${bbox.south.toFixed(5)},${bbox.west.toFixed(5)},${bbox.north.toFixed(5)},${bbox.east.toFixed(5)}`;
+  const lines = categories.map(cat => `${OVERPASS_QUERIES[cat] || ''}(${overpassBbox});`).filter(Boolean).join('\n  ');
+  const query = `[out:json][timeout:25];\n(\n  ${lines}\n);\nout body 1000;`; // Cap at 1000
+
+  try {
+    let response: Response | null = null;
+    for (const endpoint of OVERPASS_ENDPOINTS) {
+      try {
+        const upstream = await fetch(endpoint, {
+          method: 'POST',
+          body: 'data=' + encodeURIComponent(query),
+          signal: AbortSignal.timeout(20000),
+        });
+        if (upstream.status === 429 || upstream.status === 504) continue;
+        if (upstream.ok) {
+          response = upstream;
+          break;
+        }
+      } catch (err) {
+        console.error(`Overpass endpoint ${endpoint} failed:`, err);
+      }
+    }
+
+    if (!response) return res.status(502).json({ error: 'Overpass service unavailable' });
+
+    const data = await response.json() as any;
+    const elements = data.elements ?? [];
+    const pois = elements
+      .filter((el: any) => el.lat != null && el.lon != null)
+      .map((el: any) => {
+        const tags = el.tags ?? {};
+        return {
+          id: `osm-${el.id}`,
+          lat: el.lat,
+          lon: el.lon,
+          category: detectCategory(tags),
+          name: tags.name || tags.brand || tags.operator || 'Unbekannt',
+          tags,
+        };
+      });
+
+    const result = { pois, truncated: elements.length >= 1000, cached: false };
+    poiCache.set(cacheKey, result);
+    res.json(result);
+  } catch (err) {
+    console.error('Overpass query error:', err);
+    res.status(502).json({ error: 'Overpass service unavailable' });
   }
 });
 
