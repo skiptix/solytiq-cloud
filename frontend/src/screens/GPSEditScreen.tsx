@@ -1629,8 +1629,13 @@ export default function GPSEditScreen() {
     }
 
     // Leg anchors: nearest existing waypoints (or start/end) on either side of
-    // the clicked segment — the whole leg between them will be re-routed
-    const { aPrevIdx, aNextIdx } = findLegAnchors(pts, waypointsRef.current, ts, te, best, best + 1);
+    // the clicked segment — the whole leg between them will be re-routed.
+    // For imported routes with no user-defined waypoints, fall back to the
+    // immediate segment endpoints so we only re-route the local segment and
+    // preserve the rest of the imported track.
+    const { aPrevIdx, aNextIdx } = waypointsRef.current.length > 0
+      ? findLegAnchors(pts, waypointsRef.current, ts, te, best, best + 1)
+      : { aPrevIdx: best, aNextIdx: best + 1 };
     const anchorPrev = pts[aPrevIdx];
     const anchorNext = pts[aNextIdx];
 
@@ -1802,7 +1807,9 @@ export default function GPSEditScreen() {
       const d = distToSegmentM({ lat, lon }, pts[i], pts[i + 1]);
       if (d < bestD) { bestD = d; best = i; }
     }
-    const { aPrevIdx, aNextIdx } = findLegAnchors(pts, waypointsRef.current, ts, te, best, best + 1);
+    const { aPrevIdx, aNextIdx } = waypointsRef.current.length > 0
+      ? findLegAnchors(pts, waypointsRef.current, ts, te, best, best + 1)
+      : { aPrevIdx: best, aNextIdx: best + 1 };
     const anchorPrev = pts[aPrevIdx];
     const anchorNext = pts[aNextIdx];
     const newPt: GpsTrackPoint = { lat, lon, ele: (anchorPrev.ele + anchorNext.ele) / 2 };
