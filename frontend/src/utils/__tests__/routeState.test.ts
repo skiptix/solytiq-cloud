@@ -9,6 +9,7 @@ import {
   namedPinToPoiMarker,
   buildRouteStateFromEditor,
   diffPoiMarkers,
+  extendAnchorIndexByDistance,
 } from '../routeState';
 
 const track = [
@@ -39,6 +40,36 @@ describe('identity helpers — no exact coordinate equality', () => {
 
   it('findNearestPointIndex always returns the closest point', () => {
     expect(findNearestPointIndex(track, 54.3101, 10.1301)).toBe(2);
+  });
+});
+
+describe('extendAnchorIndexByDistance', () => {
+  // Points ~111 m apart along a meridian
+  const dense = Array.from({ length: 21 }, (_, i) => ({ lat: 54.3 + i * 0.001, lon: 10.12 }));
+
+  it('stops after roughly the requested distance, not at the route ends', () => {
+    const next = extendAnchorIndexByDistance(dense, 10, 1, dense.length - 1, 400);
+    const prev = extendAnchorIndexByDistance(dense, 10, -1, 0, 400);
+    // 400 m ≈ 4 points of ~111 m; must NOT reach the bounds (0 / 20)
+    expect(next).toBeGreaterThan(10);
+    expect(next).toBeLessThan(16);
+    expect(prev).toBeLessThan(10);
+    expect(prev).toBeGreaterThan(4);
+  });
+
+  it('clamps to the bound index on short tracks', () => {
+    expect(extendAnchorIndexByDistance(dense, 1, -1, 0, 4000)).toBe(0);
+    expect(extendAnchorIndexByDistance(dense, 19, 1, 20, 4000)).toBe(20);
+  });
+
+  it('returns the immediate neighbour for sparse tracks (points farther than the cap)', () => {
+    const sparse = [
+      { lat: 54.30, lon: 10.12 },
+      { lat: 54.32, lon: 10.12 }, // ~2.2 km apart
+      { lat: 54.34, lon: 10.12 },
+    ];
+    expect(extendAnchorIndexByDistance(sparse, 1, 1, 2, 400)).toBe(2);
+    expect(extendAnchorIndexByDistance(sparse, 1, -1, 0, 400)).toBe(0);
   });
 });
 

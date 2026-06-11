@@ -765,7 +765,7 @@ router.post('/pois', async (req, res) => {
 
   const overpassBbox = `${roundedBbox.south.toFixed(5)},${roundedBbox.west.toFixed(5)},${roundedBbox.north.toFixed(5)},${roundedBbox.east.toFixed(5)}`;
   const lines = normalizedCategories.map(cat => `${OVERPASS_QUERIES[cat]}(${overpassBbox});`).join('\n  ');
-  const query = `[out:json][timeout:25];\n(\n  ${lines}\n);\nout body ${MAX_POI_RESULTS + 1};`;
+  const query = `[out:json][timeout:10];\n(\n  ${lines}\n);\nout body ${MAX_POI_RESULTS + 1};`;
 
   try {
     let response: Response | null = null;
@@ -774,13 +774,14 @@ router.post('/pois', async (req, res) => {
         const upstream = await fetch(endpoint, {
           method: 'POST',
           body: 'data=' + encodeURIComponent(query),
-          signal: AbortSignal.timeout(20000),
+          signal: AbortSignal.timeout(12000),
         });
-        if (upstream.status === 429 || upstream.status === 504) continue;
         if (upstream.ok) {
           response = upstream;
           break;
         }
+        // Log non-ok statuses too — silent 429/504 skips made outages invisible
+        console.warn(`Overpass endpoint ${endpoint} returned HTTP ${upstream.status}`);
       } catch (err) {
         console.error(`Overpass endpoint ${endpoint} failed:`, err);
       }

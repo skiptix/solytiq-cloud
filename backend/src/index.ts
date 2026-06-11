@@ -3,7 +3,13 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import path from 'path';
+import dns from 'dns';
 import { pool } from './db';
+
+// Containers often advertise IPv6 without working outbound IPv6 routing, which
+// makes undici hang on AAAA records until timeout (seen with Overpass/Valhalla
+// upstreams). Prefer IPv4 for outbound requests.
+dns.setDefaultResultOrder('ipv4first');
 
 import authRouter       from './routes/auth';
 import tasksRouter      from './routes/tasks';

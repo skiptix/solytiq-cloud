@@ -53,6 +53,29 @@ export function findNearestPointIndex(
   return nearestIdx;
 }
 
+// Walk outward from `fromIdx` along the track until roughly `maxDistM` meters
+// are covered (or `boundIdx` is reached). Used to pick local re-routing anchors
+// so editing a point only replans the surrounding stretch of an existing
+// route — never the whole track.
+export function extendAnchorIndexByDistance(
+  pts: Array<{ lat: number; lon: number }>,
+  fromIdx: number,
+  direction: -1 | 1,
+  boundIdx: number,
+  maxDistM: number,
+): number {
+  let idx = fromIdx;
+  let dist = 0;
+  while (idx !== boundIdx) {
+    const next = idx + direction;
+    if (next < 0 || next >= pts.length) break;
+    dist += haversineM(pts[idx].lat, pts[idx].lon, pts[next].lat, pts[next].lon);
+    idx = next;
+    if (dist >= maxDistM) break;
+  }
+  return idx;
+}
+
 // ─── PoiMarker ↔ NamedPin conversion ────────────────────────────────────────
 // The editor's pin model (NamedPin) predates Route Planner State v1; these
 // adapters keep both in sync without losing the original POI coordinates.
