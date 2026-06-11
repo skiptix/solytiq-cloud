@@ -12,7 +12,13 @@ import { POI_CATEGORY_CONFIG, createPoiDivIcon, createPinDivIcon } from '../util
 import {
   WAYPOINT_ATTACH_TOLERANCE_M, findNearestPointWithinMeters, haversineM,
   poiMarkerToNamedPin, buildRouteStateFromEditor, diffPoiMarkers,
+  extendAnchorIndexByDistance,
 } from '../utils/routeState';
+
+// How much of the existing track gets replanned around an edited point when
+// no shaping waypoint bounds the leg — keeps edits local instead of rerouting
+// the whole route.
+const LOCAL_REPLAN_M = 400;
 import { fetchSurfaceBreakdown } from '../utils/surfaceData';
 import type { SurfaceBreakdown } from '../utils/surfaceData';
 
@@ -797,17 +803,20 @@ export default function GPSEditScreen() {
 
         // Hydrate route shaping points from persisted route controls (IDs and
         // snapped coordinates); fall back to route-linked pins for older files.
-        const controlWps: EditWaypoint[] = routeState?.routeControls?.length
-          ? routeState.routeControls
-              .filter(c => c.kind === 'via' || c.kind === 'stop' || c.kind === 'through' || c.kind === 'offgrid')
-              .map(c => ({
-                id: c.id,
-                lat: c.snappedLat ?? c.originalLat,
-                lon: c.snappedLon ?? c.originalLon,
-                offRoad: c.kind === 'offgrid' || !c.followWays,
-                anchorPrev: null, // Anchors will be recalculated on first move if needed
-                anchorNext: null,
-              }))
+        // Derived states contain only start/destination controls, so the
+        // fallback must trigger when no SHAPING controls exist — not merely
+        // when the control list is empty.
+        const shapingControls = (routeState?.routeControls ?? [])
+          .filter(c => c.kind === 'via' || c.kind === 'stop' || c.kind === 'through' || c.kind === 'offgrid');
+        const controlWps: EditWaypoint[] = shapingControls.length > 0
+          ? shapingControls.map(c => ({
+              id: c.id,
+              lat: c.snappedLat ?? c.originalLat,
+              lon: c.snappedLon ?? c.originalLon,
+              offRoad: c.kind === 'offgrid' || !c.followWays,
+              anchorPrev: null, // Anchors will be recalculated on first move if needed
+              anchorNext: null,
+            }))
           : loadedPins
               .filter(wp => wp.addedToRoute)
               .map(wp => ({
@@ -1274,12 +1283,17 @@ export default function GPSEditScreen() {
       const i = findNearestPoint(pts, existing.anchorNext.lat, existing.anchorNext.lon);
       if (i > gi && i <= te) aNextIdx = i;
     }
-    // For new vertex drags (interior points only), extend the anchors to the
-    // nearest existing waypoints so the whole leg gets re-planned cleanly
+    // For new vertex drags (interior points only): replan only the local
+    // stretch around the dragged point — bounded by the nearest shaping
+    // waypoint if one is close, otherwise ~LOCAL_REPLAN_M of track on each
+    // side. Never the whole route (findLegAnchors falls back to ts/te when
+    // no waypoints exist, which used to wipe the entire imported track).
     if (!existing && gi > ts && gi < te) {
+      const localPrev = extendAnchorIndexByDistance(pts, gi, -1, ts, LOCAL_REPLAN_M);
+      const localNext = extendAnchorIndexByDistance(pts, gi, 1, te, LOCAL_REPLAN_M);
       const legAnchors = findLegAnchors(pts, waypointsRef.current, ts, te, gi - 1, gi + 1);
-      aPrevIdx = legAnchors.aPrevIdx;
-      aNextIdx = legAnchors.aNextIdx;
+      aPrevIdx = Math.max(localPrev, legAnchors.aPrevIdx);
+      aNextIdx = Math.min(localNext, legAnchors.aNextIdx);
     }
     const anchorPrev = aPrevIdx != null ? pts[aPrevIdx] : null;
     const anchorNext = aNextIdx != null ? pts[aNextIdx] : null;
@@ -1703,14 +1717,16 @@ export default function GPSEditScreen() {
       if (d < bestD) { bestD = d; best = i; }
     }
 
-    // Leg anchors: nearest existing waypoints (or start/end) on either side of
-    // the clicked segment — the whole leg between them will be re-routed.
-    // For imported routes with no user-defined waypoints, fall back to the
-    // immediate segment endpoints so we only re-route the local segment and
-    // preserve the rest of the imported track.
-    const { aPrevIdx, aNextIdx } = waypointsRef.current.length > 0
+    // Replan only the local stretch: bounded by the nearest shaping waypoint
+    // when one is close, otherwise ~LOCAL_REPLAN_M of track on each side —
+    // the rest of the existing route is preserved.
+    const localPrev = extendAnchorIndexByDistance(pts, best, -1, ts, LOCAL_REPLAN_M);
+    const localNext = extendAnchorIndexByDistance(pts, best + 1, 1, te, LOCAL_REPLAN_M);
+    const legAnchors = waypointsRef.current.length > 0
       ? findLegAnchors(pts, waypointsRef.current, ts, te, best, best + 1)
-      : { aPrevIdx: best, aNextIdx: best + 1 };
+      : { aPrevIdx: ts, aNextIdx: te };
+    const aPrevIdx = Math.max(localPrev, legAnchors.aPrevIdx);
+    const aNextIdx = Math.min(localNext, legAnchors.aNextIdx);
     const anchorPrev = pts[aPrevIdx];
     const anchorNext = pts[aNextIdx];
 
@@ -1917,9 +1933,16 @@ export default function GPSEditScreen() {
       const d = distToSegmentM({ lat, lon }, pts[i], pts[i + 1]);
       if (d < bestD) { bestD = d; best = i; }
     }
-    const { aPrevIdx, aNextIdx } = waypointsRef.current.length > 0
+    // Replan only the local stretch: bounded by the nearest shaping waypoint
+    // when one is close, otherwise ~LOCAL_REPLAN_M of track on each side —
+    // the rest of the existing route is preserved.
+    const localPrev = extendAnchorIndexByDistance(pts, best, -1, ts, LOCAL_REPLAN_M);
+    const localNext = extendAnchorIndexByDistance(pts, best + 1, 1, te, LOCAL_REPLAN_M);
+    const legAnchors = waypointsRef.current.length > 0
       ? findLegAnchors(pts, waypointsRef.current, ts, te, best, best + 1)
-      : { aPrevIdx: best, aNextIdx: best + 1 };
+      : { aPrevIdx: ts, aNextIdx: te };
+    const aPrevIdx = Math.max(localPrev, legAnchors.aPrevIdx);
+    const aNextIdx = Math.min(localNext, legAnchors.aNextIdx);
     const anchorPrev = pts[aPrevIdx];
     const anchorNext = pts[aNextIdx];
     const newPt: GpsTrackPoint = { lat, lon, ele: (anchorPrev.ele + anchorNext.ele) / 2 };
@@ -2621,21 +2644,10 @@ export default function GPSEditScreen() {
             </button>
           </div>
 
-          {/* How to edit hint */}
+          {/* Original file info (flex spacer) */}
           <div style={{ padding: '10px 16px', flex: 1, overflowY: 'auto' }}>
-            <div style={{ background: '#ede9ff', borderRadius: 10, padding: '10px 12px' }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: '#5e4dbb', marginBottom: 4 }}>How to edit</div>
-              <div style={{ fontSize: 11, color: '#5e4dbb', lineHeight: 1.65, opacity: 0.8 }}>
-                • Drag any point — it snaps to mapped ways<br />
-                • Click anywhere on the map to add a point<br />
-                • Click midpoint dots for a quick insert<br />
-                • Click any point for details, off-road &amp; delete<br />
-                • Hover the chart to find the spot on the map<br />
-                • Drag the green/red markers to trim
-              </div>
-            </div>
             {fileInfo && (
-              <div style={{ marginTop: 10, fontSize: 10, color: '#b0acbe' }}>
+              <div style={{ fontSize: 10, color: '#b0acbe' }}>
                 Original: {fileInfo.name}
                 {originalPoints && <><br />{originalPoints.length} pts (simplified)</>}
               </div>
@@ -2787,52 +2799,6 @@ export default function GPSEditScreen() {
                   );
                 })}
                 {poiLoading && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#5e4dbb', opacity: 0.7, animation: 'pulse 1s ease-in-out infinite', marginLeft: 4, flexShrink: 0 }} />}
-              </div>
-              {/* Divider */}
-              <div style={{ height: 1, background: '#ede9ff', margin: '0 10px' }} />
-              {/* Route mode pill group — snap profile or manual drawing */}
-              <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', gap: 4 }}>
-                {([
-                  { profile: 'road' as const, label: 'Road' },
-                  { profile: 'gravel' as const, label: 'Gravel' },
-                  { profile: 'mtb' as const, label: 'MTB' },
-                  { profile: 'hike' as const, label: 'Hike' },
-                ]).map(opt => {
-                  const active = snapEnabled && snapProfile === opt.profile;
-                  return (
-                    <button
-                      key={opt.profile}
-                      title={`Snap new points to ways (${opt.label})`}
-                      onClick={() => { setSnapEnabled(true); setSnapProfile(opt.profile); }}
-                      style={{
-                        flex: 1, height: 26, borderRadius: 9999, cursor: 'pointer',
-                        background: active ? '#5e4dbb' : '#F5F3FF',
-                        border: active ? '1px solid #5e4dbb' : '1px solid #e8e4f0',
-                        color: active ? '#fff' : '#787584',
-                        fontSize: 11, fontWeight: 600,
-                        fontFamily: 'Hanken Grotesk, sans-serif',
-                        transition: 'all 160ms',
-                      }}
-                    >
-                      {opt.label}
-                    </button>
-                  );
-                })}
-                <button
-                  title="Manual — connect points with straight lines"
-                  onClick={() => setSnapEnabled(false)}
-                  style={{
-                    flex: 1, height: 26, borderRadius: 9999, cursor: 'pointer',
-                    background: !snapEnabled ? '#5e4dbb' : 'transparent',
-                    border: !snapEnabled ? '1px solid #5e4dbb' : '1px solid #e8e4f0',
-                    color: !snapEnabled ? '#fff' : '#787584',
-                    fontSize: 11, fontWeight: 600,
-                    fontFamily: 'Hanken Grotesk, sans-serif',
-                    transition: 'all 160ms',
-                  }}
-                >
-                  Manual
-                </button>
               </div>
               {/* Search results dropdown */}
               {searchOpen && searchResults.length > 0 && (
