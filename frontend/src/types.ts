@@ -172,6 +172,7 @@ export interface GpsFile {
   size: number;
   metadata?: GpsFileMetadata | null;
   createdAt: string;
+  smoothed?: boolean;
 }
 
 export interface GpsTrackPoint {

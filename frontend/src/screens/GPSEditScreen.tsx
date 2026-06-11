@@ -629,7 +629,13 @@ export default function GPSEditScreen() {
   const [addPinName, setAddPinName] = useState('');
   const [addPinMode, setAddPinMode] = useState<'pin' | 'route'>('pin');
   // ── POI Layer
-  const [activePoi, setActivePoi] = useState<Set<PoiCategory>>(new Set());
+  const [activePoi, setActivePoi] = useState<Set<PoiCategory>>(() => {
+    try { const s = localStorage.getItem('gps_active_poi'); if (s) return new Set(JSON.parse(s) as PoiCategory[]); } catch { /* ignore */ }
+    return new Set();
+  });
+  useEffect(() => { localStorage.setItem('gps_active_poi', JSON.stringify([...activePoi])); }, [activePoi]);
+  const [mapType, setMapType] = useState<'street' | 'satellite'>('street');
+  const baseTileRef = useRef<L.TileLayer | null>(null);
   const [poiLoading, setPoiLoading] = useState(false);
   const poiLayerRef = useRef<L.LayerGroup | null>(null);
   const poiFetchControllerRef = useRef<AbortController | null>(null);
@@ -741,7 +747,7 @@ export default function GPSEditScreen() {
     }
     if (!leafletRef.current) {
       const map = L.map(node, { editable: true, zoomControl: false } as L.MapOptions).setView([47, 10], 5);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      baseTileRef.current = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd',
         maxZoom: 19,
@@ -1808,6 +1814,26 @@ export default function GPSEditScreen() {
   }
 
   // ── Save ──────────────────────────────────────────────────────────────────
+  function handleMapTypeToggle() {
+    const map = leafletRef.current;
+    if (!map) return;
+    const next = mapType === 'street' ? 'satellite' : 'street';
+    baseTileRef.current?.remove();
+    if (next === 'satellite') {
+      baseTileRef.current = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA',
+        maxZoom: 19,
+      }).addTo(map);
+    } else {
+      baseTileRef.current = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19,
+      }).addTo(map);
+    }
+    setMapType(next);
+  }
+
   async function handleSave(mode: 'new' | 'replace') {
     if (!id || !editPoints || saving) return;
     setSaving(mode);
@@ -2436,6 +2462,14 @@ export default function GPSEditScreen() {
               style={mapCtrlBtn}
             >
               <Icon name="remove" size={16} color="#5e4dbb" />
+            </button>
+            <button
+              className="gps-map-ctrl"
+              onClick={handleMapTypeToggle}
+              title={mapType === 'street' ? 'Satellite View' : 'Street Map'}
+              style={{ ...mapCtrlBtn, ...(mapType === 'satellite' ? { background: '#5e4dbb', border: '1px solid #4a3da8' } : {}) }}
+            >
+              <Icon name={mapType === 'street' ? 'satellite_alt' : 'map'} size={16} color={mapType === 'satellite' ? '#fff' : '#5e4dbb'} />
             </button>
 
             {busy && (

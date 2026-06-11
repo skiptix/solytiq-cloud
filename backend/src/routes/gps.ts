@@ -55,7 +55,7 @@ interface GpsPoint {
 interface GpsFileRow {
   id: string; user_id: string; original_name: string; file_type: string;
   file_path: string; file_size: number; metadata: Record<string, unknown> | null;
-  created_at: string;
+  created_at: string; smoothed: boolean;
 }
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
@@ -248,7 +248,7 @@ router.get('/', async (req, res) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const userId = (req as any).userId as string;
     const result = await query<GpsFileRow>('SELECT * FROM gps_files WHERE user_id = $1 ORDER BY created_at DESC', [userId]);
-    res.json({ files: result.rows.map(r => ({ id: r.id, userId: r.user_id, name: r.original_name, fileType: r.file_type, size: r.file_size, metadata: r.metadata, createdAt: r.created_at })) });
+    res.json({ files: result.rows.map(r => ({ id: r.id, userId: r.user_id, name: r.original_name, fileType: r.file_type, size: r.file_size, metadata: r.metadata, createdAt: r.created_at, smoothed: r.smoothed ?? false })) });
   } catch (err) { console.error('GPS list:', err); res.status(500).json({ error: 'Failed to list GPS files' }); }
 });
 
@@ -365,10 +365,10 @@ router.post('/:id/smooth-save', async (req, res) => {
       fs.writeFileSync(filePath, gpx, 'utf8');
       const newSize = Buffer.byteLength(gpx, 'utf8');
       const metadata = computeMetadata(smoothed);
-      await query('UPDATE gps_files SET metadata=$1, file_size=$2, file_type=$3 WHERE id=$4',
+      await query('UPDATE gps_files SET metadata=$1, file_size=$2, file_type=$3, smoothed=true WHERE id=$4',
         [metadata ? JSON.stringify(metadata) : null, newSize, 'gpx', id]);
       const outName = baseName.endsWith('.gpx') ? baseName : `${baseName}.gpx`;
-      res.json({ file: { id, userId, name: outName, fileType: 'gpx', size: newSize, metadata, createdAt: row.created_at } });
+      res.json({ file: { id, userId, name: outName, fileType: 'gpx', size: newSize, metadata, createdAt: row.created_at, smoothed: true } });
     } else {
       const safeName = ((newName || `${baseName}_smoothed`)).replace(/[^\w\s\-_.]/g, '').trim() || `${baseName}_smoothed`;
       const outName = safeName.endsWith('.gpx') ? safeName : `${safeName}.gpx`;
@@ -379,9 +379,9 @@ router.post('/:id/smooth-save', async (req, res) => {
       fs.writeFileSync(fullPath, gpx, 'utf8');
       const newSize = Buffer.byteLength(gpx, 'utf8');
       const metadata = computeMetadata(smoothed);
-      await query('INSERT INTO gps_files (id, user_id, original_name, file_type, file_path, file_size, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      await query('INSERT INTO gps_files (id, user_id, original_name, file_type, file_path, file_size, metadata, smoothed) VALUES ($1,$2,$3,$4,$5,$6,$7,true)',
         [newId, userId, outName, 'gpx', filename, newSize, metadata ? JSON.stringify(metadata) : null]);
-      res.json({ file: { id: newId, userId, name: outName, fileType: 'gpx', size: newSize, metadata, createdAt: new Date().toISOString() } });
+      res.json({ file: { id: newId, userId, name: outName, fileType: 'gpx', size: newSize, metadata, createdAt: new Date().toISOString(), smoothed: true } });
     }
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return res.status(404).json({ error: 'GPS file not found on disk' });

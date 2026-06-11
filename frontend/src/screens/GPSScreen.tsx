@@ -229,7 +229,11 @@ export default function GPSScreen() {
   const [smoothSaving, setSmoothSaving] = useState(false);
 
   // ── POI Layer
-  const [activePoi, setActivePoi] = useState<Set<PoiCategory>>(new Set());
+  const [activePoi, setActivePoi] = useState<Set<PoiCategory>>(() => {
+    try { const s = localStorage.getItem('gps_active_poi'); if (s) return new Set(JSON.parse(s) as PoiCategory[]); } catch { /* ignore */ }
+    return new Set();
+  });
+  useEffect(() => { localStorage.setItem('gps_active_poi', JSON.stringify([...activePoi])); }, [activePoi]);
   const [poiLoading, setPoiLoading] = useState(false);
   const [mapZoom, setMapZoom] = useState(5);
   // ── Search
@@ -241,6 +245,8 @@ export default function GPSScreen() {
   const selectedIdRef = useRef<string | null>(null);
   const leafletRef = useRef<L.Map | null>(null);
   const pendingFitRef = useRef<L.LatLngBounds | null>(null);
+  const [mapType, setMapType] = useState<'street' | 'satellite'>('street');
+  const baseTileRef = useRef<L.TileLayer | null>(null);
   const polylineRef = useRef<L.Polyline | null>(null);
   const startMarkerRef = useRef<L.CircleMarker | null>(null);
   const endMarkerRef = useRef<L.CircleMarker | null>(null);
@@ -276,7 +282,7 @@ export default function GPSScreen() {
     }
     if (!leafletRef.current) {
       const map = L.map(node, { zoomControl: false }).setView([47, 10], 5);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      baseTileRef.current = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
         subdomains: 'abcd',
         maxZoom: 19,
@@ -529,6 +535,26 @@ export default function GPSScreen() {
     placeSearchPin(lat, lon, r.display_name.split(',')[0]);
     setSearchResults([]);
     setSearchOpen(false);
+  }
+
+  function handleMapTypeToggle() {
+    const map = leafletRef.current;
+    if (!map) return;
+    const next = mapType === 'street' ? 'satellite' : 'street';
+    baseTileRef.current?.remove();
+    if (next === 'satellite') {
+      baseTileRef.current = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, USGS, NOAA',
+        maxZoom: 19,
+      }).addTo(map);
+    } else {
+      baseTileRef.current = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19,
+      }).addTo(map);
+    }
+    setMapType(next);
   }
 
   async function selectFile(id: string) {
@@ -854,12 +880,12 @@ export default function GPSScreen() {
           <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button
               className="gps-map-ctrl"
-              onClick={() => selectedId && setSmoothWizardOpen(true)}
-              disabled={!selectedId}
-              title="Smooth Elevation"
-              style={mapCtrlBtn(!!selectedId)}
+              onClick={() => selectedId && !selectedFile?.smoothed && setSmoothWizardOpen(true)}
+              disabled={!selectedId || !!selectedFile?.smoothed}
+              title={selectedFile?.smoothed ? 'Elevation already smoothed' : 'Smooth Elevation'}
+              style={mapCtrlBtn(!!selectedId && !selectedFile?.smoothed)}
             >
-              <Icon name="auto_fix_high" size={16} color="#5e4dbb" />
+              <Icon name="auto_fix_high" size={16} color={selectedFile?.smoothed ? '#b0acbe' : '#5e4dbb'} />
             </button>
             <button
               className="gps-map-ctrl"
@@ -876,6 +902,14 @@ export default function GPSScreen() {
               style={mapCtrlBtn()}
             >
               <Icon name="upload" size={16} color="#5e4dbb" />
+            </button>
+            <button
+              className="gps-map-ctrl"
+              onClick={handleMapTypeToggle}
+              title={mapType === 'street' ? 'Satellite View' : 'Street Map'}
+              style={{ ...mapCtrlBtn(), ...(mapType === 'satellite' ? { background: '#5e4dbb', border: '1px solid #4a3da8' } : {}) }}
+            >
+              <Icon name={mapType === 'street' ? 'satellite_alt' : 'map'} size={16} color={mapType === 'satellite' ? '#fff' : '#5e4dbb'} />
             </button>
 
             {/* Zoom controls — replaces the default Leaflet control (was hidden under the info card) */}
