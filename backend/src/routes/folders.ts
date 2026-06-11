@@ -39,7 +39,7 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
     const params: unknown[] = [req.userId];
-    const wsClause = workspaceId ? `AND f.workspace_id = $2` : '';
+    const wsClause = workspaceId ? `AND (f.workspace_id = $2 OR f.workspace_id IS NULL)` : '';
     if (workspaceId) params.push(workspaceId);
     const rows = await query<FolderRow>(
       `SELECT f.* FROM folders f

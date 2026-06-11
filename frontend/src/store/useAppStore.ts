@@ -420,7 +420,7 @@ const useAppStore = create<AppState>()(
         set({ listsLoading: true });
         try {
           const [tasksRes, listsRes, foldersRes, trashRes, trashListsRes, trashFoldersRes] = await Promise.all([
-            apiGetTasks().catch(() => null),                    // always global for dashboard
+            apiGetTasks(workspaceId).catch(() => null),
             apiGetLists(workspaceId).catch(() => null),
             apiGetFolders(workspaceId).catch(() => null),
             apiGetTrash().catch(() => null),
