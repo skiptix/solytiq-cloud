@@ -121,7 +121,7 @@ export const apiReorderListSections = (listId: string, sectionIds: string[]) =>
 export const apiReorderSectionTasks = (listId: string, sectionId: string, taskIds: number[]) =>
   apiFetch<{ success: boolean }>(`/lists/${listId}/sections/${sectionId}/tasks/reorder`, { method: 'PUT', body: JSON.stringify({ task_ids: taskIds }) });
 
-export const apiAddListTask = (listId: string, sectionId: string, data: Partial<Task> & { title: string }) =>
+export const apiAddListTask = (listId: string, sectionId: string, data: Partial<Task> & { title: string; workspaceId?: string }) =>
   apiFetch<{ task: Task }>(`/lists/${listId}/sections/${sectionId}/tasks`, { method: 'POST', body: JSON.stringify(data) });
 
 export const apiCreateSublistTask = (
@@ -129,22 +129,24 @@ export const apiCreateSublistTask = (
   sectionId: string,
   taskTitle: string,
   sublistName: string,
-  depth: number
+  depth: number,
+  workspaceId?: string
 ) =>
   apiFetch<{ task: Task; list: List }>(`/lists/${parentListId}/sections/${sectionId}/tasks/sublist`, {
     method: 'POST',
-    body: JSON.stringify({ title: taskTitle, sublistName, depth }),
+    body: JSON.stringify({ title: taskTitle, sublistName, depth, workspaceId }),
   });
 
 export const apiLinkListAsTask = (
   parentListId: string,
   sectionId: string,
   taskTitle: string,
-  linkedListId: string
+  linkedListId: string,
+  workspaceId?: string
 ) =>
   apiFetch<{ task: Task }>(`/lists/${parentListId}/sections/${sectionId}/tasks/link`, {
     method: 'POST',
-    body: JSON.stringify({ title: taskTitle, linkedListId }),
+    body: JSON.stringify({ title: taskTitle, linkedListId, workspaceId }),
   });
 
 export const apiGetListProgress = (listId: string) =>
