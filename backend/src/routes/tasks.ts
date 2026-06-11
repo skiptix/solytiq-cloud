@@ -59,8 +59,9 @@ router.get('/', async (req: Request, res: Response) => {
     // Improved query to handle workspace context for both dashboard and list tasks.
     // If workspaceId is provided, we filter tasks that are explicitly in that workspace,
     // OR list tasks whose parent list belongs to that workspace.
+    // OR tasks that have no workspace assigned (backward-compatibility/legacy).
     const wsClause = workspaceId
-      ? `AND (t.workspace_id = $2 OR (t.source = 'list' AND l.workspace_id = $2))`
+      ? `AND (t.workspace_id = $2 OR t.workspace_id IS NULL OR (t.source = 'list' AND (l.workspace_id = $2 OR l.workspace_id IS NULL)))`
       : '';
     if (workspaceId) params.push(workspaceId);
 

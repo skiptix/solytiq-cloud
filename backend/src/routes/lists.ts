@@ -130,7 +130,7 @@ async function buildListsForUser(userId: string, workspaceId?: string) {
   // When omitted: return all lists the user owns or has access to (global view).
   const params: unknown[] = [userId];
   const wsFilter = workspaceId
-    ? `AND (l.workspace_id = $2 OR (l.workspace_id IS NULL AND l.user_id = $1))`
+    ? `AND (l.workspace_id = $2 OR l.workspace_id IS NULL)`
     : '';
   if (workspaceId) params.push(workspaceId);
 
