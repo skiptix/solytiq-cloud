@@ -406,6 +406,29 @@ router.patch('/:id/rename', async (req, res) => {
   } catch (err) { console.error('GPS rename:', err); res.status(500).json({ error: 'Failed to rename GPS file' }); }
 });
 
+// POST /api/gps/new — create an empty route for planning from scratch
+router.post('/new', async (req, res) => {
+  try {
+    const userId = (req as any).userId as string;
+    const { name = 'New Route' } = req.body as { name?: string };
+    const safeName = name.replace(/[^\w\s\-_.()]/g, '').trim().slice(0, 200) || 'New Route';
+    const id = crypto.randomUUID();
+    const filename = `gps_${id.replace(/-/g, '')}.gpx`;
+    const fullPath = path.join(UPLOAD_DIR, filename);
+    const gpxContent = writeGpx([], safeName);
+    fs.writeFileSync(fullPath, gpxContent, 'utf8');
+    const fileSize = Buffer.byteLength(gpxContent, 'utf8');
+    await query(
+      'INSERT INTO gps_files (id, user_id, original_name, file_type, file_path, file_size, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+      [id, userId, `${safeName}.gpx`, 'gpx', filename, fileSize, null],
+    );
+    res.json({ file: { id, userId, name: `${safeName}.gpx`, fileType: 'gpx', size: fileSize, metadata: null, createdAt: new Date().toISOString(), smoothed: false } });
+  } catch (err) {
+    console.error('GPS new route:', err);
+    res.status(500).json({ error: 'Failed to create new route' });
+  }
+});
+
 // POST /api/gps/combine — merge multiple files; optional gap handling and save-to-library
 router.post('/combine', async (req, res) => {
   try {
