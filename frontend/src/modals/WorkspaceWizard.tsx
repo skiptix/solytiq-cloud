@@ -166,7 +166,7 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
 
             {/* Emoji picker */}
             {!useImage && showEmojiPicker && (
-              <div style={{ marginBottom: 14, border: '1px solid #e8e4f0', borderRadius: 12, padding: 10, background: '#fff', width: 'fit-content' }}>
+              <div style={{ marginBottom: 14, border: '1px solid #e8e4f0', borderRadius: 12, padding: 10, background: '#fff', width: 'fit-content', animation: 'menuIn 160ms ease both', transformOrigin: 'top left' }}>
                 <EmojiGrid value={emoji} onSelect={em => { setEmoji(em); setShowEmojiPicker(false); }} />
               </div>
             )}

@@ -54,7 +54,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
   return (
     <div
       onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 200ms ease both' }}>
       <div
         onClick={e => e.stopPropagation()}
         style={{ background: '#fff', borderRadius: 18, maxWidth: 420, width: '100%', maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
@@ -85,7 +85,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 22px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
           {/* Accessibility */}
-          <div>
+          <div style={{ animation: 'sectionFadeUp 320ms ease both', animationDelay: '40ms' }}>
             <SectionLabel>Accessibility</SectionLabel>
             <div style={{ display: 'flex', gap: 8 }}>
               {([{ label: 'Private', icon: 'lock', val: false }, { label: 'Public', icon: 'public', val: true }] as const).map(opt => {
@@ -93,7 +93,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                 return (
                   <button key={opt.label}
                     onClick={() => onChange({ isPublic: opt.val })}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '9px 12px', borderRadius: 10, border: selected ? '1.5px solid #5e4dbb' : '1.5px solid #e8e4f0', background: selected ? '#f0edff' : '#fff', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? '#5e4dbb' : '#484552', transition: 'all 120ms' }}>
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '9px 12px', borderRadius: 10, border: selected ? '1.5px solid #5e4dbb' : '1.5px solid #e8e4f0', background: selected ? '#f0edff' : '#fff', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? '#5e4dbb' : '#484552', transition: 'background 120ms, border 120ms, color 120ms' }}>
                     <Icon name={opt.icon} size={14} color={selected ? '#5e4dbb' : '#787584'} />
                     {opt.label}
                     {selected && <Icon name="check" size={13} color="#5e4dbb" />}
@@ -104,7 +104,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
           </div>
 
           {/* Color */}
-          <div>
+          <div style={{ animation: 'sectionFadeUp 320ms ease both', animationDelay: '90ms' }}>
             <SectionLabel>Color</SectionLabel>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {kind === 'folder'
@@ -112,20 +112,24 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                   <button key={c}
                     onClick={() => onChange({ color: c })}
                     title={c}
-                    style={{ width: 26, height: 26, borderRadius: '50%', background: c, border: color === c ? '2.5px solid #1c1b22' : '2px solid transparent', cursor: 'pointer', padding: 0, outline: 'none', transition: 'border 120ms' }} />
+                    style={{ width: 26, height: 26, borderRadius: '50%', background: c, border: color === c ? '2.5px solid #1c1b22' : '2px solid transparent', cursor: 'pointer', padding: 0, outline: 'none', transition: 'border 120ms, transform 140ms cubic-bezier(0.34,1.56,0.64,1)' }}
+                    onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.15)')}
+                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')} />
                 ))
                 : LIST_COLORS.map(c => (
                   <button key={c.color}
                     onClick={() => onChange({ color: c.color, colorBg: c.bg })}
                     title={c.color}
-                    style={{ width: 26, height: 26, borderRadius: '50%', background: c.color, border: color === c.color ? '2.5px solid #1c1b22' : '2px solid transparent', cursor: 'pointer', padding: 0, outline: 'none', transition: 'border 120ms' }} />
+                    style={{ width: 26, height: 26, borderRadius: '50%', background: c.color, border: color === c.color ? '2.5px solid #1c1b22' : '2px solid transparent', cursor: 'pointer', padding: 0, outline: 'none', transition: 'border 120ms, transform 140ms cubic-bezier(0.34,1.56,0.64,1)' }}
+                    onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.15)')}
+                    onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')} />
                 ))
               }
             </div>
           </div>
 
           {/* Emoji */}
-          <div>
+          <div style={{ animation: 'sectionFadeUp 320ms ease both', animationDelay: '140ms' }}>
             <SectionLabel>Emoji</SectionLabel>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <EmojiSelector value={emoji ?? ''} onChange={em => onChange({ emoji: em })} direction="down" size={36} />
@@ -137,7 +141,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
 
           {/* Folder (lists only) */}
           {kind === 'list' && folders && folders.length > 0 && (
-            <div>
+            <div style={{ animation: 'sectionFadeUp 320ms ease both', animationDelay: '190ms' }}>
               <SectionLabel>Folder</SectionLabel>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {[{ id: null as string | null, name: 'No folder', emoji: undefined as string | undefined, color: undefined as string | undefined }, ...folders].map(f => {
@@ -145,7 +149,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                   return (
                     <button key={f.id ?? '__none__'}
                       onClick={() => { if (!selected) onChange({ folderId: f.id }); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: 'none', borderRadius: 8, background: selected ? '#f0edff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: selected ? 600 : 450, color: selected ? '#5e4dbb' : '#484552', textAlign: 'left', width: '100%', transition: 'background 120ms' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', border: 'none', borderRadius: 8, background: selected ? '#f0edff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: selected ? 600 : 450, color: selected ? '#5e4dbb' : '#484552', textAlign: 'left', width: '100%', transition: 'background 120ms, color 120ms' }}
                       onMouseEnter={e => { if (!selected) e.currentTarget.style.background = '#f5f3ff'; }}
                       onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent'; }}>
                       {f.id === null
@@ -168,7 +172,9 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
         <div style={{ padding: '12px 22px 18px', borderTop: '1px solid #f0ecf8', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
           <button
             onClick={onClose}
-            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 10, padding: '9px 22px', cursor: 'pointer' }}>
+            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 10, padding: '9px 22px', cursor: 'pointer', transition: 'background 140ms, transform 140ms' }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#5240a8'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#5e4dbb'; e.currentTarget.style.transform = 'translateY(0)'; }}>
             Done
           </button>
         </div>
