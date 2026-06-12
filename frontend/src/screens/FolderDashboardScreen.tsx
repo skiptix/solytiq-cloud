@@ -164,10 +164,31 @@ function ListCard({ list, onClick, index, folderColor }: { list: List; onClick: 
 export default function FolderDashboardScreen() {
   const { folderId } = useParams<{ folderId: string }>();
   const navigate = useNavigate();
-  const { folders, lists } = useAppStore();
+  const { folders, lists, listsLoading } = useAppStore();
+
+  // On a page refresh the workspace data is fetched asynchronously, so `folders`
+  // is empty for the first render(s). Wait for at least one load cycle to settle
+  // before deciding the folder doesn't exist — otherwise we'd redirect to the
+  // dashboard and the folder would appear to "disappear". `listsLoading` isn't
+  // true yet on the very first render (the loader runs in a parent effect), so
+  // we also give a short grace window.
+  const [graceElapsed, setGraceElapsed] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setGraceElapsed(true), 2000);
+    return () => clearTimeout(t);
+  }, []);
 
   const folder = folders.find(f => f.id === folderId);
-  if (!folder) return <Navigate to="/dashboard" replace />;
+  if (!folder) {
+    if (listsLoading || !graceElapsed) {
+      return (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 32, height: 32, border: '3px solid #e8e4f0', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+        </div>
+      );
+    }
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const ac = folder.color ?? '#5e4dbb';
   const acBg = `${ac}15`;
