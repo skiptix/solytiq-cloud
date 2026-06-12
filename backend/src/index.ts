@@ -25,6 +25,7 @@ import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
 import { addSseClient, removeSseClient } from './sse';
 import { verifyToken } from './auth';
+import { ensureSetupTokenLogged } from './setupToken';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -76,6 +77,7 @@ app.use('/api/', apiLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/2fa/verify', authLimiter);
 app.use('/api/auth/register', setupLimiter);
+app.use('/api/auth/request-setup-token', setupLimiter);
 app.use('/api/admin/nuke', setupLimiter);
 
 // ---------------------------------------------------------------------------
@@ -583,6 +585,16 @@ async function start() {
   } catch (err) {
     console.error('Failed to apply database migrations:', err);
     process.exit(1);
+  }
+
+  // Show setup token in logs if no users are registered yet.
+  try {
+    const { rows } = await pool.query<{ count: string }>('SELECT COUNT(*) AS count FROM users');
+    if (parseInt(rows[0].count, 10) === 0) {
+      await ensureSetupTokenLogged();
+    }
+  } catch (err) {
+    console.error('Failed to check setup token:', err);
   }
 
   // Cleanup expired AI chat files (run once on start, then every 6 hours)

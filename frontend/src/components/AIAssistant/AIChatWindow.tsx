@@ -28,7 +28,7 @@ interface Props {
 const VIEW_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
   list: 'List',
-  scheduled: 'Scheduled',
+  calendar: 'Calendar',
   files: 'Files',
   settings: 'Settings',
   general: 'App',
@@ -547,7 +547,7 @@ export default function AIChatWindow({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4, width: '100%', maxWidth: 280 }}>
               {[
                 contextView === 'list' ? 'Add a task to the first section' : 'Add a task called "Weekly review"',
-                contextView === 'scheduled' ? 'Schedule the top priority task for tomorrow' : 'Mark all overdue tasks as done',
+                contextView === 'calendar' ? 'Schedule the top priority task for tomorrow' : 'Mark all overdue tasks as done',
                 "Drop a PDF here and I'll create todos from it",
               ].map((hint, i) => (
                 <button

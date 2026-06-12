@@ -5,6 +5,7 @@ import { query, pool } from '../db';
 import { generateToken, hashPassword, comparePassword, generatePendingToken, verifyPendingToken } from '../auth';
 import { authenticate } from '../middleware';
 import { ensurePersonalWorkspace, wlog } from '../workspaceUtil';
+import { logSetupToken, clearSetupToken } from '../setupToken';
 
 const router = Router();
 
@@ -78,22 +79,24 @@ router.post('/register', async (req: Request, res: Response) => {
         return;
       }
 
-      // FIND-04: Secure first-user-admin registration with INITIAL_SETUP_TOKEN
-      const INITIAL_SETUP_TOKEN = process.env.INITIAL_SETUP_TOKEN;
-      if (!INITIAL_SETUP_TOKEN || INITIAL_SETUP_TOKEN.length < 8) {
-         await client.query('ROLLBACK');
-         res.status(500).json({ error: 'System not properly configured: INITIAL_SETUP_TOKEN is missing or too short.' });
-         return;
+      // Read setup token from DB (generated at startup / after nuke).
+      const storedTokenRes = await client.query<{ value: string }>(
+        `SELECT value FROM app_settings WHERE key = 'setup_token'`
+      );
+      if (!storedTokenRes.rows[0]) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: 'No setup token found — check backend logs or click "Show token in logs".' });
+        return;
       }
+      const storedToken = storedTokenRes.rows[0].value;
 
-      // Timing-safe comparison (optional but good practice)
       const crypto = require('crypto');
-      const safeToken = Buffer.from(INITIAL_SETUP_TOKEN);
-      const providedToken = Buffer.from(setupToken || '');
-      if (providedToken.length !== safeToken.length || !crypto.timingSafeEqual(providedToken, safeToken)) {
-         await client.query('ROLLBACK');
-         res.status(401).json({ error: 'Invalid setup token' });
-         return;
+      const safeBuf = Buffer.from(storedToken);
+      const givenBuf = Buffer.from(setupToken || '');
+      if (givenBuf.length !== safeBuf.length || !crypto.timingSafeEqual(givenBuf, safeBuf)) {
+        await client.query('ROLLBACK');
+        res.status(401).json({ error: 'Invalid setup token' });
+        return;
       }
 
       const passwordHash = await hashPassword(password);
@@ -113,6 +116,9 @@ router.post('/register', async (req: Request, res: Response) => {
         newUserId
       );
       wlog(`register: user ${newUserId} provisioned with workspace ${personalWsId}`);
+
+      // Invalidate the one-time setup token now that admin is registered.
+      await client.query(`DELETE FROM app_settings WHERE key = 'setup_token'`);
 
       await client.query('COMMIT');
 
@@ -423,6 +429,27 @@ router.put('/password', authenticate, async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (err) {
     console.error('password change error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/auth/request-setup-token — re-logs the current setup token to backend console
+// Only works while no users exist (i.e., setup is not yet complete).
+router.post('/request-setup-token', async (_req: Request, res: Response) => {
+  try {
+    const countRes = await query<{ count: string }>('SELECT COUNT(*) AS count FROM users');
+    if (parseInt(countRes.rows[0].count, 10) > 0) {
+      res.status(403).json({ error: 'Setup already complete' });
+      return;
+    }
+    const found = await logSetupToken();
+    if (!found) {
+      res.status(404).json({ error: 'No setup token found. Restart the backend to generate one.' });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('request-setup-token error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -5,6 +5,7 @@ import { query } from '../db';
 import { authenticate, requireAdmin } from '../middleware';
 import { hashPassword, comparePassword } from '../auth';
 import { ensurePersonalWorkspace, wlog } from '../workspaceUtil';
+import { generateAndLogSetupToken } from '../setupToken';
 
 const execAsync = promisify(exec);
 
@@ -175,6 +176,9 @@ router.delete('/nuke', authenticate, requireAdmin, async (req: Request, res: Res
     }
 
     await query('TRUNCATE TABLE trash, tasks, sections, lists, users RESTART IDENTITY CASCADE');
+
+    // Generate and display a fresh setup token so the system can be re-initialised.
+    await generateAndLogSetupToken();
 
     res.json({ success: true });
   } catch (err) {

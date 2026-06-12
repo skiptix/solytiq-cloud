@@ -20,7 +20,7 @@ import SetupWizard from './screens/SetupWizard';
 import NukeScreen from './screens/NukeScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import ListScreen from './screens/ListScreen';
-import ScheduledScreen from './screens/ScheduledScreen';
+import CalendarScreen from './screens/CalendarScreen';
 import FilesScreen from './screens/FilesScreen';
 import GPSScreen from './screens/GPSScreen';
 import GPSEditScreen from './screens/GPSEditScreen';
@@ -135,10 +135,10 @@ function AppLayout() {
     arr.filter(l => l.folderId === folderId).forEach((l, i) => updateList(l.id, { position: i }));
   }, [lists, setLists, updateList]);
 
-  const getActive = (): 'dashboard' | 'scheduled' | 'files' | 'list' | 'settings' | 'folder' | 'gps' => {
+  const getActive = (): 'dashboard' | 'calendar' | 'files' | 'list' | 'settings' | 'folder' | 'gps' => {
     if (location.pathname.startsWith('/folder/')) return 'folder';
     if (location.pathname.startsWith('/list/')) return 'list';
-    if (location.pathname.startsWith('/scheduled')) return 'scheduled';
+    if (location.pathname.startsWith('/calendar')) return 'calendar';
     if (location.pathname.startsWith('/files')) return 'files';
     if (location.pathname.startsWith('/settings')) return 'settings';
     if (location.pathname.startsWith('/gps')) return 'gps';
@@ -179,7 +179,7 @@ function AppLayout() {
           <Routes>
             <Route path="/dashboard" element={<DashboardScreen />} />
             <Route path="/folder/:folderId" element={<FolderDashboardScreen />} />
-            <Route path="/scheduled" element={<ScheduledScreen />} />
+            <Route path="/calendar" element={<CalendarScreen />} />
             <Route path="/files" element={<FilesScreen />} />
             <Route path="/list/:listId" element={<ListScreen />} />
             <Route path="/settings" element={<SettingsScreen />} />
