@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { query } from '../db';
+import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
+import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
 
 const router = Router();
 router.use(authenticate);
@@ -197,6 +198,11 @@ async function buildListsForUser(userId: string, workspaceId?: string) {
     if (task.checked) taskCountByList[task.list_id].completed++;
   }
 
+  wlog(
+    `buildLists user=${userId} workspace=${workspaceId ?? 'ALL'} → ` +
+    `${listsResult.rows.length} list(s), ${sectionsResult.rows.length} section(s), ${tasksResult.rows.length} item(s)`
+  );
+
   return listsResult.rows.map((list: ListRow) =>
     sanitizeList(list, sectionsByList[list.id] ?? [], taskCountByList[list.id] ?? { total: 0, completed: 0 })
   );
@@ -213,7 +219,7 @@ router.get('/', async (req: Request, res: Response) => {
     const lists = await buildListsForUser(req.userId!, workspaceId);
     res.json({ lists });
   } catch (err) {
-    console.error('lists GET error:', err);
+    werr('lists GET error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -242,6 +248,11 @@ router.post('/', async (req: Request, res: Response) => {
 
     const listId = id ?? `list_${uuidv4()}`;
 
+    // Resolve to a workspace the user can actually access. Guarantees the list
+    // lands in a real, visible workspace (never NULL / never a dangling id), so
+    // it reliably reappears on reload.
+    const resolvedWs = await resolveWorkspaceForUser(req.userId!, workspaceId);
+
     const posResult = await query<{ max: string | null }>(
       'SELECT MAX(position) AS max FROM lists WHERE user_id = $1',
       [req.userId]
@@ -254,14 +265,14 @@ router.post('/', async (req: Request, res: Response) => {
       `INSERT INTO lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, folder_id, position, parent_task_id, depth, workspace_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
-      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false, folderId ?? null, nextPos, parentTaskId ?? null, depth ?? 0, workspaceId ?? null]
+      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false, folderId ?? null, nextPos, parentTaskId ?? null, depth ?? 0, resolvedWs]
     );
 
-    console.log(`[lists POST] ✓ created listId=${result.rows[0].id} workspaceId=${result.rows[0].workspace_id ?? 'null'}`);
+    wlog(`list CREATE ✓ id=${result.rows[0].id} name="${name}" workspace=${result.rows[0].workspace_id} owner=${req.userId} (requested=${workspaceId ?? 'none'})`);
     res.status(201).json({ list: sanitizeList(result.rows[0], []) });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
-    console.error('lists POST error:', err);
+    werr('lists POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -288,7 +299,7 @@ router.put('/:listId/reorder', async (req: Request, res: Response) => {
     res.json({ success: true });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
-    console.error('lists reorder error:', err);
+    werr('lists reorder error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -343,7 +354,7 @@ router.put('/:listId', async (req: Request, res: Response) => {
     res.json({ list: sanitizeList(result.rows[0], []) });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
-    console.error('lists PUT error:', err);
+    werr('lists PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -395,17 +406,22 @@ router.delete('/:listId', async (req: Request, res: Response) => {
     );
     const listData = sanitizeList(listRow, sections);
 
-    await query(
-      `INSERT INTO trash_lists (list_id, user_id, list_data) VALUES ($1, $2, $3)`,
-      [listId, req.userId, JSON.stringify(listData)]
-    );
+    // Snapshot-to-trash and delete must be atomic: we never want to delete the
+    // list without its trash snapshot, nor keep a snapshot of a list we failed
+    // to delete.
+    await withTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO trash_lists (list_id, user_id, list_data) VALUES ($1, $2, $3)`,
+        [listId, req.userId, JSON.stringify(listData)]
+      );
+      await client.query('DELETE FROM lists WHERE id = $1', [listId]);
+    });
 
-    await query('DELETE FROM lists WHERE id = $1', [listId]);
-
+    wlog(`list DELETE ✓ id=${listId} (${sections.length} section(s)) → trashed by user ${req.userId}`);
     res.json({ success: true });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
-    console.error('lists DELETE error:', err);
+    werr('lists DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -424,7 +440,7 @@ router.post('/:listId/sections', async (req: Request, res: Response) => {
       emoji?: string;
     };
 
-    console.log(`[sections POST] listId=${listId} requestedId=${id} label=${label}`);
+    wlog(`section listId=${listId} requestedId=${id} label=${label}`);
 
     if (!label) {
       res.status(400).json({ error: 'label is required' });
@@ -437,7 +453,7 @@ router.post('/:listId/sections', async (req: Request, res: Response) => {
       [listId]
     );
     if (listCheck.rows.length === 0) {
-      console.log(`[sections POST] ✗ 404 — list ${listId} not found for userId=${req.userId}`);
+      wlog(`section ✗ 404 — list ${listId} not found for userId=${req.userId}`);
       res.status(404).json({ error: 'List not found' });
       return;
     }
@@ -463,11 +479,11 @@ router.post('/:listId/sections', async (req: Request, res: Response) => {
       [sectionId, listId, label, emoji ?? null, nextPos]
     );
 
-    console.log(`[sections POST] ✓ created sectionId=${result.rows[0].id}`);
+    wlog(`section ✓ created sectionId=${result.rows[0].id}`);
     res.status(201).json({ section: sanitizeSection(result.rows[0], []) });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
-    console.error('sections POST error:', err);
+    werr('sections POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -509,7 +525,7 @@ router.put('/sections/:sectionId', async (req: Request, res: Response) => {
     res.json({ section: sanitizeSection(result.rows[0], []) });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
-    console.error('sections PUT error:', err);
+    werr('sections PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -547,7 +563,7 @@ router.put('/:listId/sections/reorder', async (req: Request, res: Response) => {
     res.json({ success: true });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
-    console.error('sections reorder error:', err);
+    werr('sections reorder error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -585,7 +601,7 @@ router.put('/:listId/sections/:sectionId/tasks/reorder', async (req: Request, re
     res.json({ success: true });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
-    console.error('tasks reorder error:', err);
+    werr('tasks reorder error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -614,7 +630,7 @@ router.delete('/sections/:sectionId', async (req: Request, res: Response) => {
     res.json({ success: true });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
-    console.error('sections DELETE error:', err);
+    werr('sections DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -627,8 +643,8 @@ router.delete('/sections/:sectionId', async (req: Request, res: Response) => {
 router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Response) => {
   try {
     const { listId, sectionId } = req.params;
-    console.log(`[list task POST] listId=${listId} sectionId=${sectionId} title=${req.body?.title}`);
-    const { id, title, note, deadline, priority, badge, linked_list_id, linked_list_type, workspaceId } = req.body as {
+    wlog(`item CREATE → list=${listId} section=${sectionId} title="${req.body?.title}" user=${req.userId}`);
+    const { id, title, note, deadline, priority, badge, linked_list_id, linked_list_type } = req.body as {
       id?: number;
       title?: string;
       note?: string;
@@ -651,7 +667,7 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
       [sectionId, listId]
     );
     if (ownerCheck.rows.length === 0) {
-      console.log(`[list task POST] ✗ 404 — section ${sectionId} not found in list ${listId} for userId=${req.userId}`);
+      werr(`item CREATE 404 — section ${sectionId} not found in list ${listId} for user=${req.userId}`);
       res.status(404).json({ error: 'List or section not found' });
       return;
     }
@@ -661,6 +677,11 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
     }
 
     const taskId = id ?? (Date.now() * 1000 + Math.floor(Math.random() * 1000));
+
+    // An item ALWAYS inherits its parent list's workspace — never trust a
+    // client-supplied workspaceId here, so an item can never drift out of the
+    // workspace its list lives in (which would make it vanish on reload).
+    const itemWorkspaceId = ownerCheck.rows[0].workspace_id;
 
     const posResult = await query<{ max: string | null }>(
       `SELECT MAX(position) AS max FROM tasks WHERE section_id = $1`,
@@ -675,14 +696,14 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
          (id, user_id, title, note, deadline, priority, badge, source, list_id, section_id, position, linked_list_id, linked_list_type, workspace_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'list', $8, $9, $10, $11, $12, $13)
        RETURNING *`,
-      [taskId, req.userId, title, note ?? null, deadline ?? null, priority ?? null, badge ?? null, listId, sectionId, nextPos, linked_list_id ?? null, linked_list_type ?? null, workspaceId ?? ownerCheck.rows[0].workspace_id ?? null]
+      [taskId, req.userId, title, note ?? null, deadline ?? null, priority ?? null, badge ?? null, listId, sectionId, nextPos, linked_list_id ?? null, linked_list_type ?? null, itemWorkspaceId]
     );
 
-    console.log(`[list task POST] ✓ created taskId=${result.rows[0].id} in section=${sectionId}`);
+    wlog(`item CREATE ✓ id=${result.rows[0].id} list=${listId} section=${sectionId} workspace=${itemWorkspaceId ?? 'null'}`);
     res.status(201).json({ task: sanitizeTask(result.rows[0]) });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
-    console.error('list task POST error:', err);
+    werr('list task POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -717,9 +738,9 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
     const linked_list_type = _llt_snake ?? _llt_camel;
     const updateLinkedList = 'linked_list_id' in req.body || 'linkedListId' in req.body;
 
-    console.log(`[list task PUT] taskId=${taskId} listId=${listId} userId=${req.userId}`);
-    console.log(`[list task PUT] body keys: ${Object.keys(req.body).join(', ')}`);
-    console.log(`[list task PUT] updateLinkedList=${updateLinkedList} linked_list_id=${linked_list_id} linked_list_type=${linked_list_type}`);
+    wlog(`item UPDATE taskId=${taskId} listId=${listId} userId=${req.userId}`);
+    wlog(`item UPDATE body keys: ${Object.keys(req.body).join(', ')}`);
+    wlog(`item UPDATE updateLinkedList=${updateLinkedList} linked_list_id=${linked_list_id} linked_list_type=${linked_list_type}`);
 
     // Verify the task belongs to a list owned by this user (or admin)
     const permCheck = await query<{ user_id: string }>(
@@ -727,7 +748,7 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
       [taskId, listId]
     );
     if (permCheck.rows.length === 0) {
-      console.log(`[list task PUT] ✗ 404 — taskId=${taskId} not found in listId=${listId}`);
+      wlog(`item UPDATE ✗ 404 — taskId=${taskId} not found in listId=${listId}`);
       res.status(404).json({ error: 'Task not found' });
       return;
     }
@@ -769,17 +790,17 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0) {
-      console.log(`[list task PUT] ✗ 404 — taskId=${taskId} not found in listId=${listId} for userId=${req.userId}`);
+      wlog(`item UPDATE ✗ 404 — taskId=${taskId} not found in listId=${listId} for userId=${req.userId}`);
       res.status(404).json({ error: 'Task not found' });
       return;
     }
 
     const saved = result.rows[0];
-    console.log(`[list task PUT] ✓ updated → linked_list_id=${saved.linked_list_id} linked_list_type=${saved.linked_list_type}`);
+    wlog(`item UPDATE ✓ updated → linked_list_id=${saved.linked_list_id} linked_list_type=${saved.linked_list_type}`);
     res.json({ task: sanitizeTask(saved) });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
-    console.error('list task PUT error:', err);
+    werr('list task PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -816,7 +837,7 @@ router.delete('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
     res.json({ success: true });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
-    console.error('list task DELETE error:', err);
+    werr('list task DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -882,7 +903,7 @@ router.get('/:listId/progress', async (req: Request, res: Response) => {
     const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
     res.json({ total, completed, percent });
   } catch (err) {
-    console.error('list progress error:', err);
+    werr('list progress error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -898,11 +919,14 @@ router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, r
       return;
     }
 
-    const ownerCheck = await query<{ user_id: string }>(
-      `SELECT l.user_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
+    wlog(`sublist CREATE → parentList=${listId} section=${sectionId} name="${sublistName}" user=${req.userId}`);
+
+    const ownerCheck = await query<{ user_id: string; depth: number; workspace_id: string | null }>(
+      `SELECT l.user_id, l.depth, l.workspace_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
       [sectionId, listId]
     );
     if (ownerCheck.rows.length === 0) {
+      werr(`sublist CREATE 404 — section ${sectionId} not in list ${listId} for user=${req.userId}`);
       res.status(404).json({ error: 'List or section not found' });
       return;
     }
@@ -911,48 +935,54 @@ router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, r
       return;
     }
 
-    // Get parent list depth and workspace for calculating new depth and inheriting workspace
-    const parentListRes = await query<{ depth: number; workspace_id: string | null }>('SELECT depth, workspace_id FROM lists WHERE id = $1', [listId]);
-    const parentDepth = parentListRes.rows[0]?.depth ?? 0;
+    // The sublist (and its linking task) ALWAYS inherit the parent list's
+    // workspace, so the whole nested tree stays in one workspace and never
+    // gets orphaned. (workspaceId from the client is ignored on purpose.)
+    const parentDepth = ownerCheck.rows[0].depth ?? 0;
     const newDepth = depth ?? parentDepth + 1;
-    const finalWorkspaceId = workspaceId ?? parentListRes.rows[0]?.workspace_id ?? null;
+    const finalWorkspaceId = ownerCheck.rows[0].workspace_id;
 
-    // 1. Create the new sublist
     const newListId = `list_${uuidv4()}`;
-    const posResult = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM lists WHERE user_id = $1', [req.userId]);
-    const nextPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
-
-    const newList = await query<ListRow>(
-      `INSERT INTO lists (id, user_id, name, is_public, position, depth, workspace_id) VALUES ($1, $2, $3, false, $4, $5, $6) RETURNING *`,
-      [newListId, req.userId, sublistName, nextPos, newDepth, finalWorkspaceId]
-    );
-
-    // 2. Create a default section in the new list
     const newSectionId = `section_${uuidv4()}`;
-    await query(
-      `INSERT INTO sections (id, list_id, label, position) VALUES ($1, $2, 'Tasks', 0)`,
-      [newSectionId, newListId]
-    );
-
-    // 3. Create the task that links to the sublist
     const taskId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-    const taskPosResult = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM tasks WHERE section_id = $1', [sectionId]);
-    const taskPos = taskPosResult.rows[0].max !== null ? parseInt(taskPosResult.rows[0].max, 10) + 1 : 0;
 
-    const newTask = await query<TaskRow>(
-      `INSERT INTO tasks (id, user_id, title, source, list_id, section_id, position, linked_list_id, linked_list_type, workspace_id)
-       VALUES ($1, $2, $3, 'list', $4, $5, $6, $7, 'sublist', $8) RETURNING *`,
-      [taskId, req.userId, title, listId, sectionId, taskPos, newListId, finalWorkspaceId]
-    );
+    // All four writes happen atomically: list + its section + the linking task
+    // + the back-reference. A partial failure can no longer leave a sublist
+    // without a task (or a task pointing at a half-created list).
+    const { newList, newTask } = await withTransaction(async (client) => {
+      const posResult = await client.query<{ max: string | null }>('SELECT MAX(position) AS max FROM lists WHERE user_id = $1', [req.userId]);
+      const nextPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
 
-    // 4. Update the sublist with the parent_task_id
-    await query('UPDATE lists SET parent_task_id = $1 WHERE id = $2', [taskId, newListId]);
-    newList.rows[0].parent_task_id = String(taskId);
+      const listRes = await client.query<ListRow>(
+        `INSERT INTO lists (id, user_id, name, is_public, position, depth, workspace_id) VALUES ($1, $2, $3, false, $4, $5, $6) RETURNING *`,
+        [newListId, req.userId, sublistName, nextPos, newDepth, finalWorkspaceId]
+      );
 
-    res.status(201).json({ task: sanitizeTask(newTask.rows[0]), list: sanitizeList(newList.rows[0], []) });
+      await client.query(
+        `INSERT INTO sections (id, list_id, label, position) VALUES ($1, $2, 'Tasks', 0)`,
+        [newSectionId, newListId]
+      );
+
+      const taskPosResult = await client.query<{ max: string | null }>('SELECT MAX(position) AS max FROM tasks WHERE section_id = $1', [sectionId]);
+      const taskPos = taskPosResult.rows[0].max !== null ? parseInt(taskPosResult.rows[0].max, 10) + 1 : 0;
+
+      const taskRes = await client.query<TaskRow>(
+        `INSERT INTO tasks (id, user_id, title, source, list_id, section_id, position, linked_list_id, linked_list_type, workspace_id)
+         VALUES ($1, $2, $3, 'list', $4, $5, $6, $7, 'sublist', $8) RETURNING *`,
+        [taskId, req.userId, title, listId, sectionId, taskPos, newListId, finalWorkspaceId]
+      );
+
+      await client.query('UPDATE lists SET parent_task_id = $1 WHERE id = $2', [taskId, newListId]);
+      listRes.rows[0].parent_task_id = String(taskId);
+
+      return { newList: listRes.rows[0], newTask: taskRes.rows[0] };
+    });
+
+    wlog(`sublist CREATE ✓ list=${newListId} task=${taskId} depth=${newDepth} workspace=${finalWorkspaceId ?? 'null'}`);
+    res.status(201).json({ task: sanitizeTask(newTask), list: sanitizeList(newList, []) });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
-    console.error('sublist task POST error:', err);
+    werr('sublist task POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -968,11 +998,14 @@ router.post('/:listId/sections/:sectionId/tasks/link', async (req: Request, res:
       return;
     }
 
-    const ownerCheck = await query<{ user_id: string }>(
-      `SELECT l.user_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
+    wlog(`link CREATE → list=${listId} section=${sectionId} target=${linkedListId} user=${req.userId}`);
+
+    const ownerCheck = await query<{ user_id: string; workspace_id: string | null }>(
+      `SELECT l.user_id, l.workspace_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
       [sectionId, listId]
     );
     if (ownerCheck.rows.length === 0) {
+      werr(`link CREATE 404 — section ${sectionId} not in list ${listId} for user=${req.userId}`);
       res.status(404).json({ error: 'List or section not found' });
       return;
     }
@@ -992,9 +1025,8 @@ router.post('/:listId/sections/:sectionId/tasks/link', async (req: Request, res:
     const posResult = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM tasks WHERE section_id = $1', [sectionId]);
     const taskPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
 
-    // Get workspace from parent list if not provided
-    const parentListRes = await query<{ workspace_id: string | null }>('SELECT workspace_id FROM lists WHERE id = $1', [listId]);
-    const finalWorkspaceId = workspaceId ?? parentListRes.rows[0]?.workspace_id ?? null;
+    // The linking task inherits the parent list's workspace (authoritative).
+    const finalWorkspaceId = ownerCheck.rows[0].workspace_id;
 
     const newTask = await query<TaskRow>(
       `INSERT INTO tasks (id, user_id, title, source, list_id, section_id, position, linked_list_id, linked_list_type, workspace_id)
@@ -1002,10 +1034,11 @@ router.post('/:listId/sections/:sectionId/tasks/link', async (req: Request, res:
       [taskId, req.userId, title, listId, sectionId, taskPos, linkedListId, finalWorkspaceId]
     );
 
+    wlog(`link CREATE ✓ task=${taskId} list=${listId} → target=${linkedListId} workspace=${finalWorkspaceId ?? 'null'}`);
     res.status(201).json({ task: sanitizeTask(newTask.rows[0]) });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
-    console.error('link task POST error:', err);
+    werr('link task POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

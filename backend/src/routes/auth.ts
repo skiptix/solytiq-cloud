@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { query, pool } from '../db';
 import { generateToken, hashPassword, comparePassword, generatePendingToken, verifyPendingToken } from '../auth';
 import { authenticate } from '../middleware';
+import { ensurePersonalWorkspace, wlog } from '../workspaceUtil';
 
 const router = Router();
 
@@ -103,6 +104,16 @@ router.post('/register', async (req: Request, res: Response) => {
          RETURNING *`,
         [username, email, passwordHash, fullName ?? null]
       );
+
+      // Guarantee the new user owns a Personal workspace before we commit, so
+      // the very first list/item they create has a real home to land in.
+      const newUserId = inserted.rows[0].id;
+      const personalWsId = await ensurePersonalWorkspace(
+        (text, params) => client.query(text, params),
+        newUserId
+      );
+      wlog(`register: user ${newUserId} provisioned with workspace ${personalWsId}`);
+
       await client.query('COMMIT');
 
       const user = inserted.rows[0];

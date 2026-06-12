@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { query } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
+import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
 
 const router = Router();
 router.use(authenticate);
@@ -74,9 +75,10 @@ router.get('/', async (req: Request, res: Response) => {
        ORDER BY t.position ASC, t.created_at ASC`,
       params
     );
+    wlog(`tasks GET user=${req.userId} workspace=${workspaceId ?? 'ALL'} → ${result.rows.length} task(s)`);
     res.json({ tasks: result.rows.map(sanitizeTask) });
   } catch (err) {
-    console.error('tasks GET error:', err);
+    werr('tasks GET error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -115,6 +117,10 @@ router.post('/', async (req: Request, res: Response) => {
 
     const taskId = id ?? (Date.now() * 1000 + Math.floor(Math.random() * 1000));
 
+    // Resolve to a workspace the user can access so the dashboard task always
+    // has a real, visible home (never NULL / never a dangling id).
+    const resolvedWs = await resolveWorkspaceForUser(req.userId!, workspaceId);
+
     // Determine next position
     const posResult = await query<{ max: string | null }>(
       `SELECT MAX(position) AS max FROM tasks WHERE user_id = $1 AND source = 'dash'`,
@@ -129,13 +135,14 @@ router.post('/', async (req: Request, res: Response) => {
          (id, user_id, title, note, deadline, time_val, priority, badge, source, position, linked_list_id, linked_list_type, workspace_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'dash', $9, $10, $11, $12)
        RETURNING *`,
-      [taskId, req.userId, title, note ?? null, deadline ?? null, time_val ?? null, priority ?? null, badge ?? null, nextPos, linked_list_id ?? null, linked_list_type ?? null, workspaceId ?? null]
+      [taskId, req.userId, title, note ?? null, deadline ?? null, time_val ?? null, priority ?? null, badge ?? null, nextPos, linked_list_id ?? null, linked_list_type ?? null, resolvedWs]
     );
 
+    wlog(`dash task CREATE ✓ id=${result.rows[0].id} title="${title}" workspace=${resolvedWs} owner=${req.userId} (requested=${workspaceId ?? 'none'})`);
     res.status(201).json({ task: sanitizeTask(result.rows[0]) });
     broadcastToUser(req.userId!, 'tasks');
   } catch (err) {
-    console.error('tasks POST error:', err);
+    werr('tasks POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -162,7 +169,7 @@ router.put('/reorder', async (req: Request, res: Response) => {
     res.json({ success: true });
     broadcastToUser(req.userId!, 'tasks');
   } catch (err) {
-    console.error('tasks reorder error:', err);
+    werr('tasks reorder error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -203,9 +210,9 @@ router.put('/:id', async (req: Request, res: Response) => {
     const linked_list_type = _llt_snake ?? _llt_camel;
     const updateLinkedList = 'linked_list_id' in req.body || 'linkedListId' in req.body;
 
-    console.log(`[tasks PUT] id=${taskId} userId=${req.userId}`);
-    console.log(`[tasks PUT] body keys: ${Object.keys(req.body).join(', ')}`);
-    console.log(`[tasks PUT] updateLinkedList=${updateLinkedList} linked_list_id=${linked_list_id} linked_list_type=${linked_list_type}`);
+    wlog(`dash task UPDATE id=${taskId} userId=${req.userId}`);
+    wlog(`dash task UPDATE body keys: ${Object.keys(req.body).join(', ')}`);
+    wlog(`dash task UPDATE updateLinkedList=${updateLinkedList} linked_list_id=${linked_list_id} linked_list_type=${linked_list_type}`);
 
     const result = await query<TaskRow>(
       `UPDATE tasks
@@ -239,17 +246,17 @@ router.put('/:id', async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0) {
-      console.log(`[tasks PUT] ✗ 404 — no task with id=${taskId}, userId=${req.userId}, source=dash`);
+      wlog(`dash task UPDATE ✗ 404 — no task with id=${taskId}, userId=${req.userId}, source=dash`);
       res.status(404).json({ error: 'Task not found' });
       return;
     }
 
     const saved = result.rows[0];
-    console.log(`[tasks PUT] ✓ updated → linked_list_id=${saved.linked_list_id} linked_list_type=${saved.linked_list_type}`);
+    wlog(`dash task UPDATE ✓ updated → linked_list_id=${saved.linked_list_id} linked_list_type=${saved.linked_list_type}`);
     res.json({ task: sanitizeTask(saved) });
     broadcastToUser(req.userId!, 'tasks');
   } catch (err) {
-    console.error('tasks PUT error:', err);
+    werr('tasks PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -272,7 +279,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     res.json({ success: true });
     broadcastToUser(req.userId!, 'tasks');
   } catch (err) {
-    console.error('tasks DELETE error:', err);
+    werr('tasks DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
