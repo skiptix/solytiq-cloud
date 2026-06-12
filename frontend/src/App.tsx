@@ -84,6 +84,13 @@ function AppLayout() {
 
   // Reload data when the active workspace changes.
   useEffect(() => {
+    // currentWorkspaceId is null when the workspace store hasn't loaded yet (e.g.
+    // after cache clear). Skip and wait — loadWorkspaces() will set a real ID which
+    // re-fires this effect. Calling loadFromApi(undefined) here then having it
+    // preempted by the subsequent real-workspace load creates a race that discards
+    // the real results and leaves lists empty.
+    if (currentWorkspaceId === null) return;
+
     const prev = prevWorkspaceRef.current;
     prevWorkspaceRef.current = currentWorkspaceId;
 
@@ -99,7 +106,7 @@ function AppLayout() {
       setFolders([]);
     }
 
-    loadFromApi(currentWorkspaceId ?? undefined);
+    loadFromApi(currentWorkspaceId);
 
     // Navigate to dashboard only when the user explicitly switches between two
     // real workspaces (not on initial load, and not on null → first workspace).
