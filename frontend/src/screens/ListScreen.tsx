@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Task } from '../types';
 import useAppStore from '../store/useAppStore';
@@ -7,77 +7,7 @@ import TaskItem, { QuickAdd } from '../components/TaskItem';
 import TaskDialog from '../components/TaskDialog';
 import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, apiCreateSublistTask, apiLinkListAsTask, apiReorderSectionTasks, apiReorderListSections, apiUpdateListTask } from '../api/client';
 import Icon from '../components/Icon';
-
-const SECTION_EMOJI_GROUPS = [
-  { label: 'Work', emojis: ['📋','📁','💼','🗂️','📊','📈','✅','🎯','🔖','📌'] },
-  { label: 'Personal', emojis: ['🏠','❤️','⭐','🌟','💡','🎉','🎨','📚','🏃','🍎'] },
-  { label: 'Time', emojis: ['📅','⏰','🗓️','⏳','🔔','🌅','🌙','⚡','🚀','🔥'] },
-  { label: 'Other', emojis: ['🔧','💰','🎮','🌍','🤝','🧠','💪','🎵','🛒','🌱'] },
-];
-
-// Emoji selector button with popup — used when adding and when editing a section.
-// preventDefault on mousedown keeps focus (and the blur-commit) on the adjacent
-// label input while picking an emoji.
-function SectionEmojiButton({ value, onChange, direction = 'up', size = 36 }: { value: string; onChange: (emoji: string) => void; direction?: 'up' | 'down'; size?: number }) {
-  const [open, setOpen] = useState(false);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        popRef.current && !popRef.current.contains(e.target as Node) &&
-        btnRef.current && !btnRef.current.contains(e.target as Node)
-      ) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  return (
-    <div style={{ position: 'relative', flexShrink: 0 }} onMouseDown={e => e.preventDefault()}>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        title="Choose emoji"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, borderRadius: 8, border: `1.5px solid ${open ? '#5e4dbb' : '#e2dff0'}`, background: open ? '#f5f3ff' : '#faf9fc', cursor: 'pointer', fontSize: size / 2, transition: 'all 150ms' }}
-      >
-        {value || <Icon name="tag" size={size * 0.45} color="#b0acbe" />}
-      </button>
-      {open && (
-        <div
-          ref={popRef}
-          style={{ position: 'absolute', ...(direction === 'up' ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 6px)' }), left: 0, zIndex: 300, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', padding: '10px', width: 278, boxSizing: 'border-box', animation: 'modalIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
-        >
-          {value && (
-            <button
-              onClick={() => { onChange(''); setOpen(false); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', marginBottom: 8, padding: '4px 6px', border: 'none', borderRadius: 6, background: '#ffeaea', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#ba1a1a', fontWeight: 500 }}
-            >
-              <Icon name="close" size={12} color="#ba1a1a" /> Remove emoji
-            </button>
-          )}
-          {SECTION_EMOJI_GROUPS.map(group => (
-            <div key={group.label} style={{ marginBottom: 8 }}>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{group.label}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 24px)', gap: 2, justifyContent: 'space-between' }}>
-                {group.emojis.map(em => (
-                  <button key={em} onClick={() => { onChange(em); setOpen(false); }}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 4, border: 'none', background: value === em ? '#f0edff' : 'transparent', cursor: 'pointer', fontSize: 15, transition: 'background 100ms' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-                    onMouseLeave={e => (e.currentTarget.style.background = value === em ? '#f0edff' : 'transparent')}
-                  >{em}</button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+import EmojiSelector from '../components/EmojiSelector';
 
 export default function ListScreen() {
   const { listId } = useParams<{ listId: string }>();
@@ -467,7 +397,7 @@ export default function ListScreen() {
               {editingSection?.id === section.id ? (
                 /* Inline edit — label + emoji */
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <SectionEmojiButton
+                  <EmojiSelector
                     value={editingSection.emoji}
                     onChange={em => setEditingSection(s => s ? { ...s, emoji: em } : null)}
                     direction="down"
@@ -577,7 +507,7 @@ export default function ListScreen() {
         {addingSection ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
             {/* Emoji selector */}
-            <SectionEmojiButton value={newSectionEmoji} onChange={setNewSectionEmoji} direction="up" />
+            <EmojiSelector value={newSectionEmoji} onChange={setNewSectionEmoji} direction="up" />
             <input
               ref={newSectionInputRef}
               autoFocus

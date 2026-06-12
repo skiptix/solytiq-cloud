@@ -3,7 +3,7 @@ import Icon from '../components/Icon';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useAuthStore from '../store/useAuthStore';
 import type { Workspace, WorkspaceMember } from '../types';
-import EmojiPicker from 'emoji-picker-react';
+import { EmojiGrid } from '../components/EmojiSelector';
 import { apiGetMembers } from '../api/client';
 
 interface UserSuggestion { id: string; username: string; fullName: string | null; profileImage: string | null; }
@@ -228,8 +228,8 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                   </div>
                 )}
                 {!useImage && showEmojiPicker && (
-                  <div style={{ marginTop: 10 }}>
-                    <EmojiPicker onEmojiClick={d => { setEmoji(d.emoji); setShowEmojiPicker(false); }} width="100%" height={280} searchPlaceholder="Search…" previewConfig={{ showPreview: false }} />
+                  <div style={{ marginTop: 10, border: '1px solid #e8e4f0', borderRadius: 12, padding: 10, background: '#fff', width: 'fit-content' }}>
+                    <EmojiGrid value={emoji} onSelect={em => { setEmoji(em); setShowEmojiPicker(false); }} />
                   </div>
                 )}
               </div>

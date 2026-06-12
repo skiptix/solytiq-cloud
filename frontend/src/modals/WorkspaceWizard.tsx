@@ -2,12 +2,10 @@ import { useState, useRef } from 'react';
 import Icon from '../components/Icon';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import type { WorkspaceMember } from '../types';
-import EmojiPicker from 'emoji-picker-react';
+import { EmojiGrid } from '../components/EmojiSelector';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-
-const PRESET_EMOJIS = ['🏠', '🚀', '💡', '🎯', '🔬', '💼', '🎨', '🌱', '⚡', '🏋️', '📚', '🎵', '🌍', '💰', '🛒'];
 
 interface Props { onClose: () => void; onCreated?: (wsId: string) => void; forced?: boolean; }
 
@@ -168,16 +166,8 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
 
             {/* Emoji picker */}
             {!useImage && showEmojiPicker && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                  {PRESET_EMOJIS.map(e => (
-                    <button key={e} onClick={() => { setEmoji(e); setShowEmojiPicker(false); }}
-                      style={{ fontSize: 22, width: 36, height: 36, borderRadius: 8, border: emoji === e ? '2px solid #5e4dbb' : '2px solid transparent', background: '#f5f3ff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {e}
-                    </button>
-                  ))}
-                </div>
-                <EmojiPicker onEmojiClick={d => { setEmoji(d.emoji); setShowEmojiPicker(false); }} width="100%" height={300} searchPlaceholder="Search…" previewConfig={{ showPreview: false }} />
+              <div style={{ marginBottom: 14, border: '1px solid #e8e4f0', borderRadius: 12, padding: 10, background: '#fff', width: 'fit-content' }}>
+                <EmojiGrid value={emoji} onSelect={em => { setEmoji(em); setShowEmojiPicker(false); }} />
               </div>
             )}
 

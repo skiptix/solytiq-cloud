@@ -4,8 +4,8 @@ import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import { apiCreateList, apiCreateSection } from '../api/client';
 import Icon from '../components/Icon';
+import EmojiSelector from '../components/EmojiSelector';
 
-const EMOJIS = ['📋','🎯','🚴','🏃','💡','📚','🛒','🏠','💼','🎵','🏋️','✈️','🌱','💰','🎨','🔬','🍳','🎮','📷','🌍'];
 const COLORS = [
   { color: '#5e4dbb', bg: '#F5F3FF' },
   { color: '#1D4ED8', bg: '#eff6ff' },
@@ -95,13 +95,9 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
               {/* Emoji */}
               <div>
                 <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 8 }}>Icon</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {EMOJIS.map(e => (
-                    <button key={e} onClick={() => setEmoji(e)}
-                      style={{ width: 36, height: 36, borderRadius: 8, border: `2px solid ${emoji === e ? '#5e4dbb' : 'transparent'}`, background: emoji === e ? '#F5F3FF' : '#f7f4fc', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms' }}>
-                      {e}
-                    </button>
-                  ))}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <EmojiSelector value={emoji} onChange={setEmoji} direction="down" size={40} allowRemove={false} />
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>Click to choose an emoji</span>
                 </div>
               </div>
               {/* Name */}
@@ -173,10 +169,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
                 </div>
               ))}
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <select value={newSectionEmoji} onChange={e => setNewSectionEmoji(e.target.value)}
-                  style={{ fontFamily: 'Inter, sans-serif', fontSize: 16, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px', background: '#f7f4fc', cursor: 'pointer' }}>
-                  {EMOJIS.map(e => <option key={e} value={e}>{e}</option>)}
-                </select>
+                <EmojiSelector value={newSectionEmoji} onChange={setNewSectionEmoji} direction="down" size={38} allowRemove={false} />
                 <input value={newSection} onChange={e => setNewSection(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSection()} placeholder="Section name…"
                   style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 14, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 12px', outline: 'none', background: '#fff' }}
                   onFocus={e => (e.target.style.borderColor = '#5e4dbb')} onBlur={e => (e.target.style.borderColor = '#e8e4f0')} />
