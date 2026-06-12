@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from './Icon';
 
 const EMOJI_GROUPS = [
@@ -29,9 +30,9 @@ export function EmojiGrid({ value, onSelect, onRemove }: { value?: string; onSel
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 24px)', gap: 2, justifyContent: 'space-between' }}>
             {group.emojis.map(em => (
               <button key={em} onClick={() => onSelect(em)}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 4, border: 'none', background: value === em ? '#f0edff' : 'transparent', cursor: 'pointer', fontSize: 15, transition: 'background 100ms' }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-                onMouseLeave={e => (e.currentTarget.style.background = value === em ? '#f0edff' : 'transparent')}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 4, border: 'none', background: value === em ? '#f0edff' : 'transparent', cursor: 'pointer', fontSize: 15, transition: 'background 100ms, transform 120ms cubic-bezier(0.34,1.56,0.64,1)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.transform = 'scale(1.25)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = value === em ? '#f0edff' : 'transparent'; e.currentTarget.style.transform = 'scale(1)'; }}
               >{em}</button>
             ))}
           </div>
@@ -76,7 +77,13 @@ export default function EmojiSelector({ value, onChange, direction = 'down', siz
       const rect = btnRef.current?.getBoundingClientRect();
       if (rect) {
         const left = Math.max(8, Math.min(rect.left, window.innerWidth - POPUP_WIDTH - 8));
-        setPos(direction === 'up'
+        // Flip away from the nearer viewport edge when the preferred side lacks room.
+        const spaceBelow = window.innerHeight - rect.bottom - 12;
+        const spaceAbove = rect.top - 12;
+        let dir = direction;
+        if (dir === 'down' && spaceBelow < 380 && spaceAbove > spaceBelow) dir = 'up';
+        else if (dir === 'up' && spaceAbove < 380 && spaceBelow > spaceAbove) dir = 'down';
+        setPos(dir === 'up'
           ? { left, bottom: window.innerHeight - rect.top + 6 }
           : { left, top: rect.bottom + 6 });
       }
@@ -95,17 +102,21 @@ export default function EmojiSelector({ value, onChange, direction = 'down', siz
       >
         {value || <Icon name="tag" size={size * 0.45} color="#b0acbe" />}
       </button>
-      {open && pos && (
+      {open && pos && createPortal(
+        // Portaled to <body>: ancestors with backdrop-filter (modal overlays)
+        // hijack position: fixed and their overflow: hidden clips the popup.
         <div
           ref={popRef}
-          style={{ position: 'fixed', left: pos.left, top: pos.top, bottom: pos.bottom, zIndex: 1100, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', padding: '10px', width: POPUP_WIDTH, boxSizing: 'border-box', animation: 'modalIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+          onMouseDown={e => e.preventDefault()}
+          style={{ position: 'fixed', left: pos.left, top: pos.top, bottom: pos.bottom, zIndex: 1100, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', padding: '10px', width: POPUP_WIDTH, boxSizing: 'border-box', maxHeight: 'calc(100vh - 24px)', overflowY: 'auto', animation: 'modalIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
         >
           <EmojiGrid
             value={value}
             onSelect={em => { onChange(em); setOpen(false); }}
             onRemove={allowRemove ? () => { onChange(''); setOpen(false); } : undefined}
           />
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

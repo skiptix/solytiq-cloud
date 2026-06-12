@@ -392,11 +392,11 @@ export default function ListScreen() {
                   <Icon name="drag_indicator" size={15} color="#c9c4d5" />
                 </button>
               )}
-              {section.emoji && editingSection?.id !== section.id && <span style={{ fontSize: 14 }}>{section.emoji}</span>}
+              {section.emoji && editingSection?.id !== section.id && <span key={section.emoji} style={{ fontSize: 14, animation: 'modalIn 200ms cubic-bezier(0.34,1.56,0.64,1) both' }}>{section.emoji}</span>}
 
               {editingSection?.id === section.id ? (
                 /* Inline edit — label + emoji */
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, animation: 'menuItemIn 160ms ease both' }}>
                   <EmojiSelector
                     value={editingSection.emoji}
                     onChange={em => setEditingSection(s => s ? { ...s, emoji: em } : null)}
@@ -505,7 +505,7 @@ export default function ListScreen() {
 
         {/* Add Section — full-width at bottom */}
         {addingSection ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', animation: 'sectionFadeUp 220ms ease both' }}>
             {/* Emoji selector */}
             <EmojiSelector value={newSectionEmoji} onChange={setNewSectionEmoji} direction="up" />
             <input

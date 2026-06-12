@@ -123,7 +123,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
         }}>
 
         {editingName && !collapsed ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '4px 8px' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '4px 8px', animation: 'menuItemIn 140ms ease both' }}>
             <input
               autoFocus
               value={nameInput}
@@ -203,10 +203,10 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
       {/* Dropdown menu */}
       {menuOpen && menuPos && (
         <div ref={menuRef}
-          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 400, background: '#fff', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', minWidth: 180, padding: '4px 0' }}>
+          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 400, background: '#fff', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', minWidth: 180, padding: '4px 0', animation: 'menuIn 140ms ease both', transformOrigin: 'top left' }}>
           <button
             onClick={() => { setMenuOpen(false); setEditingName(true); setNameInput(list.name); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '0ms' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
@@ -216,7 +216,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
 
           <button
             onClick={() => { setMenuOpen(false); setShowSettings(true); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '30ms' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
@@ -228,7 +228,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
 
           <button
             onClick={() => { setMenuOpen(false); setShowDeleteDialog(true); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#ba1a1a', textAlign: 'left' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#ba1a1a', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '60ms' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#fff0ef')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
@@ -257,7 +257,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
       {showDeleteDialog && (
         <div
           onClick={() => setShowDeleteDialog(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
           <div
             onClick={e => e.stopPropagation()}
             style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
@@ -379,7 +379,7 @@ function FolderRow({ folder, lists, active, activeListId, activeFolderId, collap
         style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', borderTop: dragOverFolderReorderId === folder.id ? '2px solid #9d8dff' : isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', transition: 'all 120ms', background: isDragTarget ? `${accentColor}15` : 'transparent' }}>
 
         {editingName && !collapsed ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '4px 8px' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '4px 8px', animation: 'menuItemIn 140ms ease both' }}>
             <input
               autoFocus
               value={nameInput}
@@ -480,11 +480,11 @@ function FolderRow({ folder, lists, active, activeListId, activeFolderId, collap
       {/* Folder 3-dot menu */}
       {menuOpen && menuPos && (
         <div ref={menuRef}
-          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 400, background: '#fff', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', minWidth: 180, padding: '4px 0' }}>
+          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 400, background: '#fff', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', minWidth: 180, padding: '4px 0', animation: 'menuIn 140ms ease both', transformOrigin: 'top left' }}>
 
           <button
             onClick={() => { setMenuOpen(false); setEditingName(true); setNameInput(folder.name); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '0ms' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
@@ -494,7 +494,7 @@ function FolderRow({ folder, lists, active, activeListId, activeFolderId, collap
 
           <button
             onClick={() => { setMenuOpen(false); setShowSettings(true); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '30ms' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
@@ -506,7 +506,7 @@ function FolderRow({ folder, lists, active, activeListId, activeFolderId, collap
 
           <button
             onClick={() => { setMenuOpen(false); setShowDeleteDialog(true); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#ba1a1a', textAlign: 'left' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#ba1a1a', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '60ms' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#fff0ef')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
@@ -533,7 +533,7 @@ function FolderRow({ folder, lists, active, activeListId, activeFolderId, collap
       {showDeleteDialog && (
         <div
           onClick={() => setShowDeleteDialog(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
           <div
             onClick={e => e.stopPropagation()}
             style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
@@ -973,7 +973,7 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.9.1
+              v1.9.2
             </div>
           )}
         </div>
@@ -1144,7 +1144,7 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.9.1
+            v1.9.2
           </div>
         )}
       </div>

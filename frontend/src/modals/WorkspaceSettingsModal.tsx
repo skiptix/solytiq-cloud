@@ -228,7 +228,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                   </div>
                 )}
                 {!useImage && showEmojiPicker && (
-                  <div style={{ marginTop: 10, border: '1px solid #e8e4f0', borderRadius: 12, padding: 10, background: '#fff', width: 'fit-content' }}>
+                  <div style={{ marginTop: 10, border: '1px solid #e8e4f0', borderRadius: 12, padding: 10, background: '#fff', width: 'fit-content', animation: 'menuIn 160ms ease both', transformOrigin: 'top left' }}>
                     <EmojiGrid value={emoji} onSelect={em => { setEmoji(em); setShowEmojiPicker(false); }} />
                   </div>
                 )}
