@@ -8,6 +8,77 @@ import TaskDialog from '../components/TaskDialog';
 import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, apiCreateSublistTask, apiLinkListAsTask, apiReorderSectionTasks, apiReorderListSections, apiUpdateListTask } from '../api/client';
 import Icon from '../components/Icon';
 
+const SECTION_EMOJI_GROUPS = [
+  { label: 'Work', emojis: ['📋','📁','💼','🗂️','📊','📈','✅','🎯','🔖','📌'] },
+  { label: 'Personal', emojis: ['🏠','❤️','⭐','🌟','💡','🎉','🎨','📚','🏃','🍎'] },
+  { label: 'Time', emojis: ['📅','⏰','🗓️','⏳','🔔','🌅','🌙','⚡','🚀','🔥'] },
+  { label: 'Other', emojis: ['🔧','💰','🎮','🌍','🤝','🧠','💪','🎵','🛒','🌱'] },
+];
+
+// Emoji selector button with popup — used when adding and when editing a section.
+// preventDefault on mousedown keeps focus (and the blur-commit) on the adjacent
+// label input while picking an emoji.
+function SectionEmojiButton({ value, onChange, direction = 'up', size = 36 }: { value: string; onChange: (emoji: string) => void; direction?: 'up' | 'down'; size?: number }) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        popRef.current && !popRef.current.contains(e.target as Node) &&
+        btnRef.current && !btnRef.current.contains(e.target as Node)
+      ) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div style={{ position: 'relative', flexShrink: 0 }} onMouseDown={e => e.preventDefault()}>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        title="Choose emoji"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, borderRadius: 8, border: `1.5px solid ${open ? '#5e4dbb' : '#e2dff0'}`, background: open ? '#f5f3ff' : '#faf9fc', cursor: 'pointer', fontSize: size / 2, transition: 'all 150ms' }}
+      >
+        {value || <Icon name="tag" size={size * 0.45} color="#b0acbe" />}
+      </button>
+      {open && (
+        <div
+          ref={popRef}
+          style={{ position: 'absolute', ...(direction === 'up' ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 6px)' }), left: 0, zIndex: 300, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', padding: '10px', width: 224, animation: 'modalIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+        >
+          {value && (
+            <button
+              onClick={() => { onChange(''); setOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', marginBottom: 8, padding: '4px 6px', border: 'none', borderRadius: 6, background: '#ffeaea', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#ba1a1a', fontWeight: 500 }}
+            >
+              <Icon name="close" size={12} color="#ba1a1a" /> Remove emoji
+            </button>
+          )}
+          {SECTION_EMOJI_GROUPS.map(group => (
+            <div key={group.label} style={{ marginBottom: 8 }}>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{group.label}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 2 }}>
+                {group.emojis.map(em => (
+                  <button key={em} onClick={() => { onChange(em); setOpen(false); }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 4, border: 'none', background: value === em ? '#f0edff' : 'transparent', cursor: 'pointer', fontSize: 15, transition: 'background 100ms' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
+                    onMouseLeave={e => (e.currentTarget.style.background = value === em ? '#f0edff' : 'transparent')}
+                  >{em}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ListScreen() {
   const { listId } = useParams<{ listId: string }>();
   const navigate = useNavigate();
@@ -26,28 +97,13 @@ export default function ListScreen() {
 
   // Section management state
   const [hoverSectionId, setHoverSectionId] = useState<string | null>(null);
-  const [editingSection, setEditingSection] = useState<{ id: string; label: string } | null>(null);
+  const [editingSection, setEditingSection] = useState<{ id: string; label: string; emoji: string } | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [addingSection, setAddingSection] = useState(false);
   const [newSectionLabel, setNewSectionLabel] = useState('');
   const [newSectionEmoji, setNewSectionEmoji] = useState('');
-  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const newSectionInputRef = useRef<HTMLInputElement>(null);
-  const emojiPickerRef = useRef<HTMLDivElement>(null);
-  const emojiBtnRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!emojiPickerOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node) &&
-        emojiBtnRef.current && !emojiBtnRef.current.contains(e.target as Node)
-      ) setEmojiPickerOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [emojiPickerOpen]);
 
   if (!list) {
     if (listsLoading) {
@@ -163,7 +219,6 @@ export default function ListScreen() {
     setAddingSection(false);
     setNewSectionLabel('');
     setNewSectionEmoji('');
-    setEmojiPickerOpen(false);
     try {
       await apiCreateSection(listId!, { id: sectionId, label, emoji });
     } catch (e) {
@@ -172,13 +227,14 @@ export default function ListScreen() {
     }
   };
 
-  const handleUpdateSection = async (sectionId: string, label: string) => {
+  const handleUpdateSection = async (sectionId: string, label: string, emoji: string) => {
     const trimmed = label.trim();
     setEditingSection(null);
     if (!trimmed) return;
     const prevList = list;
-    setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, label: trimmed }) }));
-    apiUpdateSection(sectionId, { label: trimmed }).catch(e => {
+    setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, sections: l.sections.map(s => s.id !== sectionId ? s : { ...s, label: trimmed, emoji: emoji || undefined }) }));
+    // Backend keeps emoji on null but stores '' as-is, so '' clears it for display purposes.
+    apiUpdateSection(sectionId, { label: trimmed, emoji }).catch(e => {
       console.error('updateSection failed', e);
       setLists(prev => prev.map(l => l.id !== listId ? l : prevList));
     });
@@ -406,18 +462,24 @@ export default function ListScreen() {
                   <Icon name="drag_indicator" size={15} color="#c9c4d5" />
                 </button>
               )}
-              {section.emoji && <span style={{ fontSize: 14 }}>{section.emoji}</span>}
+              {section.emoji && editingSection?.id !== section.id && <span style={{ fontSize: 14 }}>{section.emoji}</span>}
 
               {editingSection?.id === section.id ? (
-                /* Inline edit */
+                /* Inline edit — label + emoji */
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <SectionEmojiButton
+                    value={editingSection.emoji}
+                    onChange={em => setEditingSection(s => s ? { ...s, emoji: em } : null)}
+                    direction="down"
+                    size={26}
+                  />
                   <input
                     autoFocus
                     value={editingSection.label}
                     onChange={e => setEditingSection(s => s ? { ...s, label: e.target.value } : null)}
-                    onBlur={() => handleUpdateSection(section.id, editingSection.label)}
+                    onBlur={() => handleUpdateSection(section.id, editingSection.label, editingSection.emoji)}
                     onKeyDown={e => {
-                      if (e.key === 'Enter') handleUpdateSection(section.id, editingSection.label);
+                      if (e.key === 'Enter') handleUpdateSection(section.id, editingSection.label, editingSection.emoji);
                       if (e.key === 'Escape') setEditingSection(null);
                     }}
                     style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5e5e5e', border: 'none', borderBottom: '1.5px solid #5e4dbb', outline: 'none', background: 'transparent', padding: '0 2px 1px', minWidth: 80 }}
@@ -444,8 +506,8 @@ export default function ListScreen() {
                     transition: 'opacity 180ms ease, transform 180ms ease',
                   }}>
                     <button
-                      onClick={() => setEditingSection({ id: section.id, label: section.label })}
-                      title="Rename section"
+                      onClick={() => setEditingSection({ id: section.id, label: section.label, emoji: section.emoji ?? '' })}
+                      title="Edit section"
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'background 120ms' }}
                       onMouseEnter={e => (e.currentTarget.style.background = '#ebe6f0')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
@@ -515,57 +577,13 @@ export default function ListScreen() {
         {addingSection ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
             {/* Emoji selector */}
-            <div style={{ position: 'relative', flexShrink: 0 }}>
-              <button
-                ref={emojiBtnRef}
-                type="button"
-                onClick={() => setEmojiPickerOpen(o => !o)}
-                title="Choose emoji"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: 8, border: `1.5px solid ${emojiPickerOpen ? '#5e4dbb' : '#e2dff0'}`, background: emojiPickerOpen ? '#f5f3ff' : '#faf9fc', cursor: 'pointer', fontSize: 18, transition: 'all 150ms' }}
-              >
-                {newSectionEmoji || <Icon name="tag" size={16} color="#b0acbe" />}
-              </button>
-              {emojiPickerOpen && (
-                <div
-                  ref={emojiPickerRef}
-                  style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: 0, zIndex: 300, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', padding: '10px', width: 224, animation: 'modalIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
-                >
-                  {newSectionEmoji && (
-                    <button
-                      onClick={() => { setNewSectionEmoji(''); setEmojiPickerOpen(false); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', marginBottom: 8, padding: '4px 6px', border: 'none', borderRadius: 6, background: '#ffeaea', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#ba1a1a', fontWeight: 500 }}
-                    >
-                      <Icon name="close" size={12} color="#ba1a1a" /> Remove emoji
-                    </button>
-                  )}
-                  {[
-                    { label: 'Work', emojis: ['📋','📁','💼','🗂️','📊','📈','✅','🎯','🔖','📌'] },
-                    { label: 'Personal', emojis: ['🏠','❤️','⭐','🌟','💡','🎉','🎨','📚','🏃','🍎'] },
-                    { label: 'Time', emojis: ['📅','⏰','🗓️','⏳','🔔','🌅','🌙','⚡','🚀','🔥'] },
-                    { label: 'Other', emojis: ['🔧','💰','🎮','🌍','🤝','🧠','💪','🎵','🛒','🌱'] },
-                  ].map(group => (
-                    <div key={group.label} style={{ marginBottom: 8 }}>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{group.label}</div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 2 }}>
-                        {group.emojis.map(em => (
-                          <button key={em} onClick={() => { setNewSectionEmoji(em); setEmojiPickerOpen(false); }}
-                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 4, border: 'none', background: newSectionEmoji === em ? '#f0edff' : 'transparent', cursor: 'pointer', fontSize: 15, transition: 'background 100ms' }}
-                            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-                            onMouseLeave={e => (e.currentTarget.style.background = newSectionEmoji === em ? '#f0edff' : 'transparent')}
-                          >{em}</button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <SectionEmojiButton value={newSectionEmoji} onChange={setNewSectionEmoji} direction="up" />
             <input
               ref={newSectionInputRef}
               autoFocus
               value={newSectionLabel}
               onChange={e => setNewSectionLabel(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleAddSection(); if (e.key === 'Escape') { setAddingSection(false); setNewSectionLabel(''); setNewSectionEmoji(''); setEmojiPickerOpen(false); } }}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddSection(); if (e.key === 'Escape') { setAddingSection(false); setNewSectionLabel(''); setNewSectionEmoji(''); } }}
               placeholder="Section name…"
               style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #5e4dbb', borderRadius: 8, padding: '7px 12px', outline: 'none', color: '#1c1b22', background: '#fff' }}
             />
@@ -573,7 +591,7 @@ export default function ListScreen() {
               style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#fff', background: newSectionLabel.trim() ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: newSectionLabel.trim() ? 'pointer' : 'default' }}>
               Add
             </button>
-            <button onClick={() => { setAddingSection(false); setNewSectionLabel(''); setNewSectionEmoji(''); setEmojiPickerOpen(false); }}
+            <button onClick={() => { setAddingSection(false); setNewSectionLabel(''); setNewSectionEmoji(''); }}
               style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 500, color: '#787584', background: 'transparent', border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
               Cancel
             </button>
