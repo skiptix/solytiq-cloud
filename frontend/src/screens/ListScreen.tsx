@@ -5,7 +5,7 @@ import useAppStore from '../store/useAppStore';
 import useAuthStore from '../store/useAuthStore';
 import TaskItem, { QuickAdd } from '../components/TaskItem';
 import TaskDialog from '../components/TaskDialog';
-import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, apiCreateSublistTask, apiLinkListAsTask, apiReorderSectionTasks, apiUpdateListTask } from '../api/client';
+import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, apiCreateSublistTask, apiLinkListAsTask, apiReorderSectionTasks, apiReorderListSections, apiUpdateListTask } from '../api/client';
 import Icon from '../components/Icon';
 
 export default function ListScreen() {
@@ -20,6 +20,9 @@ export default function ListScreen() {
   const [dragOverId, setDragOverId] = useState<number | null>(null);
   const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
   const [dragOverSectionId, setDragOverSectionId] = useState<string | null>(null);
+  // Section reordering (distinct from moving a task between sections)
+  const [sectionDragId, setSectionDragId] = useState<string | null>(null);
+  const [sectionDragOverId, setSectionDragOverId] = useState<string | null>(null);
 
   // Section management state
   const [hoverSectionId, setHoverSectionId] = useState<string | null>(null);
@@ -70,7 +73,34 @@ export default function ListScreen() {
   const completedCount = allTasks.filter(t => t.checked).length;
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  const toggle = (id: number) => updateListTask(listId!, id, { checked: !allTasks.find(t => t.id === id)?.checked });
+  const toggle = (id: number) => {
+    const section = list.sections.find(s => s.tasks.some(t => t.id === id));
+    if (!section) return;
+    const sectionId = section.id;
+    const current = section.tasks.find(t => t.id === id);
+    if (!current) return;
+    const newChecked = !current.checked;
+
+    // Flip the checkbox (optimistic update + API persistence + rollback live in the store).
+    updateListTask(listId!, id, { checked: newChecked });
+
+    // Auto-sort: keep unchecked items on top and slide checked ones to the bottom,
+    // preserving each group's relative order (stable partition). Persist the order.
+    let newOrder: number[] = [];
+    setLists(prev => prev.map(l => l.id !== listId ? l : {
+      ...l,
+      sections: l.sections.map(s => {
+        if (s.id !== sectionId) return s;
+        const tasks = s.tasks.map(t => t.id === id ? { ...t, checked: newChecked } : t);
+        const reordered = [...tasks.filter(t => !t.checked), ...tasks.filter(t => t.checked)];
+        newOrder = reordered.map(t => t.id);
+        return { ...s, tasks: reordered };
+      }),
+    }));
+    if (newOrder.length > 1) {
+      apiReorderSectionTasks(listId!, sectionId, newOrder).catch(e => console.error('auto-sort reorder failed', e));
+    }
+  };
   const deleteTask = (id: number) => {
     const t = allTasks.find(t => t.id === id);
     if (!t) return;
@@ -174,6 +204,27 @@ export default function ListScreen() {
   const clearDragState = () => {
     setDraggedId(null); setDragOverId(null);
     setDraggedSectionId(null); setDragOverSectionId(null);
+    setSectionDragId(null); setSectionDragOverId(null);
+  };
+
+  const handleSectionDrop = (targetSectionId: string) => {
+    if (!sectionDragId || sectionDragId === targetSectionId) { clearDragState(); return; }
+    let newOrder: string[] = [];
+    setLists(prev => prev.map(l => {
+      if (l.id !== listId) return l;
+      const arr = [...l.sections];
+      const from = arr.findIndex(s => s.id === sectionDragId);
+      const to = arr.findIndex(s => s.id === targetSectionId);
+      if (from === -1 || to === -1) return l;
+      const [moved] = arr.splice(from, 1);
+      arr.splice(to, 0, moved);
+      newOrder = arr.map(s => s.id);
+      return { ...l, sections: arr };
+    }));
+    if (newOrder.length > 0) {
+      apiReorderListSections(listId!, newOrder).catch(e => console.error('reorder sections failed', e));
+    }
+    clearDragState();
   };
 
   const handleDrop = (targetSectionId: string, targetId: number) => {
@@ -315,19 +366,46 @@ export default function ListScreen() {
         {/* Sections */}
         {list.sections.map(section => {
           const isSectionDropTarget = dragOverSectionId === section.id && draggedSectionId !== null && draggedSectionId !== section.id;
+          const isSectionReorderTarget = sectionDragOverId === section.id && sectionDragId !== null && sectionDragId !== section.id;
+          const isBeingDraggedSection = sectionDragId === section.id;
           return (
           <div
             key={section.id}
-            style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
-            onDragOver={e => { if (draggedId && draggedSectionId !== section.id) { e.preventDefault(); setDragOverSectionId(section.id); } }}
-            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOverSectionId(null); }}
-            onDrop={e => { e.preventDefault(); handleDropOnSection(section.id); }}
+            style={{
+              display: 'flex', flexDirection: 'column', gap: 8,
+              opacity: isBeingDraggedSection ? 0.4 : 1,
+              borderTop: isSectionReorderTarget ? '2px solid #9d8dff' : '2px solid transparent',
+              borderRadius: isSectionReorderTarget ? 4 : 0,
+              transition: 'opacity 150ms, border-color 120ms',
+            }}
+            onDragOver={e => {
+              if (sectionDragId && sectionDragId !== section.id) { e.preventDefault(); setSectionDragOverId(section.id); return; }
+              if (draggedId && draggedSectionId !== section.id) { e.preventDefault(); setDragOverSectionId(section.id); }
+            }}
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) { setDragOverSectionId(null); setSectionDragOverId(null); } }}
+            onDrop={e => { e.preventDefault(); if (sectionDragId) handleSectionDrop(section.id); else handleDropOnSection(section.id); }}
           >
             {/* Section header */}
             <div
               onMouseEnter={() => setHoverSectionId(section.id)}
               onMouseLeave={() => { setHoverSectionId(null); }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px' }}>
+              {isOwner && (
+                <button
+                  draggable
+                  onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setSectionDragId(section.id); }}
+                  onDragEnd={clearDragState}
+                  title="Drag to reorder section"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, flexShrink: 0,
+                    border: 'none', background: 'transparent', cursor: 'grab', padding: 0, marginLeft: -4,
+                    opacity: hoverSectionId === section.id ? 1 : 0,
+                    pointerEvents: hoverSectionId === section.id ? 'auto' : 'none',
+                    transition: 'opacity 180ms ease',
+                  }}>
+                  <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+                </button>
+              )}
               {section.emoji && <span style={{ fontSize: 14 }}>{section.emoji}</span>}
 
               {editingSection?.id === section.id ? (
