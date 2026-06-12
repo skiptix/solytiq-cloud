@@ -49,7 +49,7 @@ function SectionEmojiButton({ value, onChange, direction = 'up', size = 36 }: { 
       {open && (
         <div
           ref={popRef}
-          style={{ position: 'absolute', ...(direction === 'up' ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 6px)' }), left: 0, zIndex: 300, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', padding: '10px', width: 224, animation: 'modalIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+          style={{ position: 'absolute', ...(direction === 'up' ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 6px)' }), left: 0, zIndex: 300, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', padding: '10px', width: 278, boxSizing: 'border-box', animation: 'modalIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
         >
           {value && (
             <button
@@ -62,7 +62,7 @@ function SectionEmojiButton({ value, onChange, direction = 'up', size = 36 }: { 
           {SECTION_EMOJI_GROUPS.map(group => (
             <div key={group.label} style={{ marginBottom: 8 }}>
               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{group.label}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 2 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 24px)', gap: 2, justifyContent: 'space-between' }}>
                 {group.emojis.map(em => (
                   <button key={em} onClick={() => { onChange(em); setOpen(false); }}
                     style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 4, border: 'none', background: value === em ? '#f0edff' : 'transparent', cursor: 'pointer', fontSize: 15, transition: 'background 100ms' }}
