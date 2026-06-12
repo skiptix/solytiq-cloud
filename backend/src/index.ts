@@ -531,6 +531,21 @@ async function runMigrations() {
       SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = t.user_id LIMIT 1)
       WHERE t.workspace_id IS NULL
     `);
+
+    // Consistency heal: a list item must always live in the SAME workspace as
+    // its parent list. Fix any historical drift so items can't be filtered out
+    // of the workspace view their list belongs to.
+    const drift = await pool.query(`
+      UPDATE tasks t
+      SET workspace_id = l.workspace_id
+      FROM lists l
+      WHERE t.list_id = l.id
+        AND t.source = 'list'
+        AND t.workspace_id IS DISTINCT FROM l.workspace_id
+    `);
+    if (drift.rowCount && drift.rowCount > 0) {
+      console.log(`📋 migration: re-synced ${drift.rowCount} list item(s) to their list's workspace`);
+    }
   }
 
   // GPS files table

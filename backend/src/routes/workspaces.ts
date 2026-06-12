@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { query } from '../db';
+import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
+import { ensurePersonalWorkspace, wlog, werr } from '../workspaceUtil';
 
 const router = Router();
 router.use(authenticate);
@@ -37,6 +38,12 @@ function sanitizeWorkspace(w: WorkspaceRow) {
 // GET /api/workspaces
 router.get('/', async (req: Request, res: Response) => {
   try {
+    // Self-heal: guarantee the caller always has a Personal workspace, even if
+    // they were registered/created after the startup seed ran. This is the
+    // fix for lists/items "disappearing" — without an owned workspace the
+    // frontend had no stable context to load items into.
+    const personalWsId = await ensurePersonalWorkspace(query, req.userId!);
+
     const rows = await query<WorkspaceRow>(
       `SELECT w.*, wm.role,
               (SELECT COUNT(*) FROM workspace_members wm2 WHERE wm2.workspace_id = w.id) AS member_count
@@ -46,9 +53,10 @@ router.get('/', async (req: Request, res: Response) => {
        ORDER BY w.created_at ASC`,
       [req.userId]
     );
+    wlog(`workspaces GET user=${req.userId} → ${rows.rows.length} workspace(s), personal=${personalWsId}`);
     res.json({ workspaces: rows.rows.map(sanitizeWorkspace) });
   } catch (err) {
-    console.error('workspaces GET error:', err);
+    werr('workspaces GET error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -129,15 +137,19 @@ router.delete('/:id', async (req: Request, res: Response) => {
     if (existing.rows[0].owner_id !== req.userId && !req.user?.isAdmin) {
       res.status(403).json({ error: 'Only the owner can delete this workspace' }); return;
     }
-    // Manually cascade-delete workspace contents in correct order
-    await query(`DELETE FROM tasks WHERE workspace_id = $1`, [id]);
-    await query(`DELETE FROM lists WHERE workspace_id = $1`, [id]);
-    await query(`DELETE FROM folders WHERE workspace_id = $1`, [id]);
-    await query(`DELETE FROM workspaces WHERE id = $1`, [id]);
+    // Cascade-delete workspace contents atomically: either everything goes or
+    // nothing does, so we never strand lists/tasks pointing at a dead workspace.
+    await withTransaction(async (client) => {
+      await client.query(`DELETE FROM tasks   WHERE workspace_id = $1`, [id]);
+      await client.query(`DELETE FROM lists   WHERE workspace_id = $1`, [id]);
+      await client.query(`DELETE FROM folders WHERE workspace_id = $1`, [id]);
+      await client.query(`DELETE FROM workspaces WHERE id = $1`, [id]);
+    });
+    wlog(`workspace ${id} deleted (with all lists/tasks/folders) by user ${req.userId}`);
     res.json({ ok: true });
     broadcastToUser(req.userId!, 'workspaces');
   } catch (err) {
-    console.error('workspaces DELETE error:', err);
+    werr('workspaces DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

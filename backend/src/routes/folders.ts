@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { query } from '../db';
+import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
+import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
 
 const router = Router();
 router.use(authenticate);
@@ -51,7 +52,7 @@ router.get('/', async (req: Request, res: Response) => {
     );
     res.json({ folders: rows.rows.map(sanitizeFolder) });
   } catch (err) {
-    console.error('folders GET error:', err);
+    werr('folders GET error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -72,6 +73,9 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
     const folderId = id ?? `folder_${uuidv4()}`;
+    // Resolve to a workspace the user can access so the folder always has a
+    // real, visible home (consistent with lists/items).
+    const resolvedWs = await resolveWorkspaceForUser(req.userId!, workspaceId);
     const posRes = await query<{ max: string | null }>(
       'SELECT MAX(position) AS max FROM folders WHERE user_id = $1',
       [req.userId]
@@ -81,12 +85,13 @@ router.post('/', async (req: Request, res: Response) => {
       `INSERT INTO folders (id, user_id, name, emoji, color, position, is_public, workspace_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [folderId, req.userId, name, emoji ?? null, color ?? null, nextPos, isPublic ?? false, workspaceId ?? null]
+      [folderId, req.userId, name, emoji ?? null, color ?? null, nextPos, isPublic ?? false, resolvedWs]
     );
+    wlog(`folder CREATE ✓ id=${folderId} name="${name}" workspace=${resolvedWs} owner=${req.userId} (requested=${workspaceId ?? 'none'})`);
     res.status(201).json({ folder: sanitizeFolder(result.rows[0]) });
     broadcastToUser(req.userId!, 'folders');
   } catch (err) {
-    console.error('folders POST error:', err);
+    werr('folders POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -149,7 +154,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     res.json({ ok: true, folder: sanitizeFolder(result.rows[0]) });
     broadcastToUser(req.userId!, 'folders');
   } catch (err) {
-    console.error('folders PUT error:', err);
+    werr('folders PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -182,18 +187,21 @@ router.delete('/:id', async (req: Request, res: Response) => {
     const listIds = listsInFolder.rows.map(l => l.id);
 
     const folderData = { ...sanitizeFolder(folderRow), listIds };
-    await query(
-      `INSERT INTO trash_folders (folder_id, user_id, folder_data) VALUES ($1, $2, $3)`,
-      [id, req.userId, JSON.stringify(folderData)]
-    );
+    // Atomic: snapshot to trash, detach lists, delete folder — all or nothing.
+    await withTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO trash_folders (folder_id, user_id, folder_data) VALUES ($1, $2, $3)`,
+        [id, req.userId, JSON.stringify(folderData)]
+      );
+      await client.query('UPDATE lists SET folder_id = NULL WHERE folder_id = $1', [id]);
+      await client.query('DELETE FROM folders WHERE id = $1', [id]);
+    });
 
-    await query('UPDATE lists SET folder_id = NULL WHERE folder_id = $1', [id]);
-    await query('DELETE FROM folders WHERE id = $1', [id]);
-
+    wlog(`folder DELETE ✓ id=${id} (${listIds.length} list(s) detached) → trashed by user ${req.userId}`);
     res.json({ ok: true });
     broadcastToUser(req.userId!, 'folders');
   } catch (err) {
-    console.error('folders DELETE error:', err);
+    werr('folders DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

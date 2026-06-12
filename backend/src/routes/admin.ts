@@ -4,6 +4,7 @@ import { promisify } from 'util';
 import { query } from '../db';
 import { authenticate, requireAdmin } from '../middleware';
 import { hashPassword, comparePassword } from '../auth';
+import { ensurePersonalWorkspace, wlog } from '../workspaceUtil';
 
 const execAsync = promisify(exec);
 
@@ -71,6 +72,11 @@ router.post('/users', authenticate, requireAdmin, async (req: Request, res: Resp
        RETURNING id, username, email, full_name, profile_image, is_admin, last_online, created_at`,
       [username.trim(), resolvedEmail, passwordHash, fullName?.trim() ?? null]
     );
+
+    // Provision a Personal workspace so the new user has a stable home for
+    // their lists/items the moment they log in.
+    const wsId = await ensurePersonalWorkspace(query, result.rows[0].id);
+    wlog(`admin created user ${result.rows[0].id} with workspace ${wsId}`);
 
     res.status(201).json({ user: sanitize(result.rows[0]) });
   } catch (err: unknown) {
