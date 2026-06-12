@@ -50,6 +50,7 @@ router.get('/', async (req: Request, res: Response) => {
        ORDER BY f.position ASC, f.created_at ASC`,
       params
     );
+    wlog(`folders GET user=${req.userId} workspace=${workspaceId ?? 'ALL'} → ${rows.rows.length} folder(s)`);
     res.json({ folders: rows.rows.map(sanitizeFolder) });
   } catch (err) {
     werr('folders GET error:', err);

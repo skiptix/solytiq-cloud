@@ -82,15 +82,28 @@ function AppLayout() {
     };
   }, []);
 
-  // Reload data when active workspace changes, clearing stale workspace-scoped data first
+  // Reload data when the active workspace changes.
   useEffect(() => {
     const prev = prevWorkspaceRef.current;
     prevWorkspaceRef.current = currentWorkspaceId;
-    setLists([]);
-    setFolders([]);
+
+    // Only treat this as a real workspace SWITCH when we already had a workspace
+    // and it changed. On the initial mount / page refresh (prev === undefined)
+    // we keep the persisted lists & folders visible and just revalidate them in
+    // the background (stale-while-revalidate). Blanking them here caused folder
+    // and list routes to momentarily see empty data and redirect to the
+    // dashboard — the "folder disappears on refresh" bug.
+    const isSwitch = prev !== undefined && prev !== currentWorkspaceId;
+    if (isSwitch) {
+      setLists([]);
+      setFolders([]);
+    }
+
     loadFromApi(currentWorkspaceId ?? undefined);
-    // Navigate to dashboard when user explicitly switches between workspaces (not on initial load)
-    if (prev !== undefined && prev !== null && prev !== currentWorkspaceId) {
+
+    // Navigate to dashboard only when the user explicitly switches between two
+    // real workspaces (not on initial load, and not on null → first workspace).
+    if (isSwitch && prev !== null) {
       navigate('/dashboard');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
