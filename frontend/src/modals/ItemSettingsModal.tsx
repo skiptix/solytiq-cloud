@@ -1,7 +1,6 @@
-import { useState } from 'react';
-import EmojiPicker from 'emoji-picker-react';
 import type { Folder } from '../types';
 import Icon from '../components/Icon';
+import EmojiSelector from '../components/EmojiSelector';
 
 const FOLDER_COLORS = [
   '#5e4dbb', '#1D4ED8', '#15803d', '#ea580c',
@@ -50,7 +49,6 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, folders, folderId, onChange, onClose }: ItemSettingsModalProps) {
-  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const accent = color ?? '#5e4dbb';
 
   return (
@@ -129,37 +127,12 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
           {/* Emoji */}
           <div>
             <SectionLabel>Emoji</SectionLabel>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button
-                onClick={() => setEmojiPickerOpen(o => !o)}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 10, border: `1.5px solid ${emojiPickerOpen ? '#5e4dbb' : '#e8e4f0'}`, background: emojiPickerOpen ? '#f5f3ff' : '#fff', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', transition: 'all 120ms' }}>
-                {emoji
-                  ? <span style={{ fontSize: 17, lineHeight: 1 }}>{emoji}</span>
-                  : <Icon name="mood" size={16} color="#787584" />
-                }
-                {emoji ? 'Change emoji' : 'Choose emoji'}
-                <Icon name={emojiPickerOpen ? 'expand_less' : 'expand_more'} size={14} color="#b0acbe" />
-              </button>
-              {emoji && (
-                <button
-                  onClick={() => { onChange({ emoji: '' }); setEmojiPickerOpen(false); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 12px', borderRadius: 10, border: 'none', background: '#fff0ef', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 500, color: '#ba1a1a' }}>
-                  <Icon name="close" size={13} color="#ba1a1a" />
-                  Remove
-                </button>
-              )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <EmojiSelector value={emoji ?? ''} onChange={em => onChange({ emoji: em })} direction="down" size={36} />
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>
+                {emoji ? 'Click to change or remove' : 'Click to choose an emoji'}
+              </span>
             </div>
-            {emojiPickerOpen && (
-              <div style={{ marginTop: 10 }}>
-                <EmojiPicker
-                  onEmojiClick={emojiData => { onChange({ emoji: emojiData.emoji }); setEmojiPickerOpen(false); }}
-                  width="100%"
-                  height={320}
-                  searchPlaceholder="Search emoji…"
-                  previewConfig={{ showPreview: false }}
-                />
-              </div>
-            )}
           </div>
 
           {/* Folder (lists only) */}
