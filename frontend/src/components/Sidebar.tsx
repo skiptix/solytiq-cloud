@@ -5,15 +5,10 @@ import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import WorkspaceWizard from '../modals/WorkspaceWizard';
 import WorkspaceSettingsModal from '../modals/WorkspaceSettingsModal';
-import EmojiPicker from 'emoji-picker-react';
+import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSettingsModal';
 import { apiGetGpsFiles } from '../api/client';
 
 const MINI = 60;
-
-const FOLDER_COLORS = [
-  '#5e4dbb', '#1D4ED8', '#15803d', '#ea580c',
-  '#db2777', '#ba1a1a', '#0d9488', '#6b7280',
-];
 
 // ── NavItem ──────────────────────────────────────────────────────────────────
 interface NavItemProps {
@@ -64,10 +59,9 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
   const [hov, setHov] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
-  const [showAccessibility, setShowAccessibility] = useState(false);
-  const [showMoveToFolder, setShowMoveToFolder] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(list.name);
+  const [showSettings, setShowSettings] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -81,8 +75,6 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
         menuBtnRef.current && !menuBtnRef.current.contains(e.target as Node)
       ) {
         setMenuOpen(false);
-        setShowAccessibility(false);
-        setShowMoveToFolder(false);
       }
     };
     document.addEventListener('mousedown', handler);
@@ -94,8 +86,6 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
     const rect = menuBtnRef.current?.getBoundingClientRect();
     if (rect) setMenuPos({ top: rect.bottom + 4, left: rect.left });
     setMenuOpen(o => !o);
-    setShowAccessibility(false);
-    setShowMoveToFolder(false);
   };
 
   const handleRename = () => {
@@ -110,14 +100,10 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
     onNavigate('/dashboard');
   };
 
-  const handleMoveToFolder = (folderId: string | undefined) => {
-    updateList(list.id, { folderId });
-    setMenuOpen(false);
-    setShowMoveToFolder(false);
+  const handleSettingsChange = (updates: ItemSettingsUpdates) => {
+    // folderId: null clears the folder server-side; locally it behaves like undefined.
+    updateList(list.id, updates as Partial<List>);
   };
-
-  const otherFolders = folders.filter(f => f.id !== list.folderId);
-  const inFolder = !!list.folderId;
 
   return (
     <>
@@ -229,83 +215,14 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
           </button>
 
           <button
-            onClick={() => setShowAccessibility(a => !a)}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: showAccessibility ? '#f5f3ff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
+            onClick={() => { setMenuOpen(false); setShowSettings(true); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-            onMouseLeave={e => { if (!showAccessibility) e.currentTarget.style.background = 'transparent'; }}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
-            <Icon name={list.isPublic ? 'public' : 'lock'} size={15} color="#787584" />
-            Accessibility
-            <span style={{ marginLeft: 'auto' }}>
-              <Icon name={showAccessibility ? 'expand_less' : 'expand_more'} size={14} color="#b0acbe" />
-            </span>
+            <Icon name="tune" size={15} color="#787584" />
+            More settings…
           </button>
-
-          {showAccessibility && (
-            <div style={{ padding: '2px 8px 4px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {([{ label: 'Public', val: true }, { label: 'Private', val: false }] as const).map(opt => {
-                const selected = list.isPublic === opt.val;
-                return (
-                  <button key={opt.label}
-                    onClick={() => { updateList(list.id, { isPublic: opt.val }); setMenuOpen(false); setShowAccessibility(false); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: 'none', borderRadius: 6, background: selected ? '#f0edff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: selected ? 600 : 450, color: selected ? '#5e4dbb' : '#484552', textAlign: 'left', width: '100%' }}
-                    onMouseEnter={e => { if (!selected) e.currentTarget.style.background = '#f5f3ff'; }}
-                    onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent'; }}
-                  >
-                    <Icon name={opt.val ? 'public' : 'lock'} size={13} color={selected ? '#5e4dbb' : '#787584'} />
-                    {opt.label}
-                    {selected && <span style={{ marginLeft: 'auto' }}><Icon name="check" size={13} color="#5e4dbb" /></span>}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Move to folder */}
-          {folders.length > 0 && (
-            <button
-              onClick={() => setShowMoveToFolder(f => !f)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: showMoveToFolder ? '#f5f3ff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-              onMouseLeave={e => { if (!showMoveToFolder) e.currentTarget.style.background = 'transparent'; }}
-            >
-              <Icon name="folder_open" size={15} color="#787584" />
-              Move to folder
-              <span style={{ marginLeft: 'auto' }}>
-                <Icon name={showMoveToFolder ? 'expand_less' : 'expand_more'} size={14} color="#b0acbe" />
-              </span>
-            </button>
-          )}
-
-          {showMoveToFolder && (
-            <div style={{ padding: '2px 8px 4px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {inFolder && (
-                <button
-                  onClick={() => handleMoveToFolder(undefined)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: 'none', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 500, color: '#484552', textAlign: 'left', width: '100%' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <Icon name="remove_circle_outline" size={13} color="#787584" />
-                  Remove from folder
-                </button>
-              )}
-              {otherFolders.map(f => (
-                <button key={f.id}
-                  onClick={() => handleMoveToFolder(f.id)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: 'none', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 500, color: '#484552', textAlign: 'left', width: '100%' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  {f.emoji
-                    ? <span style={{ fontSize: 13 }}>{f.emoji}</span>
-                    : <Icon name="folder" size={13} color={f.color ?? '#787584'} />
-                  }
-                  <span style={{ color: f.color ?? '#484552' }}>{f.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
 
           <div style={{ height: 1, background: '#f0ecf8', margin: '3px 0' }} />
 
@@ -319,6 +236,21 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
             Delete list
           </button>
         </div>
+      )}
+
+      {/* More settings dialog */}
+      {showSettings && (
+        <ItemSettingsModal
+          kind="list"
+          name={list.name}
+          emoji={list.emoji}
+          color={list.color}
+          isPublic={list.isPublic}
+          folders={folders}
+          folderId={list.folderId}
+          onChange={handleSettingsChange}
+          onClose={() => setShowSettings(false)}
+        />
       )}
 
       {/* Delete confirmation dialog */}
@@ -380,9 +312,7 @@ function FolderRow({ folder, lists, active, activeListId, activeFolderId, collap
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(folder.name);
-  const [showEmojiInput, setShowEmojiInput] = useState(false);
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const [showAccessibility, setShowAccessibility] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -396,9 +326,6 @@ function FolderRow({ folder, lists, active, activeListId, activeFolderId, collap
         menuBtnRef.current && !menuBtnRef.current.contains(e.target as Node)
       ) {
         setMenuOpen(false);
-        setShowEmojiInput(false);
-        setShowColorPicker(false);
-        setShowAccessibility(false);
       }
     };
     document.addEventListener('mousedown', handler);
@@ -410,9 +337,6 @@ function FolderRow({ folder, lists, active, activeListId, activeFolderId, collap
     const rect = menuBtnRef.current?.getBoundingClientRect();
     if (rect) setMenuPos({ top: rect.bottom + 4, left: rect.left });
     setMenuOpen(o => !o);
-    setShowEmojiInput(false);
-    setShowColorPicker(false);
-    setShowAccessibility(false);
   };
 
   const handleRename = () => {
@@ -565,93 +489,18 @@ function FolderRow({ folder, lists, active, activeListId, activeFolderId, collap
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
             <Icon name="edit" size={15} color="#787584" />
-            Rename
+            Edit name
           </button>
 
           <button
-            onClick={() => { setShowEmojiInput(e => !e); setShowColorPicker(false); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: showEmojiInput ? '#f5f3ff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
+            onClick={() => { setMenuOpen(false); setShowSettings(true); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-            onMouseLeave={e => { if (!showEmojiInput) e.currentTarget.style.background = 'transparent'; }}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
-            <Icon name="mood" size={15} color="#787584" />
-            Set emoji
-            <span style={{ marginLeft: 'auto' }}>
-              <Icon name={showEmojiInput ? 'expand_less' : 'expand_more'} size={14} color="#b0acbe" />
-            </span>
+            <Icon name="tune" size={15} color="#787584" />
+            More settings…
           </button>
-
-          {showEmojiInput && (
-            <div style={{ padding: '0 0 4px' }}>
-              <EmojiPicker
-                onEmojiClick={emojiData => {
-                  updateFolder(folder.id, { emoji: emojiData.emoji });
-                  setShowEmojiInput(false);
-                  setMenuOpen(false);
-                }}
-                width="100%"
-                height={350}
-                searchPlaceholder="Search emoji…"
-                previewConfig={{ showPreview: false }}
-              />
-            </div>
-          )}
-
-          <button
-            onClick={() => { setShowColorPicker(c => !c); setShowEmojiInput(false); setShowAccessibility(false); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: showColorPicker ? '#f5f3ff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-            onMouseLeave={e => { if (!showColorPicker) e.currentTarget.style.background = 'transparent'; }}
-          >
-            <div style={{ width: 14, height: 14, borderRadius: '50%', background: folder.color ?? '#787584', border: '1.5px solid #e0dcea', flexShrink: 0 }} />
-            Set color
-            <span style={{ marginLeft: 'auto' }}>
-              <Icon name={showColorPicker ? 'expand_less' : 'expand_more'} size={14} color="#b0acbe" />
-            </span>
-          </button>
-
-          {showColorPicker && (
-            <div style={{ padding: '4px 14px 8px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {FOLDER_COLORS.map(c => (
-                <button key={c} onClick={() => { updateFolder(folder.id, { color: c }); setShowColorPicker(false); setMenuOpen(false); }}
-                  title={c}
-                  style={{ width: 22, height: 22, borderRadius: '50%', background: c, border: folder.color === c ? '2.5px solid #1c1b22' : '2px solid transparent', cursor: 'pointer', padding: 0, outline: 'none', transition: 'border 120ms' }} />
-              ))}
-            </div>
-          )}
-
-          <button
-            onClick={() => { setShowAccessibility(a => !a); setShowEmojiInput(false); setShowColorPicker(false); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: showAccessibility ? '#f5f3ff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-            onMouseLeave={e => { if (!showAccessibility) e.currentTarget.style.background = 'transparent'; }}
-          >
-            <Icon name={folder.isPublic ? 'public' : 'lock'} size={15} color="#787584" />
-            Accessibility
-            <span style={{ marginLeft: 'auto' }}>
-              <Icon name={showAccessibility ? 'expand_less' : 'expand_more'} size={14} color="#b0acbe" />
-            </span>
-          </button>
-
-          {showAccessibility && (
-            <div style={{ padding: '2px 8px 4px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {([{ label: 'Public', val: true }, { label: 'Private', val: false }] as const).map(opt => {
-                const selected = folder.isPublic === opt.val || (folder.isPublic === undefined && opt.val === true);
-                return (
-                  <button key={opt.label}
-                    onClick={() => { updateFolder(folder.id, { isPublic: opt.val }); setMenuOpen(false); setShowAccessibility(false); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', border: 'none', borderRadius: 6, background: selected ? '#f0edff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: selected ? 600 : 450, color: selected ? '#5e4dbb' : '#484552', textAlign: 'left', width: '100%' }}
-                    onMouseEnter={e => { if (!selected) e.currentTarget.style.background = '#f5f3ff'; }}
-                    onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent'; }}
-                  >
-                    <Icon name={opt.val ? 'public' : 'lock'} size={13} color={selected ? '#5e4dbb' : '#787584'} />
-                    {opt.label}
-                    {selected && <span style={{ marginLeft: 'auto' }}><Icon name="check" size={13} color="#5e4dbb" /></span>}
-                  </button>
-                );
-              })}
-            </div>
-          )}
 
           <div style={{ height: 1, background: '#f0ecf8', margin: '3px 0' }} />
 
@@ -665,6 +514,19 @@ function FolderRow({ folder, lists, active, activeListId, activeFolderId, collap
             Delete folder
           </button>
         </div>
+      )}
+
+      {/* More settings dialog */}
+      {showSettings && (
+        <ItemSettingsModal
+          kind="folder"
+          name={folder.name}
+          emoji={folder.emoji}
+          color={folder.color}
+          isPublic={folder.isPublic ?? true}
+          onChange={updates => updateFolder(folder.id, updates as Partial<Folder>)}
+          onClose={() => setShowSettings(false)}
+        />
       )}
 
       {/* Delete folder confirmation */}
@@ -1282,7 +1144,7 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.8.0
+            v1.9.0
           </div>
         )}
       </div>
