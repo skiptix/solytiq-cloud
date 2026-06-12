@@ -159,7 +159,7 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
     };
   }
 
-  if (pathname.startsWith('/scheduled')) {
+  if (pathname.startsWith('/calendar')) {
     const allTasks: (Task & { list_name: string; list_id: string | null })[] = [
       ...appStore.dashTasks.map((t) => ({ ...t, list_name: 'Dashboard', list_id: null })),
       ...appStore.lists.flatMap((l) =>
@@ -174,7 +174,7 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
       .slice(0, 30)
       .map((t) => ({ id: t.id, title: t.title, priority: t.priority ?? null, list_name: t.list_name, list_id: t.list_id }));
     return {
-      view: 'scheduled',
+      view: 'calendar',
       data: { today, scheduled_tasks: scheduled, unscheduled_tasks: unscheduled, available_lists: listsSnapshot, available_folders: foldersSnapshot },
     };
   }
@@ -208,7 +208,7 @@ export function buildSystemPrompt(ctx: AIContext, username: string, workspaces?:
   const viewDescriptions: Record<string, string> = {
     dashboard: 'Dashboard — personal quick-add task list with deadlines and priorities',
     list: `List — "${(ctx.data.list_name as string) ?? 'unknown'}" with multiple sections containing tasks`,
-    scheduled: 'Scheduled — calendar view showing tasks with and without deadlines',
+    calendar: 'Calendar — calendar view showing tasks with and without deadlines',
     gps: 'GPS Routes — route/workout file manager for .GPX and .FIT files',
   };
 
@@ -520,7 +520,7 @@ export function buildTools(ctx: AIContext, workspaceId?: string | null, workspac
     });
   }
 
-  if (ctx.view === 'scheduled') {
+  if (ctx.view === 'calendar') {
     tools.push({
       type: 'function',
       function: {
