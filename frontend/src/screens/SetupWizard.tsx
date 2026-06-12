@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import Icon from '../components/Icon';
+import { apiRequestSetupToken } from '../api/client';
 
 const w: Record<string, CSSProperties> = {
   wrap: { minHeight: '100vh', background: 'linear-gradient(135deg, #fdf8ff 0%, #f5f0ff 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, padding: 24 },
@@ -59,6 +60,8 @@ export default function SetupWizard() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [tokenRequesting, setTokenRequesting] = useState(false);
+  const [tokenRequested, setTokenRequested] = useState(false);
 
   const usernameValid = /^[A-Za-z0-9_]{3,20}$/.test(username);
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -90,6 +93,19 @@ export default function SetupWizard() {
       return;
     }
     setStep(s => s + 1);
+  };
+
+  const requestToken = async () => {
+    setTokenRequesting(true);
+    setTokenRequested(false);
+    try {
+      await apiRequestSetupToken();
+      setTokenRequested(true);
+    } catch {
+      // Token is shown in backend logs; any error is non-critical here.
+    } finally {
+      setTokenRequesting(false);
+    }
   };
 
   const fieldGroup = (children: React.ReactNode) => (
@@ -145,9 +161,20 @@ export default function SetupWizard() {
     );
     if (step === 4) return fieldGroup(<>
       <label style={w.label}>Setup Token</label>
-      <input autoFocus type="password" value={setupToken} onChange={e => setSetupToken(e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} placeholder="Enter INITIAL_SETUP_TOKEN"
+      <input autoFocus type="password" value={setupToken} onChange={e => setSetupToken(e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} placeholder="Paste token from backend logs"
         style={{ ...w.input, borderColor: setupToken && !setupTokenValid ? '#ba1a1a' : '#ececf3' }} />
-      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: setupToken && !setupTokenValid ? '#ba1a1a' : '#787584' }}>Required for initial admin registration.</div>
+      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: setupToken && !setupTokenValid ? '#ba1a1a' : '#787584' }}>
+        The token is printed in the backend container logs on startup.
+      </div>
+      <button
+        type="button"
+        onClick={requestToken}
+        disabled={tokenRequesting}
+        style={{ marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: tokenRequested ? '#10B981' : '#5e4dbb', background: tokenRequested ? 'rgba(16,185,129,0.08)' : 'rgba(94,77,187,0.07)', border: `1.5px solid ${tokenRequested ? 'rgba(16,185,129,0.3)' : 'rgba(94,77,187,0.2)'}`, borderRadius: 10, padding: '10px 0', cursor: tokenRequesting ? 'wait' : 'pointer', transition: 'all 180ms' }}
+      >
+        <Icon name={tokenRequested ? 'check_circle' : 'terminal'} size={15} color={tokenRequested ? '#10B981' : '#5e4dbb'} />
+        {tokenRequesting ? 'Requesting…' : tokenRequested ? 'Token printed to backend logs' : 'Show token in backend logs'}
+      </button>
     </>);
     if (step === 5) return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, padding: '20px 0' }}>
