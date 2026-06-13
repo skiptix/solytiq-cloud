@@ -25,6 +25,7 @@ interface TaskRow {
   updated_at: string;
   linked_list_id: string | null;
   linked_list_type: string | null;
+  attachment_count?: string;
 }
 
 function sanitizeTask(task: TaskRow) {
@@ -46,8 +47,9 @@ function sanitizeTask(task: TaskRow) {
     updatedAt:      task.updated_at,
     _source:        task.source,
     _listId:        task.list_id,
-    linkedListId:   task.linked_list_id ?? null,
-    linkedListType: task.linked_list_type ?? null,
+    linkedListId:    task.linked_list_id ?? null,
+    linkedListType:  task.linked_list_type ?? null,
+    attachmentCount: Number(task.attachment_count ?? 0),
   };
 }
 
@@ -67,7 +69,9 @@ router.get('/', async (req: Request, res: Response) => {
     if (workspaceId) params.push(workspaceId);
 
     const result = await query<TaskRow>(
-      `SELECT t.* FROM tasks t
+      `SELECT t.*,
+              (SELECT COUNT(*) FROM task_attachments ta WHERE ta.task_id = t.id) AS attachment_count
+       FROM tasks t
        LEFT JOIN lists l ON t.list_id = l.id
        WHERE ((t.user_id = $1 AND t.source = 'dash')
           OR (t.source = 'list' AND (l.user_id = $1 OR l.is_public = true)))

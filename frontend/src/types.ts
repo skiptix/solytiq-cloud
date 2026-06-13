@@ -13,6 +13,7 @@ export interface Task {
   _listName?: string;
   linkedListId?: string | null;
   linkedListType?: 'sublist' | 'link' | null;
+  attachmentCount?: number;
 }
 
 export interface Section {
