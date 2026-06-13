@@ -286,6 +286,11 @@ export default function TaskItem({ task, onToggle, onRowClick, onDragStart, onDr
           )}
         </div>
 
+        {(task.attachmentCount ?? 0) > 0 && (
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5 }}>
+            <Icon name="attach_file" size={12} color="#b0acbe" />
+          </div>
+        )}
         <div style={{ width: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: hovered ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab' }}>
           <Icon name="drag_indicator" size={16} color="#c9c4d5" />
         </div>
