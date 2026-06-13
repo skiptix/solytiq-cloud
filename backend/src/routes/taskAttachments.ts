@@ -54,11 +54,24 @@ async function ownsTask(taskId: string, userId: string): Promise<boolean> {
   return r.rows.length > 0;
 }
 
+// Broader access check: owner OR task is in a list this user can see
+async function canAccessTask(taskId: string, userId: string): Promise<boolean> {
+  const r = await query<{ id: string }>(
+    `SELECT t.id FROM tasks t
+     LEFT JOIN lists l ON t.list_id = l.id
+     WHERE t.id = $1
+       AND (t.user_id = $2
+            OR (t.source = 'list' AND (l.is_public = true OR l.user_id = $2)))`,
+    [taskId, userId]
+  );
+  return r.rows.length > 0;
+}
+
 // GET /api/tasks/:taskId/attachments
 router.get('/', async (req: Request, res: Response) => {
   try {
     const { taskId } = req.params;
-    if (!await ownsTask(taskId, req.userId!)) {
+    if (!await canAccessTask(taskId, req.userId!)) {
       res.status(404).json({ error: 'Task not found' }); return;
     }
     const result = await query<AttachmentRow>(
@@ -69,7 +82,12 @@ router.get('/', async (req: Request, res: Response) => {
               ta.file_path, ta.shared_file_id, ta.created_at
        FROM task_attachments ta
        LEFT JOIN shared_files sf ON ta.shared_file_id = sf.id
-       WHERE ta.task_id = $1 AND ta.user_id = $2
+       WHERE ta.task_id = $1
+         AND (
+           ta.attachment_type = 'upload'
+           OR ta.user_id = $2
+           OR (ta.attachment_type = 'linked' AND sf.is_public = true)
+         )
        ORDER BY ta.created_at ASC`,
       [taskId, req.userId]
     );
@@ -177,11 +195,19 @@ router.delete('/:attachmentId', async (req: Request, res: Response) => {
 router.get('/:attachmentId/download', async (req: Request, res: Response) => {
   try {
     const { taskId, attachmentId } = req.params;
+    if (!await canAccessTask(taskId, req.userId!)) {
+      res.status(404).json({ error: 'Task not found' }); return;
+    }
     const r = await query<AttachmentRow & { sf_file_path: string | null; sf_is_public: boolean }>(
       `SELECT ta.*, sf.file_path AS sf_file_path, sf.is_public AS sf_is_public
        FROM task_attachments ta
        LEFT JOIN shared_files sf ON ta.shared_file_id = sf.id
-       WHERE ta.id = $1 AND ta.task_id = $2 AND ta.user_id = $3`,
+       WHERE ta.id = $1 AND ta.task_id = $2
+         AND (
+           ta.attachment_type = 'upload'
+           OR ta.user_id = $3
+           OR (ta.attachment_type = 'linked' AND sf.is_public = true)
+         )`,
       [attachmentId, taskId, req.userId]
     );
     if (r.rows.length === 0) { res.status(404).json({ error: 'Attachment not found' }); return; }
