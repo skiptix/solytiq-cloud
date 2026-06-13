@@ -280,6 +280,7 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
   const [previewLoading, setPreviewLoading] = useState(true);
   const [name, setName] = useState(file.name);
   const [title, setTitle] = useState(file.title ?? '');
+  const [note, setNote] = useState(file.note ?? '');
   const [isPublic, setIsPublic] = useState(file.isPublic);
   const [password, setPassword] = useState('');
   const [clearPw, setClearPw] = useState(false);
@@ -308,7 +309,7 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
   const save = async () => {
     setSaving(true);
     try {
-      const updates: Parameters<typeof apiUpdateFile>[1] = { name, title: title || null, isPublic };
+      const updates: Parameters<typeof apiUpdateFile>[1] = { name, title: title || null, note: note || null, isPublic };
       if (clearPw) updates.password = null;
       else if (password) updates.password = password;
       updates.expiresAt = expiresAt ? new Date(expiresAt + 'T23:59:59').toISOString() : null;
@@ -399,6 +400,20 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
               <input value={name} onChange={e => setName(e.target.value)}
                 style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 11px', outline: 'none', boxSizing: 'border-box' }} />
             </div>
+          </div>
+
+          {/* Note */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Note <span style={{ fontWeight: 400, color: '#b0acbe', textTransform: 'none', letterSpacing: 0 }}>(visible on public share page)</span></label>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Add a note to display on the share page…"
+              rows={3}
+              style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 11px', outline: 'none', resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6, minHeight: 72 }}
+              onFocus={e => { e.currentTarget.style.borderColor = '#c4b5fd'; }}
+              onBlur={e => { e.currentTarget.style.borderColor = '#E5E7EB'; }}
+            />
           </div>
 
           {/* Visibility */}

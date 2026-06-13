@@ -96,7 +96,7 @@ app.use('/api/workspaces', workspacesRouter);
 app.use('/api/gps',        gpsRouter);
 
 // Public share endpoints — no auth required
-interface ShareFileRow { id: string; original_name: string; title: string | null; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null; }
+interface ShareFileRow { id: string; original_name: string; title: string | null; note: string | null; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null; }
 
 async function resolveShareFile(token: string): Promise<ShareFileRow | null> {
   const result = await dbQuery<ShareFileRow>(
@@ -118,6 +118,7 @@ app.get('/api/share/:token', async (req, res) => {
     res.json({
       name: file.original_name,
       title: file.title ?? null,
+      note: file.note ?? null,
       mimeType: file.mime_type,
       size: file.file_size,
       hasPassword: file.password_hash !== null,
@@ -281,6 +282,8 @@ async function runMigrations() {
   await pool.query(`ALTER TABLE shared_files ALTER COLUMN is_public SET DEFAULT false`);
 
   await pool.query(`ALTER TABLE shared_files ADD COLUMN IF NOT EXISTS title VARCHAR(500)`);
+
+  await pool.query(`ALTER TABLE shared_files ADD COLUMN IF NOT EXISTS note TEXT`);
 
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_online TIMESTAMPTZ`);
 

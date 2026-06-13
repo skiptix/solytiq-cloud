@@ -71,6 +71,7 @@ function getPreviewKind(mime: string): PreviewKind {
 interface FileInfo {
   name: string;
   title: string | null;
+  note: string | null;
   mimeType: string;
   size: number;
   hasPassword: boolean;
@@ -302,7 +303,7 @@ export default function SharePage() {
             <div style={{ fontFamily: info.title ? 'Inter, sans-serif' : 'Hanken Grotesk, sans-serif', fontSize: info.title ? 13 : 20, fontWeight: info.title ? 400 : 700, color: info.title ? '#787584' : '#1c1b22', textAlign: 'center', letterSpacing: info.title ? 0 : '-0.01em', marginBottom: 8, wordBreak: 'break-word', width: '100%' }}>{info.name}</div>
 
             {/* Meta */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: info.note ? 18 : 28, flexWrap: 'wrap', justifyContent: 'center' }}>
               <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>{fmtSize(info.size)}</span>
               <span style={{ color: '#e8e4f0' }}>·</span>
               <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Shared {fmtDate(info.createdAt)}</span>
@@ -313,6 +314,14 @@ export default function SharePage() {
                 </>
               )}
             </div>
+
+            {/* Note */}
+            {info.note && (
+              <div style={{ width: '100%', marginBottom: 24, background: '#F5F3FF', border: '1.5px solid #e8e4f0', borderRadius: 14, padding: '14px 18px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ marginTop: 1, flexShrink: 0 }}><Icon name="sticky_note_2" size={17} color="#5e4dbb" /></div>
+                <p style={{ margin: 0, fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{info.note}</p>
+              </div>
+            )}
 
             {/* Preview area */}
             {previewLoading && (
