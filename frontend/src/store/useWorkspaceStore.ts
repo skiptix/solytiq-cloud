@@ -10,8 +10,10 @@ interface WorkspaceState {
   workspaces: Workspace[];
   currentWorkspaceId: string | null;
   workspacesLoaded: boolean;
+  deletingWorkspaceId: string | null;
   setWorkspaces: (workspaces: Workspace[]) => void;
   setCurrentWorkspace: (id: string | null) => void;
+  setDeletingWorkspaceId: (id: string | null) => void;
   loadWorkspaces: () => Promise<void>;
   createWorkspace: (data: { name: string; description?: string; emoji?: string; image?: string; visibility?: 'private' | 'public' }) => Promise<Workspace>;
   updateWorkspace: (id: string, data: Partial<Pick<Workspace, 'name' | 'description' | 'emoji' | 'image' | 'visibility'>>) => Promise<void>;
@@ -27,10 +29,13 @@ const useWorkspaceStore = create<WorkspaceState>()(
       workspaces: [],
       currentWorkspaceId: null,
       workspacesLoaded: false,
+      deletingWorkspaceId: null,
 
       setWorkspaces: (workspaces) => set({ workspaces }),
 
       setCurrentWorkspace: (id) => set({ currentWorkspaceId: id }),
+
+      setDeletingWorkspaceId: (id) => set({ deletingWorkspaceId: id }),
 
       loadWorkspaces: async () => {
         try {
@@ -68,7 +73,7 @@ const useWorkspaceStore = create<WorkspaceState>()(
         set(s => {
           const filtered = s.workspaces.filter(w => w.id !== id);
           const newCurrent = s.currentWorkspaceId === id ? (filtered[0]?.id ?? null) : s.currentWorkspaceId;
-          return { workspaces: filtered, currentWorkspaceId: newCurrent };
+          return { workspaces: filtered, currentWorkspaceId: newCurrent, deletingWorkspaceId: null };
         });
       },
 
