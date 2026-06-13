@@ -116,6 +116,17 @@ export interface SharedFile {
   createdAt: string;
 }
 
+export interface TaskAttachment {
+  id: string;
+  taskId: number;
+  attachmentType: 'upload' | 'linked';
+  name: string;
+  mimeType: string;
+  size: number;
+  sharedFileId: string | null;
+  createdAt: string;
+}
+
 export interface AIFile {
   id: string;
   filename: string;

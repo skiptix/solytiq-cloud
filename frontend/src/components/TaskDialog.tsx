@@ -1,11 +1,128 @@
-import { useState, useRef, useEffect } from 'react';
-import type { Task } from '../types';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import type { Task, TaskAttachment, SharedFile } from '../types';
 import Icon from './Icon';
 import CalendarPicker from './CalendarPicker';
 import { DeleteConfirmModal } from './TaskItem';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
-import { apiCreateList, apiCreateSection, apiAddListTask, apiUpdateTask, apiUpdateListTask } from '../api/client';
+import {
+  apiCreateList, apiCreateSection, apiAddListTask, apiUpdateTask, apiUpdateListTask,
+  apiGetTaskAttachments, apiUploadTaskAttachment, apiLinkTaskAttachment, apiDeleteTaskAttachment, apiDownloadTaskAttachment,
+  apiGetFiles,
+} from '../api/client';
+
+function fmtAttSize(bytes: number): string {
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  if (bytes >= 1_000) return `${Math.round(bytes / 1_000)} KB`;
+  return `${bytes} B`;
+}
+
+function attMimeLabel(mime: string): string {
+  if (mime.includes('pdf'))   return 'PDF';
+  if (mime.includes('image')) return mime.split('/')[1]?.toUpperCase().slice(0, 4) ?? 'IMG';
+  if (mime.includes('video')) return 'VID';
+  if (mime.includes('zip') || mime.includes('compressed')) return 'ZIP';
+  if (mime.includes('word') || mime.includes('document')) return 'DOC';
+  return mime.split('/')[1]?.toUpperCase().slice(0, 4) ?? 'FILE';
+}
+
+function attMimeColor(mime: string): string {
+  if (mime.includes('pdf'))   return '#dc2626';
+  if (mime.includes('image')) return '#2563eb';
+  if (mime.includes('video')) return '#7c3aed';
+  if (mime.includes('zip'))   return '#d97706';
+  return '#5e4dbb';
+}
+
+function AttachBadge({ mime }: { mime: string }) {
+  return (
+    <div style={{ width: 34, height: 34, borderRadius: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
+      <Icon name="description" size={17} color="#d1d5db" />
+      <div style={{ position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)', background: attMimeColor(mime), color: '#fff', fontFamily: 'Inter, sans-serif', fontSize: 6, fontWeight: 800, padding: '1px 3px', borderRadius: 2 }}>{attMimeLabel(mime)}</div>
+    </div>
+  );
+}
+
+// ── File picker modal (choose from existing Files) ────────────────
+function FilePicker({ onSelect, onClose }: { onSelect: (file: SharedFile) => void; onClose: () => void }) {
+  const [files, setFiles] = useState<SharedFile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [picking, setPickingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGetFiles().then(r => setFiles(r.files)).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const filtered = files.filter(f =>
+    f.name.toLowerCase().includes(search.toLowerCase()) ||
+    (f.title ?? '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 1500, background: 'rgba(0,0,0,0.32)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 480, maxHeight: '70vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(0,0,0,0.22)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 18px 14px', borderBottom: '1px solid #F0EEF8', flexShrink: 0 }}>
+          <Icon name="folder_open" size={18} color="#5e4dbb" />
+          <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22', flex: 1 }}>Attach from Files</span>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#F5F3FF')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+            <Icon name="close" size={16} color="#787584" />
+          </button>
+        </div>
+        {/* Search */}
+        <div style={{ padding: '10px 18px 0', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 9, padding: '7px 12px' }}>
+            <Icon name="search" size={15} color="#b0acbe" />
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search files…"
+              style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none' }}
+            />
+          </div>
+        </div>
+        {/* List */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px 12px' }}>
+          {loading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 28 }}>
+              <div style={{ width: 22, height: 22, border: '2.5px solid #e8e4f0', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', padding: '28px 16px' }}>{search ? 'No matching files' : 'No files uploaded yet'}</div>
+          ) : (
+            filtered.map(f => (
+              <button
+                key={f.id}
+                disabled={picking === f.id}
+                onClick={() => { setPickingId(f.id); onSelect(f); }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 10px', borderRadius: 10, border: 'none', background: picking === f.id ? '#F5F3FF' : 'transparent', cursor: picking === f.id ? 'default' : 'pointer', textAlign: 'left', transition: 'background 120ms' }}
+                onMouseEnter={e => { if (picking !== f.id) e.currentTarget.style.background = '#faf9ff'; }}
+                onMouseLeave={e => { if (picking !== f.id) e.currentTarget.style.background = 'transparent'; }}
+              >
+                <AttachBadge mime={f.mimeType} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.title || f.name}</div>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 1 }}>{fmtAttSize(f.size)}</div>
+                </div>
+                {picking === f.id && (
+                  <div style={{ width: 14, height: 14, border: '2px solid #c4b5fd', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite', flexShrink: 0 }} />
+                )}
+                {picking !== f.id && <Icon name="add" size={16} color="#c9c4d5" />}
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const PRIORITIES = ['High', 'Medium', 'Low'] as const;
 const PRIORITY_COLORS: Record<string, string> = { High: '#ea580c', Medium: '#f59e0b', Low: '#787584' };
@@ -69,10 +186,26 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
   const [addingSubItem, setAddingSubItem] = useState(false);
   const [creatingList, setCreatingList] = useState(false);
 
+  // Attachments
+  const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
+  const [attachLoading, setAttachLoading] = useState(true);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [showFilePicker, setShowFilePicker] = useState(false);
+  const [removingAttId, setRemovingAttId] = useState<string | null>(null);
+  const [downloadingAttId, setDownloadingAttId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const calBtnRef = useRef<HTMLButtonElement>(null);
+
+  const loadAttachments = useCallback(async () => {
+    try {
+      const r = await apiGetTaskAttachments(task.id);
+      setAttachments(r.attachments);
+    } catch { /* silent */ } finally { setAttachLoading(false); }
+  }, [task.id]);
 
   const { lists, setLists, updateListTask, loadFromApi } = useAppStore();
   const { currentWorkspaceId } = useWorkspaceStore();
@@ -90,6 +223,8 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
     if (notesRef.current) resizeTA(notesRef.current);
   }, []);
 
+  useEffect(() => { loadAttachments(); }, [loadAttachments]);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && !showCal) onClose(); };
     document.addEventListener('keydown', handler);
@@ -97,6 +232,36 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
   }, [onClose, showCal]);
 
   const save = (updates: Partial<Task>) => onUpdate(task.id, updates);
+
+  const handleFileUpload = async (file: File) => {
+    setUploadProgress(0);
+    try {
+      const att = await apiUploadTaskAttachment(task.id, file, pct => setUploadProgress(pct));
+      setAttachments(prev => [...prev, att]);
+    } catch { /* silent */ } finally { setUploadProgress(null); }
+  };
+
+  const handleLinkFile = async (sf: SharedFile) => {
+    try {
+      const r = await apiLinkTaskAttachment(task.id, sf.id);
+      setAttachments(prev => [...prev, r.attachment]);
+    } catch { /* silent */ } finally { setShowFilePicker(false); }
+  };
+
+  const handleRemoveAttachment = async (att: TaskAttachment) => {
+    setRemovingAttId(att.id);
+    try {
+      await apiDeleteTaskAttachment(task.id, att.id);
+      setAttachments(prev => prev.filter(a => a.id !== att.id));
+    } catch { /* silent */ } finally { setRemovingAttId(null); }
+  };
+
+  const handleDownloadAttachment = async (att: TaskAttachment) => {
+    setDownloadingAttId(att.id);
+    try {
+      await apiDownloadTaskAttachment(task.id, att.id, att.name);
+    } catch { /* silent */ } finally { setDownloadingAttId(null); }
+  };
 
   const handleAddSubItem = async () => {
     if (!newSubItem.trim()) return;
@@ -377,6 +542,103 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
             {/* Divider */}
             <div style={{ height: 1, background: '#F0EEF8', marginBottom: 24 }} />
 
+            {/* Attachments */}
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <SectionLabel>Attachments{attachments.length > 0 && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 400, color: '#c9c4d5', textTransform: 'none', letterSpacing: 0, marginLeft: 6 }}>{attachments.length}</span>}</SectionLabel>
+              </div>
+
+              {/* Attachment rows */}
+              {attachLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', opacity: 0.5 }}>
+                  <div style={{ width: 13, height: 13, border: '2px solid #c9c4d5', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading…</span>
+                </div>
+              ) : attachments.map(att => (
+                <div key={att.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: '#faf9ff', marginBottom: 6, border: '1px solid #F0EEF8' }}>
+                  <AttachBadge mime={att.mimeType} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{att.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe' }}>{fmtAttSize(att.size)}</span>
+                      {att.attachmentType === 'linked' && (
+                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 99, padding: '1px 6px' }}>from Files</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDownloadAttachment(att)}
+                    disabled={downloadingAttId === att.id}
+                    title="Download"
+                    style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: 'transparent', cursor: downloadingAttId === att.id ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                    onMouseEnter={e => { if (downloadingAttId !== att.id) e.currentTarget.style.background = '#F5F3FF'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                    {downloadingAttId === att.id
+                      ? <div style={{ width: 12, height: 12, border: '2px solid #c4b5fd', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                      : <Icon name="download" size={15} color="#5e4dbb" />}
+                  </button>
+                  <button
+                    onClick={() => handleRemoveAttachment(att)}
+                    disabled={removingAttId === att.id}
+                    title="Remove"
+                    style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: 'transparent', cursor: removingAttId === att.id ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                    onMouseEnter={e => { if (removingAttId !== att.id) e.currentTarget.style.background = '#ffdad6'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                    {removingAttId === att.id
+                      ? <div style={{ width: 12, height: 12, border: '2px solid #e87575', borderTopColor: '#ba1a1a', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                      : <Icon name="close" size={14} color="#ba1a1a" />}
+                  </button>
+                </div>
+              ))}
+
+              {/* Upload progress row */}
+              {uploadProgress !== null && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: '#faf9ff', marginBottom: 6, border: '1px solid #F0EEF8' }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 8, background: '#F5F3FF', border: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <div style={{ width: 14, height: 14, border: '2px solid #c4b5fd', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#5e4dbb', marginBottom: 4 }}>Uploading… {uploadProgress}%</div>
+                    <div style={{ background: '#E5E7EB', borderRadius: 99, height: 3, overflow: 'hidden' }}>
+                      <div style={{ width: `${uploadProgress}%`, height: '100%', background: '#5e4dbb', borderRadius: 99, transition: 'width 150ms' }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadProgress !== null}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1.5px dashed #d1d5db', borderRadius: 9, padding: '7px 14px', cursor: uploadProgress !== null ? 'not-allowed' : 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', transition: 'all 120ms', opacity: uploadProgress !== null ? 0.5 : 1 }}
+                  onMouseEnter={e => { if (uploadProgress === null) { e.currentTarget.style.borderColor = '#5e4dbb'; e.currentTarget.style.color = '#5e4dbb'; e.currentTarget.style.background = '#faf9ff'; } }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1d5db'; e.currentTarget.style.color = '#787584'; e.currentTarget.style.background = 'transparent'; }}>
+                  <Icon name="upload" size={14} color="currentColor" />
+                  Upload file
+                </button>
+                <button
+                  onClick={() => setShowFilePicker(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1.5px dashed #d1d5db', borderRadius: 9, padding: '7px 14px', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', transition: 'all 120ms' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#5e4dbb'; e.currentTarget.style.color = '#5e4dbb'; e.currentTarget.style.background = '#faf9ff'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1d5db'; e.currentTarget.style.color = '#787584'; e.currentTarget.style.background = 'transparent'; }}>
+                  <Icon name="folder_open" size={14} color="currentColor" />
+                  Attach from Files
+                </button>
+              </div>
+
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); e.target.value = ''; }}
+              />
+            </div>
+
+            {/* Divider */}
+            <div style={{ height: 1, background: '#F0EEF8', marginBottom: 24 }} />
+
             {/* Sub-items */}
             <div style={{ minHeight: 120 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
@@ -450,6 +712,14 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
           </div>
         </div>
       </div>
+
+      {/* File picker modal */}
+      {showFilePicker && (
+        <FilePicker
+          onSelect={handleLinkFile}
+          onClose={() => setShowFilePicker(false)}
+        />
+      )}
 
       {/* Calendar rendered at fixed position to escape any overflow: hidden ancestors */}
       {showCal && calPos && (
