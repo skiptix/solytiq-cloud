@@ -270,7 +270,7 @@ export const apiGetFiles = () =>
 export const apiGetStorageUsage = () =>
   apiFetch<{ used: number; quota: number | null; isAdmin: boolean }>('/files/storage');
 
-export const apiUpdateFile = (id: string, data: { name?: string; title?: string | null; isPublic?: boolean; password?: string | null; expiresAt?: string | null }) =>
+export const apiUpdateFile = (id: string, data: { name?: string; title?: string | null; note?: string | null; isPublic?: boolean; password?: string | null; expiresAt?: string | null }) =>
   apiFetch<{ file: SharedFile }>(`/files/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiDeleteFile = (id: string) =>

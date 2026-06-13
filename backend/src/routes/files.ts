@@ -34,6 +34,7 @@ interface FileRow {
   user_id: string;
   original_name: string;
   title: string | null;
+  note: string | null;
   mime_type: string;
   file_size: number;
   file_path: string;
@@ -56,6 +57,7 @@ function sanitizeFile(f: FileRow, baseUrl: string) {
     userId:      f.user_id,
     name:        f.original_name,
     title:       f.title ?? null,
+    note:        f.note ?? null,
     mimeType:    f.mime_type,
     size:        f.file_size,
     isPublic:    f.is_public,
@@ -177,9 +179,10 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, title, isPublic, password, expiresAt } = req.body as {
+    const { name, title, note, isPublic, password, expiresAt } = req.body as {
       name?: string;
       title?: string | null;
+      note?: string | null;
       isPublic?: boolean;
       password?: string | null;
       expiresAt?: string | null;
@@ -197,6 +200,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const updatePw    = 'password'  in req.body;
     const updateExp   = 'expiresAt' in req.body;
     const updateTitle = 'title'     in req.body;
+    const updateNote  = 'note'      in req.body;
     let pwHash: string | null = null;
     if (updatePw && typeof password === 'string' && password.length > 0) {
       pwHash = await hashPassword(password);
@@ -205,13 +209,14 @@ router.put('/:id', async (req: Request, res: Response) => {
     const result = await query<FileRow>(
       `UPDATE shared_files
        SET original_name = COALESCE($2, original_name),
-           title         = CASE WHEN $8 THEN $9 ELSE title         END,
+           title         = CASE WHEN $8  THEN $9  ELSE title         END,
+           note          = CASE WHEN $10 THEN $11 ELSE note          END,
            is_public     = COALESCE($3, is_public),
            password_hash = CASE WHEN $4 THEN $5 ELSE password_hash END,
            expires_at    = CASE WHEN $6 THEN $7 ELSE expires_at    END
        WHERE id = $1
        RETURNING *`,
-      [id, name ?? null, isPublic ?? null, updatePw, pwHash, updateExp, expiresAt ?? null, updateTitle, title ?? null]
+      [id, name ?? null, isPublic ?? null, updatePw, pwHash, updateExp, expiresAt ?? null, updateTitle, title ?? null, updateNote, note ?? null]
     );
 
     const base = getBaseUrl(req);

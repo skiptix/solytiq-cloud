@@ -973,7 +973,7 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.9.2
+              v1.9.3
             </div>
           )}
         </div>
@@ -1144,7 +1144,7 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.9.2
+            v1.9.3
           </div>
         )}
       </div>
