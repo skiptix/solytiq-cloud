@@ -21,6 +21,7 @@ import filesRouter, { UPLOAD_DIR } from './routes/files';
 import aiRouter         from './routes/ai';
 import workspacesRouter from './routes/workspaces';
 import gpsRouter from './routes/gps';
+import taskAttachmentsRouter from './routes/taskAttachments';
 import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
 import { addSseClient, removeSseClient } from './sse';
@@ -85,6 +86,7 @@ app.use('/api/admin/nuke', setupLimiter);
 // ---------------------------------------------------------------------------
 
 app.use('/api/auth',       authRouter);
+app.use('/api/tasks/:taskId/attachments', taskAttachmentsRouter);
 app.use('/api/tasks',      tasksRouter);
 app.use('/api/lists',      listsRouter);
 app.use('/api/trash',      trashRouter);
@@ -284,6 +286,22 @@ async function runMigrations() {
   await pool.query(`ALTER TABLE shared_files ADD COLUMN IF NOT EXISTS title VARCHAR(500)`);
 
   await pool.query(`ALTER TABLE shared_files ADD COLUMN IF NOT EXISTS note TEXT`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS task_attachments (
+      id              VARCHAR(100) PRIMARY KEY,
+      task_id         BIGINT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      user_id         UUID   NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
+      attachment_type VARCHAR(20) NOT NULL DEFAULT 'upload'
+                        CHECK (attachment_type IN ('upload','linked')),
+      original_name   VARCHAR(500),
+      mime_type       VARCHAR(100) NOT NULL DEFAULT 'application/octet-stream',
+      file_size       BIGINT NOT NULL DEFAULT 0,
+      file_path       VARCHAR(500),
+      shared_file_id  VARCHAR(100) REFERENCES shared_files(id) ON DELETE CASCADE,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
 
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_online TIMESTAMPTZ`);
 

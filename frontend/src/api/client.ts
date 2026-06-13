@@ -1,4 +1,4 @@
-import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi } from '../types';
+import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -283,6 +283,58 @@ export const apiPreviewFile = async (id: string): Promise<string> => {
   const blob = await res.blob();
   return URL.createObjectURL(blob);
 };
+
+// Task Attachments
+export const apiGetTaskAttachments = (taskId: number) =>
+  apiFetch<{ attachments: TaskAttachment[] }>(`/tasks/${taskId}/attachments`);
+
+export const apiLinkTaskAttachment = (taskId: number, sharedFileId: string) =>
+  apiFetch<{ attachment: TaskAttachment }>(`/tasks/${taskId}/attachments/link`, {
+    method: 'POST', body: JSON.stringify({ sharedFileId }),
+  });
+
+export const apiDeleteTaskAttachment = (taskId: number, attachmentId: string) =>
+  apiFetch<{ success: boolean }>(`/tasks/${taskId}/attachments/${attachmentId}`, { method: 'DELETE' });
+
+export function apiUploadTaskAttachment(
+  taskId: number,
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<TaskAttachment> {
+  return new Promise((resolve, reject) => {
+    const token = localStorage.getItem('solytiq_token');
+    const form = new FormData();
+    form.append('file', file);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${(import.meta.env.VITE_API_URL as string | undefined) ?? '/api'}/tasks/${taskId}/attachments`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve((JSON.parse(xhr.responseText) as { attachment: TaskAttachment }).attachment);
+      } else {
+        reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(form);
+  });
+}
+
+export async function apiDownloadTaskAttachment(taskId: number, attachmentId: string, filename: string): Promise<void> {
+  const token = localStorage.getItem('solytiq_token');
+  const res = await fetch(`${(import.meta.env.VITE_API_URL as string | undefined) ?? '/api'}/tasks/${taskId}/attachments/${attachmentId}/download`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 // AI Assistant
 export const apiGetAISettings = () =>
