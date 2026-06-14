@@ -47,6 +47,8 @@ body { font-family: 'Inter', sans-serif; background: #fdf8ff; color: #1c1b22; -w
 @keyframes fileDropIconFloat { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-5px); } }
 @keyframes filesBtnPulse { 0%, 100% { box-shadow: 0 0 0 0px rgba(94,77,187,0.25); } 50% { box-shadow: 0 0 0 5px rgba(94,77,187,0.15); } }
 @keyframes fileUploadDone { 0% { opacity: 0; transform: scale(0.6); } 60% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+@keyframes pageIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .page-transition { animation: none !important; } }
 
 /* ─── POI Popup Styles ───────────────────────────────────────────────────── */
 @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: 0.5; } }

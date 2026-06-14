@@ -187,17 +187,21 @@ function AppLayout() {
           onNavigate={navigate}
         />
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', position: 'relative' }}>
-          <Routes>
-            <Route path="/dashboard" element={<DashboardScreen />} />
-            <Route path="/folder/:folderId" element={<FolderDashboardScreen />} />
-            <Route path="/calendar" element={<CalendarScreen />} />
-            <Route path="/files" element={<FilesScreen />} />
-            <Route path="/list/:listId" element={<ListScreen />} />
-            <Route path="/timeline/:timelineId" element={<TimelineScreen />} />
-            <Route path="/settings" element={<SettingsScreen />} />
-            <Route path="/gps" element={<GPSScreen />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
+          {/* Keying by pathname re-mounts the screen on navigation, replaying the
+              `pageIn` animation for a smooth transition between pages/items. */}
+          <div key={location.pathname} className="page-transition" style={{ flex: 1, display: 'flex', minWidth: 0, animation: 'pageIn 300ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <Routes location={location}>
+              <Route path="/dashboard" element={<DashboardScreen />} />
+              <Route path="/folder/:folderId" element={<FolderDashboardScreen />} />
+              <Route path="/calendar" element={<CalendarScreen />} />
+              <Route path="/files" element={<FilesScreen />} />
+              <Route path="/list/:listId" element={<ListScreen />} />
+              <Route path="/timeline/:timelineId" element={<TimelineScreen />} />
+              <Route path="/settings" element={<SettingsScreen />} />
+              <Route path="/gps" element={<GPSScreen />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </div>
 
           {currentWorkspaceId && lists.length === 0 && timelines.length === 0 && !listsLoading && getActive() === 'dashboard' && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, zIndex: 10, background: 'rgba(247,242,252,0.90)', backdropFilter: 'blur(10px)', animation: 'backdropIn 220ms ease both' }}>
