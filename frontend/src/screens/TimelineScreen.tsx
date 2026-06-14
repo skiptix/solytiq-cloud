@@ -31,6 +31,18 @@ function fmtDate(date?: string | null) {
   return `${MONTHS[m - 1]} ${d}, ${y}`;
 }
 
+// Today as YYYY-MM-DD (local)
+function todayStr(): string {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+}
+
+// A milestone is date-reached when its date <= today
+function isDateReached(date?: string | null): boolean {
+  if (!date) return false;
+  return date <= todayStr();
+}
+
 // Chronological order; undated milestones fall to the bottom by position.
 function sortMilestones(ms: Milestone[]): Milestone[] {
   return [...ms].sort((a, b) => {
@@ -57,12 +69,14 @@ function MilestoneEditor({ accent, initial, onSave, onClose }: MilestoneEditorPr
   const [status, setStatus] = useState<MilestoneStatus>(initial?.status ?? 'upcoming');
   const [emoji, setEmoji] = useState(initial?.emoji ?? '📍');
   const [color, setColor] = useState<string | null>(initial?.color ?? null);
+  const [dateError, setDateError] = useState(false);
 
   const save = () => {
     if (!title.trim()) return;
+    if (!date) { setDateError(true); return; }
     onSave({
       title: title.trim(),
-      date: date || null,
+      date: date,
       time: time || null,
       description: description.trim() || null,
       status,
@@ -93,9 +107,10 @@ function MilestoneEditor({ accent, initial, onSave, onClose }: MilestoneEditorPr
 
           <div style={{ display: 'flex', gap: 10 }}>
             <div style={{ flex: 1 }}>
-              <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', display: 'block', marginBottom: 4 }}>Date</label>
-              <input type="date" value={date ?? ''} onChange={e => setDate(e.target.value)}
-                style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13.5, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', outline: 'none', background: '#fff', color: '#1c1b22' }} />
+              <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: dateError ? '#ba1a1a' : '#787584', display: 'block', marginBottom: 4 }}>Date *</label>
+              <input type="date" value={date ?? ''} onChange={e => { setDate(e.target.value); setDateError(false); }}
+                style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13.5, border: `1.5px solid ${dateError ? '#ba1a1a' : '#e8e4f0'}`, borderRadius: 8, padding: '8px 10px', outline: 'none', background: dateError ? '#fff8f7' : '#fff', color: '#1c1b22' }} />
+              {dateError && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#ba1a1a', marginTop: 3 }}>A date is required.</div>}
             </div>
             <div style={{ width: 130 }}>
               <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', display: 'block', marginBottom: 4 }}>Time</label>
@@ -188,8 +203,16 @@ export default function TimelineScreen() {
   const isOwner = timeline.userId === currentUserId;
   const milestones = sortMilestones(timeline.milestones);
   const total = milestones.length;
+
+  // Date-based progress: a milestone counts as reached when its date <= today,
+  // OR when it was manually marked done.
+  const reachedCount = milestones.filter(m => m.status === 'done' || isDateReached(m.date)).length;
   const done = milestones.filter(m => m.status === 'done').length;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const pct = total > 0 ? Math.round((reachedCount / total) * 100) : 0;
+
+  // Index of the last milestone that is reached (for rail fill height).
+  const lastReachedIdx = milestones.reduce((acc, m, i) =>
+    (m.status === 'done' || isDateReached(m.date)) ? i : acc, -1);
 
   // Layout density knobs.
   const gap = layout === 'compact' ? 8 : layout === 'detailed' ? 26 : 16;
@@ -294,40 +317,62 @@ export default function TimelineScreen() {
           </div>
         ) : (
           <div style={{ position: 'relative', paddingLeft: 8 }}>
-            {/* Vertical rail */}
-            <div style={{ position: 'absolute', left: 8 + nodeSize / 2 - 1, top: nodeSize / 2, bottom: nodeSize / 2, width: 2, background: 'linear-gradient(#e8e4f0, #e8e4f0)', borderRadius: 2 }} />
+            {/* Vertical rail — grey background track */}
+            <div style={{ position: 'absolute', left: 8 + nodeSize / 2 - 1, top: nodeSize / 2, bottom: nodeSize / 2, width: 2, background: '#e8e4f0', borderRadius: 2 }} />
+            {/* Accent progress fill — grows from top to last reached node */}
+            {lastReachedIdx >= 0 && (
+              <div style={{
+                position: 'absolute',
+                left: 8 + nodeSize / 2 - 1,
+                top: nodeSize / 2,
+                // Fill to the center of the last reached node
+                height: `calc(${((lastReachedIdx) / Math.max(total - 1, 1)) * 100}% + 0px)`,
+                width: 2,
+                background: accent,
+                borderRadius: 2,
+                transition: 'height 600ms cubic-bezier(0.4,0,0.2,1)',
+                zIndex: 0,
+              }} />
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap }}>
-              {milestones.map(m => {
-                const st = statusOf(m.status);
+              {milestones.map((m) => {
+                // A milestone is visually "reached" if its date is past/today OR manually done
+                const dateReached = isDateReached(m.date);
+                const effectivelyDone = m.status === 'done' || dateReached;
+                const effectiveStatus: MilestoneStatus = effectivelyDone ? 'done' : m.status;
+                const st = statusOf(effectiveStatus);
                 const dot = m.color ?? st.color;
                 const dateLabel = fmtDate(m.date);
+                const isPast = m.date ? m.date < todayStr() : false;
+                const isToday = m.date === todayStr();
                 return (
                   <div key={m.id} style={{ position: 'relative', display: 'flex', gap: 18, alignItems: 'flex-start' }}>
                     {/* Node */}
                     <button
                       onClick={() => cycleStatus(m)}
                       title={isOwner ? `Status: ${st.label} — click to change` : st.label}
-                      style={{ position: 'relative', zIndex: 1, width: nodeSize, height: nodeSize, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: m.status === 'done' ? dot : '#fff', border: `2.5px solid ${dot}`, cursor: isOwner ? 'pointer' : 'default', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 4px #fff' }}>
-                      {m.status === 'done' && <Icon name="check" size={nodeSize - 7} color="#fff" />}
-                      {m.status === 'in-progress' && <div style={{ width: nodeSize / 3, height: nodeSize / 3, borderRadius: '50%', background: dot }} />}
+                      style={{ position: 'relative', zIndex: 1, width: nodeSize, height: nodeSize, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: effectivelyDone ? dot : '#fff', border: `2.5px solid ${dot}`, cursor: isOwner ? 'pointer' : 'default', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 4px #fff', transition: 'all 300ms' }}>
+                      {effectivelyDone && <Icon name="check" size={nodeSize - 7} color="#fff" />}
+                      {!effectivelyDone && effectiveStatus === 'in-progress' && <div style={{ width: nodeSize / 3, height: nodeSize / 3, borderRadius: '50%', background: dot }} />}
                     </button>
 
                     {/* Card */}
-                    <div style={{ flex: 1, minWidth: 0, background: '#fff', border: '1px solid #ece8f4', borderLeft: `3px solid ${dot}`, borderRadius: 12, padding: cardPad, transition: 'box-shadow 150ms', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}
+                    <div style={{ flex: 1, minWidth: 0, background: effectivelyDone ? `${dot}08` : '#fff', border: `1px solid ${effectivelyDone ? dot + '30' : '#ece8f4'}`, borderLeft: `3px solid ${dot}`, borderRadius: 12, padding: cardPad, transition: 'box-shadow 150ms, background 300ms', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}
                       onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.07)')}
                       onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)')}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                         {m.emoji && <span style={{ fontSize: layout === 'detailed' ? 20 : 16, lineHeight: 1.2, flexShrink: 0 }}>{m.emoji}</span>}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: titleSize, fontWeight: 700, color: '#1c1b22' }}>{m.title}</span>
+                            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: titleSize, fontWeight: 700, color: effectivelyDone ? '#787584' : '#1c1b22', textDecoration: effectivelyDone && m.status === 'done' ? 'line-through' : 'none', transition: 'color 300ms' }}>{m.title}</span>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: st.color, background: `${st.color}1a`, padding: '2px 8px', borderRadius: 9999, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                               <Icon name={st.icon} size={11} color={st.color} />{st.label}
                             </span>
+                            {isToday && <span style={{ display: 'inline-flex', alignItems: 'center', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#ea580c', background: '#fff7ed', padding: '2px 8px', borderRadius: 9999, letterSpacing: '0.04em' }}>TODAY</span>}
                           </div>
                           {(dateLabel || m.time) && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>
-                              <Icon name="event" size={13} color="#9d8dff" />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontFamily: 'Inter, sans-serif', fontSize: 12, color: isPast && !isToday ? '#10B981' : '#787584' }}>
+                              <Icon name="event" size={13} color={isPast && !isToday ? '#10B981' : '#9d8dff'} />
                               {dateLabel}{m.time ? `${dateLabel ? ' · ' : ''}${m.time}` : ''}
                             </div>
                           )}
