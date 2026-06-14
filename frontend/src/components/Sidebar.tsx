@@ -630,19 +630,21 @@ function StandaloneListWithSublists({ list, sublists, active, activeListId, coll
 
 // ── WorkspaceSwitcher ─────────────────────────────────────────────────────────
 function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
-  const { workspaces, currentWorkspaceId, setCurrentWorkspace } = useWorkspaceStore();
+  const { workspaces, currentWorkspaceId, setCurrentWorkspace, deletingWorkspaceId } = useWorkspaceStore();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number } | null>(null);
   const [showWizard, setShowWizard] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
+  const openedForDeletion = useRef(false);
 
   const current = workspaces.find(w => w.id === currentWorkspaceId);
 
   useEffect(() => {
     if (!dropdownOpen) return;
     const handler = (e: MouseEvent) => {
+      if (openedForDeletion.current) return; // don't close during deletion animation
       if (dropRef.current && !dropRef.current.contains(e.target as Node) && btnRef.current && !btnRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
       }
@@ -650,6 +652,19 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [dropdownOpen]);
+
+  // Auto-open dropdown to show deletion animation
+  useEffect(() => {
+    if (deletingWorkspaceId) {
+      const rect = btnRef.current?.getBoundingClientRect();
+      if (rect) setDropdownPos({ top: rect.bottom + 4, left: Math.max(8, rect.left) });
+      setDropdownOpen(true);
+      openedForDeletion.current = true;
+    } else if (openedForDeletion.current) {
+      setDropdownOpen(false);
+      openedForDeletion.current = false;
+    }
+  }, [deletingWorkspaceId]);
 
   const openDropdown = () => {
     const rect = btnRef.current?.getBoundingClientRect();
@@ -684,27 +699,29 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
           )}
 
           {workspaces.map(ws => (
-            <button key={ws.id}
-              onClick={() => { setCurrentWorkspace(ws.id); setDropdownOpen(false); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', background: ws.id === currentWorkspaceId ? '#f5f3ff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: ws.id === currentWorkspaceId ? 600 : 450, color: ws.id === currentWorkspaceId ? '#5e4dbb' : '#1c1b22', textAlign: 'left' }}
-              onMouseEnter={e => { if (ws.id !== currentWorkspaceId) e.currentTarget.style.background = '#f7f4fc'; }}
-              onMouseLeave={e => { if (ws.id !== currentWorkspaceId) e.currentTarget.style.background = 'transparent'; }}>
-              <div style={{ width: 26, height: 26, borderRadius: 8, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
-                {ws.image
-                  ? <img src={ws.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : <span style={{ fontSize: 14 }}>{ws.emoji ?? '🏠'}</span>
-                }
-              </div>
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ws.name}</div>
-                {(() => {
-                if (ws.visibility === 'public') return <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe' }}>Public</div>;
-                if ((ws.memberCount ?? 1) > 1) return <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe' }}>Shared</div>;
-                return <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe' }}>Private</div>;
-              })()}
-              </div>
-              {ws.id === currentWorkspaceId && <Icon name="check" size={14} color="#5e4dbb" />}
-            </button>
+            <div key={ws.id} style={{ overflow: 'hidden', animation: ws.id === deletingWorkspaceId ? 'wsItemOut 420ms ease forwards' : undefined }}>
+              <button
+                onClick={() => { if (ws.id === deletingWorkspaceId) return; setCurrentWorkspace(ws.id); setDropdownOpen(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', background: ws.id === currentWorkspaceId ? '#f5f3ff' : 'transparent', cursor: ws.id === deletingWorkspaceId ? 'default' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: ws.id === currentWorkspaceId ? 600 : 450, color: ws.id === currentWorkspaceId ? '#5e4dbb' : '#1c1b22', textAlign: 'left', pointerEvents: ws.id === deletingWorkspaceId ? 'none' : undefined }}
+                onMouseEnter={e => { if (ws.id !== currentWorkspaceId && ws.id !== deletingWorkspaceId) e.currentTarget.style.background = '#f7f4fc'; }}
+                onMouseLeave={e => { if (ws.id !== currentWorkspaceId) e.currentTarget.style.background = 'transparent'; }}>
+                <div style={{ width: 26, height: 26, borderRadius: 8, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                  {ws.image
+                    ? <img src={ws.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <span style={{ fontSize: 14 }}>{ws.emoji ?? '🏠'}</span>
+                  }
+                </div>
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ws.name}</div>
+                  {(() => {
+                  if (ws.visibility === 'public') return <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe' }}>Public</div>;
+                  if ((ws.memberCount ?? 1) > 1) return <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe' }}>Shared</div>;
+                  return <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe' }}>Private</div>;
+                })()}
+                </div>
+                {ws.id === currentWorkspaceId && <Icon name="check" size={14} color="#5e4dbb" />}
+              </button>
+            </div>
           ))}
 
           <div style={{ height: 1, background: '#f0ecf8', margin: '4px 0' }} />
@@ -973,7 +990,7 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.9.5
+              v1.9.6
             </div>
           )}
         </div>
@@ -1144,7 +1161,7 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.9.5
+            v1.9.6
           </div>
         )}
       </div>

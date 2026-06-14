@@ -49,7 +49,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const { updateWorkspace, deleteWorkspace, getMembers, addMember, removeMember } = useWorkspaceStore();
+  const { updateWorkspace, deleteWorkspace, getMembers, addMember, removeMember, setDeletingWorkspaceId } = useWorkspaceStore();
   const { userId } = useAuthStore();
   const isOwner = workspace.ownerId === userId || workspace.role === 'owner';
 
@@ -130,14 +130,14 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     setDeleteLoading(true);
-    try {
-      await deleteWorkspace(workspace.id);
-      onClose();
-    } catch {
-      setDeleteLoading(false);
-    }
+    setDeletingWorkspaceId(workspace.id);
+    handleClose(); // plays modal exit animation then unmounts
+    // Give time for: modal exit (190ms) + dropdown open + item animation (420ms)
+    setTimeout(() => {
+      deleteWorkspace(workspace.id).catch(() => setDeletingWorkspaceId(null));
+    }, 550);
   };
 
   const panelAnim = closing
