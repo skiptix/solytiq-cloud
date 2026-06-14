@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Milestone, MilestoneStatus, TimelineLayout } from '../types';
 import useAppStore from '../store/useAppStore';
@@ -9,6 +9,7 @@ import { apiCreateMilestone, apiUpdateMilestone, apiDeleteMilestone } from '../a
 import { genId } from '../utils/id';
 import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
+import CalendarPicker from '../components/CalendarPicker';
 
 const STATUSES: Array<{ key: MilestoneStatus; label: string; color: string; icon: string }> = [
   { key: 'upcoming', label: 'Upcoming', color: '#9d8dff', icon: 'schedule' },
@@ -60,6 +61,18 @@ function MilestoneEditor({ accent, initial, onSave, onClose }: MilestoneEditorPr
   const [emoji, setEmoji] = useState(initial?.emoji ?? '📍');
   const [color, setColor] = useState<string | null>(initial?.color ?? null);
   const [dateError, setDateError] = useState(false);
+  const [showCal, setShowCal] = useState(false);
+  const calRef = useRef<HTMLDivElement>(null);
+
+  // Close calendar on outside click
+  useEffect(() => {
+    if (!showCal) return;
+    const handler = (e: MouseEvent) => {
+      if (calRef.current && !calRef.current.contains(e.target as Node)) setShowCal(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showCal]);
 
   const save = () => {
     if (!title.trim()) return;
@@ -96,11 +109,28 @@ function MilestoneEditor({ accent, initial, onSave, onClose }: MilestoneEditorPr
           </div>
 
           <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, position: 'relative' }} ref={calRef}>
               <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: dateError ? '#ba1a1a' : '#787584', display: 'block', marginBottom: 4 }}>Date *</label>
-              <input type="date" value={date ?? ''} onChange={e => { setDate(e.target.value); setDateError(false); }}
-                style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13.5, border: `1.5px solid ${dateError ? '#ba1a1a' : '#e8e4f0'}`, borderRadius: 8, padding: '8px 10px', outline: 'none', background: dateError ? '#fff8f7' : '#fff', color: '#1c1b22' }} />
+              {/* Trigger button — same look as task deadline picker */}
+              <button
+                type="button"
+                onClick={() => { setShowCal(v => !v); setDateError(false); }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 7, padding: '8px 10px', borderRadius: 8, border: `1.5px solid ${dateError ? '#ba1a1a' : showCal ? accent : '#e8e4f0'}`, background: dateError ? '#fff8f7' : '#fff', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: date ? '#1c1b22' : '#b0acbe', transition: 'border-color 150ms', textAlign: 'left' }}
+              >
+                <Icon name="calendar_today" size={14} color={date ? accent : '#c9c4d5'} />
+                {date ? fmtDate(date) : 'Pick a date…'}
+              </button>
               {dateError && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#ba1a1a', marginTop: 3 }}>A date is required.</div>}
+              {/* Calendar dropdown */}
+              {showCal && (
+                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50 }}>
+                  <CalendarPicker
+                    value={date || undefined}
+                    onChange={d => { setDate(d); setShowCal(false); setDateError(false); }}
+                    onClear={() => { setDate(''); setShowCal(false); }}
+                  />
+                </div>
+              )}
             </div>
             <div style={{ width: 130 }}>
               <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', display: 'block', marginBottom: 4 }}>Time</label>
