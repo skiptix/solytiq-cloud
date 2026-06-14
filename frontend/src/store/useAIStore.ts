@@ -87,6 +87,7 @@ const useAIStore = create<AIStore>()((set) => ({
 export interface AIContext {
   view: string;
   listId?: string;
+  timelineId?: string;
   data: Record<string, unknown>;
 }
 
@@ -103,7 +104,6 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
     name: l.name,
     emoji: l.emoji ?? null,
     folder_id: l.folderId ?? null,
-    // Include section stubs for cross-list task creation
     sections: l.sections.map((s) => ({ section_id: s.id, label: s.label })),
   }));
   const foldersSnapshot = appStore.folders.map((f) => ({
@@ -111,6 +111,50 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
     name: f.name,
     emoji: f.emoji ?? null,
   }));
+  // Always include timelines stub so Sol can navigate/create milestones from any view
+  const timelinesSnapshot = appStore.timelines.map((t) => ({
+    id: t.id,
+    name: t.name,
+    emoji: t.emoji ?? null,
+    is_public: t.isPublic ?? false,
+    milestone_count: t.milestones.length,
+    done_count: t.milestones.filter(m => m.status === 'done').length,
+  }));
+
+  if (pathname.startsWith('/timeline/')) {
+    const timelineId = pathname.split('/timeline/')[1];
+    const tl = appStore.timelines.find((t) => t.id === timelineId);
+    if (tl) {
+      const total = tl.milestones.length;
+      const done = tl.milestones.filter(m => m.status === 'done').length;
+      return {
+        view: 'timeline',
+        timelineId,
+        data: {
+          timeline_id: tl.id,
+          timeline_name: tl.name,
+          timeline_subtitle: tl.subtitle ?? null,
+          is_public: tl.isPublic ?? false,
+          layout: tl.layout,
+          progress: { total, done, pct: total > 0 ? Math.round((done / total) * 100) : 0 },
+          milestones: tl.milestones.map(m => ({
+            id: m.id,
+            title: m.title,
+            date: m.date ?? null,
+            time: m.time ?? null,
+            status: m.status,
+            emoji: m.emoji ?? null,
+            color: m.color ?? null,
+            description: m.description ?? null,
+            position: m.position ?? 0,
+          })),
+          available_timelines: timelinesSnapshot,
+          available_lists: listsSnapshot,
+          available_folders: foldersSnapshot,
+        },
+      };
+    }
+  }
 
   if (pathname.startsWith('/list/')) {
     const listId = pathname.split('/list/')[1];
@@ -135,6 +179,7 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
               note: t.note ?? null,
             })),
           })),
+          available_timelines: timelinesSnapshot,
           available_lists: listsSnapshot,
           available_folders: foldersSnapshot,
         },
@@ -143,7 +188,6 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
   }
 
   if (pathname.startsWith('/gps')) {
-    // GPS files are provided via the optional gpsFiles param
     const gpsFiles = (appStore as unknown as { gpsFiles?: Array<{ id: string; name: string; fileType: string; metadata?: { totalDistance?: number; totalElevationGain?: number } }> }).gpsFiles ?? [];
     return {
       view: 'gps',
@@ -155,6 +199,7 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
           distanceKm: f.metadata?.totalDistance != null ? Math.round(f.metadata.totalDistance / 100) / 10 : null,
           elevationGain: f.metadata?.totalElevationGain != null ? Math.round(f.metadata.totalElevationGain) : null,
         })),
+        available_timelines: timelinesSnapshot,
       },
     };
   }
@@ -175,7 +220,7 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
       .map((t) => ({ id: t.id, title: t.title, priority: t.priority ?? null, list_name: t.list_name, list_id: t.list_id }));
     return {
       view: 'calendar',
-      data: { today, scheduled_tasks: scheduled, unscheduled_tasks: unscheduled, available_lists: listsSnapshot, available_folders: foldersSnapshot },
+      data: { today, scheduled_tasks: scheduled, unscheduled_tasks: unscheduled, available_timelines: timelinesSnapshot, available_lists: listsSnapshot, available_folders: foldersSnapshot },
     };
   }
 
@@ -197,7 +242,7 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
 
   return {
     view: 'dashboard',
-    data: { today, overdue_tasks: overdue, due_today_tasks: dueToday, upcoming_tasks: upcoming, no_deadline_tasks: noDeadline, available_lists: listsSnapshot, available_folders: foldersSnapshot },
+    data: { today, overdue_tasks: overdue, due_today_tasks: dueToday, upcoming_tasks: upcoming, no_deadline_tasks: noDeadline, available_timelines: timelinesSnapshot, available_lists: listsSnapshot, available_folders: foldersSnapshot },
   };
 }
 
@@ -205,11 +250,15 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
 
 export function buildSystemPrompt(ctx: AIContext, username: string, workspaces?: Array<{ id: string; name: string; role: string }>, currentWorkspaceId?: string | null): string {
   const today = toIso(new Date());
+  const tlProgress = ctx.view === 'timeline'
+    ? ` — ${(ctx.data.progress as { done: number; total: number } | undefined)?.done ?? 0}/${(ctx.data.progress as { done: number; total: number } | undefined)?.total ?? 0} milestones done`
+    : '';
   const viewDescriptions: Record<string, string> = {
     dashboard: 'Dashboard — personal quick-add task list with deadlines and priorities',
     list: `List — "${(ctx.data.list_name as string) ?? 'unknown'}" with multiple sections containing tasks`,
     calendar: 'Calendar — calendar view showing tasks with and without deadlines',
     gps: 'GPS Routes — route/workout file manager for .GPX and .FIT files',
+    timeline: `Timeline — "${(ctx.data.timeline_name as string) ?? 'unknown'}"${tlProgress}`,
   };
 
   const contextJson = JSON.stringify(ctx.data, null, 2);
@@ -246,6 +295,9 @@ Guidelines:
 - CROSS-LIST TASKS: You can create tasks in any list using create_task_in_list — use available_lists to find list IDs and their sections. For newly created lists, use the section_id returned in the create_list tool result
 - SORTING/REORDERING: To sort tasks in a section, call reorder_tasks_in_section with all task IDs in the desired order. To move a task to a different section, call move_task_to_section. To reorder sections themselves, call reorder_sections. Always use actual task/section IDs from the context — never guess IDs.
 - WORKSPACES: You can create workspaces (create_workspace), rename/update them (update_workspace), or delete them (delete_workspace). ALWAYS ask the user to confirm before deleting a workspace. You can also manage members with add_workspace_member and remove_workspace_member
+- TIMELINES: You can create timelines (create_timeline), update/rename them (update_timeline), delete them (delete_timeline — ALWAYS confirm first). Navigate to a specific timeline with navigate_to_timeline using its ID from available_timelines. When on a timeline page you can add milestones (add_milestone), edit them (update_milestone), delete them (delete_milestone — confirm first), and reorder them (reorder_milestones).
+- MILESTONE STATUS: valid values are 'upcoming', 'in-progress', 'done'. Milestone dates use YYYY-MM-DD format. Color can be a hex string (e.g. "#10B981") or null for auto.
+- TIMELINE IDs: Always use exact timeline_id strings from available_timelines. Milestone IDs come from the milestones array in the current context.
 - If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}`;
 }
 
@@ -921,6 +973,165 @@ export function buildTools(ctx: AIContext, workspaceId?: string | null, workspac
             output_name: { type: 'string', description: 'Name for the new file (only used when mode = "new")' },
           },
           required: ['route_id', 'sigma', 'mode'],
+        },
+      },
+    });
+  }
+
+  // ── Timeline tools (global — available from every view) ──────────────────
+  const timelinesForTools = (ctx.data.available_timelines as Array<{ id: string; name: string }> ?? []);
+  const timelineListStr = timelinesForTools.map(t => `"${t.name}" (id: ${t.id})`).join(', ') || 'none';
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'create_timeline',
+      description: 'Create a new timeline to track milestones and project progress.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Timeline name' },
+          emoji: { type: 'string', description: 'Optional emoji icon (e.g. 🚀)' },
+          subtitle: { type: 'string', description: 'Optional subtitle / description shown below the name' },
+          color: { type: 'string', description: 'Accent color hex (e.g. "#5e4dbb")' },
+          layout: { type: 'string', enum: ['vertical', 'compact', 'detailed'], description: 'Display density (default: vertical)' },
+          is_public: { type: 'boolean', description: 'true = public, false = private (default: false)' },
+          folder_id: { type: 'string', description: `Optional folder ID to place the timeline in. Available folders: ${folderList}` },
+        },
+        required: ['name'],
+      },
+    },
+  });
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'update_timeline',
+      description: `Update a timeline's name, emoji, subtitle, color, layout, or visibility. Available timelines: ${timelineListStr}`,
+      parameters: {
+        type: 'object',
+        properties: {
+          timeline_id: { type: 'string', description: 'ID of the timeline to update' },
+          name: { type: 'string', description: 'New name' },
+          emoji: { type: 'string', description: 'New emoji icon' },
+          subtitle: { type: 'string', description: 'New subtitle' },
+          color: { type: 'string', description: 'New accent color hex' },
+          layout: { type: 'string', enum: ['vertical', 'compact', 'detailed'] },
+          is_public: { type: 'boolean', description: 'true = public, false = private' },
+        },
+        required: ['timeline_id'],
+      },
+    },
+  });
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'delete_timeline',
+      description: `Permanently delete a timeline and all its milestones. ALWAYS ask the user to confirm before calling this. Available timelines: ${timelineListStr}`,
+      parameters: {
+        type: 'object',
+        properties: {
+          timeline_id: { type: 'string', description: 'ID of the timeline to delete' },
+        },
+        required: ['timeline_id'],
+      },
+    },
+  });
+
+  tools.push({
+    type: 'function',
+    function: {
+      name: 'navigate_to_timeline',
+      description: `Navigate the app to a specific timeline page. Use this when the user asks to open or go to a timeline. Available timelines: ${timelineListStr}`,
+      parameters: {
+        type: 'object',
+        properties: {
+          timeline_id: { type: 'string', description: 'ID of the timeline to navigate to' },
+        },
+        required: ['timeline_id'],
+      },
+    },
+  });
+
+  // ── Milestone tools (scoped to timeline view) ─────────────────────────────
+  if (ctx.view === 'timeline' && ctx.timelineId) {
+    const milestoneList = (ctx.data.milestones as Array<{ id: string; title: string; status: string }> ?? [])
+      .map(m => `"${m.title}" (id: ${m.id}, status: ${m.status})`).join(', ') || 'none';
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'add_milestone',
+        description: `Add a new milestone to the current timeline ("${ctx.data.timeline_name as string}").`,
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Milestone title' },
+            date: { type: 'string', description: 'Date YYYY-MM-DD (optional)' },
+            time: { type: 'string', description: 'Time HH:MM (optional)' },
+            status: { type: 'string', enum: ['upcoming', 'in-progress', 'done'], description: 'Default: upcoming' },
+            emoji: { type: 'string', description: 'Optional emoji (e.g. 🎯)' },
+            color: { type: 'string', description: 'Optional accent color hex or null for auto' },
+            description: { type: 'string', description: 'Optional notes / description' },
+          },
+          required: ['title'],
+        },
+      },
+    });
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'update_milestone',
+        description: `Edit an existing milestone. Current milestones: ${milestoneList}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            milestone_id: { type: 'string', description: 'ID of the milestone to update' },
+            title: { type: 'string', description: 'New title' },
+            date: { type: 'string', description: 'New date YYYY-MM-DD, or empty string to remove' },
+            time: { type: 'string', description: 'New time HH:MM, or empty string to remove' },
+            status: { type: 'string', enum: ['upcoming', 'in-progress', 'done'] },
+            emoji: { type: 'string', description: 'New emoji, or empty string to remove' },
+            color: { type: 'string', description: 'New color hex, or empty string for auto' },
+            description: { type: 'string', description: 'New notes' },
+          },
+          required: ['milestone_id'],
+        },
+      },
+    });
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'delete_milestone',
+        description: `Delete a milestone. Confirm with the user first. Current milestones: ${milestoneList}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            milestone_id: { type: 'string', description: 'ID of the milestone to delete' },
+          },
+          required: ['milestone_id'],
+        },
+      },
+    });
+
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'reorder_milestones',
+        description: `Set the display order of milestones. Pass ALL milestone IDs in the desired order. Current milestones: ${milestoneList}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            milestone_ids: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'All milestone IDs in the desired order (first = top)',
+            },
+          },
+          required: ['milestone_ids'],
         },
       },
     });

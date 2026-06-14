@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import useAIStore, {
   buildContext,
   buildSystemPrompt,
@@ -43,6 +43,13 @@ import {
   apiRenameGpsFile,
   apiSmoothAndSaveGpsFile,
   apiCombineGpsFiles,
+  apiCreateTimeline,
+  apiUpdateTimeline,
+  apiDeleteTimeline,
+  apiCreateMilestone,
+  apiUpdateMilestone,
+  apiDeleteMilestone,
+  apiReorderMilestones,
 } from '../../api/client';
 import useGpsStore from '../../store/useGpsStore';
 import AIBubble from './AIBubble';
@@ -84,6 +91,7 @@ export default function AIAssistant() {
   const appStore = useAppStore();
   const { username, userId } = useAuthStore();
   const workspaceStore = useWorkspaceStore();
+  const navigate = useNavigate();
   const thinkingIdRef = useRef<string | null>(null);
 
   // Load AI settings once
@@ -689,6 +697,129 @@ export default function AIAssistant() {
           } catch (e) { return { id: call.id, name, result: `Error: ${e}` }; }
         }
 
+        // ── Timeline management ───────────────────────────────────
+        if (name === 'create_timeline') {
+          const timelineId = `timeline_${crypto.randomUUID()}`;
+          const res = await apiCreateTimeline({
+            id: timelineId,
+            name: args.name as string,
+            emoji: (args.emoji as string) || undefined,
+            subtitle: (args.subtitle as string) || undefined,
+            color: (args.color as string) || undefined,
+            layout: (args.layout as 'vertical' | 'compact' | 'detailed') || 'vertical',
+            isPublic: args.is_public !== undefined ? (args.is_public as boolean) : false,
+            folderId: (args.folder_id as string) || undefined,
+            workspaceId: workspaceStore.currentWorkspaceId ?? undefined,
+            milestones: [],
+          });
+          appStore.setTimelines((prev) => [...prev, res.timeline]);
+          return { id: call.id, name, result: `Created timeline "${res.timeline.name}" (timeline_id: ${res.timeline.id})`, summary: `Created timeline "${res.timeline.name}"` };
+        }
+
+        if (name === 'update_timeline') {
+          const timelineId = args.timeline_id as string;
+          const updates: Record<string, unknown> = {};
+          if (args.name !== undefined) updates.name = args.name;
+          if (args.emoji !== undefined) updates.emoji = args.emoji;
+          if (args.subtitle !== undefined) updates.subtitle = args.subtitle;
+          if (args.color !== undefined) updates.color = args.color;
+          if (args.layout !== undefined) updates.layout = args.layout;
+          if (args.is_public !== undefined) updates.isPublic = args.is_public;
+          const res = await apiUpdateTimeline(timelineId, updates as Parameters<typeof apiUpdateTimeline>[1]);
+          appStore.updateTimeline(timelineId, updates as Parameters<typeof appStore.updateTimeline>[1]);
+          const tlName = appStore.timelines.find(t => t.id === timelineId)?.name ?? timelineId;
+          return { id: call.id, name, result: `Updated timeline "${res.timeline.name}"`, summary: `Updated timeline "${args.name ?? tlName}"` };
+        }
+
+        if (name === 'delete_timeline') {
+          const timelineId = args.timeline_id as string;
+          const tl = appStore.timelines.find(t => t.id === timelineId);
+          await apiDeleteTimeline(timelineId);
+          appStore.deleteTimeline(timelineId);
+          return { id: call.id, name, result: `Deleted timeline "${tl?.name ?? timelineId}"`, summary: `Deleted timeline "${tl?.name ?? timelineId}"` };
+        }
+
+        if (name === 'navigate_to_timeline') {
+          const timelineId = args.timeline_id as string;
+          const tl = appStore.timelines.find(t => t.id === timelineId);
+          if (!tl) return { id: call.id, name, result: `Error: timeline ${timelineId} not found` };
+          navigate(`/timeline/${timelineId}`);
+          return { id: call.id, name, result: `Navigated to timeline "${tl.name}"`, summary: `Opened "${tl.name}"` };
+        }
+
+        // ── Milestone management ──────────────────────────────────
+        if (name === 'add_milestone') {
+          const timelineId = ctx.timelineId!;
+          const milestoneId = `milestone_${crypto.randomUUID()}`;
+          const res = await apiCreateMilestone(timelineId, {
+            id: milestoneId,
+            title: args.title as string,
+            date: (args.date as string) || null,
+            time: (args.time as string) || null,
+            status: (args.status as 'upcoming' | 'in-progress' | 'done') || 'upcoming',
+            emoji: (args.emoji as string) || null,
+            color: (args.color as string) || null,
+            description: (args.description as string) || null,
+          });
+          appStore.setTimelines((prev) =>
+            prev.map(t =>
+              t.id !== timelineId ? t : { ...t, milestones: [...t.milestones, res.milestone] }
+            )
+          );
+          return { id: call.id, name, result: `Added milestone "${res.milestone.title}" (id: ${res.milestone.id})`, summary: `Added milestone "${res.milestone.title}"` };
+        }
+
+        if (name === 'update_milestone') {
+          const milestoneId = args.milestone_id as string;
+          const timelineId = ctx.timelineId!;
+          const updates: Record<string, unknown> = {};
+          if (args.title !== undefined) updates.title = args.title;
+          if (args.date !== undefined) updates.date = (args.date as string) || null;
+          if (args.time !== undefined) updates.time = (args.time as string) || null;
+          if (args.status !== undefined) updates.status = args.status;
+          if (args.emoji !== undefined) updates.emoji = (args.emoji as string) || null;
+          if (args.color !== undefined) updates.color = (args.color as string) || null;
+          if (args.description !== undefined) updates.description = args.description;
+          await apiUpdateMilestone(milestoneId, updates as Parameters<typeof apiUpdateMilestone>[1]);
+          appStore.setTimelines((prev) =>
+            prev.map(t =>
+              t.id !== timelineId ? t :
+              { ...t, milestones: t.milestones.map(m => m.id === milestoneId ? { ...m, ...updates } : m) }
+            )
+          );
+          const m = appStore.timelines.find(t => t.id === timelineId)?.milestones.find(m => m.id === milestoneId);
+          return { id: call.id, name, result: `Updated milestone "${m?.title ?? milestoneId}"`, summary: `Updated milestone "${updates.title ?? m?.title ?? milestoneId}"` };
+        }
+
+        if (name === 'delete_milestone') {
+          const milestoneId = args.milestone_id as string;
+          const timelineId = ctx.timelineId!;
+          const m = appStore.timelines.find(t => t.id === timelineId)?.milestones.find(m => m.id === milestoneId);
+          await apiDeleteMilestone(milestoneId);
+          appStore.setTimelines((prev) =>
+            prev.map(t =>
+              t.id !== timelineId ? t : { ...t, milestones: t.milestones.filter(m => m.id !== milestoneId) }
+            )
+          );
+          return { id: call.id, name, result: `Deleted milestone "${m?.title ?? milestoneId}"`, summary: `Deleted milestone "${m?.title ?? milestoneId}"` };
+        }
+
+        if (name === 'reorder_milestones') {
+          const timelineId = ctx.timelineId!;
+          const milestoneIds = args.milestone_ids as string[];
+          await apiReorderMilestones(timelineId, milestoneIds);
+          appStore.setTimelines((prev) =>
+            prev.map(t => {
+              if (t.id !== timelineId) return t;
+              const ordered = milestoneIds
+                .map(id => t.milestones.find(m => m.id === id))
+                .filter((m): m is NonNullable<typeof m> => m !== undefined);
+              return { ...t, milestones: ordered };
+            })
+          );
+          return { id: call.id, name, result: `Reordered ${milestoneIds.length} milestones`, summary: `Reordered milestones` };
+        }
+
         return { id: call.id, name, result: `Unknown tool: ${name}` };
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -696,7 +827,7 @@ export default function AIAssistant() {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [appStore, workspaceStore]
+    [appStore, workspaceStore, navigate]
   );
 
   // ── Send message ─────────────────────────────────────────────
