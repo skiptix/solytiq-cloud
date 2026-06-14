@@ -385,7 +385,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
             {/* ── PREFERENCES ── */}
             <div style={{ animation: 'sectionFadeUp 340ms 40ms cubic-bezier(0.22,1,0.36,1) both' }}>
               {sectionLabel('Preferences')}
-              <div style={card}>
+              <div style={{ ...card, overflow: 'visible' }}>
                 <div style={{ padding: '14px 18px' }}>
                   <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Timezone</div>
                   <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginBottom: 10, lineHeight: 1.5 }}>
