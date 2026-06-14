@@ -6,7 +6,7 @@ import useWorkspaceStore from '../store/useWorkspaceStore';
 import WorkspaceWizard from '../modals/WorkspaceWizard';
 import WorkspaceSettingsModal from '../modals/WorkspaceSettingsModal';
 import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSettingsModal';
-import { apiGetGpsFiles } from '../api/client';
+import { apiGetGpsFiles, apiReorderTimelines } from '../api/client';
 
 const MINI = 60;
 
@@ -286,9 +286,14 @@ interface TimelineItemRowProps {
   collapsed: boolean;
   indented?: boolean;
   folders: Folder[];
+  dragOverId?: string | null;
   onNavigate: (path: string) => void;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragLeave?: () => void;
+  onDrop?: (e: React.DragEvent) => void;
 }
-function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, onNavigate }: TimelineItemRowProps) {
+function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dragOverId, onNavigate, onDragStart, onDragOver, onDragLeave, onDrop }: TimelineItemRowProps) {
   const [hov, setHov] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -342,8 +347,13 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, onN
   return (
     <>
       <div
+        draggable={!collapsed && !editingName}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
         onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, position: 'relative', paddingLeft: indented ? 8 : 0 }}>
+        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, position: 'relative', paddingLeft: indented ? 8 : 0, borderTop: dragOverId === timeline.id ? '2px solid #9d8dff' : '2px solid transparent', transition: 'border-color 120ms' }}>
 
         {editingName && !collapsed ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '4px 8px', animation: 'menuItemIn 140ms ease both' }}>
@@ -386,6 +396,9 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, onN
             >
               <Icon name="more_vert" size={15} color="#9d8dff" />
             </button>
+            <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
+              <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+            </div>
           </div>
         )}
       </div>
@@ -480,6 +493,7 @@ interface FolderRowProps {
   activeFolderId?: string;
   collapsed: boolean;
   dragOverId: string | null;
+  dragOverTimelineId: string | null;
   dragOverFolderId: string | null;
   dragOverFolderReorderId: string | null;
   dragOverTaskListId: string | null;
@@ -490,6 +504,10 @@ interface FolderRowProps {
   onListDragOver: (listId: string, e: React.DragEvent) => void;
   onListDragLeave: () => void;
   onListDrop: (listId: string, e: React.DragEvent) => void;
+  onTimelineDragStart: (timelineId: string, e: React.DragEvent) => void;
+  onTimelineDragOver: (timelineId: string, e: React.DragEvent) => void;
+  onTimelineDragLeave: () => void;
+  onTimelineDrop: (timelineId: string, e: React.DragEvent) => void;
   onFolderDragStart: (folderId: string, e: React.DragEvent) => void;
   onFolderDragOver: (folderId: string, e: React.DragEvent) => void;
   onFolderDragLeave: () => void;
@@ -498,7 +516,7 @@ interface FolderRowProps {
   onFolderReorderDragLeave: () => void;
   onFolderReorderDrop: (folderId: string, e: React.DragEvent) => void;
 }
-function FolderRow({ folder, lists, timelines, active, activeListId, activeTimelineId, activeFolderId, collapsed, dragOverId, dragOverFolderId, dragOverFolderReorderId, dragOverTaskListId, recentlyDroppedListId, allFolders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop, onFolderDragStart, onFolderDragOver, onFolderDragLeave, onFolderDrop, onFolderReorderDragOver, onFolderReorderDragLeave, onFolderReorderDrop }: FolderRowProps) {
+function FolderRow({ folder, lists, timelines, active, activeListId, activeTimelineId, activeFolderId, collapsed, dragOverId, dragOverTimelineId, dragOverFolderId, dragOverFolderReorderId, dragOverTaskListId, recentlyDroppedListId, allFolders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop, onTimelineDragStart, onTimelineDragOver, onTimelineDragLeave, onTimelineDrop, onFolderDragStart, onFolderDragOver, onFolderDragLeave, onFolderDrop, onFolderReorderDragOver, onFolderReorderDragLeave, onFolderReorderDrop }: FolderRowProps) {
   const [hov, setHov] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -671,7 +689,12 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
                 collapsed={collapsed}
                 indented
                 folders={allFolders}
+                dragOverId={dragOverTimelineId}
                 onNavigate={onNavigate}
+                onDragStart={e => onTimelineDragStart(timeline.id, e)}
+                onDragOver={e => onTimelineDragOver(timeline.id, e)}
+                onDragLeave={onTimelineDragLeave}
+                onDrop={e => onTimelineDrop(timeline.id, e)}
               />
             );
           })}
@@ -985,6 +1008,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   const [folderHov, setFolderHov] = useState(false);
   const [handleHov, setHandleHov] = useState(false);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [dragOverTimelineId, setDragOverTimelineId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [dragOverFolderReorderId, setDragOverFolderReorderId] = useState<string | null>(null);
   const [dragOverTaskListId, setDragOverTaskListId] = useState<string | null>(null);
@@ -996,10 +1020,10 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsSearch, setGpsSearch] = useState('');
 
-  const { folders, timelines, addFolder, updateList, updateFolder, setFolders } = useAppStore();
+  const { folders, timelines, addFolder, updateList, updateFolder, updateTimeline, setFolders, setTimelines, loadFromApi } = useAppStore();
 
   useEffect(() => {
-    const clearTaskDrag = () => setDragOverTaskListId(null);
+    const clearTaskDrag = () => { setDragOverTaskListId(null); setDragOverTimelineId(null); };
     document.addEventListener('dragend', clearTaskDrag);
     return () => document.removeEventListener('dragend', clearTaskDrag);
   }, []);
@@ -1046,8 +1070,49 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
     if (listId) {
       updateList(listId, { folderId });
       setDragOverFolderId(null);
+      return;
     }
-  }, [updateList]);
+    const timelineId = e.dataTransfer.getData('timelineId');
+    if (timelineId) {
+      updateTimeline(timelineId, { folderId });
+      setDragOverFolderId(null);
+    }
+  }, [updateList, updateTimeline]);
+
+  // Reorder timelines (and move them between scopes) by dropping one onto another.
+  // The dragged timeline inherits the drop target's folder, so dropping onto a
+  // timeline inside a folder moves it in, and onto a root timeline moves it out.
+  const handleTimelineReorderDrop = useCallback((toId: string, e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverTimelineId(null);
+    const fromId = e.dataTransfer.getData('timelineId');
+    if (!fromId || fromId === toId) return;
+
+    const arr = [...timelines];
+    const fromIdx = arr.findIndex(t => t.id === fromId);
+    const target = arr.find(t => t.id === toId);
+    if (fromIdx === -1 || !target) return;
+
+    const [moved] = arr.splice(fromIdx, 1);
+    const insertIdx = arr.findIndex(t => t.id === toId);
+    arr.splice(insertIdx, 0, { ...moved, folderId: target.folderId });
+    const reordered = arr.map((t, i) => ({ ...t, position: i }));
+    setTimelines(reordered);
+
+    const folderChanged = (moved.folderId ?? null) !== (target.folderId ?? null);
+    if (folderChanged) updateTimeline(moved.id, { folderId: target.folderId ?? null } as Partial<Timeline>);
+    apiReorderTimelines(reordered.map(t => t.id)).catch(() => loadFromApi());
+  }, [timelines, setTimelines, updateTimeline, loadFromApi]);
+
+  const timelineDragHandlers = {
+    onTimelineDragStart: (timelineId: string, e: React.DragEvent) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('timelineId', timelineId); },
+    onTimelineDragOver: (timelineId: string, e: React.DragEvent) => {
+      if (e.dataTransfer.types.includes('timelineid')) { e.preventDefault(); setDragOverTimelineId(timelineId); }
+    },
+    onTimelineDragLeave: () => setDragOverTimelineId(null),
+    onTimelineDrop: handleTimelineReorderDrop,
+  };
 
   const onFolderReorderDrop = useCallback((toId: string, e: React.DragEvent) => {
     e.preventDefault();
@@ -1198,7 +1263,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.10.1
+              v1.11.0
             </div>
           )}
         </div>
@@ -1288,12 +1353,14 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
               activeFolderId={activeFolderId}
               collapsed={collapsed}
               dragOverId={dragOverId}
+              dragOverTimelineId={dragOverTimelineId}
               dragOverFolderId={dragOverFolderId}
               dragOverFolderReorderId={dragOverFolderReorderId}
               dragOverTaskListId={dragOverTaskListId}
               recentlyDroppedListId={recentlyDroppedListId}
               allFolders={folders}
               onNavigate={onNavigate}
+              {...timelineDragHandlers}
               onListDragStart={(listId, e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('listId', listId); }}
               onListDragOver={(listId, e) => {
                 if (e.dataTransfer.types.includes('dashtaskid')) {
@@ -1310,8 +1377,8 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
               onListDrop={(listId, e) => handleListDrop(listId, e)}
               onFolderDragStart={(folderId, e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('folderId', folderId); }}
               onFolderDragOver={(folderId, e) => {
-                const listId = e.dataTransfer.types.includes('listid');
-                if (listId) {
+                const canDrop = e.dataTransfer.types.includes('listid') || e.dataTransfer.types.includes('timelineid');
+                if (canDrop) {
                   e.preventDefault();
                   setDragOverFolderId(folderId);
                 }
@@ -1374,7 +1441,12 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
             isActive={active === 'timeline' && activeTimelineId === timeline.id}
             collapsed={collapsed}
             folders={folders}
+            dragOverId={dragOverTimelineId}
             onNavigate={onNavigate}
+            onDragStart={e => timelineDragHandlers.onTimelineDragStart(timeline.id, e)}
+            onDragOver={e => timelineDragHandlers.onTimelineDragOver(timeline.id, e)}
+            onDragLeave={timelineDragHandlers.onTimelineDragLeave}
+            onDrop={e => timelineDragHandlers.onTimelineDrop(timeline.id, e)}
           />
         ))}
       </div>
@@ -1384,7 +1456,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.10.1
+            v1.11.0
           </div>
         )}
       </div>

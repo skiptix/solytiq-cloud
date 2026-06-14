@@ -97,6 +97,23 @@ export interface TrashedTimeline {
   expiresAt: string;
 }
 
+// A milestone enriched with its parent timeline's context, as returned by the
+// /timelines/upcoming endpoint that powers the dashboard "Upcoming" widget.
+export interface UpcomingMilestone {
+  id: string;
+  timelineId: string;
+  title: string;
+  description?: string | null;
+  date?: string | null;      // YYYY-MM-DD
+  time?: string | null;      // HH:MM
+  status: MilestoneStatus;
+  emoji?: string | null;
+  color?: string | null;
+  timelineName: string;
+  timelineEmoji?: string | null;
+  timelineColor?: string | null;
+}
+
 export interface Workspace {
   id: string;
   name: string;
