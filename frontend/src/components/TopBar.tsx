@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { Task, List } from '../types';
 import Icon from './Icon';
 import useAuthStore from '../store/useAuthStore';
-import { apiUpdateProfile, apiUploadProfileImage } from '../api/client';
+import { apiUpdateProfile, apiUploadProfileImage, apiUploadFile } from '../api/client';
 import UserSettingsModal from '../modals/UserSettingsModal';
 
 interface TopBarProps {
@@ -65,6 +65,54 @@ export default function TopBar({ tasks, lists, onNavigate }: TopBarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const initials = (fullName || username || 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+  // File drag-to-upload state
+  const [fileDragActive, setFileDragActive] = useState(false);
+  const [fileDropHover, setFileDropHover] = useState(false);
+  const [fileUploadProgress, setFileUploadProgress] = useState<number | null>(null);
+  const [fileUploadDone, setFileUploadDone] = useState(false);
+
+  useEffect(() => {
+    const onEnter = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes('Files')) setFileDragActive(true);
+    };
+    const onLeave = (e: DragEvent) => {
+      if (!e.relatedTarget) setFileDragActive(false);
+    };
+    const onEnd = () => setFileDragActive(false);
+    document.addEventListener('dragenter', onEnter);
+    document.addEventListener('dragleave', onLeave);
+    document.addEventListener('drop', onEnd);
+    document.addEventListener('dragend', onEnd);
+    return () => {
+      document.removeEventListener('dragenter', onEnter);
+      document.removeEventListener('dragleave', onLeave);
+      document.removeEventListener('drop', onEnd);
+      document.removeEventListener('dragend', onEnd);
+    };
+  }, []);
+
+  const handleFileAreaDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileDragActive(false);
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    setFileUploadProgress(0);
+    try {
+      await apiUploadFile(file, { isPublic: false }, pct => setFileUploadProgress(pct));
+      setFileUploadDone(true);
+      setTimeout(() => {
+        setFileUploadProgress(null);
+        setFileUploadDone(false);
+        setFileDropHover(false);
+        onNavigate('/files');
+      }, 900);
+    } catch {
+      setFileUploadProgress(null);
+      setFileDropHover(false);
+    }
+  }, [onNavigate]);
 
   // Close profile dropdown on outside click
   useEffect(() => {
@@ -334,16 +382,76 @@ export default function TopBar({ tasks, lists, onNavigate }: TopBarProps) {
             <Icon name="route" size={17} color="#787584" />
           </button>
 
-          {/* Files button */}
-          <button
-            onClick={() => onNavigate('/files')}
-            title="Files"
-            style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid #e8e4f0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.borderColor = '#c4b8f0'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#e8e4f0'; }}
+          {/* Files button + drag-to-upload */}
+          <div
+            style={{ position: 'relative' }}
+            onDragEnter={e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setFileDropHover(true); } }}
+            onDragLeave={e => {
+              if (fileUploadProgress !== null) return;
+              if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setFileDropHover(false);
+            }}
+            onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }}
+            onDrop={handleFileAreaDrop}
           >
-            <Icon name="folder_shared" size={17} color="#787584" />
-          </button>
+            <button
+              onClick={() => onNavigate('/files')}
+              title="Files"
+              style={{
+                width: 32, height: 32, borderRadius: '50%', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 200ms',
+                background: fileDropHover ? '#ede9ff' : (fileDragActive ? '#f5f3ff' : 'transparent'),
+                border: fileDropHover ? '1.5px solid #5e4dbb' : (fileDragActive ? '1px solid #c4b8f0' : '1px solid #e8e4f0'),
+                boxShadow: fileDropHover ? '0 0 0 3px rgba(94,77,187,0.18)' : 'none',
+                animation: fileDragActive && !fileDropHover ? 'filesBtnPulse 1.4s ease infinite' : undefined,
+              }}
+              onMouseEnter={e => { if (!fileDragActive) { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.borderColor = '#c4b8f0'; } }}
+              onMouseLeave={e => { if (!fileDragActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#e8e4f0'; } }}
+            >
+              <Icon name="folder_shared" size={17} color={fileDropHover || fileDragActive ? '#5e4dbb' : '#787584'} />
+            </button>
+
+            {fileDropHover && (
+              <div style={{ position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: 220, background: '#fff', borderRadius: 14, boxShadow: '0 8px 32px rgba(94,77,187,0.18)', border: '1.5px solid #c4b8f0', zIndex: 400, animation: 'fileDropPanelIn 220ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+                {fileUploadProgress === null ? (
+                  <div style={{ padding: '18px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 46, height: 46, borderRadius: 13, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fileDropIconFloat 1.6s ease infinite' }}>
+                      <Icon name="cloud_upload" size={24} color="#5e4dbb" />
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 700, color: '#1c1b22', textAlign: 'center' }}>Drop to upload</div>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#9d96aa', textAlign: 'center', marginTop: 3 }}>Adds file to your Files</div>
+                    </div>
+                  </div>
+                ) : fileUploadDone ? (
+                  <div style={{ padding: '18px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 46, height: 46, borderRadius: 13, background: '#e8f5e9', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fileUploadDone 380ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                      <Icon name="check" size={22} color="#2e7d32" />
+                    </div>
+                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22' }}>Uploaded!</div>
+                  </div>
+                ) : (
+                  <div style={{ padding: '16px' }}>
+                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#1c1b22', marginBottom: 8 }}>Uploading…</div>
+                    <div style={{ height: 5, borderRadius: 9999, background: '#f0ecf8', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${fileUploadProgress}%`, background: 'linear-gradient(90deg, #9d8dff, #5e4dbb)', borderRadius: 9999, transition: 'width 150ms ease' }} />
+                    </div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#9d96aa', marginTop: 5, textAlign: 'right' }}>{fileUploadProgress}%</div>
+                  </div>
+                )}
+                {fileUploadProgress === null && (
+                  <div style={{ borderTop: '1px solid #f0ecf8', padding: '8px 12px' }}>
+                    <button
+                      onClick={() => { setFileDropHover(false); onNavigate('/files'); }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: 'transparent', border: 'none', cursor: 'pointer', padding: '3px 0' }}
+                    >
+                      <Icon name="open_in_new" size={12} color="#5e4dbb" />
+                      Open Files
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Profile avatar + dropdown */}
           <div ref={profileDropRef} style={{ position: 'relative' }}>
