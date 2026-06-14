@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { Timeline, TimelineLayout, MilestoneStatus } from '../types';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
@@ -6,6 +6,7 @@ import { apiCreateTimeline, apiCreateMilestone } from '../api/client';
 import { genId } from '../utils/id';
 import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
+import CalendarPicker from '../components/CalendarPicker';
 
 const COLORS = [
   { color: '#5e4dbb', bg: '#F5F3FF' },
@@ -27,6 +28,17 @@ const MILESTONE_STATUSES: Array<{ key: MilestoneStatus; label: string; color: st
   { key: 'in-progress', label: 'In progress', color: '#ea580c', icon: 'pending' },
   { key: 'done', label: 'Done', color: '#10B981', icon: 'check_circle' },
 ];
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function fmtDate(date?: string | null) {
+  if (!date) return null;
+  const parts = date.split('-');
+  if (parts.length !== 3) return date;
+  const [y, m, d] = parts.map(Number);
+  if (!m || !d) return date;
+  return `${MONTHS[m - 1]} ${d}, ${y}`;
+}
 
 interface MilestoneDraft {
   id: string;
@@ -60,6 +72,18 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
   const [mDesc, setMDesc] = useState('');
   const [mStatus, setMStatus] = useState<MilestoneStatus>('upcoming');
   const [mEmoji, setMEmoji] = useState('📍');
+  const [showCal, setShowCal] = useState(false);
+  const calRef = useRef<HTMLDivElement>(null);
+
+  // Close calendar on outside click
+  useEffect(() => {
+    if (!showCal) return;
+    const handler = (e: MouseEvent) => {
+      if (calRef.current && !calRef.current.contains(e.target as Node)) setShowCal(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showCal]);
 
   const [loading, setLoading] = useState(false);
   const [createError, setCreateError] = useState('');
@@ -280,10 +304,25 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
                     onFocus={e => (e.target.style.borderColor = selectedColor.color)} onBlur={e => (e.target.style.borderColor = '#e8e4f0')} />
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, position: 'relative' }} ref={calRef}>
                     <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10.5, fontWeight: 600, color: '#787584', display: 'block', marginBottom: 3 }}>Date</label>
-                    <input type="date" value={mDate} onChange={e => setMDate(e.target.value)}
-                      style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none', background: '#fff', color: '#1c1b22' }} />
+                    <button
+                      type="button"
+                      onClick={() => setShowCal(v => !v)}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${showCal ? selectedColor.color : '#e8e4f0'}`, background: '#fff', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: mDate ? '#1c1b22' : '#b0acbe', transition: 'border-color 150ms', textAlign: 'left' }}
+                    >
+                      <Icon name="calendar_today" size={14} color={mDate ? selectedColor.color : '#c9c4d5'} />
+                      {mDate ? fmtDate(mDate) : 'dd.mm.yyyy'}
+                    </button>
+                    {showCal && (
+                      <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50 }}>
+                        <CalendarPicker
+                          value={mDate || undefined}
+                          onChange={d => { setMDate(d); setShowCal(false); }}
+                          onClear={() => { setMDate(''); setShowCal(false); }}
+                        />
+                      </div>
+                    )}
                   </div>
                   <div style={{ width: 120 }}>
                     <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10.5, fontWeight: 600, color: '#787584', display: 'block', marginBottom: 3 }}>Time</label>
