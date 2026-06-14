@@ -1,0 +1,517 @@
+import { Router, Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
+import { query, withTransaction } from '../db';
+import { authenticate } from '../middleware';
+import { broadcastToUser } from '../sse';
+import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
+
+const router = Router();
+router.use(authenticate);
+
+// ---------------------------------------------------------------------------
+// Row types
+// ---------------------------------------------------------------------------
+
+interface TimelineRow {
+  id: string;
+  user_id: string;
+  name: string;
+  emoji: string | null;
+  color: string | null;
+  color_bg: string | null;
+  subtitle: string | null;
+  layout: string;
+  is_public: boolean;
+  folder_id: string | null;
+  workspace_id: string | null;
+  position: number;
+  created_at: string;
+}
+
+interface MilestoneRow {
+  id: string;
+  timeline_id: string;
+  title: string;
+  description: string | null;
+  milestone_date: string | null;
+  time_val: string | null;
+  status: string;
+  emoji: string | null;
+  color: string | null;
+  position: number;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Sanitizers
+// ---------------------------------------------------------------------------
+
+function sanitizeMilestone(m: MilestoneRow) {
+  return {
+    id:          m.id,
+    timelineId:  m.timeline_id,
+    title:       m.title,
+    description: m.description,
+    date:        m.milestone_date,
+    time:        m.time_val,
+    status:      m.status,
+    emoji:       m.emoji,
+    color:       m.color,
+    position:    m.position,
+    createdAt:   m.created_at,
+  };
+}
+
+function sanitizeTimeline(t: TimelineRow, milestones: ReturnType<typeof sanitizeMilestone>[]) {
+  return {
+    id:          t.id,
+    userId:      t.user_id,
+    name:        t.name,
+    emoji:       t.emoji,
+    color:       t.color,
+    colorBg:     t.color_bg,
+    subtitle:    t.subtitle,
+    layout:      t.layout,
+    isPublic:    t.is_public,
+    folderId:    t.folder_id ?? undefined,
+    workspaceId: t.workspace_id ?? undefined,
+    position:    t.position,
+    createdAt:   t.created_at,
+    milestones,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Helper: build full timeline objects (timelines → milestones)
+// ---------------------------------------------------------------------------
+
+async function buildTimelinesForUser(userId: string, workspaceId?: string) {
+  const params: unknown[] = [userId];
+  const wsFilter = workspaceId
+    ? `AND (t.workspace_id = $2 OR t.workspace_id IS NULL)`
+    : '';
+  if (workspaceId) params.push(workspaceId);
+
+  // Mirrors the lists access model: owner always; public timelines visible to
+  // workspace members, to legacy NULL-workspace timelines, or in public workspaces.
+  const accessCondition = `(
+    t.user_id = $1
+    OR (t.is_public = true AND (
+      wm.user_id = $1
+      OR t.workspace_id IS NULL
+      OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = t.workspace_id AND w.visibility = 'public')
+    ))
+  )`;
+
+  const [timelinesResult, milestonesResult] = await Promise.all([
+    query<TimelineRow>(
+      `SELECT t.* FROM timelines t
+       LEFT JOIN workspace_members wm ON wm.workspace_id = t.workspace_id AND wm.user_id = $1
+       WHERE ${accessCondition}
+       ${wsFilter}
+       ORDER BY t.position ASC, t.created_at ASC`,
+      params
+    ),
+    query<MilestoneRow>(
+      `SELECT m.* FROM milestones m
+       JOIN timelines t ON m.timeline_id = t.id
+       LEFT JOIN workspace_members wm ON wm.workspace_id = t.workspace_id AND wm.user_id = $1
+       WHERE ${accessCondition}
+       ${wsFilter}
+       ORDER BY m.position ASC, m.milestone_date ASC NULLS LAST, m.created_at ASC`,
+      params
+    ),
+  ]);
+
+  const milestonesByTimeline: Record<string, ReturnType<typeof sanitizeMilestone>[]> = {};
+  for (const m of milestonesResult.rows) {
+    if (!milestonesByTimeline[m.timeline_id]) milestonesByTimeline[m.timeline_id] = [];
+    milestonesByTimeline[m.timeline_id].push(sanitizeMilestone(m));
+  }
+
+  wlog(
+    `buildTimelines user=${userId} workspace=${workspaceId ?? 'ALL'} → ` +
+    `${timelinesResult.rows.length} timeline(s), ${milestonesResult.rows.length} milestone(s)`
+  );
+
+  return timelinesResult.rows.map((t) =>
+    sanitizeTimeline(t, milestonesByTimeline[t.id] ?? [])
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Timelines CRUD
+// ---------------------------------------------------------------------------
+
+// GET /api/timelines
+router.get('/', async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const timelines = await buildTimelinesForUser(req.userId!, workspaceId);
+    res.json({ timelines });
+  } catch (err) {
+    werr('timelines GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/timelines
+router.post('/', async (req: Request, res: Response) => {
+  try {
+    const { id, name, emoji, color, colorBg, subtitle, layout, isPublic, folderId, workspaceId } = req.body as {
+      id?: string;
+      name?: string;
+      emoji?: string;
+      color?: string;
+      colorBg?: string;
+      subtitle?: string;
+      layout?: string;
+      isPublic?: boolean;
+      folderId?: string;
+      workspaceId?: string;
+    };
+
+    if (!name) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+
+    const validLayout = ['vertical', 'compact', 'detailed'].includes(layout ?? '') ? layout : 'vertical';
+    const timelineId = id ?? `timeline_${uuidv4()}`;
+
+    const resolvedWs = await resolveWorkspaceForUser(req.userId!, workspaceId);
+
+    const posResult = await query<{ max: string | null }>(
+      'SELECT MAX(position) AS max FROM timelines WHERE user_id = $1',
+      [req.userId]
+    );
+    const nextPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
+
+    const result = await query<TimelineRow>(
+      `INSERT INTO timelines (id, user_id, name, emoji, color, color_bg, subtitle, layout, is_public, folder_id, position, workspace_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING *`,
+      [timelineId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, validLayout, isPublic ?? false, folderId ?? null, nextPos, resolvedWs]
+    );
+
+    wlog(`timeline CREATE ✓ id=${result.rows[0].id} name="${name}" workspace=${result.rows[0].workspace_id} owner=${req.userId}`);
+    res.status(201).json({ timeline: sanitizeTimeline(result.rows[0], []) });
+    broadcastToUser(req.userId!, 'timelines');
+  } catch (err) {
+    werr('timelines POST error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/timelines/:timelineId/reorder
+router.put('/:timelineId/reorder', async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body as { ids?: string[] };
+    if (!Array.isArray(ids)) {
+      res.status(400).json({ error: 'ids must be an array' });
+      return;
+    }
+
+    await Promise.all(
+      ids.map((timelineId, index) =>
+        query('UPDATE timelines SET position = $1 WHERE id = $2 AND user_id = $3', [index, timelineId, req.userId])
+      )
+    );
+
+    res.json({ success: true });
+    broadcastToUser(req.userId!, 'timelines');
+  } catch (err) {
+    werr('timelines reorder error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/timelines/:timelineId
+router.put('/:timelineId', async (req: Request, res: Response) => {
+  try {
+    const { timelineId } = req.params;
+    const { name, emoji, color, colorBg, subtitle, layout, position, isPublic, folderId } = req.body as {
+      name?: string;
+      emoji?: string;
+      color?: string;
+      colorBg?: string;
+      subtitle?: string;
+      layout?: string;
+      position?: number;
+      isPublic?: boolean;
+      folderId?: string | null;
+    };
+
+    const existing = await query<TimelineRow>('SELECT user_id FROM timelines WHERE id = $1', [timelineId]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'Timeline not found' });
+      return;
+    }
+
+    const isOwner = existing.rows[0].user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    const validLayout = layout !== undefined && ['vertical', 'compact', 'detailed'].includes(layout) ? layout : null;
+    const updateFolderId = 'folderId' in req.body;
+
+    const result = await query<TimelineRow>(
+      `UPDATE timelines
+       SET name      = COALESCE($1, name),
+           emoji     = COALESCE($2, emoji),
+           color     = COALESCE($3, color),
+           color_bg  = COALESCE($4, color_bg),
+           subtitle  = COALESCE($5, subtitle),
+           layout    = COALESCE($6, layout),
+           position  = COALESCE($7, position),
+           is_public = COALESCE($8, is_public),
+           folder_id = CASE WHEN $10 THEN $11 ELSE folder_id END
+       WHERE id = $9
+       RETURNING *`,
+      [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, validLayout, position ?? null, isPublic ?? null, timelineId,
+       updateFolderId, folderId ?? null]
+    );
+
+    // Re-attach milestones so the client gets a complete object back.
+    const milestonesRes = await query<MilestoneRow>(
+      'SELECT * FROM milestones WHERE timeline_id = $1 ORDER BY position ASC',
+      [timelineId]
+    );
+    res.json({ timeline: sanitizeTimeline(result.rows[0], milestonesRes.rows.map(sanitizeMilestone)) });
+    broadcastToUser(req.userId!, 'timelines');
+  } catch (err) {
+    werr('timelines PUT error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/timelines/:timelineId  — soft delete to trash
+router.delete('/:timelineId', async (req: Request, res: Response) => {
+  try {
+    const { timelineId } = req.params;
+
+    const existing = await query<TimelineRow>('SELECT * FROM timelines WHERE id = $1', [timelineId]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'Timeline not found' });
+      return;
+    }
+
+    const isOwner = existing.rows[0].user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    const milestonesRes = await query<MilestoneRow>(
+      'SELECT * FROM milestones WHERE timeline_id = $1 ORDER BY position ASC',
+      [timelineId]
+    );
+    const timelineData = sanitizeTimeline(existing.rows[0], milestonesRes.rows.map(sanitizeMilestone));
+
+    // Snapshot-to-trash and delete must be atomic.
+    await withTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO trash_timelines (timeline_id, user_id, timeline_data) VALUES ($1, $2, $3)`,
+        [timelineId, req.userId, JSON.stringify(timelineData)]
+      );
+      await client.query('DELETE FROM timelines WHERE id = $1', [timelineId]);
+    });
+
+    wlog(`timeline DELETE ✓ id=${timelineId} (${milestonesRes.rows.length} milestone(s)) → trashed by user ${req.userId}`);
+    res.json({ success: true });
+    broadcastToUser(req.userId!, 'timelines');
+  } catch (err) {
+    werr('timelines DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Milestones
+// ---------------------------------------------------------------------------
+
+async function assertTimelineOwner(timelineId: string, req: Request): Promise<'ok' | 404 | 403> {
+  const check = await query<{ user_id: string }>('SELECT user_id FROM timelines WHERE id = $1', [timelineId]);
+  if (check.rows.length === 0) return 404;
+  if (check.rows[0].user_id !== req.userId && !req.user?.isAdmin) return 403;
+  return 'ok';
+}
+
+// POST /api/timelines/:timelineId/milestones
+router.post('/:timelineId/milestones', async (req: Request, res: Response) => {
+  try {
+    const { timelineId } = req.params;
+    const { id, title, description, date, time, status, emoji, color } = req.body as {
+      id?: string;
+      title?: string;
+      description?: string;
+      date?: string;
+      time?: string;
+      status?: string;
+      emoji?: string;
+      color?: string;
+    };
+
+    if (!title) {
+      res.status(400).json({ error: 'title is required' });
+      return;
+    }
+
+    const perm = await assertTimelineOwner(timelineId, req);
+    if (perm === 404) { res.status(404).json({ error: 'Timeline not found' }); return; }
+    if (perm === 403) { res.status(403).json({ error: 'Permission denied' }); return; }
+
+    const validStatus = ['upcoming', 'in-progress', 'done'].includes(status ?? '') ? status : 'upcoming';
+    const milestoneId = id ?? `milestone_${uuidv4()}`;
+
+    const posResult = await query<{ max: string | null }>(
+      'SELECT MAX(position) AS max FROM milestones WHERE timeline_id = $1',
+      [timelineId]
+    );
+    const nextPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
+
+    const result = await query<MilestoneRow>(
+      `INSERT INTO milestones (id, timeline_id, title, description, milestone_date, time_val, status, emoji, color, position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING *`,
+      [milestoneId, timelineId, title, description ?? null, date ?? null, time ?? null, validStatus, emoji ?? null, color ?? null, nextPos]
+    );
+
+    res.status(201).json({ milestone: sanitizeMilestone(result.rows[0]) });
+    broadcastToUser(req.userId!, 'timelines');
+  } catch (err) {
+    werr('milestones POST error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/timelines/milestones/:milestoneId
+router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
+  try {
+    const { milestoneId } = req.params;
+    const { title, description, date, time, status, emoji, color, position } = req.body as {
+      title?: string;
+      description?: string;
+      date?: string | null;
+      time?: string | null;
+      status?: string;
+      emoji?: string | null;
+      color?: string | null;
+      position?: number;
+    };
+
+    const ownerCheck = await query<{ user_id: string }>(
+      `SELECT t.user_id FROM milestones m JOIN timelines t ON m.timeline_id = t.id WHERE m.id = $1`,
+      [milestoneId]
+    );
+    if (ownerCheck.rows.length === 0) {
+      res.status(404).json({ error: 'Milestone not found' });
+      return;
+    }
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    const validStatus = status !== undefined && ['upcoming', 'in-progress', 'done'].includes(status) ? status : null;
+    // Allow explicitly clearing date/time/emoji/color when the key is present.
+    const updateDate = 'date' in req.body;
+    const updateTime = 'time' in req.body;
+    const updateEmoji = 'emoji' in req.body;
+    const updateColor = 'color' in req.body;
+
+    const result = await query<MilestoneRow>(
+      `UPDATE milestones
+       SET title          = COALESCE($1, title),
+           description     = COALESCE($2, description),
+           milestone_date  = CASE WHEN $3 THEN $4 ELSE milestone_date END,
+           time_val        = CASE WHEN $5 THEN $6 ELSE time_val END,
+           status          = COALESCE($7, status),
+           emoji           = CASE WHEN $8 THEN $9 ELSE emoji END,
+           color           = CASE WHEN $10 THEN $11 ELSE color END,
+           position        = COALESCE($12, position)
+       WHERE id = $13
+       RETURNING *`,
+      [
+        title ?? null,
+        description ?? null,
+        updateDate, date ?? null,
+        updateTime, time ?? null,
+        validStatus,
+        updateEmoji, emoji ?? null,
+        updateColor, color ?? null,
+        position ?? null,
+        milestoneId,
+      ]
+    );
+
+    res.json({ milestone: sanitizeMilestone(result.rows[0]) });
+    broadcastToUser(req.userId!, 'timelines');
+  } catch (err) {
+    werr('milestones PUT error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/timelines/:timelineId/milestones/reorder
+router.put('/:timelineId/milestones/reorder', async (req: Request, res: Response) => {
+  try {
+    const { timelineId } = req.params;
+    const { milestone_ids } = req.body as { milestone_ids?: string[] };
+
+    if (!Array.isArray(milestone_ids)) {
+      res.status(400).json({ error: 'milestone_ids must be an array' });
+      return;
+    }
+
+    const perm = await assertTimelineOwner(timelineId, req);
+    if (perm === 404) { res.status(404).json({ error: 'Timeline not found' }); return; }
+    if (perm === 403) { res.status(403).json({ error: 'Permission denied' }); return; }
+
+    await Promise.all(
+      milestone_ids.map((milestoneId, index) =>
+        query('UPDATE milestones SET position = $1 WHERE id = $2 AND timeline_id = $3', [index, milestoneId, timelineId])
+      )
+    );
+
+    res.json({ success: true });
+    broadcastToUser(req.userId!, 'timelines');
+  } catch (err) {
+    werr('milestones reorder error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/timelines/milestones/:milestoneId
+router.delete('/milestones/:milestoneId', async (req: Request, res: Response) => {
+  try {
+    const { milestoneId } = req.params;
+
+    const ownerCheck = await query<{ user_id: string }>(
+      `SELECT t.user_id FROM milestones m JOIN timelines t ON m.timeline_id = t.id WHERE m.id = $1`,
+      [milestoneId]
+    );
+    if (ownerCheck.rows.length === 0) {
+      res.status(404).json({ error: 'Milestone not found' });
+      return;
+    }
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    await query('DELETE FROM milestones WHERE id = $1', [milestoneId]);
+
+    res.json({ success: true });
+    broadcastToUser(req.userId!, 'timelines');
+  } catch (err) {
+    werr('milestones DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+export default router;

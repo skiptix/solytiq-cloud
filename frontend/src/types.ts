@@ -56,6 +56,47 @@ export interface Folder {
   workspaceId?: string;
 }
 
+// ─── Timelines ────────────────────────────────────────────────────────────────
+export type TimelineLayout = 'vertical' | 'compact' | 'detailed';
+export type MilestoneStatus = 'upcoming' | 'in-progress' | 'done';
+
+export interface Milestone {
+  id: string;
+  timelineId?: string;
+  title: string;
+  description?: string | null;
+  date?: string | null;      // YYYY-MM-DD
+  time?: string | null;      // HH:MM
+  status: MilestoneStatus;
+  emoji?: string | null;
+  color?: string | null;
+  position?: number;
+}
+
+export interface Timeline {
+  id: string;
+  name: string;
+  emoji?: string;
+  color?: string;
+  colorBg?: string;
+  subtitle?: string;
+  userId?: string;
+  isPublic?: boolean;
+  layout: TimelineLayout;
+  folderId?: string;
+  workspaceId?: string;
+  position?: number;
+  milestones: Milestone[];
+}
+
+export interface TrashedTimeline {
+  id: number;
+  timelineId: string;
+  timeline: Timeline;
+  deletedAt: string;
+  expiresAt: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;
@@ -313,14 +354,21 @@ export interface AppState {
   dashTasks: Task[];
   lists: List[];
   folders: Folder[];
+  timelines: Timeline[];
   listsLoading: boolean;
   trashTasks: TrashedTask[];
   trashLists: TrashedList[];
   trashFolders: TrashedFolder[];
+  trashTimelines: TrashedTimeline[];
   sidebarWidth: number;
   setDashTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   setLists: (lists: List[] | ((prev: List[]) => List[])) => void;
   setFolders: (folders: Folder[] | ((prev: Folder[]) => Folder[])) => void;
+  setTimelines: (timelines: Timeline[] | ((prev: Timeline[]) => Timeline[])) => void;
+  updateTimeline: (timelineId: string, updates: Partial<Timeline>) => void;
+  deleteTimeline: (timelineId: string) => void;
+  restoreTimelineFromTrash: (trashId: number) => void;
+  deleteTimelineFromTrash: (trashId: number) => void;
   addFolder: (folder: Folder) => void;
   updateFolder: (id: string, updates: Partial<Folder>) => void;
   deleteFolder: (id: string) => void;

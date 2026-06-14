@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import type { List } from './types';
+import type { List, Timeline } from './types';
 import useAuthStore from './store/useAuthStore';
 import useAppStore from './store/useAppStore';
 import useMembersStore from './store/useMembersStore';
@@ -9,7 +9,7 @@ import { apiCheckSetupRequired, connectSSE, disconnectSSE } from './api/client';
 
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
-import AddListWizard from './modals/AddListWizard';
+import AddWizard from './modals/AddWizard';
 import CompletedModal from './modals/CompletedModal';
 import TrashModal from './modals/TrashModal';
 import WorkspaceWizard from './modals/WorkspaceWizard';
@@ -20,6 +20,7 @@ import SetupWizard from './screens/SetupWizard';
 import NukeScreen from './screens/NukeScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import ListScreen from './screens/ListScreen';
+import TimelineScreen from './screens/TimelineScreen';
 import CalendarScreen from './screens/CalendarScreen';
 import FilesScreen from './screens/FilesScreen';
 import GPSScreen from './screens/GPSScreen';
@@ -39,9 +40,9 @@ function Protected({ children }: { children: React.ReactNode }) {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { dashTasks, lists, listsLoading, sidebarWidth, setSidebarWidth, loadFromApi, setLists, setFolders, updateList, moveTaskToList } = useAppStore();
+  const { dashTasks, lists, timelines, listsLoading, sidebarWidth, setSidebarWidth, loadFromApi, setLists, setFolders, updateList, moveTaskToList } = useAppStore();
   const prevWorkspaceRef = useRef<string | null | undefined>(undefined);
-  const [modal, setModal] = useState<'add-list' | 'completed' | 'trash' | null>(null);
+  const [modal, setModal] = useState<'add' | 'completed' | 'trash' | null>(null);
 
   const loadMembers = useMembersStore(s => s.load);
   const { currentWorkspaceId, workspaces, workspacesLoaded, loadWorkspaces } = useWorkspaceStore();
@@ -142,9 +143,10 @@ function AppLayout() {
     arr.filter(l => l.folderId === folderId).forEach((l, i) => updateList(l.id, { position: i }));
   }, [lists, setLists, updateList]);
 
-  const getActive = (): 'dashboard' | 'calendar' | 'files' | 'list' | 'settings' | 'folder' | 'gps' => {
+  const getActive = (): 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' => {
     if (location.pathname.startsWith('/folder/')) return 'folder';
     if (location.pathname.startsWith('/list/')) return 'list';
+    if (location.pathname.startsWith('/timeline/')) return 'timeline';
     if (location.pathname.startsWith('/calendar')) return 'calendar';
     if (location.pathname.startsWith('/files')) return 'files';
     if (location.pathname.startsWith('/settings')) return 'settings';
@@ -153,6 +155,7 @@ function AppLayout() {
   };
 
   const activeListId = location.pathname.startsWith('/list/') ? location.pathname.split('/list/')[1] : undefined;
+  const activeTimelineId = location.pathname.startsWith('/timeline/') ? location.pathname.split('/timeline/')[1] : undefined;
   const activeFolderId = location.pathname.startsWith('/folder/') ? location.pathname.split('/folder/')[1] : undefined;
   const activeGpsFileId = location.pathname.startsWith('/gps') ? new URLSearchParams(location.search).get('file') ?? undefined : undefined;
 
@@ -166,6 +169,7 @@ function AppLayout() {
       <Sidebar
         active={getActive()}
         activeListId={activeListId}
+        activeTimelineId={activeTimelineId}
         activeFolderId={activeFolderId}
         activeGpsFileId={activeGpsFileId}
         lists={lists}
@@ -189,12 +193,13 @@ function AppLayout() {
             <Route path="/calendar" element={<CalendarScreen />} />
             <Route path="/files" element={<FilesScreen />} />
             <Route path="/list/:listId" element={<ListScreen />} />
+            <Route path="/timeline/:timelineId" element={<TimelineScreen />} />
             <Route path="/settings" element={<SettingsScreen />} />
             <Route path="/gps" element={<GPSScreen />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
 
-          {currentWorkspaceId && lists.length === 0 && !listsLoading && getActive() === 'dashboard' && (
+          {currentWorkspaceId && lists.length === 0 && timelines.length === 0 && !listsLoading && getActive() === 'dashboard' && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, zIndex: 10, background: 'rgba(247,242,252,0.90)', backdropFilter: 'blur(10px)', animation: 'backdropIn 220ms ease both' }}>
               <div style={{ width: 72, height: 72, borderRadius: 20, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
                 <span style={{ fontSize: 36 }}>📋</span>
@@ -204,7 +209,7 @@ function AppLayout() {
                 This workspace is empty. Create your first list to get started.
               </div>
               <button
-                onClick={() => setModal('add-list')}
+                onClick={() => setModal('add')}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 12, border: 'none', background: '#5e4dbb', color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 16px rgba(94,77,187,0.35)', transition: 'all 150ms' }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#4d3da8')}
                 onMouseLeave={e => (e.currentTarget.style.background = '#5e4dbb')}
@@ -217,8 +222,12 @@ function AppLayout() {
         </div>
       </div>
 
-      {modal === 'add-list' && (
-        <AddListWizard onClose={() => setModal(null)} onCreated={(_list: List) => { setModal(null); navigate(`/list/${_list.id}`); }} />
+      {modal === 'add' && (
+        <AddWizard
+          onClose={() => setModal(null)}
+          onCreatedList={(_list: List) => { setModal(null); navigate(`/list/${_list.id}`); }}
+          onCreatedTimeline={(_t: Timeline) => { setModal(null); navigate(`/timeline/${_t.id}`); }}
+        />
       )}
       {modal === 'completed' && <CompletedModal onClose={() => setModal(null)} />}
       {modal === 'trash' && <TrashModal onClose={() => setModal(null)} />}

@@ -20,6 +20,7 @@ import foldersRouter    from './routes/folders';
 import filesRouter, { UPLOAD_DIR } from './routes/files';
 import aiRouter         from './routes/ai';
 import workspacesRouter from './routes/workspaces';
+import timelinesRouter  from './routes/timelines';
 import gpsRouter from './routes/gps';
 import taskAttachmentsRouter from './routes/taskAttachments';
 import { comparePassword } from './auth';
@@ -95,6 +96,7 @@ app.use('/api/folders',    foldersRouter);
 app.use('/api/files',      filesRouter);
 app.use('/api/ai',         aiRouter);
 app.use('/api/workspaces', workspacesRouter);
+app.use('/api/timelines',  timelinesRouter);
 app.use('/api/gps',        gpsRouter);
 
 // Public share endpoints — no auth required
@@ -570,6 +572,55 @@ async function runMigrations() {
       console.log(`📋 migration: re-synced ${drift.rowCount} list item(s) to their list's workspace`);
     }
   }
+
+  // ── Timelines ───────────────────────────────────────────────────────────────
+  // A Timeline behaves like a List in the sidebar (accessibility, color, emoji,
+  // folder), but holds an ordered set of dated milestones instead of sections.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS timelines (
+      id           VARCHAR(100) PRIMARY KEY,
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name         VARCHAR(255) NOT NULL,
+      emoji        VARCHAR(10),
+      color        VARCHAR(50),
+      color_bg     VARCHAR(50),
+      subtitle     VARCHAR(500),
+      layout       VARCHAR(20) NOT NULL DEFAULT 'vertical' CHECK (layout IN ('vertical', 'compact', 'detailed')),
+      is_public    BOOLEAN NOT NULL DEFAULT false,
+      folder_id    VARCHAR(100) REFERENCES folders(id) ON DELETE SET NULL,
+      workspace_id VARCHAR(100) REFERENCES workspaces(id) ON DELETE SET NULL,
+      position     INTEGER NOT NULL DEFAULT 0,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS milestones (
+      id          VARCHAR(100) PRIMARY KEY,
+      timeline_id VARCHAR(100) NOT NULL REFERENCES timelines(id) ON DELETE CASCADE,
+      title       VARCHAR(500) NOT NULL,
+      description TEXT,
+      milestone_date DATE,
+      time_val    VARCHAR(20),
+      status      VARCHAR(20) NOT NULL DEFAULT 'upcoming' CHECK (status IN ('upcoming', 'in-progress', 'done')),
+      emoji       VARCHAR(10),
+      color       VARCHAR(50),
+      position    INTEGER NOT NULL DEFAULT 0,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS milestones_timeline_idx ON milestones(timeline_id)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS trash_timelines (
+      id            SERIAL PRIMARY KEY,
+      timeline_id   VARCHAR(100) NOT NULL,
+      user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      timeline_data JSONB NOT NULL,
+      deleted_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at    TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
+    )
+  `);
 
   // GPS files table
   await pool.query(`
