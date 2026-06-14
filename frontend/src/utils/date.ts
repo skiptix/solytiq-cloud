@@ -31,7 +31,6 @@ export function todayInTz(timezone: string): string {
  * Returns `YYYY-MM-DD` shifted by `daysAhead` days from today in the given timezone.
  */
 export function futureDateInTz(timezone: string, daysAhead: number): string {
-  const base = new Date();
   // Move to the correct calendar day in the target timezone by adjusting UTC
   const todayStr = todayInTz(timezone);
   const todayMidnight = new Date(todayStr + 'T00:00:00');
