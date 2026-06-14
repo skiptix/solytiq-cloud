@@ -7,6 +7,7 @@ import { apiCreateTask } from '../api/client';
 import { todayInTz, futureDateInTz } from '../utils/date';
 import TaskItem, { QuickAdd } from '../components/TaskItem';
 import TaskDialog from '../components/TaskDialog';
+import UpcomingTimelineWidget from '../components/UpcomingTimelineWidget';
 import Icon from '../components/Icon';
 
 // ── Date helpers (timezone-aware) ────────────────────────────────
@@ -293,6 +294,8 @@ export default function DashboardScreen() {
             </div>
           )}
         </header>
+
+        <UpcomingTimelineWidget accent="#5e4dbb" />
 
         <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
           <StatCard num={openCount} label="Open Tasks" sub={`${totalCount} total`} icon="inventory_2" iconBg="#F5F3FF" iconColor="#5e4dbb" />

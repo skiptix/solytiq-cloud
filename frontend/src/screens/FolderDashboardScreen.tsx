@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import type { Task, List } from '../types';
 import useAppStore from '../store/useAppStore';
+import UpcomingTimelineWidget from '../components/UpcomingTimelineWidget';
 import Icon from '../components/Icon';
 
 // ── Date helpers ────────────────────────────────────────────────
@@ -262,6 +263,9 @@ export default function FolderDashboardScreen() {
             </div>
           </div>
         </header>
+
+        {/* ── Upcoming timeline events (scoped to this folder) ─── */}
+        <UpcomingTimelineWidget folderId={folderId} accent={ac} />
 
         {/* ── Stat cards ─────────────────────────────────────── */}
         <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, animation: 'folderDashIn 420ms 80ms ease both' }}>

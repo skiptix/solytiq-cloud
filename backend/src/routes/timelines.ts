@@ -155,6 +155,71 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/timelines/upcoming — the next N upcoming milestones across all
+// accessible timelines, ordered by date. Optionally scoped to a single folder.
+router.get('/upcoming', async (req: Request, res: Response) => {
+  try {
+    const workspaceId = req.query.workspaceId as string | undefined;
+    const folderId = req.query.folderId as string | undefined;
+    const rawLimit = parseInt(String(req.query.limit ?? '3'), 10);
+    const limit = Math.min(Math.max(Number.isNaN(rawLimit) ? 3 : rawLimit, 1), 20);
+
+    const params: unknown[] = [req.userId];
+    const accessCondition = `(
+      t.user_id = $1
+      OR (t.is_public = true AND (
+        wm.user_id = $1
+        OR t.workspace_id IS NULL
+        OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = t.workspace_id AND w.visibility = 'public')
+      ))
+    )`;
+
+    let wsFilter = '';
+    if (workspaceId) {
+      params.push(workspaceId);
+      wsFilter = `AND (t.workspace_id = $${params.length} OR t.workspace_id IS NULL)`;
+    }
+    let folderFilter = '';
+    if (folderId) {
+      params.push(folderId);
+      folderFilter = `AND t.folder_id = $${params.length}`;
+    }
+    params.push(limit);
+    const limitIdx = params.length;
+
+    const result = await query<
+      MilestoneRow & { timeline_name: string; timeline_emoji: string | null; timeline_color: string | null }
+    >(
+      `SELECT m.id, m.timeline_id, m.title, m.description, m.milestone_date, m.time_val, m.status, m.emoji, m.color, m.position, m.created_at,
+              t.name AS timeline_name, t.emoji AS timeline_emoji, t.color AS timeline_color
+       FROM milestones m
+       JOIN timelines t ON m.timeline_id = t.id
+       LEFT JOIN workspace_members wm ON wm.workspace_id = t.workspace_id AND wm.user_id = $1
+       WHERE ${accessCondition}
+         ${wsFilter}
+         ${folderFilter}
+         AND m.milestone_date IS NOT NULL
+         AND m.milestone_date >= CURRENT_DATE
+         AND m.status <> 'done'
+       ORDER BY m.milestone_date ASC, m.time_val ASC NULLS LAST, m.position ASC
+       LIMIT $${limitIdx}`,
+      params
+    );
+
+    const milestones = result.rows.map((m) => ({
+      ...sanitizeMilestone(m),
+      timelineName: m.timeline_name,
+      timelineEmoji: m.timeline_emoji,
+      timelineColor: m.timeline_color,
+    }));
+
+    res.json({ milestones });
+  } catch (err) {
+    werr('timelines upcoming error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // POST /api/timelines
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -199,6 +264,30 @@ router.post('/', async (req: Request, res: Response) => {
     broadcastToUser(req.userId!, 'timelines');
   } catch (err) {
     werr('timelines POST error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/timelines/reorder — persist the order of timelines by id.
+// Declared before the `/:timelineId` routes so "reorder" isn't captured as an id.
+router.put('/reorder', async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body as { ids?: string[] };
+    if (!Array.isArray(ids)) {
+      res.status(400).json({ error: 'ids must be an array' });
+      return;
+    }
+
+    await Promise.all(
+      ids.map((timelineId, index) =>
+        query('UPDATE timelines SET position = $1 WHERE id = $2 AND user_id = $3', [index, timelineId, req.userId])
+      )
+    );
+
+    res.json({ success: true });
+    broadcastToUser(req.userId!, 'timelines');
+  } catch (err) {
+    werr('timelines reorder error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
