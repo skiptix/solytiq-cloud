@@ -38,6 +38,15 @@ interface TrashFolderRow {
   expires_at: string;
 }
 
+interface TrashTimelineRow {
+  id: number;
+  timeline_id: string;
+  user_id: string;
+  timeline_data: Record<string, unknown>;
+  deleted_at: string;
+  expires_at: string;
+}
+
 interface TaskRow {
   id: string;
   user_id: string;
@@ -91,6 +100,17 @@ function sanitizeTrashFolder(row: TrashFolderRow) {
     folderData: row.folder_data,
     deletedAt:  row.deleted_at,
     expiresAt:  row.expires_at,
+  };
+}
+
+function sanitizeTrashTimeline(row: TrashTimelineRow) {
+  return {
+    id:           row.id,
+    timelineId:   row.timeline_id,
+    userId:       row.user_id,
+    timelineData: row.timeline_data,
+    deletedAt:    row.deleted_at,
+    expiresAt:    row.expires_at,
   };
 }
 
@@ -216,6 +236,7 @@ router.delete('/empty', async (req: Request, res: Response) => {
       query('DELETE FROM trash WHERE user_id = $1', [req.userId]),
       query('DELETE FROM trash_lists WHERE user_id = $1', [req.userId]),
       query('DELETE FROM trash_folders WHERE user_id = $1', [req.userId]),
+      query('DELETE FROM trash_timelines WHERE user_id = $1', [req.userId]),
     ]);
     res.json({ success: true });
     broadcastToUser(req.userId!, 'trash');
@@ -357,6 +378,105 @@ router.delete('/lists/:trashId', async (req: Request, res: Response) => {
     broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     console.error('trash lists delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Timeline trash routes
+// ---------------------------------------------------------------------------
+
+// GET /api/trash/timelines
+router.get('/timelines', async (req: Request, res: Response) => {
+  try {
+    const result = await query<TrashTimelineRow>(
+      `SELECT * FROM trash_timelines WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`,
+      [req.userId]
+    );
+    res.json({ trash: result.rows.map(sanitizeTrashTimeline) });
+  } catch (err) {
+    console.error('trash timelines GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/trash/timelines/:trashId/restore
+router.post('/timelines/:trashId/restore', async (req: Request, res: Response) => {
+  try {
+    const trashId = parseInt(req.params.trashId, 10);
+    if (isNaN(trashId)) {
+      res.status(400).json({ error: 'Invalid trash id' });
+      return;
+    }
+
+    const trashResult = await query<TrashTimelineRow>(
+      `SELECT * FROM trash_timelines WHERE id = $1 AND user_id = $2 AND expires_at > NOW()`,
+      [trashId, req.userId]
+    );
+    if (trashResult.rows.length === 0) {
+      res.status(404).json({ error: 'Trash item not found or expired' });
+      return;
+    }
+
+    const d = trashResult.rows[0].timeline_data as Record<string, unknown>;
+    const validLayout = ['vertical', 'compact', 'detailed'].includes(d.layout as string) ? d.layout : 'vertical';
+
+    await query(
+      `INSERT INTO timelines (id, user_id, name, emoji, color, color_bg, subtitle, layout, is_public, folder_id, position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        d.id, req.userId, d.name, d.emoji ?? null, d.color ?? null,
+        d.colorBg ?? null, d.subtitle ?? null, validLayout, d.isPublic ?? false,
+        d.folderId ?? null, d.position ?? 0,
+      ]
+    );
+
+    const milestones = (d.milestones as Array<Record<string, unknown>>) ?? [];
+    for (const m of milestones) {
+      const ms = ['upcoming', 'in-progress', 'done'].includes(m.status as string) ? m.status : 'upcoming';
+      await query(
+        `INSERT INTO milestones (id, timeline_id, title, description, milestone_date, time_val, status, emoji, color, position)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          m.id, d.id, m.title, m.description ?? null, m.date ?? null, m.time ?? null,
+          ms, m.emoji ?? null, m.color ?? null, m.position ?? 0,
+        ]
+      );
+    }
+
+    await query('DELETE FROM trash_timelines WHERE id = $1', [trashId]);
+    res.json({ success: true });
+    broadcastToUser(req.userId!, 'trash');
+  } catch (err) {
+    console.error('trash timelines restore error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/trash/timelines/:trashId
+router.delete('/timelines/:trashId', async (req: Request, res: Response) => {
+  try {
+    const trashId = parseInt(req.params.trashId, 10);
+    if (isNaN(trashId)) {
+      res.status(400).json({ error: 'Invalid trash id' });
+      return;
+    }
+
+    const result = await query(
+      'DELETE FROM trash_timelines WHERE id = $1 AND user_id = $2',
+      [trashId, req.userId]
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Trash item not found' });
+      return;
+    }
+
+    res.json({ success: true });
+    broadcastToUser(req.userId!, 'trash');
+  } catch (err) {
+    console.error('trash timelines delete error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

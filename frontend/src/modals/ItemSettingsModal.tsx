@@ -26,7 +26,7 @@ export interface ItemSettingsUpdates {
 }
 
 interface ItemSettingsModalProps {
-  kind: 'list' | 'folder';
+  kind: 'list' | 'folder' | 'timeline';
   name: string;
   emoji?: string;
   color?: string;
@@ -64,12 +64,12 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
           <div style={{ width: 34, height: 34, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             {emoji
               ? <span style={{ fontSize: 18 }}>{emoji}</span>
-              : <Icon name={kind === 'folder' ? 'folder' : 'format_list_bulleted'} size={18} color={accent} />
+              : <Icon name={kind === 'folder' ? 'folder' : kind === 'timeline' ? 'timeline' : 'format_list_bulleted'} size={18} color={accent} />
             }
           </div>
           <div style={{ flex: 1, overflow: 'hidden' }}>
             <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15.5, fontWeight: 700, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe' }}>{kind === 'folder' ? 'Folder settings' : 'List settings'}</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe' }}>{kind === 'folder' ? 'Folder settings' : kind === 'timeline' ? 'Timeline settings' : 'List settings'}</div>
           </div>
           <button
             onClick={onClose}
@@ -139,8 +139,8 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
             </div>
           </div>
 
-          {/* Folder (lists only) */}
-          {kind === 'list' && folders && folders.length > 0 && (
+          {/* Folder (lists & timelines) */}
+          {kind !== 'folder' && folders && folders.length > 0 && (
             <div style={{ animation: 'sectionFadeUp 320ms ease both', animationDelay: '190ms' }}>
               <SectionLabel>Folder</SectionLabel>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

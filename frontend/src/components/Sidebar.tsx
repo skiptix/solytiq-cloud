@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { List, Folder, GpsFile } from '../types';
+import type { List, Folder, Timeline, GpsFile } from '../types';
 import Icon from './Icon';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
@@ -279,12 +279,204 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
   );
 }
 
+// ── TimelineItemRow ───────────────────────────────────────────────────────────
+interface TimelineItemRowProps {
+  timeline: Timeline;
+  isActive: boolean;
+  collapsed: boolean;
+  indented?: boolean;
+  folders: Folder[];
+  onNavigate: (path: string) => void;
+}
+function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, onNavigate }: TimelineItemRowProps) {
+  const [hov, setHov] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(timeline.name);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const { updateTimeline, deleteTimeline } = useAppStore();
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        menuBtnRef.current && !menuBtnRef.current.contains(e.target as Node)
+      ) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
+
+  const openMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const rect = menuBtnRef.current?.getBoundingClientRect();
+    if (rect) setMenuPos({ top: rect.bottom + 4, left: rect.left });
+    setMenuOpen(o => !o);
+  };
+
+  const handleRename = () => {
+    const trimmed = nameInput.trim();
+    if (trimmed && trimmed !== timeline.name) updateTimeline(timeline.id, { name: trimmed });
+    setEditingName(false);
+  };
+
+  const handleDelete = () => {
+    deleteTimeline(timeline.id);
+    setShowDeleteDialog(false);
+    onNavigate('/dashboard');
+  };
+
+  const handleSettingsChange = (updates: ItemSettingsUpdates) => {
+    updateTimeline(timeline.id, updates as Partial<Timeline>);
+  };
+
+  const accent = timeline.color ?? '#1D4ED8';
+
+  return (
+    <>
+      <div
+        onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, position: 'relative', paddingLeft: indented ? 8 : 0 }}>
+
+        {editingName && !collapsed ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '4px 8px', animation: 'menuItemIn 140ms ease both' }}>
+            <input
+              autoFocus
+              value={nameInput}
+              onChange={e => setNameInput(e.target.value)}
+              onBlur={handleRename}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleRename();
+                if (e.key === 'Escape') { setEditingName(false); setNameInput(timeline.name); }
+              }}
+              style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, border: 'none', borderBottom: `1.5px solid ${accent}`, outline: 'none', background: 'transparent', color: '#1c1b22', padding: '2px 4px' }}
+            />
+          </div>
+        ) : (
+          <button title={collapsed ? timeline.name : undefined}
+            onClick={() => onNavigate(`/timeline/${timeline.id}`)}
+            style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, background: hov ? (timeline.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? accent : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+            {!collapsed && (
+              <Icon name={timeline.isPublic ? 'public' : 'lock'} size={13} color="#b0acbe" />
+            )}
+            {timeline.emoji
+              ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{timeline.emoji}</span>
+              : <Icon name="timeline" size={19} color={isActive ? accent : '#787584'} />
+            }
+            {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{timeline.name}</span>}
+          </button>
+        )}
+
+        {!collapsed && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 4, flexShrink: 0 }}>
+            <button
+              ref={menuBtnRef}
+              onClick={openMenu}
+              title="Timeline options"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? '#ebe6f0' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#ebe6f0')}
+              onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background = 'transparent'; }}
+            >
+              <Icon name="more_vert" size={15} color="#9d8dff" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Dropdown menu */}
+      {menuOpen && menuPos && (
+        <div ref={menuRef}
+          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 400, background: '#fff', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', minWidth: 190, padding: '4px 0', animation: 'menuIn 140ms ease both', transformOrigin: 'top left' }}>
+          <button
+            onClick={() => { setMenuOpen(false); setEditingName(true); setNameInput(timeline.name); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left', animation: 'menuItemIn 160ms ease both' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Icon name="edit" size={15} color="#787584" />
+            Edit name
+          </button>
+
+          <button
+            onClick={() => { setMenuOpen(false); setShowSettings(true); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '30ms' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Icon name="tune" size={15} color="#787584" />
+            More settings…
+          </button>
+
+          <div style={{ height: 1, background: '#f0ecf8', margin: '3px 0' }} />
+
+          <button
+            onClick={() => { setMenuOpen(false); setShowDeleteDialog(true); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#ba1a1a', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '60ms' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#fff0ef')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Icon name="delete" size={15} color="#ba1a1a" />
+            Delete timeline
+          </button>
+        </div>
+      )}
+
+      {/* More settings dialog */}
+      {showSettings && (
+        <ItemSettingsModal
+          kind="timeline"
+          name={timeline.name}
+          emoji={timeline.emoji}
+          color={timeline.color}
+          isPublic={timeline.isPublic}
+          folders={folders}
+          folderId={timeline.folderId}
+          onChange={handleSettingsChange}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {/* Delete confirmation dialog */}
+      {showDeleteDialog && (
+        <div
+          onClick={() => setShowDeleteDialog(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <Icon name="delete" size={20} color="#ba1a1a" />
+            </div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Delete timeline?</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.5, marginBottom: 24 }}>
+              "<span style={{ color: '#1c1b22', fontWeight: 500 }}>{timeline.name}</span>" and all its milestones will be moved to Trash.
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleDelete} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── FolderRow ─────────────────────────────────────────────────────────────────
 interface FolderRowProps {
   folder: Folder;
   lists: List[];
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'settings' | 'folder' | 'gps';
+  timelines: Timeline[];
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps';
   activeListId?: string;
+  activeTimelineId?: string;
   activeFolderId?: string;
   collapsed: boolean;
   dragOverId: string | null;
@@ -306,7 +498,7 @@ interface FolderRowProps {
   onFolderReorderDragLeave: () => void;
   onFolderReorderDrop: (folderId: string, e: React.DragEvent) => void;
 }
-function FolderRow({ folder, lists, active, activeListId, activeFolderId, collapsed, dragOverId, dragOverFolderId, dragOverFolderReorderId, dragOverTaskListId, recentlyDroppedListId, allFolders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop, onFolderDragStart, onFolderDragOver, onFolderDragLeave, onFolderDrop, onFolderReorderDragOver, onFolderReorderDragLeave, onFolderReorderDrop }: FolderRowProps) {
+function FolderRow({ folder, lists, timelines, active, activeListId, activeTimelineId, activeFolderId, collapsed, dragOverId, dragOverFolderId, dragOverFolderReorderId, dragOverTaskListId, recentlyDroppedListId, allFolders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop, onFolderDragStart, onFolderDragOver, onFolderDragLeave, onFolderDrop, onFolderReorderDragOver, onFolderReorderDragLeave, onFolderReorderDrop }: FolderRowProps) {
   const [hov, setHov] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -469,9 +661,23 @@ function FolderRow({ folder, lists, active, activeListId, activeFolderId, collap
               />
             );
           })}
-          {lists.length === 0 && (
+          {timelines.map(timeline => {
+            const isActive = active === 'timeline' && activeTimelineId === timeline.id;
+            return (
+              <TimelineItemRow
+                key={timeline.id}
+                timeline={timeline}
+                isActive={isActive}
+                collapsed={collapsed}
+                indented
+                folders={allFolders}
+                onNavigate={onNavigate}
+              />
+            );
+          })}
+          {lists.length === 0 && timelines.length === 0 && (
             <div style={{ padding: '6px 10px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', fontStyle: 'italic' }}>
-              No lists yet
+              Empty folder
             </div>
           )}
         </div>
@@ -559,7 +765,7 @@ function FolderRow({ folder, lists, active, activeListId, activeFolderId, collap
 interface StandaloneListWithSublistsProps {
   list: List;
   sublists: List[];
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'settings' | 'folder' | 'gps';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps';
   activeListId?: string;
   collapsed: boolean;
   dragOverId: string | null;
@@ -754,14 +960,15 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'settings' | 'folder' | 'gps';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps';
   activeListId?: string;
+  activeTimelineId?: string;
   activeFolderId?: string;
   activeGpsFileId?: string;
   lists: List[];
   width: number;
   onNavigate: (path: string) => void;
-  onOpenModal: (modal: 'add-list' | 'completed' | 'trash') => void;
+  onOpenModal: (modal: 'add' | 'completed' | 'trash') => void;
   onReorderLists: (fromId: string, toId: string) => void;
   onResizeStart: (startX: number) => void;
   onTaskDropToList: (taskId: number, listId: string) => void;
@@ -772,7 +979,7 @@ function fmtDistShort(m?: number | null) {
   return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`;
 }
 
-export default function Sidebar({ active, activeListId, activeFolderId, activeGpsFileId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList }: SidebarProps) {
+export default function Sidebar({ active, activeListId, activeTimelineId, activeFolderId, activeGpsFileId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList }: SidebarProps) {
   const collapsed = width <= 72;
   const [addHov, setAddHov] = useState(false);
   const [folderHov, setFolderHov] = useState(false);
@@ -789,7 +996,7 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsSearch, setGpsSearch] = useState('');
 
-  const { folders, addFolder, updateList, updateFolder, setFolders } = useAppStore();
+  const { folders, timelines, addFolder, updateList, updateFolder, setFolders } = useAppStore();
 
   useEffect(() => {
     const clearTaskDrag = () => setDragOverTaskListId(null);
@@ -875,6 +1082,7 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
   };
 
   const standaloneListItems = lists.filter(l => !l.folderId);
+  const standaloneTimelines = timelines.filter(t => !t.folderId);
 
   // ── GPS sidebar mode ───────────────────────────────────────────────────────
   if (active === 'gps') {
@@ -990,7 +1198,7 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.9.8
+              v1.10.0
             </div>
           )}
         </div>
@@ -1028,12 +1236,12 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
 
         {/* Add List / Add Folder buttons */}
         <div style={{ display: 'flex', gap: 4 }}>
-          <button title={collapsed ? 'Add List' : undefined}
+          <button title={collapsed ? 'Add' : undefined}
             onMouseEnter={() => setAddHov(true)} onMouseLeave={() => setAddHov(false)}
-            onClick={() => onOpenModal('add-list')}
+            onClick={() => onOpenModal('add')}
             style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, borderRadius: 8, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 500, color: '#5e4dbb', background: addHov ? '#F5F3FF' : 'transparent', border: 'none', transition: 'background 200ms' }}>
             <Icon name="add" size={19} color="#5e4dbb" />
-            {!collapsed && <span>Add List</span>}
+            {!collapsed && <span>Add</span>}
           </button>
           {!collapsed && (
             <button title="Add Folder"
@@ -1067,13 +1275,16 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
         {/* Folders */}
         {[...folders].sort((a, b) => a.position - b.position).map(folder => {
           const folderLists = lists.filter(l => l.folderId === folder.id);
+          const folderTimelines = timelines.filter(t => t.folderId === folder.id);
           return (
             <FolderRow
               key={folder.id}
               folder={folder}
               lists={folderLists}
+              timelines={folderTimelines}
               active={active}
               activeListId={activeListId}
+              activeTimelineId={activeTimelineId}
               activeFolderId={activeFolderId}
               collapsed={collapsed}
               dragOverId={dragOverId}
@@ -1154,6 +1365,18 @@ export default function Sidebar({ active, activeListId, activeFolderId, activeGp
             />
           );
         })}
+
+        {/* Standalone timelines (root level) */}
+        {standaloneTimelines.map(timeline => (
+          <TimelineItemRow
+            key={timeline.id}
+            timeline={timeline}
+            isActive={active === 'timeline' && activeTimelineId === timeline.id}
+            collapsed={collapsed}
+            folders={folders}
+            onNavigate={onNavigate}
+          />
+        ))}
       </div>
 
       <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>

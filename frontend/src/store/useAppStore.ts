@@ -1,11 +1,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AppState, TrashedTask, TrashedList, TrashedFolder } from '../types';
+import type { AppState, TrashedTask, TrashedList, TrashedFolder, TrashedTimeline } from '../types';
 import useWorkspaceStore from './useWorkspaceStore';
 import {
   apiGetTasks,
   apiGetLists,
   apiGetFolders,
+  apiGetTimelines,
+  apiUpdateTimeline,
+  apiDeleteTimeline,
+  apiGetTrashTimelines,
+  apiRestoreTimelineFromTrash,
+  apiDeleteTimelineFromTrash,
   apiCreateFolder,
   apiUpdateFolder,
   apiDeleteFolder,
@@ -40,10 +46,12 @@ const useAppStore = create<AppState>()(
       dashTasks: [],
       lists: [],
       folders: [],
+      timelines: [],
       listsLoading: false,
       trashTasks: [],
       trashLists: [],
       trashFolders: [],
+      trashTimelines: [],
       sidebarWidth: 256,
 
       setDashTasks: (tasks) => {
@@ -68,6 +76,75 @@ const useAppStore = create<AppState>()(
         } else {
           set({ folders });
         }
+      },
+
+      setTimelines: (timelines) => {
+        if (typeof timelines === 'function') {
+          set((state) => ({ timelines: timelines(state.timelines) }));
+        } else {
+          set({ timelines });
+        }
+      },
+
+      updateTimeline: (timelineId, updates) => {
+        const prev = get().timelines.find((t) => t.id === timelineId);
+        set((state) => ({
+          timelines: state.timelines.map((t) => (t.id === timelineId ? { ...t, ...updates } : t)),
+        }));
+        apiUpdateTimeline(timelineId, updates).catch(() => {
+          if (prev) {
+            set((state) => ({
+              timelines: state.timelines.map((t) => (t.id === timelineId ? prev : t)),
+            }));
+          }
+          get().loadFromApi();
+        });
+      },
+
+      deleteTimeline: (timelineId) => {
+        const state = get();
+        const timeline = state.timelines.find((t) => t.id === timelineId);
+
+        set((s) => ({ timelines: s.timelines.filter((t) => t.id !== timelineId) }));
+
+        let trashId: number | null = null;
+        if (timeline) {
+          trashId = ++trashCounter;
+          const trashEntry: TrashedTimeline = {
+            id: trashId,
+            timelineId: timeline.id,
+            timeline,
+            deletedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          };
+          set((s) => ({ trashTimelines: [...s.trashTimelines, trashEntry] }));
+        }
+
+        apiDeleteTimeline(timelineId).catch(() => {
+          if (timeline) {
+            set((s) => ({
+              timelines: [...s.timelines, timeline],
+              trashTimelines: trashId != null ? s.trashTimelines.filter((t) => t.id !== trashId) : s.trashTimelines,
+            }));
+          }
+          get().loadFromApi();
+        });
+      },
+
+      restoreTimelineFromTrash: (trashId) => {
+        const state = get();
+        const entry = state.trashTimelines.find((t) => t.id === trashId);
+        if (!entry) return;
+        set((s) => ({
+          timelines: [...s.timelines, entry.timeline],
+          trashTimelines: s.trashTimelines.filter((t) => t.id !== trashId),
+        }));
+        apiRestoreTimelineFromTrash(trashId).catch(() => {});
+      },
+
+      deleteTimelineFromTrash: (trashId) => {
+        set((s) => ({ trashTimelines: s.trashTimelines.filter((t) => t.id !== trashId) }));
+        apiDeleteTimelineFromTrash(trashId).catch(() => {});
       },
 
       addFolder: (folder) => {
@@ -419,20 +496,23 @@ const useAppStore = create<AppState>()(
         const myLoadId = ++currentLoadId;
         set({ listsLoading: true });
         try {
-          const [tasksRes, listsRes, foldersRes, trashRes, trashListsRes, trashFoldersRes] = await Promise.all([
+          const [tasksRes, listsRes, foldersRes, timelinesRes, trashRes, trashListsRes, trashFoldersRes, trashTimelinesRes] = await Promise.all([
             apiGetTasks(workspaceId).catch(() => null),
             apiGetLists(workspaceId).catch(() => null),
             apiGetFolders(workspaceId).catch(() => null),
+            apiGetTimelines(workspaceId).catch(() => null),
             apiGetTrash().catch(() => null),
             apiGetTrashLists().catch(() => null),
             apiGetTrashFolders().catch(() => null),
+            apiGetTrashTimelines().catch(() => null),
           ]);
           // Discard results if a newer load has been requested (e.g. workspace switched mid-load)
           if (myLoadId !== currentLoadId) return;
-          const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'folders' | 'trashTasks' | 'trashLists' | 'trashFolders' | 'listsLoading'>> = {};
+          const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'folders' | 'timelines' | 'trashTasks' | 'trashLists' | 'trashFolders' | 'trashTimelines' | 'listsLoading'>> = {};
           update.listsLoading = false;
           if (tasksRes) update.dashTasks = tasksRes.tasks.map(t => ({ ...t, id: Number(t.id) }));
           if (foldersRes) update.folders = foldersRes.folders;
+          if (timelinesRes) update.timelines = timelinesRes.timelines.map(t => ({ ...t, milestones: t.milestones ?? [] }));
           if (listsRes) update.lists = listsRes.lists.map(l => ({
             ...l,
             parentTaskId: l.parentTaskId != null ? Number(l.parentTaskId) : null,
@@ -461,6 +541,13 @@ const useAppStore = create<AppState>()(
             deletedAt: tr.deletedAt,
             expiresAt: tr.expiresAt,
           }));
+          if (trashTimelinesRes) update.trashTimelines = trashTimelinesRes.trash.map(tr => ({
+            id: Number(tr.id),
+            timelineId: tr.timelineId,
+            timeline: { ...tr.timelineData, milestones: tr.timelineData.milestones ?? [] },
+            deletedAt: tr.deletedAt,
+            expiresAt: tr.expiresAt,
+          }));
           set(update as AppState);
         } catch {
           set({ listsLoading: false });
@@ -473,9 +560,11 @@ const useAppStore = create<AppState>()(
         dashTasks: state.dashTasks,
         lists: state.lists,
         folders: state.folders,
+        timelines: state.timelines,
         trashTasks: state.trashTasks,
         trashLists: state.trashLists,
         trashFolders: state.trashFolders,
+        trashTimelines: state.trashTimelines,
         sidebarWidth: state.sidebarWidth,
       }),
     }

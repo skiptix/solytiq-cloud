@@ -1,4 +1,4 @@
-import type { Task, List, Folder, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -160,6 +160,40 @@ export const apiUpdateListTask = (listId: string, taskId: number, data: Partial<
 
 export const apiDeleteListTask = (listId: string, taskId: number) =>
   apiFetch<{ success: boolean }>(`/lists/${listId}/tasks/${taskId}`, { method: 'DELETE' });
+
+// Timelines
+export const apiGetTimelines = (workspaceId?: string) =>
+  apiFetch<{ timelines: Timeline[] }>(`/timelines${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`);
+
+export const apiCreateTimeline = (data: Omit<Timeline, 'milestones'> & { milestones?: Timeline['milestones']; workspaceId?: string }) =>
+  apiFetch<{ timeline: Timeline }>('/timelines', { method: 'POST', body: JSON.stringify(data) });
+
+export const apiUpdateTimeline = (id: string, data: Partial<Timeline>) =>
+  apiFetch<{ timeline: Timeline }>(`/timelines/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const apiDeleteTimeline = (id: string) =>
+  apiFetch<{ success: boolean }>(`/timelines/${id}`, { method: 'DELETE' });
+
+export const apiCreateMilestone = (timelineId: string, data: Partial<Milestone> & { title: string }) =>
+  apiFetch<{ milestone: Milestone }>(`/timelines/${timelineId}/milestones`, { method: 'POST', body: JSON.stringify(data) });
+
+export const apiUpdateMilestone = (milestoneId: string, data: Partial<Milestone>) =>
+  apiFetch<{ milestone: Milestone }>(`/timelines/milestones/${milestoneId}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const apiDeleteMilestone = (milestoneId: string) =>
+  apiFetch<{ success: boolean }>(`/timelines/milestones/${milestoneId}`, { method: 'DELETE' });
+
+export const apiReorderMilestones = (timelineId: string, milestoneIds: string[]) =>
+  apiFetch<{ success: boolean }>(`/timelines/${timelineId}/milestones/reorder`, { method: 'PUT', body: JSON.stringify({ milestone_ids: milestoneIds }) });
+
+export const apiGetTrashTimelines = () =>
+  apiFetch<{ trash: Array<{ id: number; timelineId: string; timelineData: Timeline; deletedAt: string; expiresAt: string }> }>('/trash/timelines');
+
+export const apiRestoreTimelineFromTrash = (trashId: number) =>
+  apiFetch<{ success: boolean }>(`/trash/timelines/${trashId}/restore`, { method: 'POST' });
+
+export const apiDeleteTimelineFromTrash = (trashId: number) =>
+  apiFetch<{ success: boolean }>(`/trash/timelines/${trashId}`, { method: 'DELETE' });
 
 // Folders
 export const apiGetFolders = (workspaceId?: string) =>
