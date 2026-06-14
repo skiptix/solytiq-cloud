@@ -2,14 +2,143 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Icon from '../components/Icon';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useAuthStore from '../store/useAuthStore';
-import type { Workspace, WorkspaceMember } from '../types';
+import type { Workspace, WorkspaceMember, SharedFile } from '../types';
 import { EmojiGrid } from '../components/EmojiSelector';
-import { apiGetMembers } from '../api/client';
+import { apiGetMembers, apiGetFiles } from '../api/client';
 
 interface UserSuggestion { id: string; username: string; fullName: string | null; profileImage: string | null; }
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const IMAGE_PICKER_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
+
+function extBadge(mime: string) {
+  if (mime === 'image/svg+xml') return 'SVG';
+  if (mime === 'image/png') return 'PNG';
+  if (mime === 'image/jpeg') return 'JPG';
+  if (mime === 'image/webp') return 'WEBP';
+  return 'IMG';
+}
+
+async function fetchFileAsDataUrl(fileId: string): Promise<string> {
+  const token = localStorage.getItem('solytiq_token');
+  const res = await fetch(`${API_BASE}/files/${fileId}/download`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const blob = await res.blob();
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function WorkspaceImagePicker({ onSelect, onClose }: { onSelect: (dataUrl: string) => void; onClose: () => void }) {
+  const [files, setFiles] = useState<SharedFile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [fetchingId, setFetchingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGetFiles()
+      .then(r => setFiles(r.files.filter(f => IMAGE_PICKER_MIMES.includes(f.mimeType))))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = files.filter(f =>
+    f.name.toLowerCase().includes(search.toLowerCase()) ||
+    (f.title ?? '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleSelect = async (f: SharedFile) => {
+    if (fetchingId) return;
+    setFetchingId(f.id);
+    try {
+      const dataUrl = await fetchFileAsDataUrl(f.id);
+      onSelect(dataUrl);
+    } catch {
+      setFetchingId(null);
+    }
+  };
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 1500, background: 'rgba(0,0,0,0.38)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 440, maxHeight: '68vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(0,0,0,0.22)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 18px 14px', borderBottom: '1px solid #F0EEF8', flexShrink: 0 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="image" size={16} color="#5e4dbb" />
+          </div>
+          <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22', flex: 1 }}>Pick icon from Files</span>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#F5F3FF')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+            <Icon name="close" size={16} color="#787584" />
+          </button>
+        </div>
+        {/* Search */}
+        <div style={{ padding: '10px 18px 0', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 9, padding: '7px 12px' }}>
+            <Icon name="search" size={15} color="#b0acbe" />
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search images…"
+              style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none' }}
+            />
+          </div>
+        </div>
+        {/* File list */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px 12px' }}>
+          {loading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 28 }}>
+              <div style={{ width: 22, height: 22, border: '2.5px solid #e8e4f0', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '28px 16px' }}>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>
+                {search ? 'No matching images' : 'No image files found'}
+              </div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#c9c4d5', marginTop: 4 }}>
+                Upload PNG, JPG, SVG, or WEBP to Files first
+              </div>
+            </div>
+          ) : (
+            filtered.map(f => (
+              <button key={f.id}
+                disabled={!!fetchingId}
+                onClick={() => handleSelect(f)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 10px', borderRadius: 10, border: 'none', background: fetchingId === f.id ? '#F5F3FF' : 'transparent', cursor: fetchingId ? 'default' : 'pointer', textAlign: 'left', transition: 'background 120ms' }}
+                onMouseEnter={e => { if (!fetchingId) e.currentTarget.style.background = '#faf9ff'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = fetchingId === f.id ? '#F5F3FF' : 'transparent'; }}
+              >
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: '#F5F3FF', border: '1px solid #ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 9.5, fontWeight: 700, color: '#5e4dbb', letterSpacing: '0.03em' }}>{extBadge(f.mimeType)}</span>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.title || f.name}</div>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 1 }}>{(f.size / 1024).toFixed(0)} KB</div>
+                </div>
+                {fetchingId === f.id
+                  ? <div style={{ width: 14, height: 14, border: '2px solid #c4b5fd', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite', flexShrink: 0 }} />
+                  : <Icon name="add_photo_alternate" size={16} color="#c9c4d5" />
+                }
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface Props { workspace: Workspace; onClose: () => void; }
 
@@ -48,6 +177,9 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   // Danger
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // Image picker from Files
+  const [showImagePicker, setShowImagePicker] = useState(false);
 
   const { updateWorkspace, deleteWorkspace, getMembers, addMember, removeMember, setDeletingWorkspaceId } = useWorkspaceStore();
   const { userId } = useAuthStore();
@@ -154,6 +286,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   ];
 
   return (
+    <>
     <div
       onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: backdropAnim }}>
@@ -213,7 +346,16 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                       <button onClick={() => setUseImage(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: !useImage ? '#5e4dbb' : 'transparent', color: !useImage ? '#fff' : '#787584', transition: 'all 150ms' }}>Emoji</button>
                       <button onClick={() => setUseImage(true)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: useImage ? '#5e4dbb' : 'transparent', color: useImage ? '#fff' : '#787584', transition: 'all 150ms' }}>Image</button>
                     </div>
-                    {useImage && <button onClick={() => fileInputRef.current?.click()} style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#5e4dbb', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}>Upload image…</button>}
+                    {useImage && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        <button onClick={() => fileInputRef.current?.click()} style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#5e4dbb', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Icon name="upload" size={13} color="#5e4dbb" />Upload from device
+                        </button>
+                        <button onClick={() => setShowImagePicker(true)} style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#5e4dbb', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Icon name="folder_open" size={13} color="#5e4dbb" />Pick from Files
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
                 {useImage && (
@@ -415,5 +557,13 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
         </div>
       </div>
     </div>
+
+    {showImagePicker && (
+      <WorkspaceImagePicker
+        onSelect={dataUrl => { setImage(dataUrl); setUseImage(true); setShowImagePicker(false); }}
+        onClose={() => setShowImagePicker(false)}
+      />
+    )}
+    </>
   );
 }
