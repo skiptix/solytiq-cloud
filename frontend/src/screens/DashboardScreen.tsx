@@ -2,34 +2,36 @@ import { useState } from 'react';
 import type { Task, List } from '../types';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
+import useUserPrefsStore from '../store/useUserPrefsStore';
 import { apiCreateTask } from '../api/client';
+import { todayInTz, futureDateInTz } from '../utils/date';
 import TaskItem, { QuickAdd } from '../components/TaskItem';
 import TaskDialog from '../components/TaskDialog';
 import Icon from '../components/Icon';
 
-// ── Date helpers ─────────────────────────────────────────────────
-function toIso(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+// ── Date helpers (timezone-aware) ────────────────────────────────
+// All helpers accept an IANA timezone string so the user's chosen zone is respected.
+function endOfWeek(tz: string): string {
+  const todayStr = todayInTz(tz);
+  const d = new Date(todayStr + 'T12:00:00');
+  const daysLeft = (7 - d.getDay()) % 7;
+  d.setDate(d.getDate() + daysLeft);
+  return d.toISOString().slice(0, 10);
 }
-const today = () => toIso(new Date());
-function endOfWeek(): string {
-  const t = new Date(); t.setHours(0,0,0,0);
-  const daysLeft = (7 - t.getDay()) % 7;
-  const end = new Date(t); end.setDate(t.getDate() + daysLeft);
-  return toIso(end);
+function isDueToday(t: Task, tz: string) { return t.deadline === todayInTz(tz); }
+function isDueThisWeek(t: Task, tz: string) {
+  const d = t.deadline;
+  const td = todayInTz(tz);
+  return d ? d > td && d <= endOfWeek(tz) : false;
 }
-function isDueToday(t: Task) { return t.deadline === today(); }
-function isDueThisWeek(t: Task) { const d = t.deadline; return d ? d > today() && d <= endOfWeek() : false; }
-function isOverdue(t: Task) { return t.deadline ? t.deadline < today() && !t.checked : false; }
-function friendlyDate(iso?: string) {
+function isOverdue(t: Task, tz: string) { return t.deadline ? t.deadline < todayInTz(tz) && !t.checked : false; }
+function friendlyDate(iso: string | undefined, tz: string) {
   if (!iso) return '';
-  if (iso === today()) return 'Today';
+  const td = todayInTz(tz);
+  if (iso === td) return 'Today';
   const d = new Date(iso.slice(0, 10) + 'T12:00:00');
-  const tom = new Date(); tom.setDate(tom.getDate() + 1);
-  if (iso === toIso(tom)) return 'Tomorrow';
+  const tom = futureDateInTz(tz, 1);
+  if (iso === tom) return 'Tomorrow';
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
@@ -79,7 +81,7 @@ function StatCard({ num, label, sub, icon, iconBg, iconColor, accent }: { num: n
 }
 
 // ── Mini Task Row ──────────────────────────────────────────────
-function MiniTaskRow({ task, onToggle, onOpen }: { task: Task; onToggle: (id: number) => void; onOpen: (task: Task, e: React.MouseEvent) => void }) {
+function MiniTaskRow({ task, onToggle, onOpen, timezone }: { task: Task; onToggle: (id: number) => void; onOpen: (task: Task, e: React.MouseEvent) => void; timezone: string }) {
   const [hov, setHov] = useState(false);
   const PCOLS: Record<string, string> = { High: '#ea580c', Medium: '#f59e0b', Low: '#787584' };
   return (
@@ -96,13 +98,13 @@ function MiniTaskRow({ task, onToggle, onOpen }: { task: Task; onToggle: (id: nu
           {task.priority && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, fontWeight: 600, color: PCOLS[task.priority] }}>{task.priority}</span>}
         </div>
       </div>
-      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584', flexShrink: 0 }}>{friendlyDate(task.deadline)}</span>
+      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584', flexShrink: 0 }}>{friendlyDate(task.deadline, timezone)}</span>
     </div>
   );
 }
 
 // ── Observer Panel ─────────────────────────────────────────────
-function ObserverPanel({ title, icon, accent, accentBg, tasks, emptyText, onToggle, onOpen, onSeeMore }: { title: string; icon: string; accent: string; accentBg: string; tasks: Task[]; emptyText: string; onToggle: (id: number) => void; onOpen: (t: Task, e: React.MouseEvent) => void; onSeeMore: () => void }) {
+function ObserverPanel({ title, icon, accent, accentBg, tasks, emptyText, onToggle, onOpen, onSeeMore, timezone }: { title: string; icon: string; accent: string; accentBg: string; tasks: Task[]; emptyText: string; onToggle: (id: number) => void; onOpen: (t: Task, e: React.MouseEvent) => void; onSeeMore: () => void; timezone: string }) {
   const visible = tasks.slice(0, 5);
   const more = Math.max(0, tasks.length - visible.length);
   const [moreHov, setMoreHov] = useState(false);
@@ -120,7 +122,7 @@ function ObserverPanel({ title, icon, accent, accentBg, tasks, emptyText, onTogg
         <div style={{ padding: '24px 12px', textAlign: 'center', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>{emptyText}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {visible.map(t => <MiniTaskRow key={`${t._listId}-${t.id}`} task={t} onToggle={onToggle} onOpen={onOpen} />)}
+          {visible.map(t => <MiniTaskRow key={`${t._listId}-${t.id}`} task={t} onToggle={onToggle} onOpen={onOpen} timezone={timezone} />)}
           {more > 0 && (
             <button onClick={onSeeMore} onMouseEnter={() => setMoreHov(true)} onMouseLeave={() => setMoreHov(false)}
               style={{ marginTop: 4, width: '100%', background: moreHov ? `${accent}14` : 'transparent', border: `1px dashed ${moreHov ? accent : '#d8d0eb'}`, borderRadius: 8, padding: '8px 10px', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 160ms' }}>
@@ -203,6 +205,7 @@ function TasksDetailModal({ title, icon, accent, accentBg, tasks, onClose, onTog
 // ── Dashboard Screen ───────────────────────────────────────────
 export default function DashboardScreen() {
   const { dashTasks, setDashTasks, lists, updateDashTask, updateListTask, deleteListTask, addToTrash } = useAppStore();
+  const timezone = useUserPrefsStore(s => s.timezone);
 
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState<string | null>(null);
@@ -219,9 +222,9 @@ export default function DashboardScreen() {
   const completedCount = allTasks.filter(t => t.checked).length;
   const openCount = totalCount - completedCount;
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-  const dueTodayTasks = allTasks.filter(t => isDueToday(t) && !t.checked);
-  const dueWeekTasks = allTasks.filter(t => isDueThisWeek(t) && !t.checked);
-  const overdueTasks = allTasks.filter(isOverdue);
+  const dueTodayTasks = allTasks.filter(t => isDueToday(t, timezone) && !t.checked);
+  const dueWeekTasks = allTasks.filter(t => isDueThisWeek(t, timezone) && !t.checked);
+  const overdueTasks = allTasks.filter(t => isOverdue(t, timezone));
 
   const toggle = (id: number) => {
     const t = allTasks.find(t => t.id === id);
@@ -309,8 +312,8 @@ export default function DashboardScreen() {
         </section>
 
         <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-          <ObserverPanel title="Due Today" icon="today" accent="#ea580c" accentBg="#fff7ed" tasks={dueTodayTasks} emptyText="Nothing on your plate today." onToggle={toggle} onOpen={openTask} onSeeMore={() => setDetailModal({ source: 'today', title: 'Due Today', icon: 'today', accent: '#ea580c', accentBg: '#fff7ed' })} />
-          <ObserverPanel title="This Week" icon="calendar_month" accent="#1D4ED8" accentBg="#eff6ff" tasks={dueWeekTasks} emptyText="No deadlines this week." onToggle={toggle} onOpen={openTask} onSeeMore={() => setDetailModal({ source: 'week', title: 'Due This Week', icon: 'calendar_month', accent: '#1D4ED8', accentBg: '#eff6ff' })} />
+          <ObserverPanel title="Due Today" icon="today" accent="#ea580c" accentBg="#fff7ed" tasks={dueTodayTasks} emptyText="Nothing on your plate today." onToggle={toggle} onOpen={openTask} timezone={timezone} onSeeMore={() => setDetailModal({ source: 'today', title: 'Due Today', icon: 'today', accent: '#ea580c', accentBg: '#fff7ed' })} />
+          <ObserverPanel title="This Week" icon="calendar_month" accent="#1D4ED8" accentBg="#eff6ff" tasks={dueWeekTasks} emptyText="No deadlines this week." onToggle={toggle} onOpen={openTask} timezone={timezone} onSeeMore={() => setDetailModal({ source: 'week', title: 'Due This Week', icon: 'calendar_month', accent: '#1D4ED8', accentBg: '#eff6ff' })} />
         </section>
 
         <section>

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import Icon from '../components/Icon';
 import useAuthStore from '../store/useAuthStore';
+import useUserPrefsStore from '../store/useUserPrefsStore';
 import {
   apiUpdateProfile,
   apiUploadProfileImage,
@@ -56,6 +57,7 @@ const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   const { username, fullName, profileImage, isAdmin, totpEnabled, setProfile, setTotpEnabled } = useAuthStore();
+  const { timezone, setTimezone } = useUserPrefsStore();
 
   // Feature flag
   const [twoFAFeatureEnabled, setTwoFAFeatureEnabled] = useState(true);
@@ -375,6 +377,24 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#787584' }}>@{username}</span>
                     <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', background: '#f7f4fc', borderRadius: 9999, padding: '2px 8px' }}>can't be changed</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── PREFERENCES ── */}
+            <div style={{ animation: 'sectionFadeUp 340ms 40ms cubic-bezier(0.22,1,0.36,1) both' }}>
+              {sectionLabel('Preferences')}
+              <div style={card}>
+                <div style={{ padding: '14px 18px' }}>
+                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Timezone</div>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginBottom: 10, lineHeight: 1.5 }}>
+                    Affects how deadlines and timeline milestones are evaluated against "today".
+                  </div>
+                  <TimezoneSelector value={timezone} onChange={setTimezone} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 8 }}>
+                    <Icon name="schedule" size={12} color="#9d8dff" />
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#9d8dff' }}>Current: {timezone}</span>
                   </div>
                 </div>
               </div>
@@ -757,6 +777,120 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
       {/* 2FA Enable Wizard (nested modal) */}
       {twoFAOpen && <TwoFAWizardInline onClose={() => setTwoFAOpen(false)} onEnabled={() => setTotpEnabled(true)} />}
     </>
+  );
+}
+
+// ── Timezone Selector ─────────────────────────────────────────────────────────
+
+const COMMON_TIMEZONES: Array<{ label: string; value: string }> = [
+  { label: 'Pacific/Honolulu (UTC-10)', value: 'Pacific/Honolulu' },
+  { label: 'America/Anchorage (UTC-9)', value: 'America/Anchorage' },
+  { label: 'America/Los_Angeles (UTC-8/-7)', value: 'America/Los_Angeles' },
+  { label: 'America/Denver (UTC-7/-6)', value: 'America/Denver' },
+  { label: 'America/Chicago (UTC-6/-5)', value: 'America/Chicago' },
+  { label: 'America/New_York (UTC-5/-4)', value: 'America/New_York' },
+  { label: 'America/Sao_Paulo (UTC-3)', value: 'America/Sao_Paulo' },
+  { label: 'Atlantic/Azores (UTC-1)', value: 'Atlantic/Azores' },
+  { label: 'Europe/London (UTC+0/+1)', value: 'Europe/London' },
+  { label: 'Europe/Paris (UTC+1/+2)', value: 'Europe/Paris' },
+  { label: 'Europe/Berlin (UTC+1/+2)', value: 'Europe/Berlin' },
+  { label: 'Europe/Amsterdam (UTC+1/+2)', value: 'Europe/Amsterdam' },
+  { label: 'Europe/Stockholm (UTC+1/+2)', value: 'Europe/Stockholm' },
+  { label: 'Europe/Helsinki (UTC+2/+3)', value: 'Europe/Helsinki' },
+  { label: 'Europe/Istanbul (UTC+3)', value: 'Europe/Istanbul' },
+  { label: 'Asia/Dubai (UTC+4)', value: 'Asia/Dubai' },
+  { label: 'Asia/Karachi (UTC+5)', value: 'Asia/Karachi' },
+  { label: 'Asia/Kolkata (UTC+5:30)', value: 'Asia/Kolkata' },
+  { label: 'Asia/Dhaka (UTC+6)', value: 'Asia/Dhaka' },
+  { label: 'Asia/Bangkok (UTC+7)', value: 'Asia/Bangkok' },
+  { label: 'Asia/Singapore (UTC+8)', value: 'Asia/Singapore' },
+  { label: 'Asia/Shanghai (UTC+8)', value: 'Asia/Shanghai' },
+  { label: 'Asia/Tokyo (UTC+9)', value: 'Asia/Tokyo' },
+  { label: 'Australia/Sydney (UTC+10/+11)', value: 'Australia/Sydney' },
+  { label: 'Pacific/Auckland (UTC+12/+13)', value: 'Pacific/Auckland' },
+];
+
+interface TimezoneSelectorProps {
+  value: string;
+  onChange: (tz: string) => void;
+}
+
+function TimezoneSelector({ value, onChange }: TimezoneSelectorProps) {
+  const [search, setSearch] = useState('');
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const filtered = COMMON_TIMEZONES.filter(tz =>
+    tz.label.toLowerCase().includes(search.toLowerCase()) ||
+    tz.value.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const current = COMMON_TIMEZONES.find(tz => tz.value === value);
+  const displayLabel = current?.label ?? value;
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => { setOpen(v => !v); setSearch(''); }}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '9px 12px', borderRadius: 8, border: '1.5px solid #e8e4f0', background: '#fff', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', transition: 'border-color 150ms' }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
+        onMouseLeave={e => { if (!open) e.currentTarget.style.borderColor = '#e8e4f0'; }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <Icon name="public" size={14} color="#9d8dff" />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>{displayLabel}</span>
+        </div>
+        <Icon name={open ? 'expand_less' : 'expand_more'} size={16} color="#787584" />
+      </button>
+
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 200, background: '#fff', borderRadius: 10, border: '1.5px solid #e8e4f0', boxShadow: '0 8px 24px rgba(0,0,0,0.13)', overflow: 'hidden', animation: 'wizardStepIn 160ms cubic-bezier(0.22,1,0.36,1) both' }}>
+          {/* Search */}
+          <div style={{ padding: '8px 10px', borderBottom: '1px solid #f1ecf6', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="search" size={14} color="#b0acbe" />
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search timezone…"
+              style={{ flex: 1, border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: 'transparent' }}
+            />
+          </div>
+          {/* List */}
+          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '14px 14px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', textAlign: 'center' }}>No matches</div>
+            ) : (
+              filtered.map(tz => {
+                const selected = tz.value === value;
+                return (
+                  <button
+                    key={tz.value}
+                    onClick={() => { onChange(tz.value); setOpen(false); }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', border: 'none', background: selected ? '#F5F3FF' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 100ms' }}
+                    onMouseEnter={e => { if (!selected) e.currentTarget.style.background = '#faf9ff'; }}
+                    onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: selected ? '#5e4dbb' : '#1c1b22', fontWeight: selected ? 600 : 400 }}>{tz.label}</span>
+                    {selected && <Icon name="check" size={13} color="#5e4dbb" />}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

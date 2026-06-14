@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import type { Milestone, MilestoneStatus, TimelineLayout } from '../types';
 import useAppStore from '../store/useAppStore';
 import useAuthStore from '../store/useAuthStore';
+import useUserPrefsStore from '../store/useUserPrefsStore';
+import { todayInTz } from '../utils/date';
 import { apiCreateMilestone, apiUpdateMilestone, apiDeleteMilestone } from '../api/client';
 import { genId } from '../utils/id';
 import Icon from '../components/Icon';
@@ -29,18 +31,6 @@ function fmtDate(date?: string | null) {
   const [y, m, d] = parts.map(Number);
   if (!m || !d) return date;
   return `${MONTHS[m - 1]} ${d}, ${y}`;
-}
-
-// Today as YYYY-MM-DD (local)
-function todayStr(): string {
-  const n = new Date();
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
-}
-
-// A milestone is date-reached when its date <= today
-function isDateReached(date?: string | null): boolean {
-  if (!date) return false;
-  return date <= todayStr();
 }
 
 // Chronological order; undated milestones fall to the bottom by position.
@@ -174,6 +164,8 @@ export default function TimelineScreen() {
   const navigate = useNavigate();
   const { userId: currentUserId } = useAuthStore();
   const { timelines, listsLoading, setTimelines, loadFromApi } = useAppStore();
+  const timezone = useUserPrefsStore(s => s.timezone);
+  const today = todayInTz(timezone);
   const timeline = timelines.find(t => t.id === timelineId);
 
   const [editing, setEditing] = useState<Milestone | null>(null);
@@ -206,13 +198,13 @@ export default function TimelineScreen() {
 
   // Date-based progress: a milestone counts as reached when its date <= today,
   // OR when it was manually marked done.
-  const reachedCount = milestones.filter(m => m.status === 'done' || isDateReached(m.date)).length;
+  const reachedCount = milestones.filter(m => m.status === 'done' || (m.date != null && m.date <= today)).length;
   const done = milestones.filter(m => m.status === 'done').length;
   const pct = total > 0 ? Math.round((reachedCount / total) * 100) : 0;
 
   // Index of the last milestone that is reached (for rail fill height).
   const lastReachedIdx = milestones.reduce((acc, m, i) =>
-    (m.status === 'done' || isDateReached(m.date)) ? i : acc, -1);
+    (m.status === 'done' || (m.date != null && m.date <= today)) ? i : acc, -1);
 
   // Layout density knobs.
   const gap = layout === 'compact' ? 8 : layout === 'detailed' ? 26 : 16;
@@ -337,14 +329,14 @@ export default function TimelineScreen() {
             <div style={{ display: 'flex', flexDirection: 'column', gap }}>
               {milestones.map((m) => {
                 // A milestone is visually "reached" if its date is past/today OR manually done
-                const dateReached = isDateReached(m.date);
+                const dateReached = m.date != null && m.date <= today;
                 const effectivelyDone = m.status === 'done' || dateReached;
                 const effectiveStatus: MilestoneStatus = effectivelyDone ? 'done' : m.status;
                 const st = statusOf(effectiveStatus);
                 const dot = m.color ?? st.color;
                 const dateLabel = fmtDate(m.date);
-                const isPast = m.date ? m.date < todayStr() : false;
-                const isToday = m.date === todayStr();
+                const isPast = m.date ? m.date < today : false;
+                const isToday = m.date === today;
                 return (
                   <div key={m.id} style={{ position: 'relative', display: 'flex', gap: 18, alignItems: 'flex-start' }}>
                     {/* Node */}
