@@ -383,7 +383,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
             </div>
 
             {/* ── PREFERENCES ── */}
-            <div style={{ animation: 'sectionFadeUp 340ms 40ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <div style={{ position: 'relative', zIndex: 10, animation: 'sectionFadeUp 340ms 40ms cubic-bezier(0.22,1,0.36,1) both' }}>
               {sectionLabel('Preferences')}
               <div style={{ ...card, overflow: 'visible' }}>
                 <div style={{ padding: '14px 18px' }}>
@@ -867,7 +867,7 @@ function TimezoneSelector({ value, onChange }: TimezoneSelectorProps) {
             />
           </div>
           {/* List */}
-          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 180, overflowY: 'auto' }}>
             {filtered.length === 0 ? (
               <div style={{ padding: '14px 14px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', textAlign: 'center' }}>No matches</div>
             ) : (
