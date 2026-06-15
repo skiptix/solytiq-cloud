@@ -8,7 +8,7 @@ Solytiq Cloud is a self-hosted, full-stack productivity suite: task lists, proje
 
 The current version is displayed at the bottom-left of the sidebar in `frontend/src/components/Sidebar.tsx`.
 
-**On every deploy / release, update the version string** in that file — search for the `v1.12.0` literal (it appears in two places, for the expanded and collapsed sidebar states) and bump **both**. Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
+**On every deploy / release, update the version string** in that file — search for the `v1.12.1` literal (it appears in two places, for the expanded and collapsed sidebar states) and bump **both**. Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
 
 ---
 
@@ -311,6 +311,7 @@ The per-item **"More settings…"** menu in the `Sidebar` opens `ItemSettingsMod
 - **Animations** (defined in `index.css`): `modalIn` (`280ms cubic-bezier(0.34,1.56,0.64,1)`), `menuIn`, `backdropIn`, `sectionFadeUp`, `cardIn`, `spin`.
 - **Icons:** Material Symbols via the `<Icon>` component (`src/components/Icon.tsx`) — pass the symbol name as a string.
 - **Privacy/visibility toggles:** two-button (lock/public) pattern; selected gets `#5e4dbb` border + `#f0edff` background + a check icon.
+- **Date pickers:** Always use the shared `<CalendarPicker>` component (`src/components/CalendarPicker.tsx`) for *every* calendar/date field — never a native `<input type="date">` (it renders the OS picker, which breaks the design language and is locale-dependent). The established pattern is a trigger button (`calendar_today` icon + the formatted date or a placeholder + an `×` clear affordance) that toggles a `showExpiryCal`-style boolean, with `<CalendarPicker value={…} onChange={…} onClear={…} />` in an absolutely-positioned popover. See the expiry fields in `FilesScreen` and `ItemSettingsModal`, and the due-date field in `TaskDialog`, for reference.
 
 ### Task Source Duality
 
