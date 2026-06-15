@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SharedFile } from '../types';
 import { apiGetFiles, apiUpdateFile, apiDeleteFile, apiUploadFile, apiGetStorageUsage, apiPreviewFile } from '../api/client';
@@ -543,6 +544,7 @@ function RecentCard({ file, onEdit, onDelete }: { file: SharedFile; onEdit: () =
 // ── Main Screen ───────────────────────────────────────────────────
 
 export default function FilesScreen() {
+  usePageTitle("Files");
   const { userId } = useAuthStore();
   const [files, setFiles] = useState<SharedFile[]>([]);
   const [loading, setLoading] = useState(true);

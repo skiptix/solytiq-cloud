@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -49,6 +50,7 @@ function PasswordStrength({ password }: { password: string }) {
 }
 
 export default function SetupWizard() {
+  usePageTitle("Setup");
   const navigate = useNavigate();
   const { register } = useAuthStore();
   const [step, setStep] = useState(0);

@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useRef, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -248,6 +249,15 @@ export default function TimelineScreen() {
 
   const [editing, setEditing] = useState<Milestone | null>(null);
   const [adding, setAdding] = useState(false);
+
+  let pageTitle = 'Loading timeline...';
+  if (!timeline && !listsLoading) {
+    pageTitle = 'Timeline not found';
+  } else if (timeline) {
+    const prefix = timeline.emoji ? `${timeline.emoji} ` : '';
+    pageTitle = `${prefix}${timeline.name}`;
+  }
+  usePageTitle(pageTitle);
 
   if (!timeline) {
     if (listsLoading) {

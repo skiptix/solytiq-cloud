@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import Icon from '../components/Icon';
@@ -231,6 +232,14 @@ export default function SharePage() {
   function sharedByInitials(name: string): string {
     return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   }
+
+  let pageTitle = 'Loading file...';
+  if (state === 'notfound') {
+    pageTitle = 'File not found';
+  } else if (info) {
+    pageTitle = info.name;
+  }
+  usePageTitle(pageTitle);
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8f7fc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
