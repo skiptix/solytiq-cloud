@@ -232,7 +232,21 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
     return () => document.removeEventListener('keydown', handler);
   }, [onClose, showCal]);
 
-  const save = (updates: Partial<Task>) => onUpdate(task.id, updates);
+  // Buffered editing: field edits live in local state and are only persisted
+  // when Save is clicked. Cancel/close discards them. (Attachments & sub-items
+  // remain immediate — they're separate actions that can't be cleanly rolled back.)
+  const handleSave = () => {
+    const updates: Partial<Task> = {};
+    const trimmed = title.trim();
+    if (trimmed && trimmed !== task.title) updates.title = trimmed;
+    if (checked !== task.checked) updates.checked = checked;
+    if ((deadline || '') !== (task.deadline ?? '')) updates.deadline = deadline || undefined;
+    if ((priority || '') !== (task.priority ?? '')) updates.priority = (priority as Task['priority']) || undefined;
+    if ((tag || '') !== (task.badge ?? '')) updates.badge = tag || undefined;
+    if ((notes || '') !== (task.note ?? '')) updates.note = notes || undefined;
+    if (Object.keys(updates).length > 0) onUpdate(task.id, updates);
+    onClose();
+  };
 
   const handleFileUpload = async (file: File) => {
     setUploadProgress(0);
@@ -393,7 +407,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
             {/* Title row */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 26 }}>
               <div
-                onClick={() => { const next = !checked; setChecked(next); save({ checked: next }); }}
+                onClick={() => setChecked(c => !c)}
                 style={{
                   width: 24, height: 24, minWidth: 24, borderRadius: 7,
                   border: `2px solid ${checked ? '#5e4dbb' : '#c9c4d5'}`,
@@ -408,7 +422,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                 ref={titleRef}
                 value={title}
                 onChange={e => { setTitle(e.target.value); resizeTA(e.target); }}
-                onBlur={() => { if (title.trim() && title !== task.title) save({ title: title.trim() }); }}
                 style={{
                   flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700,
                   color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none',
@@ -465,7 +478,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                   </button>
                   {deadline && (
                     <button
-                      onClick={() => { setDeadline(''); setShowCal(false); save({ deadline: undefined }); }}
+                      onClick={() => { setDeadline(''); setShowCal(false); }}
                       style={{ marginLeft: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 3, display: 'inline-flex', alignItems: 'center' }}>
                       <Icon name="close" size={12} color="#b9b3cb" />
                     </button>
@@ -477,7 +490,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                 <div style={{ display: 'flex', gap: 6 }}>
                   {PRIORITIES.map(p => (
                     <button key={p}
-                      onClick={() => { const next = priority === p ? '' : p; setPriority(next); save({ priority: (next as Task['priority']) || undefined }); }}
+                      onClick={() => setPriority(prev => (prev === p ? '' : p))}
                       style={{
                         padding: '4px 12px', borderRadius: 8,
                         border: `1px solid ${priority === p ? PRIORITY_COLORS[p] : '#E5E7EB'}`,
@@ -499,7 +512,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                     const active = tag === t;
                     return (
                       <button key={t}
-                        onClick={() => { const next = tag === t ? '' : t; setTag(next); save({ badge: next || undefined }); }}
+                        onClick={() => setTag(prev => (prev === t ? '' : t))}
                         style={{
                           padding: '4px 12px', borderRadius: 9999,
                           border: `1px solid ${active ? c.color : '#E5E7EB'}`,
@@ -529,7 +542,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                 ref={notesRef}
                 value={notes}
                 onChange={e => { setNotes(e.target.value); resizeTA(e.target); }}
-                onBlur={() => { if (notes !== (task.note ?? '')) save({ note: notes || undefined }); }}
                 placeholder="Add notes, context, or any details…"
                 style={{
                   width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552',
@@ -711,6 +723,18 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
               )}
             </div>
           </div>
+
+          {/* Footer — explicit save / cancel */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 32px', borderTop: '1px solid #f1ecf6', flexShrink: 0 }}>
+            <button onClick={onClose}
+              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 18px', cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button onClick={handleSave} disabled={!title.trim()}
+              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: title.trim() ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 8, padding: '9px 22px', cursor: title.trim() ? 'pointer' : 'default' }}>
+              Save
+            </button>
+          </div>
         </div>
       </div>
 
@@ -730,8 +754,8 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
           <div style={{ position: 'fixed', top: calPos.top, left: calPos.left, zIndex: 1400 }}>
             <CalendarPicker
               value={deadline}
-              onChange={d => { setDeadline(d); setShowCal(false); save({ deadline: d || undefined }); }}
-              onClear={() => { setDeadline(''); setShowCal(false); save({ deadline: undefined }); }}
+              onChange={d => { setDeadline(d); setShowCal(false); }}
+              onClear={() => { setDeadline(''); setShowCal(false); }}
             />
           </div>
         </>,
