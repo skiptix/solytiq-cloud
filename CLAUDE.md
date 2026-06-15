@@ -8,7 +8,7 @@ Solytiq Cloud is a self-hosted, full-stack productivity suite: task lists, proje
 
 The current version is displayed at the bottom-left of the sidebar in `frontend/src/components/Sidebar.tsx`.
 
-**On every deploy / release, update the version string** in that file — search for the `v1.12.2` literal (it appears in two places, for the expanded and collapsed sidebar states) and bump **both**. Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
+**On every deploy / release, update the version string** in that file — search for the `v1.12.3` literal (it appears in two places, for the expanded and collapsed sidebar states) and bump **both**. Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
 
 ---
 

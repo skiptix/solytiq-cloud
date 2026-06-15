@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { Task, TaskAttachment, SharedFile } from '../types';
 import Icon from './Icon';
 import CalendarPicker from './CalendarPicker';
@@ -721,18 +722,20 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
         />
       )}
 
-      {/* Calendar rendered at fixed position to escape any overflow: hidden ancestors */}
-      {showCal && calPos && (
+      {/* Calendar portaled to <body> so position:fixed is relative to the
+          viewport, not the transformed modal card — keeps it under the button. */}
+      {showCal && calPos && createPortal(
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 1350 }} onClick={() => setShowCal(false)} />
-          <div style={{ position: 'fixed', top: calPos.top, left: calPos.left, zIndex: 1400, animation: 'menuIn 200ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          <div style={{ position: 'fixed', top: calPos.top, left: calPos.left, zIndex: 1400 }}>
             <CalendarPicker
               value={deadline}
               onChange={d => { setDeadline(d); setShowCal(false); save({ deadline: d || undefined }); }}
               onClear={() => { setDeadline(''); setShowCal(false); save({ deadline: undefined }); }}
             />
           </div>
-        </>
+        </>,
+        document.body
       )}
 
       {showDelete && (
