@@ -23,6 +23,7 @@ import workspacesRouter from './routes/workspaces';
 import timelinesRouter  from './routes/timelines';
 import gpsRouter from './routes/gps';
 import taskAttachmentsRouter from './routes/taskAttachments';
+import milestoneAttachmentsRouter from './routes/milestoneAttachments';
 import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
 import { addSseClient, removeSseClient } from './sse';
@@ -96,6 +97,7 @@ app.use('/api/folders',    foldersRouter);
 app.use('/api/files',      filesRouter);
 app.use('/api/ai',         aiRouter);
 app.use('/api/workspaces', workspacesRouter);
+app.use('/api/timelines/milestones/:milestoneId/attachments', milestoneAttachmentsRouter);
 app.use('/api/timelines',  timelinesRouter);
 app.use('/api/gps',        gpsRouter);
 
@@ -843,6 +845,24 @@ async function runMigrations() {
   await pool.query(`ALTER TABLE timelines ADD COLUMN IF NOT EXISTS share_enabled BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`ALTER TABLE timelines ADD COLUMN IF NOT EXISTS share_password_hash VARCHAR(255)`);
   await pool.query(`ALTER TABLE timelines ADD COLUMN IF NOT EXISTS share_expires_at TIMESTAMPTZ`);
+
+  // Milestone attachments — mirrors task_attachments (upload or linked shared file).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS milestone_attachments (
+      id              VARCHAR(100) PRIMARY KEY,
+      milestone_id    VARCHAR(100) NOT NULL REFERENCES milestones(id) ON DELETE CASCADE,
+      user_id         UUID   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      attachment_type VARCHAR(20) NOT NULL DEFAULT 'upload'
+                        CHECK (attachment_type IN ('upload','linked')),
+      original_name   VARCHAR(500),
+      mime_type       VARCHAR(100) NOT NULL DEFAULT 'application/octet-stream',
+      file_size       BIGINT NOT NULL DEFAULT 0,
+      file_path       VARCHAR(500),
+      shared_file_id  VARCHAR(100) REFERENCES shared_files(id) ON DELETE CASCADE,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS milestone_attachments_milestone_idx ON milestone_attachments(milestone_id)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS trash_timelines (

@@ -8,7 +8,7 @@ Solytiq Cloud is a self-hosted, full-stack productivity suite: task lists, proje
 
 The current version is displayed at the bottom-left of the sidebar in `frontend/src/components/Sidebar.tsx`.
 
-**On every deploy / release, update the version string** in that file — search for the `v1.12.6` literal (it appears in two places, for the expanded and collapsed sidebar states) and bump **both**. Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
+**On every deploy / release, update the version string** in that file — search for the `v1.12.7` literal (it appears in two places, for the expanded and collapsed sidebar states) and bump **both**. Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
 
 ---
 
@@ -153,6 +153,7 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 | `workspace_members` | `(workspace_id, user_id)` PK, `role` (`owner｜member`) |
 | `shared_files` | File sharing: `share_token` (unique), `is_public`, `password_hash`, `expires_at`, `title`, `note` |
 | `task_attachments` | Files attached to tasks: `attachment_type` (`upload｜linked`), optional `shared_file_id` |
+| `milestone_attachments` | Files attached to milestones — same shape as `task_attachments` (`milestone_id` FK, `upload｜linked`) |
 | `gps_files` | `file_type` (`gpx｜fit`), `file_path`, `metadata JSONB`, `smoothed`, `route_state JSONB` (Route Planner State v1) |
 | `trash`, `trash_lists`, `trash_folders`, `trash_timelines` | Soft-delete payloads as JSONB with a 30-day `expires_at` |
 | `app_settings` | Key/value config (storage quota, `ai_assistant_enabled`, `ai_model`, `two_fa_feature_enabled`) |
@@ -218,7 +219,7 @@ Sharing model for lists/timelines (distinct from the workspace `is_public` flag 
 - Max upload size: 200 MB (multer config). Nginx proxy limit: 210 MB.
 - Each user has a 15 GB storage quota enforced server-side (configurable via `app_settings.storage_quota_per_user`).
 - File sharing uses an opaque `share_token` (hex). Public file info and download are at `/api/share/:token` and `/api/share/:token/download`.
-- **Task attachments** (`taskAttachments.ts`) either upload a new file or link an existing `shared_files` row to a task.
+- **Task attachments** (`taskAttachments.ts`) either upload a new file or link an existing `shared_files` row to a task. **Milestone attachments** (`milestoneAttachments.ts`, mounted at `/api/timelines/milestones/:milestoneId/attachments`) mirror this for timeline milestones; access is gated by the milestone's timeline (owner, or workspace-public for reads).
 
 ### GPS / Route Planner
 

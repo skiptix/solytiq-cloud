@@ -2,18 +2,29 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useRef, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import type { Milestone, MilestoneStatus, TimelineLayout } from '../types';
+import type { Milestone, MilestoneStatus, TimelineLayout, MilestoneAttachment, SharedFile } from '../types';
 import useAppStore from '../store/useAppStore';
 import useAuthStore from '../store/useAuthStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
 import { todayInTz } from '../utils/date';
-import { apiCreateMilestone, apiUpdateMilestone, apiDeleteMilestone } from '../api/client';
+import {
+  apiCreateMilestone, apiUpdateMilestone, apiDeleteMilestone,
+  apiGetMilestoneAttachments, apiUploadMilestoneAttachment, apiLinkMilestoneAttachment,
+  apiDeleteMilestoneAttachment, apiDownloadMilestoneAttachment,
+} from '../api/client';
 import { genId } from '../utils/id';
 import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
 import CalendarPicker from '../components/CalendarPicker';
 import CreatorBubble from '../components/CreatorBubble';
+import { FilePicker, AttachBadge } from '../components/TaskDialog';
 import useMembersStore from '../store/useMembersStore';
+
+function fmtAttSize(bytes: number): string {
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  if (bytes >= 1_000) return `${Math.round(bytes / 1_000)} KB`;
+  return `${bytes} B`;
+}
 
 const STATUSES: Array<{ key: MilestoneStatus; label: string; color: string; icon: string }> = [
   { key: 'upcoming', label: 'Upcoming', color: '#9d8dff', icon: 'schedule' },
@@ -89,6 +100,16 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
   const calRef = useRef<HTMLDivElement>(null);
   const effectiveAccent = color ?? statusOf(status).color;
 
+  // Attachments (edit mode only — a milestone must exist before files attach to it)
+  const milestoneId = initial?.id;
+  const [attachments, setAttachments] = useState<MilestoneAttachment[]>([]);
+  const [attachLoading, setAttachLoading] = useState(Boolean(milestoneId));
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [showFilePicker, setShowFilePicker] = useState(false);
+  const [removingAttId, setRemovingAttId] = useState<string | null>(null);
+  const [downloadingAttId, setDownloadingAttId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Close calendar on outside click
   useEffect(() => {
     if (!showCal) return;
@@ -98,6 +119,50 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showCal]);
+
+  useEffect(() => {
+    if (!milestoneId) return;
+    let active = true;
+    apiGetMilestoneAttachments(milestoneId)
+      .then(r => { if (active) setAttachments(r.attachments); })
+      .catch(() => { /* silent */ })
+      .finally(() => { if (active) setAttachLoading(false); });
+    return () => { active = false; };
+  }, [milestoneId]);
+
+  const handleFileUpload = async (file: File) => {
+    if (!milestoneId) return;
+    setUploadProgress(0);
+    try {
+      const att = await apiUploadMilestoneAttachment(milestoneId, file, pct => setUploadProgress(pct));
+      setAttachments(prev => [...prev, att]);
+    } catch { /* silent */ } finally { setUploadProgress(null); }
+  };
+
+  const handleLinkFile = async (sf: SharedFile) => {
+    if (!milestoneId) return;
+    try {
+      const r = await apiLinkMilestoneAttachment(milestoneId, sf.id);
+      setAttachments(prev => [...prev, r.attachment]);
+    } catch { /* silent */ } finally { setShowFilePicker(false); }
+  };
+
+  const handleRemoveAttachment = async (att: MilestoneAttachment) => {
+    if (!milestoneId) return;
+    setRemovingAttId(att.id);
+    try {
+      await apiDeleteMilestoneAttachment(milestoneId, att.id);
+      setAttachments(prev => prev.filter(a => a.id !== att.id));
+    } catch { /* silent */ } finally { setRemovingAttId(null); }
+  };
+
+  const handleDownloadAttachment = async (att: MilestoneAttachment) => {
+    if (!milestoneId) return;
+    setDownloadingAttId(att.id);
+    try {
+      await apiDownloadMilestoneAttachment(milestoneId, att.id, att.name);
+    } catch { /* silent */ } finally { setDownloadingAttId(null); }
+  };
 
   const save = () => {
     if (!title.trim()) return;
@@ -114,6 +179,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
   };
 
   return (
+    <>
     <div onClick={onClose}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', animation: 'backdropIn 200ms ease both' }}>
       <div onClick={e => e.stopPropagation()}
@@ -222,6 +288,88 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
             <textarea value={description ?? ''} onChange={e => setDescription(e.target.value)} placeholder="Add notes, context, or any details…" rows={4}
               style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', background: 'transparent', border: 'none', outline: 'none', resize: 'vertical', lineHeight: 1.75, padding: 0, minHeight: 90 }} />
           </div>
+
+          {/* Attachments — only once the milestone exists (edit mode) */}
+          {milestoneId && (
+            <>
+              <div style={{ height: 1, background: '#F0EEF8', margin: '24px 0' }} />
+              <div>
+                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Attachments{attachments.length > 0 && <span style={{ fontWeight: 400, color: '#c9c4d5', marginLeft: 6 }}>{attachments.length}</span>}
+                </div>
+
+                {attachLoading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', opacity: 0.5 }}>
+                    <div style={{ width: 13, height: 13, border: '2px solid #c9c4d5', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading…</span>
+                  </div>
+                ) : attachments.map(att => (
+                  <div key={att.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: '#faf9ff', marginBottom: 6, border: '1px solid #F0EEF8' }}>
+                    <AttachBadge mime={att.mimeType} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{att.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
+                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe' }}>{fmtAttSize(att.size)}</span>
+                        {att.attachmentType === 'linked' && (
+                          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 99, padding: '1px 6px' }}>from Files</span>
+                        )}
+                      </div>
+                    </div>
+                    <button onClick={() => handleDownloadAttachment(att)} disabled={downloadingAttId === att.id} title="Download"
+                      style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: 'transparent', cursor: downloadingAttId === att.id ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                      onMouseEnter={e => { if (downloadingAttId !== att.id) e.currentTarget.style.background = '#F5F3FF'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                      {downloadingAttId === att.id
+                        ? <div style={{ width: 12, height: 12, border: '2px solid #c4b5fd', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                        : <Icon name="download" size={15} color="#5e4dbb" />}
+                    </button>
+                    <button onClick={() => handleRemoveAttachment(att)} disabled={removingAttId === att.id} title="Remove"
+                      style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: 'transparent', cursor: removingAttId === att.id ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                      onMouseEnter={e => { if (removingAttId !== att.id) e.currentTarget.style.background = '#ffdad6'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                      {removingAttId === att.id
+                        ? <div style={{ width: 12, height: 12, border: '2px solid #e87575', borderTopColor: '#ba1a1a', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                        : <Icon name="close" size={14} color="#ba1a1a" />}
+                    </button>
+                  </div>
+                ))}
+
+                {uploadProgress !== null && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: '#faf9ff', marginBottom: 6, border: '1px solid #F0EEF8' }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, background: '#F5F3FF', border: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <div style={{ width: 14, height: 14, border: '2px solid #c4b5fd', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#5e4dbb', marginBottom: 4 }}>Uploading… {uploadProgress}%</div>
+                      <div style={{ background: '#E5E7EB', borderRadius: 99, height: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${uploadProgress}%`, height: '100%', background: '#5e4dbb', borderRadius: 99, transition: 'width 150ms' }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button onClick={() => fileInputRef.current?.click()} disabled={uploadProgress !== null}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1.5px dashed #d1d5db', borderRadius: 9, padding: '7px 14px', cursor: uploadProgress !== null ? 'not-allowed' : 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', transition: 'all 120ms', opacity: uploadProgress !== null ? 0.5 : 1 }}
+                    onMouseEnter={e => { if (uploadProgress === null) { e.currentTarget.style.borderColor = '#5e4dbb'; e.currentTarget.style.color = '#5e4dbb'; e.currentTarget.style.background = '#faf9ff'; } }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1d5db'; e.currentTarget.style.color = '#787584'; e.currentTarget.style.background = 'transparent'; }}>
+                    <Icon name="upload" size={14} color="currentColor" />
+                    Upload file
+                  </button>
+                  <button onClick={() => setShowFilePicker(true)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1.5px dashed #d1d5db', borderRadius: 9, padding: '7px 14px', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', transition: 'all 120ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#5e4dbb'; e.currentTarget.style.color = '#5e4dbb'; e.currentTarget.style.background = '#faf9ff'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1d5db'; e.currentTarget.style.color = '#787584'; e.currentTarget.style.background = 'transparent'; }}>
+                    <Icon name="folder_open" size={14} color="currentColor" />
+                    Attach from Files
+                  </button>
+                </div>
+
+                <input ref={fileInputRef} type="file" style={{ display: 'none' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); e.target.value = ''; }} />
+              </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -234,6 +382,8 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
         </div>
       </div>
     </div>
+    {showFilePicker && <FilePicker onSelect={handleLinkFile} onClose={() => setShowFilePicker(false)} />}
+    </>
   );
 }
 

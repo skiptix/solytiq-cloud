@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -391,6 +391,58 @@ export function apiUploadTaskAttachment(
 export async function apiDownloadTaskAttachment(taskId: number, attachmentId: string, filename: string): Promise<void> {
   const token = localStorage.getItem('solytiq_token');
   const res = await fetch(`${(import.meta.env.VITE_API_URL as string | undefined) ?? '/api'}/tasks/${taskId}/attachments/${attachmentId}/download`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Milestone attachments — mirrors task attachments (mounted under /timelines/milestones/:id/attachments)
+export const apiGetMilestoneAttachments = (milestoneId: string) =>
+  apiFetch<{ attachments: MilestoneAttachment[] }>(`/timelines/milestones/${milestoneId}/attachments`);
+
+export const apiLinkMilestoneAttachment = (milestoneId: string, sharedFileId: string) =>
+  apiFetch<{ attachment: MilestoneAttachment }>(`/timelines/milestones/${milestoneId}/attachments/link`, {
+    method: 'POST', body: JSON.stringify({ sharedFileId }),
+  });
+
+export const apiDeleteMilestoneAttachment = (milestoneId: string, attachmentId: string) =>
+  apiFetch<{ success: boolean }>(`/timelines/milestones/${milestoneId}/attachments/${attachmentId}`, { method: 'DELETE' });
+
+export function apiUploadMilestoneAttachment(
+  milestoneId: string,
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<MilestoneAttachment> {
+  return new Promise((resolve, reject) => {
+    const token = localStorage.getItem('solytiq_token');
+    const form = new FormData();
+    form.append('file', file);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${(import.meta.env.VITE_API_URL as string | undefined) ?? '/api'}/timelines/milestones/${milestoneId}/attachments`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve((JSON.parse(xhr.responseText) as { attachment: MilestoneAttachment }).attachment);
+      } else {
+        reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(form);
+  });
+}
+
+export async function apiDownloadMilestoneAttachment(milestoneId: string, attachmentId: string, filename: string): Promise<void> {
+  const token = localStorage.getItem('solytiq_token');
+  const res = await fetch(`${(import.meta.env.VITE_API_URL as string | undefined) ?? '/api'}/timelines/milestones/${milestoneId}/attachments/${attachmentId}/download`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

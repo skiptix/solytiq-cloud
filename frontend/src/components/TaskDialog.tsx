@@ -37,7 +37,7 @@ function attMimeColor(mime: string): string {
   return '#5e4dbb';
 }
 
-function AttachBadge({ mime }: { mime: string }) {
+export function AttachBadge({ mime }: { mime: string }) {
   return (
     <div style={{ width: 34, height: 34, borderRadius: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
       <Icon name="description" size={17} color="#d1d5db" />
@@ -47,7 +47,7 @@ function AttachBadge({ mime }: { mime: string }) {
 }
 
 // ── File picker modal (choose from existing Files) ────────────────
-function FilePicker({ onSelect, onClose }: { onSelect: (file: SharedFile) => void; onClose: () => void }) {
+export function FilePicker({ onSelect, onClose }: { onSelect: (file: SharedFile) => void; onClose: () => void }) {
   const [files, setFiles] = useState<SharedFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
