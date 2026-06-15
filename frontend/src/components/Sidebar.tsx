@@ -6,7 +6,7 @@ import useWorkspaceStore from '../store/useWorkspaceStore';
 import WorkspaceWizard from '../modals/WorkspaceWizard';
 import WorkspaceSettingsModal from '../modals/WorkspaceSettingsModal';
 import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSettingsModal';
-import { apiGetGpsFiles, apiReorderTimelines } from '../api/client';
+import { apiGetGpsFiles, apiReorderTimelines, type ShareInfo } from '../api/client';
 
 const MINI = 60;
 
@@ -65,7 +65,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { deleteList, updateList } = useAppStore();
+  const { deleteList, updateList, setLists } = useAppStore();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -248,6 +248,9 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
           isPublic={list.isPublic}
           folders={folders}
           folderId={list.folderId}
+          itemId={list.id}
+          share={{ enabled: list.shareEnabled, token: list.shareToken, hasPassword: list.shareHasPassword, expiresAt: list.shareExpiresAt, subpages: list.shareSubpages }}
+          onShareUpdated={(s: ShareInfo) => setLists(prev => prev.map(l => l.id === list.id ? { ...l, shareEnabled: s.enabled, shareToken: s.token, shareHasPassword: s.hasPassword, shareExpiresAt: s.expiresAt, shareSubpages: s.subpages ?? l.shareSubpages } : l))}
           onChange={handleSettingsChange}
           onClose={() => setShowSettings(false)}
         />
@@ -303,7 +306,7 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { updateTimeline, deleteTimeline } = useAppStore();
+  const { updateTimeline, deleteTimeline, setTimelines } = useAppStore();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -451,6 +454,9 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
           isPublic={timeline.isPublic}
           folders={folders}
           folderId={timeline.folderId}
+          itemId={timeline.id}
+          share={{ enabled: timeline.shareEnabled, token: timeline.shareToken, hasPassword: timeline.shareHasPassword, expiresAt: timeline.shareExpiresAt }}
+          onShareUpdated={(s: ShareInfo) => setTimelines(prev => prev.map(t => t.id === timeline.id ? { ...t, shareEnabled: s.enabled, shareToken: s.token, shareHasPassword: s.hasPassword, shareExpiresAt: s.expiresAt } : t))}
           onChange={handleSettingsChange}
           onClose={() => setShowSettings(false)}
         />
@@ -1263,7 +1269,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.11.1
+              v1.12.0
             </div>
           )}
         </div>
@@ -1456,7 +1462,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.11.1
+            v1.12.0
           </div>
         )}
       </div>

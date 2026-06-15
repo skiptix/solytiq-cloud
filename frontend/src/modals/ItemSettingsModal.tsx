@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import type { Folder } from '../types';
 import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
+import { apiUpdateListShare, apiUpdateTimelineShare, type ShareInfo, type ShareUpdate } from '../api/client';
 
 const FOLDER_COLORS = [
   '#5e4dbb', '#1D4ED8', '#15803d', '#ea580c',
@@ -35,9 +37,185 @@ interface ItemSettingsModalProps {
   folders?: Folder[];
   /** Lists only — id of the folder the list currently lives in. */
   folderId?: string;
+  /** List / timeline id — required for the public link sharing section. */
+  itemId?: string;
+  /** Current public-link share state (lists & timelines). */
+  share?: {
+    enabled?: boolean;
+    token?: string | null;
+    hasPassword?: boolean;
+    expiresAt?: string | null;
+    subpages?: boolean;
+  };
+  /** Called after a share change so the store can reflect the new state. */
+  onShareUpdated?: (share: ShareInfo) => void;
   /** Changes apply immediately (optimistic store update + API call). */
   onChange: (updates: ItemSettingsUpdates) => void;
   onClose: () => void;
+}
+
+// ── Public link sharing section (lists & timelines) ───────────────────────────
+function ShareSection({ kind, itemId, share, onShareUpdated }: {
+  kind: 'list' | 'timeline';
+  itemId: string;
+  share?: ItemSettingsModalProps['share'];
+  onShareUpdated?: (share: ShareInfo) => void;
+}) {
+  const [enabled, setEnabled]       = useState(Boolean(share?.enabled));
+  const [token, setToken]           = useState<string | null>(share?.token ?? null);
+  const [hasPassword, setHasPassword] = useState(Boolean(share?.hasPassword));
+  const [expiresAt, setExpiresAt]   = useState<string>(share?.expiresAt ? share.expiresAt.slice(0, 10) : '');
+  const [subpages, setSubpages]     = useState(Boolean(share?.subpages));
+  const [pwInput, setPwInput]       = useState('');
+  const [saving, setSaving]         = useState(false);
+  const [copied, setCopied]         = useState(false);
+  const [showPwField, setShowPwField] = useState(false);
+
+  const shareUrl = token ? `${window.location.origin}/share/${kind}/${token}` : '';
+
+  const apply = async (update: ShareUpdate) => {
+    setSaving(true);
+    try {
+      const fn = kind === 'list' ? apiUpdateListShare : apiUpdateTimelineShare;
+      const { share: next } = await fn(itemId, update);
+      setEnabled(next.enabled);
+      setToken(next.token);
+      setHasPassword(next.hasPassword);
+      setExpiresAt(next.expiresAt ? next.expiresAt.slice(0, 10) : '');
+      if (next.subpages !== undefined) setSubpages(next.subpages);
+      onShareUpdated?.(next);
+    } catch (err) {
+      console.error('share update failed', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const copyLink = () => {
+    if (!shareUrl) return;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    });
+  };
+
+  return (
+    <div style={{ animation: 'sectionFadeUp 320ms ease both', animationDelay: '65ms' }}>
+      <SectionLabel>Share via link</SectionLabel>
+
+      {/* On / Off toggle */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: enabled ? 12 : 0 }}>
+        {([{ label: 'Off', icon: 'link_off', val: false }, { label: 'On', icon: 'link', val: true }] as const).map(opt => {
+          const selected = enabled === opt.val;
+          return (
+            <button key={opt.label}
+              disabled={saving}
+              onClick={() => { if (enabled !== opt.val) apply({ enabled: opt.val }); }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '9px 12px', borderRadius: 10, border: selected ? '1.5px solid #5e4dbb' : '1.5px solid #e8e4f0', background: selected ? '#f0edff' : '#fff', cursor: saving ? 'wait' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? '#5e4dbb' : '#484552', transition: 'background 120ms, border 120ms, color 120ms' }}>
+              <Icon name={opt.icon} size={14} color={selected ? '#5e4dbb' : '#787584'} />
+              {opt.label}
+              {selected && <Icon name="check" size={13} color="#5e4dbb" />}
+            </button>
+          );
+        })}
+      </div>
+
+      {enabled && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, animation: 'sectionFadeUp 240ms ease both' }}>
+          {/* Copyable link */}
+          {shareUrl && (
+            <div style={{ background: '#F5F3FF', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Icon name="link" size={16} color="#5e4dbb" />
+              <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#5e4dbb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shareUrl}</span>
+              <button onClick={copyLink}
+                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: copied ? '#10B981' : '#5e4dbb', background: copied ? '#f0fdf4' : '#fff', border: `1px solid ${copied ? '#a7f3d0' : '#c4b5fd'}`, borderRadius: 7, padding: '5px 12px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, transition: 'all 150ms' }}>
+                <Icon name={copied ? 'check' : 'content_copy'} size={12} color={copied ? '#10B981' : '#5e4dbb'} />
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          )}
+
+          {/* Read-only note */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe' }}>
+            <Icon name="visibility" size={13} color="#b0acbe" />
+            Anyone with this link can view a read-only copy. No sign-in required.
+          </div>
+
+          {/* Subpages (lists only) */}
+          {kind === 'list' && (
+            <div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Subpages</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {([{ label: 'Keep private', icon: 'lock', val: false }, { label: 'Share too', icon: 'account_tree', val: true }] as const).map(opt => {
+                  const selected = subpages === opt.val;
+                  return (
+                    <button key={opt.label}
+                      disabled={saving}
+                      onClick={() => { if (subpages !== opt.val) apply({ subpages: opt.val }); }}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '8px 10px', borderRadius: 10, border: selected ? '1.5px solid #5e4dbb' : '1.5px solid #e8e4f0', background: selected ? '#f0edff' : '#fff', cursor: saving ? 'wait' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: selected ? 600 : 500, color: selected ? '#5e4dbb' : '#484552', transition: 'all 120ms' }}>
+                      <Icon name={opt.icon} size={14} color={selected ? '#5e4dbb' : '#787584'} />
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 5 }}>
+                When shared, nested sublists become clickable links on the public page.
+              </div>
+            </div>
+          )}
+
+          {/* Password */}
+          <div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Password</div>
+            {hasPassword && !showPwField ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F9FAFB', border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '8px 12px' }}>
+                <Icon name="lock" size={15} color="#5e4dbb" />
+                <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#484552' }}>Password protected</span>
+                <button onClick={() => setShowPwField(true)}
+                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: 'transparent', border: 'none', cursor: 'pointer' }}>Change</button>
+                <button disabled={saving} onClick={() => apply({ password: null })}
+                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#ba1a1a', background: 'transparent', border: 'none', cursor: saving ? 'wait' : 'pointer' }}>Remove</button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="password"
+                  value={pwInput}
+                  onChange={e => setPwInput(e.target.value)}
+                  placeholder="Set a password (optional)"
+                  style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 10, padding: '8px 12px', outline: 'none', background: '#fff', color: '#1c1b22' }}
+                  onFocus={e => (e.target.style.borderColor = '#5e4dbb')}
+                  onBlur={e => (e.target.style.borderColor = '#e8e4f0')}
+                />
+                <button disabled={saving || !pwInput.trim()}
+                  onClick={() => { apply({ password: pwInput }); setPwInput(''); setShowPwField(false); }}
+                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#fff', background: pwInput.trim() ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 10, padding: '8px 16px', cursor: pwInput.trim() && !saving ? 'pointer' : 'not-allowed' }}>Set</button>
+              </div>
+            )}
+          </div>
+
+          {/* Expiry */}
+          <div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Expires</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type="date"
+                value={expiresAt}
+                disabled={saving}
+                onChange={e => apply({ expiresAt: e.target.value || null })}
+                style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 10, padding: '8px 12px', outline: 'none', background: '#fff', color: expiresAt ? '#1c1b22' : '#b0acbe' }}
+              />
+              {expiresAt && (
+                <button disabled={saving} onClick={() => apply({ expiresAt: null })}
+                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', background: 'transparent', border: '1px solid #e8e4f0', borderRadius: 10, padding: '8px 12px', cursor: saving ? 'wait' : 'pointer' }}>Clear</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -48,7 +226,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, folders, folderId, onChange, onClose }: ItemSettingsModalProps) {
+export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, folders, folderId, itemId, share, onShareUpdated, onChange, onClose }: ItemSettingsModalProps) {
   const accent = color ?? '#5e4dbb';
 
   return (
@@ -102,6 +280,11 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
               })}
             </div>
           </div>
+
+          {/* Share via link (lists & timelines) */}
+          {kind !== 'folder' && itemId && (
+            <ShareSection kind={kind} itemId={itemId} share={share} onShareUpdated={onShareUpdated} />
+          )}
 
           {/* Color */}
           <div style={{ animation: 'sectionFadeUp 320ms ease both', animationDelay: '90ms' }}>

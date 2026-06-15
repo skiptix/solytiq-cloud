@@ -38,6 +38,12 @@ export interface List {
   sections: Section[];
   parentTaskId?: number | null;
   depth?: number;
+  // Public read-only link sharing (distinct from the workspace `isPublic` flag).
+  shareEnabled?: boolean;
+  shareToken?: string | null;
+  shareHasPassword?: boolean;
+  shareExpiresAt?: string | null;
+  shareSubpages?: boolean;
   linkedProgress?: {
     total: number;
     completed: number;
@@ -86,6 +92,11 @@ export interface Timeline {
   folderId?: string;
   workspaceId?: string;
   position?: number;
+  // Public read-only link sharing.
+  shareEnabled?: boolean;
+  shareToken?: string | null;
+  shareHasPassword?: boolean;
+  shareExpiresAt?: string | null;
   milestones: Milestone[];
 }
 

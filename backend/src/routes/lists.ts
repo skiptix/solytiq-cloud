@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
+import { randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
+import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
 
@@ -27,6 +29,11 @@ interface ListRow {
   parent_task_id: string | null;
   depth: number;
   workspace_id: string | null;
+  share_token: string | null;
+  share_enabled: boolean;
+  share_password_hash: string | null;
+  share_expires_at: string | null;
+  share_subpages: boolean;
 }
 
 interface SectionRow {
@@ -118,6 +125,11 @@ function sanitizeList(
     createdAt:    list.created_at,
     parentTaskId: list.parent_task_id ?? null,
     depth:        list.depth ?? 0,
+    shareEnabled:     list.share_enabled ?? false,
+    shareToken:       list.share_token ?? null,
+    shareHasPassword: list.share_password_hash != null,
+    shareExpiresAt:   list.share_expires_at ?? null,
+    shareSubpages:    list.share_subpages ?? false,
     sections,
     ...(linkedProgress !== undefined ? { linkedProgress } : {}),
   };
@@ -304,6 +316,125 @@ router.put('/:listId/reorder', async (req: Request, res: Response) => {
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     werr('lists reorder error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Recursively collect the ids of every sublist nested under a list.
+async function collectDescendantListIds(rootId: string): Promise<string[]> {
+  const out: string[] = [];
+  const visit = async (id: string) => {
+    const sub = await query<{ id: string }>(
+      `SELECT l.id FROM lists l
+       JOIN tasks t ON l.parent_task_id = t.id
+       WHERE t.list_id = $1 AND l.id <> $1`,
+      [id]
+    );
+    for (const row of sub.rows) {
+      if (out.includes(row.id)) continue;
+      out.push(row.id);
+      await visit(row.id);
+    }
+  };
+  await visit(rootId);
+  return out;
+}
+
+// PUT /api/lists/:listId/share — manage the public read-only share link.
+// Body: { enabled?, password?: string|null, expiresAt?: string|null, subpages? }
+//  - password/expiresAt: omit = unchanged, null = clear, value = set.
+//  - subpages: when enabled together with sharing, cascades the share state
+//    (token + password + expiry) onto every nested sublist so the public page
+//    can deep-link to them; turning it off disables sharing on those sublists.
+router.put('/:listId/share', async (req: Request, res: Response) => {
+  try {
+    const { listId } = req.params;
+    const { enabled, password, expiresAt, subpages } = req.body as {
+      enabled?: boolean;
+      password?: string | null;
+      expiresAt?: string | null;
+      subpages?: boolean;
+    };
+
+    const existing = await query<ListRow>('SELECT * FROM lists WHERE id = $1', [listId]);
+    if (existing.rows.length === 0) { res.status(404).json({ error: 'List not found' }); return; }
+
+    const isOwner = existing.rows[0].user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+    if (!isOwner && !isAdmin) { res.status(403).json({ error: 'Permission denied' }); return; }
+
+    const row = existing.rows[0];
+    const updatePw  = 'password'  in req.body;
+    const updateExp = 'expiresAt' in req.body;
+    const updateSub = 'subpages'  in req.body;
+    const updateEnabled = 'enabled' in req.body;
+
+    const willBeEnabled = updateEnabled ? Boolean(enabled) : row.share_enabled;
+    // Generate an opaque token the first time sharing is turned on.
+    let token = row.share_token;
+    if (willBeEnabled && !token) token = randomBytes(24).toString('hex');
+
+    let pwHash: string | null = null;
+    if (updatePw && typeof password === 'string' && password.length > 0) {
+      pwHash = await hashPassword(password);
+    }
+
+    const result = await query<ListRow>(
+      `UPDATE lists
+       SET share_enabled       = COALESCE($2, share_enabled),
+           share_token         = $3,
+           share_password_hash = CASE WHEN $4 THEN $5 ELSE share_password_hash END,
+           share_expires_at    = CASE WHEN $6 THEN $7 ELSE share_expires_at END,
+           share_subpages      = COALESCE($8, share_subpages)
+       WHERE id = $1
+       RETURNING *`,
+      [listId, updateEnabled ? enabled : null, token, updatePw, pwHash, updateExp, expiresAt ?? null, updateSub ? subpages : null]
+    );
+
+    const saved = result.rows[0];
+
+    // Cascade onto nested sublists.
+    if (saved.share_subpages) {
+      const descendants = await collectDescendantListIds(listId);
+      if (descendants.length > 0) {
+        if (saved.share_enabled) {
+          // Share each descendant, minting a token where missing and inheriting
+          // the parent's password + expiry so protection stays consistent.
+          for (const id of descendants) {
+            await query(
+              `UPDATE lists
+               SET share_enabled = true,
+                   share_token = COALESCE(share_token, $2),
+                   share_password_hash = $3,
+                   share_expires_at = $4
+               WHERE id = $1`,
+              [id, randomBytes(24).toString('hex'), saved.share_password_hash, saved.share_expires_at]
+            );
+          }
+        } else {
+          await query(`UPDATE lists SET share_enabled = false WHERE id = ANY($1::varchar[])`, [descendants]);
+        }
+      }
+    } else if (updateSub && subpages === false) {
+      // Subpage sharing explicitly turned off — revoke it on descendants.
+      const descendants = await collectDescendantListIds(listId);
+      if (descendants.length > 0) {
+        await query(`UPDATE lists SET share_enabled = false WHERE id = ANY($1::varchar[])`, [descendants]);
+      }
+    }
+
+    res.json({
+      share: {
+        enabled: saved.share_enabled,
+        token: saved.share_token,
+        hasPassword: saved.share_password_hash != null,
+        expiresAt: saved.share_expires_at ?? null,
+        subpages: saved.share_subpages,
+      },
+    });
+    broadcastToUser(req.userId!, 'lists');
+  } catch (err) {
+    werr('lists share PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
