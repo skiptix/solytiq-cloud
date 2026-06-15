@@ -517,6 +517,21 @@ export const apiAIChat = (messages: unknown[], tools?: unknown[], sessionId?: st
     usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   }>('/ai/chat', { method: 'POST', body: JSON.stringify({ messages, tools, sessionId }) });
 
+// Shared AI tool registry (single source of truth with the MCP server).
+export interface AiToolDef {
+  type: 'function';
+  function: { name: string; description: string; parameters: Record<string, unknown> };
+}
+
+export const apiGetAiToolDefs = () =>
+  apiFetch<{ tools: AiToolDef[] }>('/ai/tools');
+
+export const apiExecuteAiTool = (name: string, args: Record<string, unknown>) =>
+  apiFetch<{ ok: boolean; result: string; summary?: string }>('/ai/execute', {
+    method: 'POST',
+    body: JSON.stringify({ name, arguments: args }),
+  });
+
 export const apiSaveAIMessage = (role: string, content: string, sessionId?: string | null, metadata?: Record<string, unknown>) =>
   apiFetch<{ id: number; createdAt: string }>('/ai/history', {
     method: 'POST',
@@ -541,6 +556,28 @@ export const apiGetAISessionMessages = (sessionId: string) =>
 
 export const apiDeleteAISession = (sessionId: string) =>
   apiFetch<{ success: boolean }>(`/ai/sessions/${sessionId}`, { method: 'DELETE' });
+
+// ── AI access tokens (Personal Access Tokens for external MCP agents) ────────
+export interface ApiAccessToken {
+  id: string;
+  name: string;
+  prefix: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+export const apiGetApiTokens = () =>
+  apiFetch<{ tokens: ApiAccessToken[] }>('/tokens');
+
+export const apiCreateApiToken = (name: string, expiresInDays?: number | null) =>
+  apiFetch<{ token: ApiAccessToken & { secret: string } }>('/tokens', {
+    method: 'POST',
+    body: JSON.stringify({ name, expiresInDays }),
+  });
+
+export const apiDeleteApiToken = (id: string) =>
+  apiFetch<{ success: boolean }>(`/tokens/${id}`, { method: 'DELETE' });
 
 // AI File Attachments
 export function apiUploadAIFile(
