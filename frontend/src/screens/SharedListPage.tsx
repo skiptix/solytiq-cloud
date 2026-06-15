@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Icon from '../components/Icon';
@@ -110,6 +111,15 @@ export default function SharedListPage() {
   const total = allTasks.length;
   const completed = allTasks.filter(t => t.checked || (t.linkedProgress && t.linkedProgress.total > 0 && t.linkedProgress.completed === t.linkedProgress.total)).length;
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  let pageTitle = 'Loading list...';
+  if (state === 'notfound') {
+    pageTitle = 'List not found';
+  } else if (meta) {
+    const prefix = meta.emoji ? `${meta.emoji} ` : '';
+    pageTitle = `${prefix}${meta.name}`;
+  }
+  usePageTitle(pageTitle);
 
   const cardMaxWidth = state === 'ready' ? 720 : 460;
 

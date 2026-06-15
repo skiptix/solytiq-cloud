@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState } from 'react';
 import type { Task, List } from '../types';
 import useAppStore from '../store/useAppStore';
@@ -205,6 +206,7 @@ function TasksDetailModal({ title, icon, accent, accentBg, tasks, onClose, onTog
 
 // ── Dashboard Screen ───────────────────────────────────────────
 export default function DashboardScreen() {
+  usePageTitle("Dashboard");
   const { dashTasks, setDashTasks, lists, updateDashTask, updateListTask, deleteListTask, addToTrash } = useAppStore();
   const timezone = useUserPrefsStore(s => s.timezone);
 

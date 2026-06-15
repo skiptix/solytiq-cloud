@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import Icon from '../components/Icon';
@@ -115,6 +116,15 @@ export default function SharedTimelinePage() {
   const done = milestones.filter(m => m.status === 'done').length;
   const pct = total > 0 ? Math.round((reached / total) * 100) : 0;
   const lastReachedIdx = milestones.reduce((acc, m, i) => (m.status === 'done' || (m.date != null && m.date <= today)) ? i : acc, -1);
+
+  let pageTitle = 'Loading timeline...';
+  if (state === 'notfound') {
+    pageTitle = 'Timeline not found';
+  } else if (meta) {
+    const prefix = meta.emoji ? `${meta.emoji} ` : '';
+    pageTitle = `${prefix}${meta.name}`;
+  }
+  usePageTitle(pageTitle);
 
   const cardMaxWidth = state === 'ready' ? 720 : 460;
 

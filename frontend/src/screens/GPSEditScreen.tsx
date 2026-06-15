@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
@@ -609,6 +610,8 @@ export default function GPSEditScreen() {
   const [loading, setLoading] = useState(true);
   const [fileInfo, setFileInfo] = useState<GpsFile | null>(null);
   const [editName, setEditName] = useState('');
+
+  usePageTitle(editName ? `Edit Track: ${editName}` : 'Edit GPS Track');
   const [originalPoints, setOriginalPoints] = useState<GpsTrackPoint[] | null>(null);
   const [editPoints, setEditPoints] = useState<GpsTrackPoint[] | null>(null);
   const [trimStart, setTrimStart] = useState(0);

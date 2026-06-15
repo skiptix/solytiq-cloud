@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Task } from '../types';
@@ -35,6 +36,23 @@ export default function ListScreen() {
   const [newSectionEmoji, setNewSectionEmoji] = useState('');
   const newSectionInputRef = useRef<HTMLInputElement>(null);
 
+  const isOwner = list?.userId === currentUserId;
+  const allTasks = list ? list.sections.flatMap(s => s.tasks) : [];
+  const totalCount = allTasks.length;
+  const completedCount = allTasks.filter(t => t.checked).length;
+  const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+  let pageTitle = 'Loading list...';
+  if (!list && !listsLoading) {
+    pageTitle = 'List not found';
+  } else if (list) {
+    const openTasks = totalCount - completedCount;
+    const taskBadge = openTasks > 0 ? `(${openTasks})` : '(Done)';
+    const prefix = list.emoji ? `${list.emoji} ` : '';
+    pageTitle = `${prefix}${list.name} ${taskBadge}`;
+  }
+  usePageTitle(pageTitle);
+
   if (!list) {
     if (listsLoading) {
       return (
@@ -52,12 +70,6 @@ export default function ListScreen() {
       </div>
     );
   }
-
-  const isOwner = list.userId === currentUserId;
-  const allTasks = list.sections.flatMap(s => s.tasks);
-  const totalCount = allTasks.length;
-  const completedCount = allTasks.filter(t => t.checked).length;
-  const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const toggle = (id: number) => {
     const section = list.sections.find(s => s.tasks.some(t => t.id === id));

@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useRef, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -17,13 +18,13 @@ import EmojiSelector from '../components/EmojiSelector';
 import CalendarPicker from '../components/CalendarPicker';
 import CreatorBubble from '../components/CreatorBubble';
 import { FilePicker, AttachBadge } from '../components/TaskDialog';
+import useMembersStore from '../store/useMembersStore';
 
 function fmtAttSize(bytes: number): string {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
   if (bytes >= 1_000) return `${Math.round(bytes / 1_000)} KB`;
   return `${bytes} B`;
 }
-import useMembersStore from '../store/useMembersStore';
 
 const STATUSES: Array<{ key: MilestoneStatus; label: string; color: string; icon: string }> = [
   { key: 'upcoming', label: 'Upcoming', color: '#9d8dff', icon: 'schedule' },
@@ -398,6 +399,15 @@ export default function TimelineScreen() {
 
   const [editing, setEditing] = useState<Milestone | null>(null);
   const [adding, setAdding] = useState(false);
+
+  let pageTitle = 'Loading timeline...';
+  if (!timeline && !listsLoading) {
+    pageTitle = 'Timeline not found';
+  } else if (timeline) {
+    const prefix = timeline.emoji ? `${timeline.emoji} ` : '';
+    pageTitle = `${prefix}${timeline.name}`;
+  }
+  usePageTitle(pageTitle);
 
   if (!timeline) {
     if (listsLoading) {

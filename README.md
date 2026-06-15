@@ -24,6 +24,8 @@
 - 🚀 **Dashboard** — A bird's-eye view of your day featuring "Due Today" focus, priority tracking, and productivity stats.
 - 📅 **Scheduled View** — A full interactive calendar with drag-and-drop scheduling for unscheduled tasks.
 - 📂 **Folders & Lists** — Deeply nestable folders and smart lists with custom emojis, colors, and progress tracking.
+- 🗺️ **GPS Tracks & Routing** — Upload, analyze, and map GPX/FIT files directly within your workspace.
+- 📈 **Visual Timelines** — Track project milestones and plan your schedule chronologically.
 - ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via Server-Sent Events.
 - 🔒 **Enhanced Security** — Built-in TOTP 2FA support, JWT-based authentication, and hardened security headers.
 - 🤖 **AI Assistant** — A floating AI chat powered by OpenRouter to help you break down tasks and stay productive.
@@ -52,6 +54,7 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 - **Routing:** [React Router 7](https://reactrouter.com/)
 - **Styling:** Modern CSS (Design Tokens) with refined animations
 - **Communication:** [Server-Sent Events (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) for real-time updates
+- **Maps:** [Leaflet](https://leafletjs.com/) for rendering GPS tracks
 
 ### Backend
 - **Runtime:** [Node.js 22](https://nodejs.org/) (Alpine-based)
@@ -60,6 +63,7 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 - **Auth:** JWT + [otplib](https://github.com/yeoju/otplib) (TOTP 2FA) + bcryptjs
 - **File Handling:** Multer (with disk storage)
 - **AI Integration:** [OpenRouter API](https://openrouter.ai/)
+- **Data Parsing:** GPX & FIT file processing for workout data
 
 ---
 

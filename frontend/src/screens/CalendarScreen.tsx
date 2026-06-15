@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState } from 'react';
 import type { Task, List } from '../types';
 import useAppStore, { apiCreateTask, apiAddListTask } from '../store/useAppStore';
@@ -120,6 +121,7 @@ function AddToDateModal({ date, lists, onAdd, onClose }: AddToDateModalProps) {
 }
 
 export default function CalendarScreen() {
+  usePageTitle("Calendar");
   const { dashTasks, lists, updateDashTask, updateListTask, setDashTasks, setLists, addToTrash, deleteListTask } = useAppStore();
   const today = new Date(); today.setHours(0,0,0,0);
   const [viewDate, setViewDate] = useState({ year: today.getFullYear(), month: today.getMonth() });

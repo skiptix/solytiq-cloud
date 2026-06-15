@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import type { Task, List } from '../types';
@@ -180,6 +181,16 @@ export default function FolderDashboardScreen() {
   }, []);
 
   const folder = folders.find(f => f.id === folderId);
+
+  let pageTitle = 'Loading folder...';
+  if (!folder && !listsLoading && graceElapsed) {
+    pageTitle = 'Folder not found';
+  } else if (folder) {
+    const prefix = folder.emoji ? `${folder.emoji} ` : '';
+    pageTitle = `${prefix}${folder.name}`;
+  }
+  usePageTitle(pageTitle);
+
   if (!folder) {
     if (listsLoading || !graceElapsed) {
       return (
