@@ -46,6 +46,7 @@ interface MilestoneRow {
   color: string | null;
   position: number;
   created_at: string;
+  attachment_count?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +66,7 @@ function sanitizeMilestone(m: MilestoneRow) {
     color:       m.color,
     position:    m.position,
     createdAt:   m.created_at,
+    attachmentCount: Number(m.attachment_count ?? 0),
   };
 }
 
@@ -123,7 +125,8 @@ async function buildTimelinesForUser(userId: string, workspaceId?: string) {
       params
     ),
     query<MilestoneRow>(
-      `SELECT m.* FROM milestones m
+      `SELECT m.*, (SELECT COUNT(*) FROM milestone_attachments ma WHERE ma.milestone_id = m.id) AS attachment_count
+       FROM milestones m
        JOIN timelines t ON m.timeline_id = t.id
        LEFT JOIN workspace_members wm ON wm.workspace_id = t.workspace_id AND wm.user_id = $1
        WHERE ${accessCondition}
