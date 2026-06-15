@@ -543,6 +543,7 @@ export default function ListScreen() {
           onUpdate={(id, upd) => updateListTask(listId!, id, upd)}
           onDelete={deleteTask}
           onClose={() => setSelectedTask(null)}
+          isPublic={list.isPublic}
         />
       )}
 

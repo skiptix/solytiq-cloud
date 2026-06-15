@@ -11,6 +11,8 @@ import { genId } from '../utils/id';
 import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
 import CalendarPicker from '../components/CalendarPicker';
+import CreatorBubble from '../components/CreatorBubble';
+import useMembersStore from '../store/useMembersStore';
 
 const STATUSES: Array<{ key: MilestoneStatus; label: string; color: string; icon: string }> = [
   { key: 'upcoming', label: 'Upcoming', color: '#9d8dff', icon: 'schedule' },
@@ -69,8 +71,11 @@ interface MilestoneEditorProps {
   onSave: (data: Partial<Milestone>) => void;
   onDelete?: () => void;
   onClose: () => void;
+  /** Set to the timeline owner's id when the timeline is public — shows an Owner row. */
+  ownerId?: string;
 }
-function MilestoneEditor({ accent, initial, onSave, onDelete, onClose }: MilestoneEditorProps) {
+function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }: MilestoneEditorProps) {
+  const owner = useMembersStore(s => (ownerId ? s.members[ownerId] : undefined));
   const [title, setTitle] = useState(initial?.title ?? '');
   const [date, setDate] = useState(initial?.date ?? '');
   const [time, setTime] = useState(initial?.time ?? '');
@@ -185,7 +190,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose }: Milesto
               </div>
             </PropRow>
 
-            <PropRow icon="palette" label="Accent" last>
+            <PropRow icon="palette" label="Accent" last={!ownerId}>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center' }}>
                 <button onClick={() => setColor(null)} title="Match status"
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 24, padding: '0 10px', borderRadius: 9999, background: color === null ? '#f0edff' : '#fff', border: `1.5px solid ${color === null ? accent : '#e8e4f0'}`, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: color === null ? accent : '#787584' }}>
@@ -197,6 +202,17 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose }: Milesto
                 ))}
               </div>
             </PropRow>
+
+            {ownerId && (
+              <PropRow icon="account_circle" label="Owner" last>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <CreatorBubble creatorId={ownerId} taskHovered />
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#484552' }}>
+                    {owner ? (owner.fullName || owner.username) : 'Unknown'}
+                  </span>
+                </div>
+              </PropRow>
+            )}
           </div>
 
           {/* Notes */}
@@ -470,8 +486,8 @@ export default function TimelineScreen() {
         )}
       </div>
 
-      {adding && <MilestoneEditor accent={accent} onSave={handleAdd} onClose={() => setAdding(false)} />}
-      {editing && <MilestoneEditor accent={accent} initial={editing} onSave={data => handleSave(editing.id, data)} onDelete={() => { handleDelete(editing.id); setEditing(null); }} onClose={() => setEditing(null)} />}
+      {adding && <MilestoneEditor accent={accent} onSave={handleAdd} onClose={() => setAdding(false)} ownerId={timeline.isPublic ? timeline.userId : undefined} />}
+      {editing && <MilestoneEditor accent={accent} initial={editing} onSave={data => handleSave(editing.id, data)} onDelete={() => { handleDelete(editing.id); setEditing(null); }} onClose={() => setEditing(null)} ownerId={timeline.isPublic ? timeline.userId : undefined} />}
     </div>
   );
 }
