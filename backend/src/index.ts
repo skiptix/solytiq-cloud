@@ -361,7 +361,7 @@ app.get('/api/share/timeline/:token/content', async (req, res) => {
       time_val: string | null; status: string; emoji: string | null; color: string | null; position: number;
     }>(
       `SELECT id, title, description, milestone_date, time_val, status, emoji, color, position
-       FROM milestones WHERE timeline_id = $1 ORDER BY position ASC, milestone_date ASC NULLS LAST, created_at ASC`,
+       FROM milestones WHERE timeline_id = $1 ORDER BY milestone_date ASC NULLS LAST, position ASC, created_at ASC`,
       [tl.id]
     );
 
