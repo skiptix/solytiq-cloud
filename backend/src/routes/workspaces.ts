@@ -3,6 +3,7 @@ import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
 import { ensurePersonalWorkspace, wlog, werr } from '../workspaceUtil';
+import { getPublicDescendants, buildRestrictConflict, restrictDescendants } from '../visibility';
 
 const router = Router();
 router.use(authenticate);
@@ -93,8 +94,8 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, description, emoji, image, visibility } = req.body as {
-      name?: string; description?: string; emoji?: string | null; image?: string | null; visibility?: string;
+    const { name, description, emoji, image, visibility, cascade } = req.body as {
+      name?: string; description?: string; emoji?: string | null; image?: string | null; visibility?: string; cascade?: boolean;
     };
 
     const existing = await query<WorkspaceRow>('SELECT * FROM workspaces WHERE id = $1', [id]);
@@ -103,25 +104,47 @@ router.put('/:id', async (req: Request, res: Response) => {
       res.status(403).json({ error: 'Only the owner can edit this workspace' }); return;
     }
 
-    const result = await query<WorkspaceRow>(
+    // Going private: any public folders/lists/timelines inside must be hidden
+    // too. Warn (409) with the affected items unless the client cascades.
+    let restrict: Awaited<ReturnType<typeof getPublicDescendants>> = [];
+    if (visibility === 'private' && existing.rows[0].visibility !== 'private') {
+      const descendants = await getPublicDescendants(query, { type: 'workspace', id });
+      if (descendants.length > 0) {
+        if (!cascade) { res.status(409).json(buildRestrictConflict('workspace', existing.rows[0].name, descendants)); return; }
+        restrict = descendants;
+      }
+    }
+
+    const updateSql =
       `UPDATE workspaces
        SET name        = COALESCE($2, name),
            description = CASE WHEN $3::boolean THEN $4 ELSE description END,
            emoji       = CASE WHEN $5::boolean THEN $6 ELSE emoji END,
            image       = CASE WHEN $7::boolean THEN $8 ELSE image END,
            visibility  = COALESCE($9, visibility)
-       WHERE id = $1 RETURNING *`,
-      [
-        id,
-        name ?? null,
-        'description' in req.body, description ?? null,
-        'emoji'       in req.body, emoji       ?? null,
-        'image'       in req.body, image       ?? null,
-        visibility ?? null,
-      ]
-    );
+       WHERE id = $1 RETURNING *`;
+    const updateParams = [
+      id,
+      name ?? null,
+      'description' in req.body, description ?? null,
+      'emoji'       in req.body, emoji       ?? null,
+      'image'       in req.body, image       ?? null,
+      visibility ?? null,
+    ];
+
+    let result;
+    if (restrict.length > 0) {
+      result = await withTransaction(async (client) => {
+        const r = await client.query<WorkspaceRow>(updateSql, updateParams);
+        await restrictDescendants(client, { type: 'workspace', id });
+        return r;
+      });
+    } else {
+      result = await query<WorkspaceRow>(updateSql, updateParams);
+    }
     res.json({ workspace: sanitizeWorkspace(result.rows[0]) });
     broadcastToUser(req.userId!, 'workspaces');
+    if (restrict.length > 0) { broadcastToUser(req.userId!, 'folders'); broadcastToUser(req.userId!, 'lists'); broadcastToUser(req.userId!, 'timelines'); }
   } catch (err) {
     console.error('workspaces PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });

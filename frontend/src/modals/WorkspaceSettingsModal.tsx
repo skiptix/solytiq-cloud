@@ -4,7 +4,8 @@ import useWorkspaceStore from '../store/useWorkspaceStore';
 import useAuthStore from '../store/useAuthStore';
 import type { Workspace, WorkspaceMember, SharedFile } from '../types';
 import { EmojiGrid } from '../components/EmojiSelector';
-import { apiGetMembers, apiGetFiles } from '../api/client';
+import { apiGetMembers, apiGetFiles, asVisibilityConflict, type VisibilityConflict } from '../api/client';
+import VisibilityConflictModal from '../components/VisibilityConflictModal';
 
 interface UserSuggestion { id: string; username: string; fullName: string | null; profileImage: string | null; }
 
@@ -160,6 +161,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const [dragOver, setDragOver]       = useState(false);
   const [saving, setSaving]           = useState(false);
   const [saved, setSaved]             = useState(false);
+  const [conflict, setConflict]       = useState<VisibilityConflict | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Members
@@ -228,7 +230,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
     reader.readAsDataURL(file);
   }
 
-  const handleSave = async () => {
+  const handleSave = async (cascade = false) => {
     setSaving(true);
     try {
       await updateWorkspace(workspace.id, {
@@ -237,11 +239,17 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
         emoji: useImage ? undefined : emoji,
         image: useImage ? image ?? undefined : null as unknown as undefined,
         visibility,
+        ...(cascade ? { cascade: true } : {}),
       });
+      setConflict(null);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch {
-      // silent
+    } catch (err) {
+      // Turning the workspace private with public folders/lists/timelines inside
+      // surfaces a conflict the owner can confirm (cascade) or cancel.
+      const c = asVisibilityConflict(err);
+      if (c) setConflict(c);
+      // else: silent (matches prior behaviour)
     } finally {
       setSaving(false);
     }
@@ -408,7 +416,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10 }}>
                 {saved && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#15803d', animation: 'savedPop 300ms ease both', display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="check_circle" size={14} color="#15803d" /> Saved</div>}
-                <button onClick={handleSave} disabled={saving || !isOwner}
+                <button onClick={() => handleSave()} disabled={saving || !isOwner}
                   style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 10, padding: '10px 22px', cursor: (saving || !isOwner) ? 'default' : 'pointer', opacity: !isOwner ? 0.5 : 1 }}>
                   {saving ? 'Saving…' : 'Save changes'}
                 </button>
@@ -562,6 +570,15 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
       <WorkspaceImagePicker
         onSelect={dataUrl => { setImage(dataUrl); setUseImage(true); setShowImagePicker(false); }}
         onClose={() => setShowImagePicker(false)}
+      />
+    )}
+
+    {conflict && (
+      <VisibilityConflictModal
+        conflict={conflict}
+        busy={saving}
+        onCancel={() => setConflict(null)}
+        onConfirm={() => handleSave(true)}
       />
     )}
     </>

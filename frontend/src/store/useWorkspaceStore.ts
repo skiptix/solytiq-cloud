@@ -16,7 +16,7 @@ interface WorkspaceState {
   setDeletingWorkspaceId: (id: string | null) => void;
   loadWorkspaces: () => Promise<void>;
   createWorkspace: (data: { name: string; description?: string; emoji?: string; image?: string; visibility?: 'private' | 'public' }) => Promise<Workspace>;
-  updateWorkspace: (id: string, data: Partial<Pick<Workspace, 'name' | 'description' | 'emoji' | 'image' | 'visibility'>>) => Promise<void>;
+  updateWorkspace: (id: string, data: Partial<Pick<Workspace, 'name' | 'description' | 'emoji' | 'image' | 'visibility'>> & { cascade?: boolean }) => Promise<void>;
   deleteWorkspace: (id: string) => Promise<void>;
   getMembers: (id: string) => Promise<WorkspaceMember[]>;
   addMember: (id: string, username: string) => Promise<WorkspaceMember>;
@@ -63,8 +63,10 @@ const useWorkspaceStore = create<WorkspaceState>()(
 
       updateWorkspace: async (id, data) => {
         await apiUpdateWorkspace(id, data);
+        const patch = { ...data };
+        delete patch.cascade;
         set(s => ({
-          workspaces: s.workspaces.map(w => w.id === id ? { ...w, ...data } : w),
+          workspaces: s.workspaces.map(w => w.id === id ? { ...w, ...patch } : w),
         }));
       },
 

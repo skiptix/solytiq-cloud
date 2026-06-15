@@ -6,6 +6,7 @@ import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
+import { getPrivateAncestors, buildPromoteConflict, promoteAncestors } from '../visibility';
 
 const router = Router();
 router.use(authenticate);
@@ -390,7 +391,7 @@ router.put('/:timelineId/share', async (req: Request, res: Response) => {
 router.put('/:timelineId', async (req: Request, res: Response) => {
   try {
     const { timelineId } = req.params;
-    const { name, emoji, color, colorBg, subtitle, layout, position, isPublic, folderId } = req.body as {
+    const { name, emoji, color, colorBg, subtitle, layout, position, isPublic, folderId, cascade } = req.body as {
       name?: string;
       emoji?: string;
       color?: string;
@@ -400,9 +401,10 @@ router.put('/:timelineId', async (req: Request, res: Response) => {
       position?: number;
       isPublic?: boolean;
       folderId?: string | null;
+      cascade?: boolean;
     };
 
-    const existing = await query<TimelineRow>('SELECT user_id FROM timelines WHERE id = $1', [timelineId]);
+    const existing = await query<TimelineRow>('SELECT user_id, workspace_id, folder_id, name FROM timelines WHERE id = $1', [timelineId]);
     if (existing.rows.length === 0) {
       res.status(404).json({ error: 'Timeline not found' });
       return;
@@ -418,7 +420,23 @@ router.put('/:timelineId', async (req: Request, res: Response) => {
     const validLayout = layout !== undefined && ['vertical', 'compact', 'detailed'].includes(layout) ? layout : null;
     const updateFolderId = 'folderId' in req.body;
 
-    const result = await query<TimelineRow>(
+    // Enforce the visibility hierarchy (folder + workspace must be public before
+    // a timeline can be). Conflicts return a 409 unless the client cascades.
+    let promote: Awaited<ReturnType<typeof getPrivateAncestors>> = [];
+    if (isPublic === true) {
+      const targetFolderId = updateFolderId ? (folderId ?? null) : existing.rows[0].folder_id;
+      const ancestors = await getPrivateAncestors(query, {
+        workspaceId: existing.rows[0].workspace_id, folderId: targetFolderId, userId: req.userId!, isAdmin,
+      });
+      if (ancestors.length > 0) {
+        const conflict = buildPromoteConflict('timeline', existing.rows[0].name, ancestors);
+        if (!cascade) { res.status(409).json(conflict); return; }
+        if (!conflict.canResolve) { res.status(403).json(conflict); return; }
+        promote = ancestors;
+      }
+    }
+
+    const updateSql =
       `UPDATE timelines
        SET name      = COALESCE($1, name),
            emoji     = COALESCE($2, emoji),
@@ -430,10 +448,19 @@ router.put('/:timelineId', async (req: Request, res: Response) => {
            is_public = COALESCE($8, is_public),
            folder_id = CASE WHEN $10 THEN $11 ELSE folder_id END
        WHERE id = $9
-       RETURNING *`,
-      [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, validLayout, position ?? null, isPublic ?? null, timelineId,
-       updateFolderId, folderId ?? null]
-    );
+       RETURNING *`;
+    const updateParams = [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, validLayout, position ?? null, isPublic ?? null, timelineId,
+      updateFolderId, folderId ?? null];
+
+    let result;
+    if (promote.length > 0) {
+      result = await withTransaction(async (client) => {
+        await promoteAncestors(client, promote);
+        return client.query<TimelineRow>(updateSql, updateParams);
+      });
+    } else {
+      result = await query<TimelineRow>(updateSql, updateParams);
+    }
 
     // Re-attach milestones so the client gets a complete object back.
     const milestonesRes = await query<MilestoneRow>(
@@ -442,6 +469,7 @@ router.put('/:timelineId', async (req: Request, res: Response) => {
     );
     res.json({ timeline: sanitizeTimeline(result.rows[0], milestonesRes.rows.map(sanitizeMilestone)) });
     broadcastToUser(req.userId!, 'timelines');
+    if (promote.length > 0) { broadcastToUser(req.userId!, 'folders'); broadcastToUser(req.userId!, 'workspaces'); broadcastToUser(req.userId!, 'lists'); }
   } catch (err) {
     werr('timelines PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });

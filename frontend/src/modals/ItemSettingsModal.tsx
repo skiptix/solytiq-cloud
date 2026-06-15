@@ -3,7 +3,13 @@ import type { Folder } from '../types';
 import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
 import CalendarPicker from '../components/CalendarPicker';
-import { apiUpdateListShare, apiUpdateTimelineShare, type ShareInfo, type ShareUpdate } from '../api/client';
+import {
+  apiUpdateListShare, apiUpdateTimelineShare,
+  apiUpdateList, apiUpdateTimeline, apiUpdateFolder,
+  asVisibilityConflict, type VisibilityConflict,
+  type ShareInfo, type ShareUpdate,
+} from '../api/client';
+import VisibilityConflictModal from '../components/VisibilityConflictModal';
 
 const FOLDER_COLORS = [
   '#5e4dbb', '#1D4ED8', '#15803d', '#ea580c',
@@ -50,6 +56,8 @@ interface ItemSettingsModalProps {
   };
   /** Called after a share change so the store can reflect the new state. */
   onShareUpdated?: (share: ShareInfo) => void;
+  /** Called after the workspace visibility (is_public) is applied server-side. */
+  onVisibilityApplied?: (isPublic: boolean) => void;
   /** Changes apply immediately (optimistic store update + API call). */
   onChange: (updates: ItemSettingsUpdates) => void;
   onClose: () => void;
@@ -229,6 +237,69 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
   );
 }
 
+// ── Accessibility (workspace visibility) section ──────────────────────────────
+// Self-contained: calls the API directly so it can enforce the visibility
+// hierarchy. On a 409 conflict it surfaces the VisibilityConflictModal, then
+// retries with `cascade: true` once the user confirms.
+function AccessibilitySection({ kind, itemId, initialPublic, onApplied }: {
+  kind: 'list' | 'folder' | 'timeline';
+  itemId: string;
+  initialPublic?: boolean;
+  onApplied?: (isPublic: boolean) => void;
+}) {
+  const [pub, setPub]           = useState(Boolean(initialPublic));
+  const [busy, setBusy]         = useState(false);
+  const [conflict, setConflict] = useState<VisibilityConflict | null>(null);
+  const [pending, setPending]   = useState(false);
+
+  const updateFn = kind === 'list' ? apiUpdateList : kind === 'timeline' ? apiUpdateTimeline : apiUpdateFolder;
+
+  const apply = async (value: boolean, cascade = false) => {
+    setBusy(true);
+    try {
+      await updateFn(itemId, cascade ? { isPublic: value, cascade: true } : { isPublic: value });
+      setPub(value);
+      setConflict(null);
+      onApplied?.(value);
+    } catch (err) {
+      const c = asVisibilityConflict(err);
+      if (c) { setConflict(c); setPending(value); }
+      else console.error('visibility update failed', err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ animation: 'sectionFadeUp 320ms ease both', animationDelay: '40ms' }}>
+      <SectionLabel>Accessibility</SectionLabel>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {([{ label: 'Private', icon: 'lock', val: false }, { label: 'Public', icon: 'public', val: true }] as const).map(opt => {
+          const selected = pub === opt.val;
+          return (
+            <button key={opt.label}
+              disabled={busy}
+              onClick={() => { if (pub !== opt.val) apply(opt.val); }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '9px 12px', borderRadius: 10, border: selected ? '1.5px solid #5e4dbb' : '1.5px solid #e8e4f0', background: selected ? '#f0edff' : '#fff', cursor: busy ? 'wait' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? '#5e4dbb' : '#484552', transition: 'background 120ms, border 120ms, color 120ms' }}>
+              <Icon name={opt.icon} size={14} color={selected ? '#5e4dbb' : '#787584'} />
+              {opt.label}
+              {selected && <Icon name="check" size={13} color="#5e4dbb" />}
+            </button>
+          );
+        })}
+      </div>
+      {conflict && (
+        <VisibilityConflictModal
+          conflict={conflict}
+          busy={busy}
+          onCancel={() => setConflict(null)}
+          onConfirm={() => apply(pending, true)}
+        />
+      )}
+    </div>
+  );
+}
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
@@ -237,7 +308,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, folders, folderId, itemId, share, onShareUpdated, onChange, onClose }: ItemSettingsModalProps) {
+export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, folders, folderId, itemId, share, onShareUpdated, onVisibilityApplied, onChange, onClose }: ItemSettingsModalProps) {
   const accent = color ?? '#5e4dbb';
 
   return (
@@ -273,24 +344,28 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
         {/* Body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 22px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
 
-          {/* Accessibility */}
-          <div style={{ animation: 'sectionFadeUp 320ms ease both', animationDelay: '40ms' }}>
-            <SectionLabel>Accessibility</SectionLabel>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {([{ label: 'Private', icon: 'lock', val: false }, { label: 'Public', icon: 'public', val: true }] as const).map(opt => {
-                const selected = isPublic === opt.val;
-                return (
-                  <button key={opt.label}
-                    onClick={() => onChange({ isPublic: opt.val })}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '9px 12px', borderRadius: 10, border: selected ? '1.5px solid #5e4dbb' : '1.5px solid #e8e4f0', background: selected ? '#f0edff' : '#fff', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? '#5e4dbb' : '#484552', transition: 'background 120ms, border 120ms, color 120ms' }}>
-                    <Icon name={opt.icon} size={14} color={selected ? '#5e4dbb' : '#787584'} />
-                    {opt.label}
-                    {selected && <Icon name="check" size={13} color="#5e4dbb" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {/* Accessibility — workspace visibility with hierarchy enforcement */}
+          {itemId
+            ? <AccessibilitySection kind={kind} itemId={itemId} initialPublic={isPublic} onApplied={onVisibilityApplied} />
+            : (
+              <div style={{ animation: 'sectionFadeUp 320ms ease both', animationDelay: '40ms' }}>
+                <SectionLabel>Accessibility</SectionLabel>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {([{ label: 'Private', icon: 'lock', val: false }, { label: 'Public', icon: 'public', val: true }] as const).map(opt => {
+                    const selected = isPublic === opt.val;
+                    return (
+                      <button key={opt.label}
+                        onClick={() => onChange({ isPublic: opt.val })}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '9px 12px', borderRadius: 10, border: selected ? '1.5px solid #5e4dbb' : '1.5px solid #e8e4f0', background: selected ? '#f0edff' : '#fff', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? '#5e4dbb' : '#484552', transition: 'background 120ms, border 120ms, color 120ms' }}>
+                        <Icon name={opt.icon} size={14} color={selected ? '#5e4dbb' : '#787584'} />
+                        {opt.label}
+                        {selected && <Icon name="check" size={13} color="#5e4dbb" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
           {/* Share via link (lists & timelines) */}
           {kind !== 'folder' && itemId && (

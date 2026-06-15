@@ -251,6 +251,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
           itemId={list.id}
           share={{ enabled: list.shareEnabled, token: list.shareToken, hasPassword: list.shareHasPassword, expiresAt: list.shareExpiresAt, subpages: list.shareSubpages }}
           onShareUpdated={(s: ShareInfo) => setLists(prev => prev.map(l => l.id === list.id ? { ...l, shareEnabled: s.enabled, shareToken: s.token, shareHasPassword: s.hasPassword, shareExpiresAt: s.expiresAt, shareSubpages: s.subpages ?? l.shareSubpages } : l))}
+          onVisibilityApplied={(p: boolean) => setLists(prev => prev.map(l => l.id === list.id ? { ...l, isPublic: p } : l))}
           onChange={handleSettingsChange}
           onClose={() => setShowSettings(false)}
         />
@@ -457,6 +458,7 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
           itemId={timeline.id}
           share={{ enabled: timeline.shareEnabled, token: timeline.shareToken, hasPassword: timeline.shareHasPassword, expiresAt: timeline.shareExpiresAt }}
           onShareUpdated={(s: ShareInfo) => setTimelines(prev => prev.map(t => t.id === timeline.id ? { ...t, shareEnabled: s.enabled, shareToken: s.token, shareHasPassword: s.hasPassword, shareExpiresAt: s.expiresAt } : t))}
+          onVisibilityApplied={(p: boolean) => setTimelines(prev => prev.map(t => t.id === timeline.id ? { ...t, isPublic: p } : t))}
           onChange={handleSettingsChange}
           onClose={() => setShowSettings(false)}
         />
@@ -532,7 +534,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { updateFolder, deleteFolder } = useAppStore();
+  const { updateFolder, deleteFolder, setFolders } = useAppStore();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -758,7 +760,9 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
           name={folder.name}
           emoji={folder.emoji}
           color={folder.color}
-          isPublic={folder.isPublic ?? true}
+          isPublic={folder.isPublic ?? false}
+          itemId={folder.id}
+          onVisibilityApplied={(p: boolean) => setFolders(prev => prev.map(f => f.id === folder.id ? { ...f, isPublic: p } : f))}
           onChange={updates => updateFolder(folder.id, updates as Partial<Folder>)}
           onClose={() => setShowSettings(false)}
         />
@@ -1269,7 +1273,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.12.8
+              v1.13.0
             </div>
           )}
         </div>
@@ -1462,7 +1466,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.12.8
+            v1.13.0
           </div>
         )}
       </div>
