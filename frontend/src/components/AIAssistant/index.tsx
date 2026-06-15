@@ -50,6 +50,9 @@ import {
   apiUpdateMilestone,
   apiDeleteMilestone,
   apiReorderMilestones,
+  apiGetAiToolDefs,
+  apiExecuteAiTool,
+  type AiToolDef,
 } from '../../api/client';
 import useGpsStore from '../../store/useGpsStore';
 import AIBubble from './AIBubble';
@@ -59,6 +62,38 @@ interface ToolCall {
   id: string;
   type: string;
   function: { name: string; arguments: string };
+}
+
+// The data tools (tasks/lists/folders/timelines/milestones/files) live in the
+// backend registry — the single source of truth shared with the MCP server.
+// We fetch their definitions once and execute them server-side via /api/ai/execute,
+// keeping only frontend-coupled tools (navigation, GPS downloads, optimistic
+// reorder/sublist/workspace ops) on the client. Cached at module scope so we
+// don't refetch on every message.
+// Frontend data tools that the backend registry now supersedes. Their client
+// definitions are suppressed so the model only sees the shared backend version
+// (the old executeTool branches remain as harmless dead code). Tools with no
+// backend equivalent — sublists, reorder/move, calendar scheduling, workspaces,
+// GPS, navigation — stay on the client.
+const SUPERSEDED_CLIENT_TOOLS = new Set([
+  'create_dashboard_task', 'update_dashboard_task', 'delete_dashboard_task',
+  'create_list_task', 'update_list_task', 'delete_list_task', 'create_task_in_list',
+  'create_section', 'create_list', 'update_list', 'delete_list',
+  'create_folder', 'update_folder', 'delete_folder',
+  'create_timeline', 'update_timeline', 'delete_timeline',
+  'add_milestone', 'update_milestone', 'delete_milestone',
+]);
+
+let sharedToolDefsCache: AiToolDef[] | null = null;
+async function getSharedToolDefs(): Promise<AiToolDef[]> {
+  if (sharedToolDefsCache) return sharedToolDefsCache;
+  try {
+    const { tools } = await apiGetAiToolDefs();
+    sharedToolDefsCache = tools;
+    return tools;
+  } catch {
+    return [];
+  }
 }
 
 export default function AIAssistant() {
@@ -93,6 +128,8 @@ export default function AIAssistant() {
   const workspaceStore = useWorkspaceStore();
   const navigate = useNavigate();
   const thinkingIdRef = useRef<string | null>(null);
+  // Names of tools handled by the shared backend registry (executed via /api/ai/execute).
+  const backendToolNamesRef = useRef<Set<string>>(new Set());
 
   // Load AI settings once
   useEffect(() => {
@@ -124,11 +161,23 @@ export default function AIAssistant() {
   const executeTool = useCallback(
     async (call: ToolCall, ctx: ReturnType<typeof buildContext>): Promise<{ id: string; name: string; result: string; summary?: string }> => {
       const name = call.function.name;
-      let args: Record<string, unknown> = {};
+      let args: Record<string, unknown>;
       try {
         args = JSON.parse(call.function.arguments);
       } catch {
         return { id: call.id, name, result: 'Error: invalid arguments' };
+      }
+
+      // Shared registry tools run on the backend (same code path as the MCP
+      // server). The server reloads the store afterwards so the UI updates.
+      if (backendToolNamesRef.current.has(name)) {
+        try {
+          const r = await apiExecuteAiTool(name, args);
+          return { id: call.id, name, result: r.result, summary: r.ok ? r.summary : undefined };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Unknown error';
+          return { id: call.id, name, result: `Error: ${msg}` };
+        }
       }
 
       try {
@@ -859,7 +908,21 @@ export default function AIAssistant() {
         let ctx = buildContext(location.pathname, appStore);
         const wsId = workspaceStore.currentWorkspaceId;
         const wsInfo = workspaceStore.workspaces.map((w) => ({ id: w.id, name: w.name, role: w.role }));
-        let tools = buildTools(ctx, wsId, wsInfo);
+
+        // Pull the shared backend tool definitions (single source of truth) and
+        // record their names so executeTool routes them to /api/ai/execute. The
+        // tool list sent to the model = client-only tools + shared backend tools,
+        // de-duplicated by name so the backend definitions always win.
+        const sharedDefs = await getSharedToolDefs();
+        backendToolNamesRef.current = new Set(sharedDefs.map((d) => d.function.name));
+        const composeTools = (clientTools: ReturnType<typeof buildTools>) => [
+          ...clientTools.filter(
+            (t) => !backendToolNamesRef.current.has(t.function.name) && !SUPERSEDED_CLIENT_TOOLS.has(t.function.name)
+          ),
+          ...sharedDefs,
+        ];
+
+        let tools = composeTools(buildTools(ctx, wsId, wsInfo));
         const systemPrompt = buildSystemPrompt(ctx, username || 'User', wsInfo, wsId);
 
         // Build API messages from history (last 20 + current)
@@ -915,9 +978,16 @@ export default function AIAssistant() {
             messages.push({ role: 'tool', tool_call_id: r.id, name: r.name, content: r.result })
           );
 
+          // Backend-executed tools mutate the DB without optimistic store
+          // updates, so refresh from the server before rebuilding context to
+          // keep the next round's tool list and IDs accurate.
+          if (results.some((r) => backendToolNamesRef.current.has(r.name))) {
+            await appStore.loadFromApi(workspaceStore.currentWorkspaceId ?? undefined);
+          }
+
           // Rebuild context with updated store state
           ctx = buildContext(location.pathname, appStore);
-          tools = buildTools(ctx, wsId, workspaceStore.workspaces.map((w) => ({ id: w.id, name: w.name, role: w.role })));
+          tools = composeTools(buildTools(ctx, wsId, workspaceStore.workspaces.map((w) => ({ id: w.id, name: w.name, role: w.role }))));
         }
 
         // After tool calls complete, refresh from server and let the AI verify

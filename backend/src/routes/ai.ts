@@ -1,14 +1,9 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require('pdf-parse');
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX: {
-  read: (buf: Buffer, opts: { type: string }) => { SheetNames: string[]; Sheets: Record<string, unknown> };
-  utils: { sheet_to_csv: (sheet: unknown) => string };
-} = require('xlsx');
 import { query } from '../db';
 import { authenticate } from '../middleware';
+import { extractTextFromBuffer, MAX_TEXT_CHARS } from '../fileText';
+import { getOpenRouterToolDefs, executeAiTool } from '../aiTools';
 
 const router = Router();
 
@@ -286,8 +281,6 @@ interface AIFileRow {
   created_at: string;
 }
 
-const MAX_TEXT_CHARS = 50000;
-
 // POST /api/ai/files — upload a file, extract text/base64, store in db
 router.post('/files', authenticate, aiUpload.single('file'), async (req: Request, res: Response) => {
   try {
@@ -311,57 +304,14 @@ router.post('/files', authenticate, aiUpload.single('file'), async (req: Request
       }
     }
 
-    let contentText: string | null = null;
-    let isImage = false;
-
-    // Derive extension for MIME-ambiguous types (e.g. .ts files arrive as video/mp2t)
-    const ext = (file.originalname.split('.').pop() ?? '').toLowerCase();
-    const TEXT_EXTENSIONS = new Set([
-      'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs',
-      'md', 'markdown',
-      'html', 'htm',
-      'csv',
-      'json', 'yaml', 'yml', 'toml', 'xml',
-      'sql', 'sh', 'bash', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cpp', 'h',
-      'txt', 'log', 'env',
-    ]);
-    const isXlsx = ext === 'xlsx' || ext === 'xls'
-      || file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      || file.mimetype === 'application/vnd.ms-excel';
-    const isTextByExt = TEXT_EXTENSIONS.has(ext);
-
-    if (file.mimetype === 'application/pdf') {
-      try {
-        const parsed = await pdfParse(file.buffer);
-        contentText = parsed.text.slice(0, MAX_TEXT_CHARS);
-      } catch {
-        contentText = '[PDF could not be parsed]';
-      }
-    } else if (isXlsx) {
-      try {
-        const workbook = XLSX.read(file.buffer, { type: 'buffer' });
-        const sheets = workbook.SheetNames.map((name) => {
-          const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[name]);
-          return `Sheet: ${name}\n${csv}`;
-        }).join('\n\n');
-        contentText = sheets.slice(0, MAX_TEXT_CHARS);
-      } catch {
-        contentText = '[XLSX could not be parsed]';
-      }
-    } else if (file.mimetype.startsWith('text/') || isTextByExt) {
-      contentText = file.buffer.toString('utf-8').slice(0, MAX_TEXT_CHARS);
-    } else if (file.mimetype.startsWith('image/')) {
-      isImage = true;
-      // Store as base64 data URL for vision models (cap at 4 MB raw)
-      if (file.size <= 4 * 1024 * 1024) {
-        contentText = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
-      } else {
-        contentText = '[Image too large for AI context — max 4 MB]';
-        isImage = false;
-      }
-    } else {
-      contentText = `[Unsupported file type: ${file.mimetype} (.${ext}). Supported: PDF, XLSX, CSV, HTML, Markdown, TypeScript/JS, images]`;
-    }
+    // Extract readable content using the shared file→text logic (same path the
+    // MCP `read_file` tool uses), so internal and external AIs read files alike.
+    const { contentText, isImage } = await extractTextFromBuffer(
+      file.buffer,
+      file.mimetype,
+      file.originalname,
+      MAX_TEXT_CHARS
+    );
 
     const result = await query<{ id: string }>(
       `INSERT INTO ai_chat_files (user_id, session_id, filename, mime_type, file_size, content_text)
@@ -422,6 +372,33 @@ router.delete('/files/:id', authenticate, async (req: Request, res: Response) =>
     res.json({ success: true });
   } catch (err) {
     console.error('ai/files/:id DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Shared tool registry (single source of truth with the MCP server) ──
+
+// GET /api/ai/tools — the data-tool definitions (OpenRouter format) that the
+// internal assistant sends to the model. These are the exact same tools the
+// external MCP server exposes (aiTools.ts).
+router.get('/tools', authenticate, (_req: Request, res: Response) => {
+  res.json({ tools: getOpenRouterToolDefs() });
+});
+
+// POST /api/ai/execute — run a shared tool server-side for the verified user.
+// The userId is taken from the JWT, never from the request body, so the
+// internal assistant gets identical isolation guarantees to the MCP path.
+router.post('/execute', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { name, arguments: args } = req.body as { name?: string; arguments?: Record<string, unknown> };
+    if (!name) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+    const result = await executeAiTool(req.userId!, name, args ?? {});
+    res.json(result);
+  } catch (err) {
+    console.error('ai/execute POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

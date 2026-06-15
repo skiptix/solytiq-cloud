@@ -24,6 +24,8 @@ import timelinesRouter  from './routes/timelines';
 import gpsRouter from './routes/gps';
 import taskAttachmentsRouter from './routes/taskAttachments';
 import milestoneAttachmentsRouter from './routes/milestoneAttachments';
+import tokensRouter from './routes/tokens';
+import mcpRouter from './routes/mcp';
 import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
 import { addSseClient, removeSseClient } from './sse';
@@ -100,6 +102,12 @@ app.use('/api/workspaces', workspacesRouter);
 app.use('/api/timelines/milestones/:milestoneId/attachments', milestoneAttachmentsRouter);
 app.use('/api/timelines',  timelinesRouter);
 app.use('/api/gps',        gpsRouter);
+app.use('/api/tokens',     tokensRouter);
+
+// Model Context Protocol endpoint for external AI agents (PAT-authenticated).
+// Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
+// loops; the endpoint enforces its own bearer-token auth.
+app.use('/mcp',            mcpRouter);
 
 // Public share endpoints — no auth required
 interface ShareFileRow { id: string; original_name: string; title: string | null; note: string | null; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null; }
@@ -452,6 +460,23 @@ async function runMigrations() {
   await pool.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0
   `);
+
+  // Personal Access Tokens — long-lived, individually revocable credentials for
+  // external AI agents (MCP). Only the SHA-256 hash of each secret is stored.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS api_tokens (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name         VARCHAR(100) NOT NULL,
+      token_hash   VARCHAR(100) NOT NULL UNIQUE,
+      token_prefix VARCHAR(30)  NOT NULL,
+      last_used_at TIMESTAMPTZ,
+      expires_at   TIMESTAMPTZ,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_user_idx ON api_tokens(user_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_hash_idx ON api_tokens(token_hash)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS lists (

@@ -8,7 +8,7 @@ Solytiq Cloud is a self-hosted, full-stack productivity suite: task lists, proje
 
 The current version is displayed at the bottom-left of the sidebar in `frontend/src/components/Sidebar.tsx`.
 
-**On every deploy / release, update the version string** in that file — search for the `v1.12.8` literal (it appears in two places, for the expanded and collapsed sidebar states) and bump **both**. Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
+**On every deploy / release, update the version string** in that file — search for the `v1.14.0` literal (it appears in two places, for the expanded and collapsed sidebar states) and bump **both**. Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
 
 ---
 
@@ -234,6 +234,18 @@ Sharing model for lists/timelines (distinct from the workspace `is_public` flag 
 - **File context:** users can upload files into a chat (`POST /api/ai/files`); stored in `ai_chat_files` with extracted `content_text` (PDF via `pdf-parse`, spreadsheets via `xlsx`) and a 30-day TTL. A startup + 6-hour cron purges expired files.
 - **Usage tracking:** every OpenRouter call records token counts in `ai_usage`.
 - AI settings (`ai_assistant_enabled`, `ai_model`) live in `app_settings` and are admin-configurable from the Settings screen.
+
+### Shared AI Tool Registry (single source of truth)
+
+- **`backend/src/aiTools.ts`** is the one place AI capabilities are defined: each tool has a JSON-Schema parameter spec **and** a server-side SQL handler. `executeAiTool(userId, name, args)` runs a tool; `getOpenRouterToolDefs()` / `getMcpToolDefs()` adapt the same defs to each consumer.
+- **Security invariant:** handlers receive `userId` from the verified credential only — there is **no `user_id` tool parameter**, and every query is scoped by `user_id`. This removes any prompt-injection path to another user's data. New tools must follow this rule.
+- **Internal AI** (`Sol`) fetches these defs from `GET /api/ai/tools` and executes data tools via `POST /api/ai/execute`; the frontend keeps only client-coupled tools (navigation, GPS browser-downloads, reorder/move, sublists, workspaces) — see `SUPERSEDED_CLIENT_TOOLS` in `components/AIAssistant/index.tsx`.
+- File→text extraction is centralized in **`backend/src/fileText.ts`** (used by both `/api/ai/files` and the `read_file` tool).
+
+### MCP Server (external AI agents)
+
+- **`/mcp`** (mounted in `index.ts`, handler in `routes/mcp.ts`) is a Model Context Protocol server over **Streamable HTTP** (`@modelcontextprotocol/sdk`, stateless: one server+transport per request). It exposes the shared registry to external agents (e.g. Claude Desktop). Nginx proxies `/mcp` with buffering off.
+- **Auth: Personal Access Tokens (PATs).** Agents send `Authorization: Bearer solytiq_pat_…`. Tokens live in `api_tokens` (only a SHA-256 hash is stored), are long-lived, individually revocable, and optionally expiring. Managed at `/api/tokens` (`routes/tokens.ts`) and generated/copied/revoked from the **AI Access** section of the per-user `UserSettingsModal`. PAT helpers are in `backend/src/apiToken.ts`.
 
 ---
 
