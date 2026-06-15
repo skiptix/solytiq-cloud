@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
@@ -74,6 +75,7 @@ function fmtCost(usd: number): string {
 }
 
 export default function SettingsScreen() {
+  usePageTitle("Settings");
   const navigate = useNavigate();
   const { isAdmin, userId } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabId>('system');

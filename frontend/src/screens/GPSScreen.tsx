@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
@@ -205,6 +206,7 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
 
 // ─── GPSScreen ────────────────────────────────────────────────────────────────
 export default function GPSScreen() {
+  usePageTitle("GPS");
   const navigate = useNavigate();
   const location = useLocation();
 

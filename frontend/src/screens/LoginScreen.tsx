@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -15,6 +16,7 @@ const s: Record<string, CSSProperties> = {
 };
 
 export default function LoginScreen() {
+  usePageTitle("Login");
   const navigate = useNavigate();
   const { setAuthFromToken } = useAuthStore();
 

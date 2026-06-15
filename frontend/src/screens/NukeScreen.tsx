@@ -1,3 +1,4 @@
+import { usePageTitle } from "../hooks/usePageTitle";
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
@@ -15,6 +16,7 @@ const R = 68;
 const CIRC = 2 * Math.PI * R;
 
 export default function NukeScreen() {
+  usePageTitle("Wipe System");
   const navigate = useNavigate();
   const location = useLocation();
   const { signOut } = useAuthStore();
