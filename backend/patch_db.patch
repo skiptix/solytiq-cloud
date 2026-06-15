@@ -1,0 +1,44 @@
+<<<<<<< SEARCH
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS api_tokens (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name         VARCHAR(100) NOT NULL,
+      token_hash   VARCHAR(100) NOT NULL UNIQUE,
+      token_prefix VARCHAR(30)  NOT NULL,
+      last_used_at TIMESTAMPTZ,
+      expires_at   TIMESTAMPTZ,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_user_idx ON api_tokens(user_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_hash_idx ON api_tokens(token_hash)`);
+=======
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS api_tokens (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name         VARCHAR(100) NOT NULL,
+      token_hash   VARCHAR(100) NOT NULL UNIQUE,
+      token_prefix VARCHAR(30)  NOT NULL,
+      last_used_at TIMESTAMPTZ,
+      expires_at   TIMESTAMPTZ,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_user_idx ON api_tokens(user_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_hash_idx ON api_tokens(token_hash)`);
+
+  // OAuth 2.0 authorization codes for native integrations (e.g. Claude)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS oauth_codes (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      code         VARCHAR(100) NOT NULL UNIQUE,
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      redirect_uri TEXT NOT NULL,
+      state        TEXT NOT NULL,
+      expires_at   TIMESTAMPTZ NOT NULL
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS oauth_codes_code_idx ON oauth_codes(code)`);
+>>>>>>> REPLACE
