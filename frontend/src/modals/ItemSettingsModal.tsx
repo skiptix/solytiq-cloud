@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Folder } from '../types';
 import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
+import CalendarPicker from '../components/CalendarPicker';
 import { apiUpdateListShare, apiUpdateTimelineShare, type ShareInfo, type ShareUpdate } from '../api/client';
 
 const FOLDER_COLORS = [
@@ -70,6 +71,7 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
   const [saving, setSaving]         = useState(false);
   const [copied, setCopied]         = useState(false);
   const [showPwField, setShowPwField] = useState(false);
+  const [showExpiryCal, setShowExpiryCal] = useState(false);
 
   const shareUrl = token ? `${window.location.origin}/share/${kind}/${token}` : '';
 
@@ -196,21 +198,30 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
           </div>
 
           {/* Expiry */}
-          <div>
+          <div style={{ position: 'relative' }}>
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Expires</div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input
-                type="date"
-                value={expiresAt}
-                disabled={saving}
-                onChange={e => apply({ expiresAt: e.target.value || null })}
-                style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 10, padding: '8px 12px', outline: 'none', background: '#fff', color: expiresAt ? '#1c1b22' : '#b0acbe' }}
-              />
+            <button
+              disabled={saving}
+              onClick={() => setShowExpiryCal(s => !s)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid #e8e4f0', borderRadius: 10, padding: '8px 12px', cursor: saving ? 'wait' : 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: expiresAt ? '#1c1b22' : '#b0acbe', textAlign: 'left' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#e8e4f0'; }}
+            >
+              <Icon name="calendar_today" size={14} color={expiresAt ? '#5e4dbb' : '#b0acbe'} />
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{expiresAt ? new Date(expiresAt + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No expiry'}</span>
               {expiresAt && (
-                <button disabled={saving} onClick={() => apply({ expiresAt: null })}
-                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', background: 'transparent', border: '1px solid #e8e4f0', borderRadius: 10, padding: '8px 12px', cursor: saving ? 'wait' : 'pointer' }}>Clear</button>
+                <span onClick={e => { e.stopPropagation(); setShowExpiryCal(false); apply({ expiresAt: null }); }} style={{ color: '#b0acbe', lineHeight: 1, cursor: 'pointer', padding: '0 2px' }}>×</span>
               )}
-            </div>
+            </button>
+            {showExpiryCal && (
+              <div style={{ position: 'absolute', bottom: 'calc(100% + 4px)', left: 0, zIndex: 500 }}>
+                <CalendarPicker
+                  value={expiresAt}
+                  onChange={d => { setShowExpiryCal(false); apply({ expiresAt: d || null }); }}
+                  onClear={() => { setShowExpiryCal(false); apply({ expiresAt: null }); }}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
