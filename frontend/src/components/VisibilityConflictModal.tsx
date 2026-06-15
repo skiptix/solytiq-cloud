@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import type { VisibilityConflict } from '../api/client';
 import Icon from './Icon';
 
@@ -57,10 +58,10 @@ export default function VisibilityConflictModal({ conflict, busy, onConfirm, onC
   const canAct = isPromote ? conflict.canResolve : true;
   const confirmLabel = isPromote ? 'Make all public' : 'Make all private';
 
-  return (
+  return createPortal(
     <div
       onClick={onCancel}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 200ms ease both' }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(4px)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 200ms ease both' }}>
       <div
         onClick={e => e.stopPropagation()}
         style={{ background: '#fff', borderRadius: 18, maxWidth: 420, width: '100%', maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(94,77,187,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
@@ -112,6 +113,7 @@ export default function VisibilityConflictModal({ conflict, busy, onConfirm, onC
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
