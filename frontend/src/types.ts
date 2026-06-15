@@ -77,6 +77,7 @@ export interface Milestone {
   emoji?: string | null;
   color?: string | null;
   position?: number;
+  attachmentCount?: number;
 }
 
 export interface Timeline {

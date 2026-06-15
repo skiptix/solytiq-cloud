@@ -599,6 +599,11 @@ export default function TimelineScreen() {
                               <Icon name={st.icon} size={11} color={st.color} />{st.label}
                             </span>
                             {isToday && <span style={{ display: 'inline-flex', alignItems: 'center', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#ea580c', background: '#fff7ed', padding: '2px 8px', borderRadius: 9999, letterSpacing: '0.04em' }}>TODAY</span>}
+                            {(m.attachmentCount ?? 0) > 0 && (
+                              <span title={`${m.attachmentCount} attachment${m.attachmentCount === 1 ? '' : 's'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe' }}>
+                                <Icon name="attach_file" size={12} color="#b0acbe" />{m.attachmentCount}
+                              </span>
+                            )}
                           </div>
                           {(dateLabel || m.time) && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontFamily: 'Inter, sans-serif', fontSize: 12, color: isPast && !isToday ? '#10B981' : '#787584' }}>
