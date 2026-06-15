@@ -197,6 +197,17 @@ export interface TaskAttachment {
   createdAt: string;
 }
 
+export interface MilestoneAttachment {
+  id: string;
+  milestoneId: string;
+  attachmentType: 'upload' | 'linked';
+  name: string;
+  mimeType: string;
+  size: number;
+  sharedFileId: string | null;
+  createdAt: string;
+}
+
 export interface AIFile {
   id: string;
   filename: string;
