@@ -18,6 +18,7 @@ import AIAssistant from './components/AIAssistant';
 import LoginScreen from './screens/LoginScreen';
 import SetupWizard from './screens/SetupWizard';
 import NukeScreen from './screens/NukeScreen';
+import OAuthConsentScreen from './screens/OAuthConsentScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import ListScreen from './screens/ListScreen';
 import TimelineScreen from './screens/TimelineScreen';
@@ -263,6 +264,7 @@ export default function App() {
       <Route path="/share/list/:token" element={<SharedListPage />} />
       <Route path="/share/timeline/:token" element={<SharedTimelinePage />} />
       <Route path="/share/:token" element={<SharePage />} />
+      <Route path="/oauth/consent" element={loggedIn ? <OAuthConsentScreen /> : <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />} />
       <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : <LoginScreen />} />
       <Route path="/setup" element={loggedIn ? <Navigate to="/dashboard" replace /> : <SetupWizard />} />
       <Route path="/nuke" element={loggedIn ? <NukeScreen /> : <Navigate to="/login" replace />} />

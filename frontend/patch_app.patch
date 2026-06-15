@@ -1,0 +1,20 @@
+<<<<<<< SEARCH
+import LoginScreen from './screens/LoginScreen';
+import SetupWizard from './screens/SetupWizard';
+import DashboardScreen from './screens/DashboardScreen';
+=======
+import LoginScreen from './screens/LoginScreen';
+import SetupWizard from './screens/SetupWizard';
+import DashboardScreen from './screens/DashboardScreen';
+import OAuthConsentScreen from './screens/OAuthConsentScreen';
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+      <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : <LoginScreen />} />
+      <Route path="/setup" element={loggedIn ? <Navigate to="/dashboard" replace /> : <SetupWizard />} />
+      <Route path="/nuke" element={loggedIn ? <NukeScreen /> : <Navigate to="/login" replace />} />
+=======
+      <Route path="/oauth/consent" element={loggedIn ? <OAuthConsentScreen /> : <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />} />
+      <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : <LoginScreen />} />
+      <Route path="/setup" element={loggedIn ? <Navigate to="/dashboard" replace /> : <SetupWizard />} />
+      <Route path="/nuke" element={loggedIn ? <NukeScreen /> : <Navigate to="/login" replace />} />
+>>>>>>> REPLACE

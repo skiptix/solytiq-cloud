@@ -25,6 +25,7 @@ import gpsRouter from './routes/gps';
 import taskAttachmentsRouter from './routes/taskAttachments';
 import milestoneAttachmentsRouter from './routes/milestoneAttachments';
 import tokensRouter from './routes/tokens';
+import oauthRouter from './routes/oauth';
 import mcpRouter from './routes/mcp';
 import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
@@ -103,6 +104,7 @@ app.use('/api/timelines/milestones/:milestoneId/attachments', milestoneAttachmen
 app.use('/api/timelines',  timelinesRouter);
 app.use('/api/gps',        gpsRouter);
 app.use('/api/tokens',     tokensRouter);
+app.use('/api/oauth',      oauthRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
@@ -477,6 +479,19 @@ async function runMigrations() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_user_idx ON api_tokens(user_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_hash_idx ON api_tokens(token_hash)`);
+
+  // OAuth 2.0 authorization codes for native integrations (e.g. Claude)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS oauth_codes (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      code         VARCHAR(100) NOT NULL UNIQUE,
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      redirect_uri TEXT NOT NULL,
+      state        TEXT NOT NULL,
+      expires_at   TIMESTAMPTZ NOT NULL
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS oauth_codes_code_idx ON oauth_codes(code)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS lists (

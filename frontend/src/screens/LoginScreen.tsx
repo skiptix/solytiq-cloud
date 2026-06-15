@@ -1,7 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import { apiLogin, api2FAVerify } from '../api/client';
 import Icon from '../components/Icon';
@@ -18,6 +18,7 @@ const s: Record<string, CSSProperties> = {
 export default function LoginScreen() {
   usePageTitle("Login");
   const navigate = useNavigate();
+  const location = useLocation();
   const { setAuthFromToken } = useAuthStore();
 
   // ── credentials step
@@ -94,7 +95,8 @@ export default function LoginScreen() {
         setTimeout(() => r0.current?.focus(), 80);
       } else if (data.token && data.user) {
         setAuthFromToken(data.token, data.user);
-        navigate('/');
+        const from = location.state?.from || '/';
+        navigate(from);
       }
     } catch {
       setError('Invalid username or password.');
@@ -113,7 +115,8 @@ export default function LoginScreen() {
     try {
       const data = await api2FAVerify(pendingToken, code);
       setAuthFromToken(data.token, data.user);
-      navigate('/');
+      const from = location.state?.from || '/';
+      navigate(from);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';
       if (msg.toLowerCase().includes('expired')) {
