@@ -26,6 +26,8 @@ import FilesScreen from './screens/FilesScreen';
 import GPSScreen from './screens/GPSScreen';
 import GPSEditScreen from './screens/GPSEditScreen';
 import SharePage from './screens/SharePage';
+import SharedListPage from './screens/SharedListPage';
+import SharedTimelinePage from './screens/SharedTimelinePage';
 import SettingsScreen from './screens/SettingsScreen';
 import FolderDashboardScreen from './screens/FolderDashboardScreen';
 
@@ -258,6 +260,8 @@ export default function App() {
 
   return (
     <Routes>
+      <Route path="/share/list/:token" element={<SharedListPage />} />
+      <Route path="/share/timeline/:token" element={<SharedTimelinePage />} />
       <Route path="/share/:token" element={<SharePage />} />
       <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : <LoginScreen />} />
       <Route path="/setup" element={loggedIn ? <Navigate to="/dashboard" replace /> : <SetupWizard />} />

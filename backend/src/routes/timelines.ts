@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
+import { randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
+import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
 
@@ -26,6 +28,10 @@ interface TimelineRow {
   workspace_id: string | null;
   position: number;
   created_at: string;
+  share_token: string | null;
+  share_enabled: boolean;
+  share_password_hash: string | null;
+  share_expires_at: string | null;
 }
 
 interface MilestoneRow {
@@ -77,6 +83,10 @@ function sanitizeTimeline(t: TimelineRow, milestones: ReturnType<typeof sanitize
     workspaceId: t.workspace_id ?? undefined,
     position:    t.position,
     createdAt:   t.created_at,
+    shareEnabled:     t.share_enabled ?? false,
+    shareToken:       t.share_token ?? null,
+    shareHasPassword: t.share_password_hash != null,
+    shareExpiresAt:   t.share_expires_at ?? null,
     milestones,
   };
 }
@@ -311,6 +321,64 @@ router.put('/:timelineId/reorder', async (req: Request, res: Response) => {
     broadcastToUser(req.userId!, 'timelines');
   } catch (err) {
     werr('timelines reorder error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/timelines/:timelineId/share — manage the public read-only share link.
+router.put('/:timelineId/share', async (req: Request, res: Response) => {
+  try {
+    const { timelineId } = req.params;
+    const { enabled, password, expiresAt } = req.body as {
+      enabled?: boolean;
+      password?: string | null;
+      expiresAt?: string | null;
+    };
+
+    const existing = await query<TimelineRow>('SELECT * FROM timelines WHERE id = $1', [timelineId]);
+    if (existing.rows.length === 0) { res.status(404).json({ error: 'Timeline not found' }); return; }
+
+    const isOwner = existing.rows[0].user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+    if (!isOwner && !isAdmin) { res.status(403).json({ error: 'Permission denied' }); return; }
+
+    const row = existing.rows[0];
+    const updatePw  = 'password'  in req.body;
+    const updateExp = 'expiresAt' in req.body;
+    const updateEnabled = 'enabled' in req.body;
+
+    const willBeEnabled = updateEnabled ? Boolean(enabled) : row.share_enabled;
+    let token = row.share_token;
+    if (willBeEnabled && !token) token = randomBytes(24).toString('hex');
+
+    let pwHash: string | null = null;
+    if (updatePw && typeof password === 'string' && password.length > 0) {
+      pwHash = await hashPassword(password);
+    }
+
+    const result = await query<TimelineRow>(
+      `UPDATE timelines
+       SET share_enabled       = COALESCE($2, share_enabled),
+           share_token         = $3,
+           share_password_hash = CASE WHEN $4 THEN $5 ELSE share_password_hash END,
+           share_expires_at    = CASE WHEN $6 THEN $7 ELSE share_expires_at END
+       WHERE id = $1
+       RETURNING *`,
+      [timelineId, updateEnabled ? enabled : null, token, updatePw, pwHash, updateExp, expiresAt ?? null]
+    );
+
+    const saved = result.rows[0];
+    res.json({
+      share: {
+        enabled: saved.share_enabled,
+        token: saved.share_token,
+        hasPassword: saved.share_password_hash != null,
+        expiresAt: saved.share_expires_at ?? null,
+      },
+    });
+    broadcastToUser(req.userId!, 'timelines');
+  } catch (err) {
+    werr('timelines share PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

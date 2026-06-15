@@ -166,6 +166,224 @@ app.get('/api/share/:token/download', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Public list / timeline share endpoints — no auth required
+// ---------------------------------------------------------------------------
+
+interface ShareListRow {
+  id: string; name: string; emoji: string | null; color: string | null; color_bg: string | null;
+  subtitle: string | null; share_enabled: boolean; share_password_hash: string | null;
+  share_expires_at: string | null; share_subpages: boolean; created_at: string;
+  shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null;
+}
+interface ShareTimelineRow {
+  id: string; name: string; emoji: string | null; color: string | null; color_bg: string | null;
+  subtitle: string | null; layout: string; share_enabled: boolean; share_password_hash: string | null;
+  share_expires_at: string | null; created_at: string;
+  shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null;
+}
+
+async function resolveShareList(token: string): Promise<ShareListRow | null> {
+  const result = await dbQuery<ShareListRow>(
+    `SELECT l.id, l.name, l.emoji, l.color, l.color_bg, l.subtitle, l.share_enabled,
+            l.share_password_hash, l.share_expires_at, l.share_subpages, l.created_at,
+            u.full_name AS shared_by_name, u.username AS shared_by_username, u.profile_image AS shared_by_image
+     FROM lists l JOIN users u ON l.user_id = u.id
+     WHERE l.share_token = $1`,
+    [token]
+  );
+  return result.rows[0] ?? null;
+}
+
+async function resolveShareTimeline(token: string): Promise<ShareTimelineRow | null> {
+  const result = await dbQuery<ShareTimelineRow>(
+    `SELECT t.id, t.name, t.emoji, t.color, t.color_bg, t.subtitle, t.layout, t.share_enabled,
+            t.share_password_hash, t.share_expires_at, t.created_at,
+            u.full_name AS shared_by_name, u.username AS shared_by_username, u.profile_image AS shared_by_image
+     FROM timelines t JOIN users u ON t.user_id = u.id
+     WHERE t.share_token = $1`,
+    [token]
+  );
+  return result.rows[0] ?? null;
+}
+
+function shareOwnerMeta(row: { shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null; created_at: string; share_password_hash: string | null; share_expires_at: string | null }) {
+  const expired = row.share_expires_at && new Date(row.share_expires_at) < new Date();
+  return {
+    hasPassword: row.share_password_hash !== null,
+    expiresAt: row.share_expires_at ?? null,
+    isExpired: Boolean(expired),
+    createdAt: row.created_at,
+    sharedBy: row.shared_by_name || row.shared_by_username,
+    sharedByImage: row.shared_by_image ?? null,
+  };
+}
+
+// GET /api/share/list/:token — list metadata (no content)
+app.get('/api/share/list/:token', async (req, res) => {
+  try {
+    const list = await resolveShareList(req.params.token);
+    if (!list || !list.share_enabled) { res.status(404).json({ error: 'List not found' }); return; }
+    res.json({
+      name: list.name,
+      emoji: list.emoji,
+      color: list.color,
+      colorBg: list.color_bg,
+      subtitle: list.subtitle,
+      ...shareOwnerMeta(list),
+    });
+  } catch (err) {
+    console.error('share list info error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/share/list/:token/content — full list content (password-gated)
+app.get('/api/share/list/:token/content', async (req, res) => {
+  try {
+    const pw = (req.query.password ?? '') as string;
+    const list = await resolveShareList(req.params.token);
+    if (!list || !list.share_enabled) { res.status(404).json({ error: 'List not found' }); return; }
+    if (list.share_expires_at && new Date(list.share_expires_at) < new Date()) { res.status(410).json({ error: 'Share link has expired' }); return; }
+    if (list.share_password_hash) {
+      if (!pw) { res.status(401).json({ error: 'Password required', passwordRequired: true }); return; }
+      const valid = await comparePassword(pw, list.share_password_hash);
+      if (!valid) { res.status(401).json({ error: 'Invalid password' }); return; }
+    }
+
+    const sectionsRes = await dbQuery<{ id: string; label: string; emoji: string | null; position: number }>(
+      `SELECT id, label, emoji, position FROM sections WHERE list_id = $1 ORDER BY position ASC`,
+      [list.id]
+    );
+    const tasksRes = await dbQuery<{
+      id: string; title: string; checked: boolean; note: string | null; deadline: string | null;
+      time_val: string | null; priority: string | null; badge: string | null; section_id: string | null;
+      position: number; linked_list_id: string | null; linked_list_type: string | null;
+    }>(
+      `SELECT id, title, checked, note, deadline, time_val, priority, badge, section_id, position, linked_list_id, linked_list_type
+       FROM tasks WHERE list_id = $1 AND source = 'list' ORDER BY position ASC, created_at ASC`,
+      [list.id]
+    );
+
+    // For linked sublists, expose the child's share token (when it is itself
+    // shared & live) so the public page can deep-link to the subpage, plus a
+    // small progress summary for the ring indicator.
+    const linkedIds = [...new Set(tasksRes.rows.map(t => t.linked_list_id).filter((x): x is string => !!x))];
+    const linkedInfo: Record<string, { token: string | null; total: number; completed: number }> = {};
+    if (linkedIds.length > 0) {
+      const childRes = await dbQuery<{ id: string; share_token: string | null; share_enabled: boolean; share_expires_at: string | null }>(
+        `SELECT id, share_token, share_enabled, share_expires_at FROM lists WHERE id = ANY($1::varchar[])`,
+        [linkedIds]
+      );
+      const progRes = await dbQuery<{ list_id: string; total: string; completed: string }>(
+        `SELECT list_id, COUNT(*) AS total, COUNT(*) FILTER (WHERE checked) AS completed
+         FROM tasks WHERE list_id = ANY($1::varchar[]) AND source = 'list' GROUP BY list_id`,
+        [linkedIds]
+      );
+      const progByList: Record<string, { total: number; completed: number }> = {};
+      for (const p of progRes.rows) progByList[p.list_id] = { total: parseInt(p.total, 10), completed: parseInt(p.completed, 10) };
+      for (const c of childRes.rows) {
+        const live = c.share_enabled && !(c.share_expires_at && new Date(c.share_expires_at) < new Date());
+        linkedInfo[c.id] = {
+          token: live ? c.share_token : null,
+          total: progByList[c.id]?.total ?? 0,
+          completed: progByList[c.id]?.completed ?? 0,
+        };
+      }
+    }
+
+    const sections = sectionsRes.rows.map(s => ({
+      id: s.id,
+      label: s.label,
+      emoji: s.emoji,
+      tasks: tasksRes.rows
+        .filter(t => (t.section_id ?? '__none__') === s.id)
+        .map(t => ({
+          id: t.id,
+          title: t.title,
+          checked: t.checked,
+          note: t.note,
+          deadline: t.deadline,
+          time: t.time_val,
+          priority: t.priority,
+          badge: t.badge,
+          linkedListType: t.linked_list_type,
+          linkedShareToken: t.linked_list_id ? (linkedInfo[t.linked_list_id]?.token ?? null) : null,
+          linkedProgress: t.linked_list_id ? { total: linkedInfo[t.linked_list_id]?.total ?? 0, completed: linkedInfo[t.linked_list_id]?.completed ?? 0 } : null,
+        })),
+    }));
+
+    res.json({
+      list: { name: list.name, emoji: list.emoji, color: list.color, colorBg: list.color_bg, subtitle: list.subtitle },
+      sections,
+    });
+  } catch (err) {
+    console.error('share list content error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/share/timeline/:token — timeline metadata (no content)
+app.get('/api/share/timeline/:token', async (req, res) => {
+  try {
+    const tl = await resolveShareTimeline(req.params.token);
+    if (!tl || !tl.share_enabled) { res.status(404).json({ error: 'Timeline not found' }); return; }
+    res.json({
+      name: tl.name,
+      emoji: tl.emoji,
+      color: tl.color,
+      colorBg: tl.color_bg,
+      subtitle: tl.subtitle,
+      layout: tl.layout,
+      ...shareOwnerMeta(tl),
+    });
+  } catch (err) {
+    console.error('share timeline info error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/share/timeline/:token/content — milestones (password-gated)
+app.get('/api/share/timeline/:token/content', async (req, res) => {
+  try {
+    const pw = (req.query.password ?? '') as string;
+    const tl = await resolveShareTimeline(req.params.token);
+    if (!tl || !tl.share_enabled) { res.status(404).json({ error: 'Timeline not found' }); return; }
+    if (tl.share_expires_at && new Date(tl.share_expires_at) < new Date()) { res.status(410).json({ error: 'Share link has expired' }); return; }
+    if (tl.share_password_hash) {
+      if (!pw) { res.status(401).json({ error: 'Password required', passwordRequired: true }); return; }
+      const valid = await comparePassword(pw, tl.share_password_hash);
+      if (!valid) { res.status(401).json({ error: 'Invalid password' }); return; }
+    }
+
+    const msRes = await dbQuery<{
+      id: string; title: string; description: string | null; milestone_date: string | null;
+      time_val: string | null; status: string; emoji: string | null; color: string | null; position: number;
+    }>(
+      `SELECT id, title, description, milestone_date, time_val, status, emoji, color, position
+       FROM milestones WHERE timeline_id = $1 ORDER BY position ASC, milestone_date ASC NULLS LAST, created_at ASC`,
+      [tl.id]
+    );
+
+    res.json({
+      timeline: { name: tl.name, emoji: tl.emoji, color: tl.color, colorBg: tl.color_bg, subtitle: tl.subtitle, layout: tl.layout },
+      milestones: msRes.rows.map(m => ({
+        id: m.id,
+        title: m.title,
+        description: m.description,
+        date: m.milestone_date,
+        time: m.time_val,
+        status: m.status,
+        emoji: m.emoji,
+        color: m.color,
+      })),
+    });
+  } catch (err) {
+    console.error('share timeline content error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // SSE — real-time sync endpoint
 app.get('/api/events', async (req, res) => {
   const token =
@@ -248,6 +466,15 @@ async function runMigrations() {
   `);
 
   await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT false`);
+
+  // Public link sharing for lists — independent of the workspace `is_public` flag.
+  // `share_enabled` opens an opaque, unauthenticated read-only link at /share/list/:token.
+  // `share_subpages` cascades sharing onto nested sublists so the public page can link to them.
+  await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS share_token VARCHAR(100) UNIQUE`);
+  await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS share_enabled BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS share_password_hash VARCHAR(255)`);
+  await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS share_expires_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS share_subpages BOOLEAN NOT NULL DEFAULT false`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS folders (
@@ -610,6 +837,12 @@ async function runMigrations() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS milestones_timeline_idx ON milestones(timeline_id)`);
+
+  // Public link sharing for timelines — mirrors the lists sharing model.
+  await pool.query(`ALTER TABLE timelines ADD COLUMN IF NOT EXISTS share_token VARCHAR(100) UNIQUE`);
+  await pool.query(`ALTER TABLE timelines ADD COLUMN IF NOT EXISTS share_enabled BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE timelines ADD COLUMN IF NOT EXISTS share_password_hash VARCHAR(255)`);
+  await pool.query(`ALTER TABLE timelines ADD COLUMN IF NOT EXISTS share_expires_at TIMESTAMPTZ`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS trash_timelines (

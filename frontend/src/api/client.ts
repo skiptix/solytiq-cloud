@@ -105,6 +105,24 @@ export const apiUpdateList = (id: string, data: Partial<List>) =>
 export const apiDeleteList = (id: string) =>
   apiFetch<{ success: boolean }>(`/lists/${id}`, { method: 'DELETE' });
 
+// Public link sharing
+export interface ShareUpdate {
+  enabled?: boolean;
+  password?: string | null;   // omit = unchanged, null = clear, value = set
+  expiresAt?: string | null;  // omit = unchanged, null = clear, value = set
+  subpages?: boolean;         // lists only
+}
+export interface ShareInfo {
+  enabled: boolean;
+  token: string | null;
+  hasPassword: boolean;
+  expiresAt: string | null;
+  subpages?: boolean;
+}
+
+export const apiUpdateListShare = (id: string, data: ShareUpdate) =>
+  apiFetch<{ share: ShareInfo }>(`/lists/${id}/share`, { method: 'PUT', body: JSON.stringify(data) });
+
 export const apiCreateSection = (listId: string, data: { id?: string; label: string; emoji?: string }) =>
   apiFetch<{ section: { id: string; label: string; emoji?: string; tasks: Task[] } }>(
     `/lists/${listId}/sections`, { method: 'POST', body: JSON.stringify(data) }
@@ -185,6 +203,9 @@ export const apiUpdateTimeline = (id: string, data: Partial<Timeline>) =>
 
 export const apiDeleteTimeline = (id: string) =>
   apiFetch<{ success: boolean }>(`/timelines/${id}`, { method: 'DELETE' });
+
+export const apiUpdateTimelineShare = (id: string, data: ShareUpdate) =>
+  apiFetch<{ share: ShareInfo }>(`/timelines/${id}/share`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiCreateMilestone = (timelineId: string, data: Partial<Milestone> & { title: string }) =>
   apiFetch<{ milestone: Milestone }>(`/timelines/${timelineId}/milestones`, { method: 'POST', body: JSON.stringify(data) });
