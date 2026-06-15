@@ -6,6 +6,20 @@ function getToken(): string | null {
   return localStorage.getItem('solytiq_token');
 }
 
+/** Error thrown for any non-2xx response. Carries the HTTP status and the
+ *  parsed JSON body (when available) so callers can react to structured errors
+ *  such as the visibility-hierarchy 409 conflict. */
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+  constructor(status: number, body: unknown, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -16,11 +30,43 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
-    throw new Error(text || `HTTP ${res.status}`);
+    let body: unknown = text;
+    try { body = text ? JSON.parse(text) : text; } catch { /* keep raw text */ }
+    const message =
+      body && typeof body === 'object' && 'error' in body
+        ? String((body as { error: unknown }).error)
+        : (text || `HTTP ${res.status}`);
+    throw new ApiError(res.status, body, message);
   }
   const ct = res.headers.get('content-type');
   if (ct?.includes('application/json')) return res.json() as Promise<T>;
   return null as unknown as T;
+}
+
+// ── Visibility hierarchy conflict (Workspace → Folder → List/Timeline) ────────
+export interface ConflictAncestor { type: 'workspace' | 'folder'; id: string; name: string; canPromote: boolean; }
+export interface ConflictDescendant { type: 'folder' | 'list' | 'timeline'; id: string; name: string; }
+export interface VisibilityConflict {
+  error: 'visibility_conflict';
+  direction: 'promote' | 'restrict';
+  entityType: 'workspace' | 'folder' | 'list' | 'timeline';
+  entityName: string;
+  ancestors?: ConflictAncestor[];
+  descendants?: ConflictDescendant[];
+  canResolve: boolean;
+  blockedReason?: string;
+}
+
+/** Returns the conflict payload if `err` is a visibility-hierarchy 409, else null. */
+export function asVisibilityConflict(err: unknown): VisibilityConflict | null {
+  if (
+    err instanceof ApiError &&
+    err.body && typeof err.body === 'object' &&
+    (err.body as { error?: unknown }).error === 'visibility_conflict'
+  ) {
+    return err.body as VisibilityConflict;
+  }
+  return null;
 }
 
 // Auth
@@ -99,7 +145,7 @@ export const apiGetLists = (workspaceId?: string) =>
 export const apiCreateList = (data: Omit<List, 'sections'> & { sections?: List['sections']; workspaceId?: string }) =>
   apiFetch<{ list: List }>('/lists', { method: 'POST', body: JSON.stringify(data) });
 
-export const apiUpdateList = (id: string, data: Partial<List>) =>
+export const apiUpdateList = (id: string, data: Partial<List> & { cascade?: boolean }) =>
   apiFetch<{ list: List }>(`/lists/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiDeleteList = (id: string) =>
@@ -198,7 +244,7 @@ export const apiCreateTimeline = (data: Omit<Timeline, 'milestones'> & { milesto
 export const apiReorderTimelines = (ids: string[]) =>
   apiFetch<{ success: boolean }>('/timelines/reorder', { method: 'PUT', body: JSON.stringify({ ids }) });
 
-export const apiUpdateTimeline = (id: string, data: Partial<Timeline>) =>
+export const apiUpdateTimeline = (id: string, data: Partial<Timeline> & { cascade?: boolean }) =>
   apiFetch<{ timeline: Timeline }>(`/timelines/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiDeleteTimeline = (id: string) =>
@@ -235,7 +281,7 @@ export const apiGetFolders = (workspaceId?: string) =>
 export const apiCreateFolder = (data: { id: string; name: string; emoji?: string; color?: string; isPublic?: boolean; workspaceId?: string }) =>
   apiFetch<{ folder: Folder }>('/folders', { method: 'POST', body: JSON.stringify(data) });
 
-export const apiUpdateFolder = (id: string, data: Partial<Omit<Folder, 'id'>>) =>
+export const apiUpdateFolder = (id: string, data: Partial<Omit<Folder, 'id'>> & { cascade?: boolean }) =>
   apiFetch<{ ok: boolean; folder?: Folder }>(`/folders/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiDeleteFolder = (id: string) =>
@@ -548,7 +594,7 @@ export const apiGetWorkspaces = () =>
 export const apiCreateWorkspace = (data: { name: string; description?: string; emoji?: string; image?: string; visibility?: 'private' | 'public' }) =>
   apiFetch<{ workspace: Workspace }>('/workspaces', { method: 'POST', body: JSON.stringify(data) });
 
-export const apiUpdateWorkspace = (id: string, data: Partial<Pick<Workspace, 'name' | 'description' | 'emoji' | 'image' | 'visibility'>>) =>
+export const apiUpdateWorkspace = (id: string, data: Partial<Pick<Workspace, 'name' | 'description' | 'emoji' | 'image' | 'visibility'>> & { cascade?: boolean }) =>
   apiFetch<{ workspace: Workspace }>(`/workspaces/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiDeleteWorkspace = (id: string) =>

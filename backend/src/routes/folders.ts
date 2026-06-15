@@ -4,6 +4,10 @@ import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
+import {
+  getPrivateAncestors, buildPromoteConflict, promoteAncestors,
+  getPublicDescendants, buildRestrictConflict, restrictDescendants,
+} from '../visibility';
 
 const router = Router();
 router.use(authenticate);
@@ -101,16 +105,17 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, emoji, color, collapsed, position, isPublic } = req.body as {
+    const { name, emoji, color, collapsed, position, isPublic, cascade } = req.body as {
       name?: string;
       emoji?: string;
       color?: string;
       collapsed?: boolean;
       position?: number;
       isPublic?: boolean;
+      cascade?: boolean;
     };
 
-    const existing = await query<FolderRow>('SELECT user_id, is_public FROM folders WHERE id = $1', [id]);
+    const existing = await query<FolderRow>('SELECT user_id, is_public, name, workspace_id FROM folders WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
       res.status(404).json({ error: 'Folder not found' });
       return;
@@ -132,7 +137,30 @@ router.put('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await query<FolderRow>(
+    // Enforce the visibility hierarchy in both directions.
+    let promote: Awaited<ReturnType<typeof getPrivateAncestors>> = [];
+    let restrict: Awaited<ReturnType<typeof getPublicDescendants>> = [];
+    if (isPublic === true) {
+      // Going public: the workspace must be public too.
+      const ancestors = await getPrivateAncestors(query, {
+        workspaceId: folder.workspace_id, folderId: null, userId: req.userId!, isAdmin,
+      });
+      if (ancestors.length > 0) {
+        const conflict = buildPromoteConflict('folder', folder.name, ancestors);
+        if (!cascade) { res.status(409).json(conflict); return; }
+        if (!conflict.canResolve) { res.status(403).json(conflict); return; }
+        promote = ancestors;
+      }
+    } else if (isPublic === false) {
+      // Going private: any public lists/timelines inside must be hidden too.
+      const descendants = await getPublicDescendants(query, { type: 'folder', id });
+      if (descendants.length > 0) {
+        if (!cascade) { res.status(409).json(buildRestrictConflict('folder', folder.name, descendants)); return; }
+        restrict = descendants;
+      }
+    }
+
+    const updateSql =
       `UPDATE folders
        SET name      = COALESCE($2, name),
            emoji     = COALESCE($3, emoji),
@@ -141,19 +169,32 @@ router.put('/:id', async (req: Request, res: Response) => {
            position  = COALESCE($6, position),
            is_public = COALESCE($7, is_public)
        WHERE id = $1
-       RETURNING *`,
-      [
-        id,
-        name      ?? null,
-        emoji     ?? null,
-        color     ?? null,
-        collapsed !== undefined ? collapsed : null,
-        position  ?? null,
-        isPublic  ?? null,
-      ]
-    );
+       RETURNING *`;
+    const updateParams = [
+      id,
+      name      ?? null,
+      emoji     ?? null,
+      color     ?? null,
+      collapsed !== undefined ? collapsed : null,
+      position  ?? null,
+      isPublic  ?? null,
+    ];
+
+    let result;
+    if (promote.length > 0 || restrict.length > 0) {
+      result = await withTransaction(async (client) => {
+        if (promote.length > 0) await promoteAncestors(client, promote);
+        const r = await client.query<FolderRow>(updateSql, updateParams);
+        if (restrict.length > 0) await restrictDescendants(client, { type: 'folder', id });
+        return r;
+      });
+    } else {
+      result = await query<FolderRow>(updateSql, updateParams);
+    }
+
     res.json({ ok: true, folder: sanitizeFolder(result.rows[0]) });
     broadcastToUser(req.userId!, 'folders');
+    if (promote.length > 0 || restrict.length > 0) { broadcastToUser(req.userId!, 'lists'); broadcastToUser(req.userId!, 'timelines'); broadcastToUser(req.userId!, 'workspaces'); }
   } catch (err) {
     werr('folders PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });

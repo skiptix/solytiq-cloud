@@ -6,6 +6,7 @@ import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
+import { getPrivateAncestors, buildPromoteConflict, promoteAncestors } from '../visibility';
 
 const router = Router();
 router.use(authenticate);
@@ -443,7 +444,7 @@ router.put('/:listId/share', async (req: Request, res: Response) => {
 router.put('/:listId', async (req: Request, res: Response) => {
   try {
     const { listId } = req.params;
-    const { name, emoji, color, colorBg, subtitle, position, isPublic, folderId } = req.body as {
+    const { name, emoji, color, colorBg, subtitle, position, isPublic, folderId, cascade } = req.body as {
       name?: string;
       emoji?: string;
       color?: string;
@@ -452,9 +453,10 @@ router.put('/:listId', async (req: Request, res: Response) => {
       position?: number;
       isPublic?: boolean;
       folderId?: string | null;
+      cascade?: boolean;
     };
 
-    const existing = await query<ListRow>('SELECT user_id FROM lists WHERE id = $1', [listId]);
+    const existing = await query<ListRow>('SELECT user_id, workspace_id, folder_id, name FROM lists WHERE id = $1', [listId]);
     if (existing.rows.length === 0) {
       res.status(404).json({ error: 'List not found' });
       return;
@@ -470,7 +472,24 @@ router.put('/:listId', async (req: Request, res: Response) => {
 
     const updateFolderId = 'folderId' in req.body;
 
-    const result = await query<ListRow>(
+    // Enforce the visibility hierarchy: a list can only be public if its folder
+    // (if any) and workspace are public too. On conflict, return a structured
+    // 409 unless the client opts into a cascade promote.
+    let promote: Awaited<ReturnType<typeof getPrivateAncestors>> = [];
+    if (isPublic === true) {
+      const targetFolderId = updateFolderId ? (folderId ?? null) : existing.rows[0].folder_id;
+      const ancestors = await getPrivateAncestors(query, {
+        workspaceId: existing.rows[0].workspace_id, folderId: targetFolderId, userId: req.userId!, isAdmin,
+      });
+      if (ancestors.length > 0) {
+        const conflict = buildPromoteConflict('list', existing.rows[0].name, ancestors);
+        if (!cascade) { res.status(409).json(conflict); return; }
+        if (!conflict.canResolve) { res.status(403).json(conflict); return; }
+        promote = ancestors;
+      }
+    }
+
+    const updateSql =
       `UPDATE lists
        SET name      = COALESCE($1, name),
            emoji     = COALESCE($2, emoji),
@@ -481,13 +500,23 @@ router.put('/:listId', async (req: Request, res: Response) => {
            is_public = COALESCE($7, is_public),
            folder_id = CASE WHEN $9 THEN $10 ELSE folder_id END
        WHERE id = $8
-       RETURNING *`,
-      [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, isPublic ?? null, listId,
-       updateFolderId, folderId ?? null]
-    );
+       RETURNING *`;
+    const updateParams = [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, isPublic ?? null, listId,
+      updateFolderId, folderId ?? null];
+
+    let result;
+    if (promote.length > 0) {
+      result = await withTransaction(async (client) => {
+        await promoteAncestors(client, promote);
+        return client.query<ListRow>(updateSql, updateParams);
+      });
+    } else {
+      result = await query<ListRow>(updateSql, updateParams);
+    }
 
     res.json({ list: sanitizeList(result.rows[0], []) });
     broadcastToUser(req.userId!, 'lists');
+    if (promote.length > 0) { broadcastToUser(req.userId!, 'folders'); broadcastToUser(req.userId!, 'workspaces'); broadcastToUser(req.userId!, 'timelines'); }
   } catch (err) {
     werr('lists PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
