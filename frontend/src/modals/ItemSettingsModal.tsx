@@ -10,6 +10,7 @@ import {
   type ShareInfo, type ShareUpdate,
 } from '../api/client';
 import VisibilityConflictModal from '../components/VisibilityConflictModal';
+import useWorkspaceStore from '../store/useWorkspaceStore';
 
 const FOLDER_COLORS = [
   '#5e4dbb', '#1D4ED8', '#15803d', '#ea580c',
@@ -251,16 +252,24 @@ function AccessibilitySection({ kind, itemId, initialPublic, onApplied }: {
   const [busy, setBusy]         = useState(false);
   const [conflict, setConflict] = useState<VisibilityConflict | null>(null);
   const [pending, setPending]   = useState(false);
+  const loadWorkspaces = useWorkspaceStore(s => s.loadWorkspaces);
 
   const updateFn = kind === 'list' ? apiUpdateList : kind === 'timeline' ? apiUpdateTimeline : apiUpdateFolder;
 
   const apply = async (value: boolean, cascade = false) => {
     setBusy(true);
+    const resolving = conflict; // the conflict this call resolves, if any
     try {
       await updateFn(itemId, cascade ? { isPublic: value, cascade: true } : { isPublic: value });
       setPub(value);
       setConflict(null);
       onApplied?.(value);
+      // A cascade promote may have flipped the workspace to public; the
+      // workspace store isn't refreshed by the SSE list/folder reload, so pull
+      // it fresh — otherwise "Edit workspace" would still show the old value.
+      if (cascade && resolving?.ancestors?.some(a => a.type === 'workspace')) {
+        loadWorkspaces();
+      }
     } catch (err) {
       const c = asVisibilityConflict(err);
       if (c) { setConflict(c); setPending(value); }
