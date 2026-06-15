@@ -97,7 +97,7 @@ export function EditModal({ task = {}, mode = 'edit', onSave, onClose, available
               </span>
             </button>
             {showCal && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 500, animation: 'menuIn 200ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 500 }}>
                 <CalendarPicker value={deadline} onChange={d => { setDeadline(d); setShowCal(false); }} onClear={() => { setDeadline(''); setShowCal(false); }} />
               </div>
             )}
