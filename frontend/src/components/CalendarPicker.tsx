@@ -46,7 +46,7 @@ export default function CalendarPicker({ value, onChange, onClear }: CalendarPic
   }
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '14px 16px', width: 288 }}>
+    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '14px 16px', width: 288, transformOrigin: 'bottom center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <button onClick={prevMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 6 }}>
           <Icon name="chevron_left" size={18} color="#787584" />
