@@ -8,7 +8,7 @@ Solytiq Cloud is a self-hosted, full-stack productivity suite: task lists, proje
 
 The current version is displayed at the bottom-left of the sidebar in `frontend/src/components/Sidebar.tsx`.
 
-**On every deploy / release, update the version string** in that file — search for the `v1.12.5` literal (it appears in two places, for the expanded and collapsed sidebar states) and bump **both**. Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
+**On every deploy / release, update the version string** in that file — search for the `v1.12.6` literal (it appears in two places, for the expanded and collapsed sidebar states) and bump **both**. Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
 
 ---
 
@@ -301,7 +301,7 @@ Top-level modal visibility is managed by a single `modal` string state in `App.t
 
 The per-item **"More settings…"** menu in the `Sidebar` opens `ItemSettingsModal`, which is where accessibility (workspace Public/Private), color, emoji, folder, and the **public Share link** controls live for lists and timelines.
 
-The two editor dialogs — `TaskDialog` (task/item editing) and the milestone editor in `TimelineScreen` — share one chrome: a wide (800px) card with a colored accent stripe, a large title-with-emoji/checkbox heading row, a light-purple **properties panel** of icon+label rows (`PropRow`), a Notes section, and an explicit **Cancel / Save** footer. Both use **buffered editing** — field edits live in local state and only persist on Save; Cancel/close/Escape discards them. (In `TaskDialog`, attachments and sub-items are the exception: they remain immediate actions.)
+The two editor dialogs — `TaskDialog` (task/item editing) and the milestone editor in `TimelineScreen` — share one chrome: a wide (800px) card with a colored accent stripe, a large title-with-emoji/checkbox heading row, a light-purple **properties panel** of icon+label rows (`PropRow`), a Notes section, and an explicit **Cancel / Save** footer. When the containing list/timeline is **workspace-public**, the panel also shows an **Owner** row — a `CreatorBubble` avatar + name (task `creatorId` for items; the timeline owner for milestones). Both use **buffered editing** — field edits live in local state and only persist on Save; Cancel/close/Escape discards them. (In `TaskDialog`, attachments and sub-items are the exception: they remain immediate actions.)
 
 ### Styling — "Luminous List" Design System
 

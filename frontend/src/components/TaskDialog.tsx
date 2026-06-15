@@ -3,9 +3,11 @@ import { createPortal } from 'react-dom';
 import type { Task, TaskAttachment, SharedFile } from '../types';
 import Icon from './Icon';
 import CalendarPicker from './CalendarPicker';
+import CreatorBubble from './CreatorBubble';
 import { DeleteConfirmModal } from './TaskItem';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
+import useMembersStore from '../store/useMembersStore';
 import {
   apiCreateList, apiCreateSection, apiAddListTask, apiUpdateTask, apiUpdateListTask,
   apiGetTaskAttachments, apiUploadTaskAttachment, apiLinkTaskAttachment, apiDeleteTaskAttachment, apiDownloadTaskAttachment,
@@ -170,9 +172,13 @@ interface TaskDialogProps {
   onUpdate: (id: number, updates: Partial<Task>) => void;
   onDelete: (id: number) => void;
   onClose: () => void;
+  /** When the containing list is public (workspace-visible), show an Owner row. */
+  isPublic?: boolean;
 }
 
-export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDialogProps) {
+export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic }: TaskDialogProps) {
+  const owner = useMembersStore(s => (task.creatorId ? s.members[task.creatorId] : undefined));
+  const showOwner = Boolean(isPublic && task.creatorId);
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.note ?? '');
   const [deadline, setDeadline] = useState(task.deadline ?? '');
@@ -505,7 +511,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                 </div>
               </PropRow>
 
-              <PropRow icon="label" label="Tag" last={!task._listName}>
+              <PropRow icon="label" label="Tag" last={!task._listName && !showOwner}>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {TAGS.map(t => {
                     const c = BADGE_COLORS[t];
@@ -529,8 +535,19 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
               </PropRow>
 
               {task._listName && (
-                <PropRow icon="format_list_bulleted" label="In list" last>
+                <PropRow icon="format_list_bulleted" label="In list" last={!showOwner}>
                   <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#484552' }}>{task._listName}</span>
+                </PropRow>
+              )}
+
+              {showOwner && task.creatorId && (
+                <PropRow icon="account_circle" label="Owner" last>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <CreatorBubble creatorId={task.creatorId} taskHovered />
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#484552' }}>
+                      {owner ? (owner.fullName || owner.username) : 'Unknown'}
+                    </span>
+                  </div>
                 </PropRow>
               )}
             </div>
