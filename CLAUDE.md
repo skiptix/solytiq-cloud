@@ -8,7 +8,7 @@ Solytiq Cloud is a self-hosted, full-stack productivity suite: task lists, proje
 
 The current version is displayed at the bottom-left of the sidebar in `frontend/src/components/Sidebar.tsx`.
 
-**On every deploy / release, update the version string** in that file — search for the `v1.12.4` literal (it appears in two places, for the expanded and collapsed sidebar states) and bump **both**. Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
+**On every deploy / release, update the version string** in that file — search for the `v1.12.5` literal (it appears in two places, for the expanded and collapsed sidebar states) and bump **both**. Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
 
 ---
 
@@ -300,6 +300,8 @@ Public / unauthenticated routes:
 Top-level modal visibility is managed by a single `modal` string state in `App.tsx` (e.g. `'completed'`, `'trash'`, workspace wizard, add wizard, `null`). Creation/settings wizards live in `src/modals/` (`AddListWizard`, `AddTimelineWizard`, `WorkspaceWizard`, `ItemSettingsModal`, `UserSettingsModal`, `WorkspaceSettingsModal`, `TwoFAWizard`, `TrashModal`, `CompletedModal`).
 
 The per-item **"More settings…"** menu in the `Sidebar` opens `ItemSettingsModal`, which is where accessibility (workspace Public/Private), color, emoji, folder, and the **public Share link** controls live for lists and timelines.
+
+The two editor dialogs — `TaskDialog` (task/item editing) and the milestone editor in `TimelineScreen` — share one chrome: a wide (800px) card with a colored accent stripe, a large title-with-emoji/checkbox heading row, a light-purple **properties panel** of icon+label rows (`PropRow`), a Notes section, and an explicit **Cancel / Save** footer. Both use **buffered editing** — field edits live in local state and only persist on Save; Cancel/close/Escape discards them. (In `TaskDialog`, attachments and sub-items are the exception: they remain immediate actions.)
 
 ### Styling — "Luminous List" Design System
 

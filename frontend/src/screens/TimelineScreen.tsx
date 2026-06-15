@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Milestone, MilestoneStatus, TimelineLayout } from '../types';
 import useAppStore from '../store/useAppStore';
@@ -45,14 +46,31 @@ function sortMilestones(ms: Milestone[]): Milestone[] {
   });
 }
 
+// Properties-panel row — mirrors TaskDialog's PropRow so the milestone dialog
+// reads like the item dialog.
+function PropRow({ icon, label, children, last = false, first = false }: { icon: string; label: string; children: ReactNode; last?: boolean; first?: boolean }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', padding: '11px 16px', borderBottom: last ? 'none' : '1px solid rgba(229,231,235,0.5)', borderRadius: first ? '11px 11px 0 0' : last ? '0 0 11px 11px' : 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: 130, flexShrink: 0 }}>
+        <Icon name={icon} size={14} color="#b9b3cb" />
+        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>{label}</span>
+      </div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 // ── Milestone editor (add / edit) ─────────────────────────────────────────────
 interface MilestoneEditorProps {
   accent: string;
   initial?: Milestone;
   onSave: (data: Partial<Milestone>) => void;
+  onDelete?: () => void;
   onClose: () => void;
 }
-function MilestoneEditor({ accent, initial, onSave, onClose }: MilestoneEditorProps) {
+function MilestoneEditor({ accent, initial, onSave, onDelete, onClose }: MilestoneEditorProps) {
   const [title, setTitle] = useState(initial?.title ?? '');
   const [date, setDate] = useState(initial?.date ?? '');
   const [time, setTime] = useState(initial?.time ?? '');
@@ -63,6 +81,7 @@ function MilestoneEditor({ accent, initial, onSave, onClose }: MilestoneEditorPr
   const [dateError, setDateError] = useState(false);
   const [showCal, setShowCal] = useState(false);
   const calRef = useRef<HTMLDivElement>(null);
+  const effectiveAccent = color ?? statusOf(status).color;
 
   // Close calendar on outside click
   useEffect(() => {
@@ -90,96 +109,109 @@ function MilestoneEditor({ accent, initial, onSave, onClose }: MilestoneEditorPr
 
   return (
     <div onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 24px', overflowY: 'auto', animation: 'backdropIn 200ms ease both' }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', animation: 'backdropIn 200ms ease both' }}>
       <div onClick={e => e.stopPropagation()}
-        style={{ margin: 'auto', background: '#fff', borderRadius: 16, width: '100%', maxWidth: 460, display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid #f1ecf6', flexShrink: 0 }}>
-          <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>{initial ? 'Edit Milestone' : 'New Milestone'}</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}>
-            <Icon name="close" size={18} color="#787584" />
-          </button>
-        </div>
+        style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 800, maxHeight: '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.08)', animation: 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
 
-        <div style={{ padding: '18px 24px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <EmojiSelector value={emoji} onChange={setEmoji} direction="down" size={40} allowRemove={false} />
+        {/* Accent stripe */}
+        <div style={{ height: 3, background: effectiveAccent, flexShrink: 0, transition: 'background 200ms' }} />
+
+        {/* Scrollable body */}
+        <div style={{ overflowY: 'auto', flex: 1, padding: '28px 32px 32px' }}>
+
+          {/* Title row */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 26 }}>
+            <div style={{ marginTop: 2, flexShrink: 0 }}>
+              <EmojiSelector value={emoji} onChange={setEmoji} direction="down" size={40} allowRemove={false} />
+            </div>
             <input autoFocus value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()} placeholder="Milestone title"
-              style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 14.5, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '9px 12px', outline: 'none', background: '#fff' }}
-              onFocus={e => (e.target.style.borderColor = accent)} onBlur={e => (e.target.style.borderColor = '#e8e4f0')} />
-          </div>
-
-          <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: 1, position: 'relative' }} ref={calRef}>
-              <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: dateError ? '#ba1a1a' : '#787584', display: 'block', marginBottom: 4 }}>Date *</label>
-              {/* Trigger button — same look as task deadline picker */}
-              <button
-                type="button"
-                onClick={() => { setShowCal(v => !v); setDateError(false); }}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 7, padding: '8px 10px', borderRadius: 8, border: `1.5px solid ${dateError ? '#ba1a1a' : showCal ? accent : '#e8e4f0'}`, background: dateError ? '#fff8f7' : '#fff', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: date ? '#1c1b22' : '#b0acbe', transition: 'border-color 150ms', textAlign: 'left' }}
-              >
-                <Icon name="calendar_today" size={14} color={date ? accent : '#c9c4d5'} />
-                {date ? fmtDate(date) : 'Pick a date…'}
-              </button>
-              {dateError && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#ba1a1a', marginTop: 3 }}>A date is required.</div>}
-              {/* Calendar dropdown */}
-              {showCal && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50 }}>
-                  <CalendarPicker
-                    value={date || undefined}
-                    onChange={d => { setDate(d); setShowCal(false); setDateError(false); }}
-                    onClear={() => { setDate(''); setShowCal(false); }}
-                  />
-                </div>
+              style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none', lineHeight: 1.3, padding: '6px 0', marginTop: 2 }} />
+            <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginTop: 4 }}>
+              {initial && onDelete && (
+                <button onClick={onDelete} title="Delete milestone"
+                  style={{ width: 34, height: 34, borderRadius: 9, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 120ms' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = '#ffdad6')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  <Icon name="delete" size={17} color="#ba1a1a" />
+                </button>
               )}
-            </div>
-            <div style={{ width: 130 }}>
-              <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', display: 'block', marginBottom: 4 }}>Time</label>
-              <input type="time" value={time ?? ''} onChange={e => setTime(e.target.value)}
-                style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13.5, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', outline: 'none', background: '#fff', color: '#1c1b22' }} />
-            </div>
-          </div>
-
-          <div>
-            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', display: 'block', marginBottom: 5 }}>Status</label>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {STATUSES.map(s => {
-                const sel = status === s.key;
-                return (
-                  <button key={s.key} onClick={() => setStatus(s.key)}
-                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '8px 6px', borderRadius: 8, border: `1.5px solid ${sel ? s.color : '#e8e4f0'}`, background: sel ? `${s.color}14` : '#fff', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: sel ? s.color : '#787584', transition: 'all 140ms' }}>
-                    <Icon name={s.icon} size={13} color={sel ? s.color : '#9d8dff'} />{s.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', display: 'block', marginBottom: 5 }}>Accent</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center' }}>
-              <button onClick={() => setColor(null)} title="Match status"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 24, padding: '0 10px', borderRadius: 9999, background: color === null ? '#f0edff' : '#fff', border: `1.5px solid ${color === null ? accent : '#e8e4f0'}`, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: color === null ? accent : '#787584' }}>
-                Auto
+              <button onClick={onClose} title="Close"
+                style={{ width: 34, height: 34, borderRadius: 9, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 120ms' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#F5F3FF')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <Icon name="close" size={18} color="#787584" />
               </button>
-              {MILESTONE_COLORS.map(c => (
-                <button key={c} onClick={() => setColor(c)} title={c}
-                  style={{ width: 24, height: 24, borderRadius: '50%', background: c, border: color === c ? '2.5px solid #1c1b22' : '2px solid transparent', cursor: 'pointer', padding: 0 }} />
-              ))}
             </div>
           </div>
 
+          {/* Properties panel */}
+          <div style={{ background: '#faf9ff', borderRadius: 12, marginBottom: 28, border: '1px solid #F0EEF8' }}>
+            <PropRow icon="calendar_today" label="Date" first>
+              <div style={{ position: 'relative' }} ref={calRef}>
+                <button type="button" onClick={() => { setShowCal(v => !v); setDateError(false); }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 8, border: `1px solid ${dateError ? '#ba1a1a' : showCal ? effectiveAccent : (date ? '#c4b5fd' : 'transparent')}`, background: dateError ? '#fff8f7' : (date ? '#F5F3FF' : 'transparent'), cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: date ? '#5e4dbb' : '#c9c4d5', transition: 'all 120ms', textAlign: 'left' }}>
+                  <Icon name="calendar_today" size={13} color={date ? effectiveAccent : '#c9c4d5'} />
+                  {date ? fmtDate(date) : 'Pick a date…'}
+                </button>
+                {dateError && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a', marginLeft: 10 }}>A date is required.</span>}
+                {showCal && (
+                  <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50 }}>
+                    <CalendarPicker
+                      value={date || undefined}
+                      onChange={d => { setDate(d); setShowCal(false); setDateError(false); }}
+                      onClear={() => { setDate(''); setShowCal(false); }}
+                    />
+                  </div>
+                )}
+              </div>
+            </PropRow>
+
+            <PropRow icon="schedule" label="Time">
+              <input type="time" value={time ?? ''} onChange={e => setTime(e.target.value)}
+                style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1px solid #E5E7EB', borderRadius: 8, padding: '5px 10px', outline: 'none', background: '#fff', color: '#1c1b22' }} />
+            </PropRow>
+
+            <PropRow icon="flag" label="Status">
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {STATUSES.map(s => {
+                  const sel = status === s.key;
+                  return (
+                    <button key={s.key} onClick={() => setStatus(s.key)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 8, border: `1px solid ${sel ? s.color : '#E5E7EB'}`, background: sel ? `${s.color}18` : 'transparent', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: sel ? s.color : '#787584', transition: 'all 120ms' }}>
+                      <Icon name={s.icon} size={13} color={sel ? s.color : '#9d8dff'} />{s.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </PropRow>
+
+            <PropRow icon="palette" label="Accent" last>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center' }}>
+                <button onClick={() => setColor(null)} title="Match status"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 24, padding: '0 10px', borderRadius: 9999, background: color === null ? '#f0edff' : '#fff', border: `1.5px solid ${color === null ? accent : '#e8e4f0'}`, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: color === null ? accent : '#787584' }}>
+                  Auto
+                </button>
+                {MILESTONE_COLORS.map(c => (
+                  <button key={c} onClick={() => setColor(c)} title={c}
+                    style={{ width: 24, height: 24, borderRadius: '50%', background: c, border: color === c ? '2.5px solid #1c1b22' : '2px solid transparent', cursor: 'pointer', padding: 0 }} />
+                ))}
+              </div>
+            </PropRow>
+          </div>
+
+          {/* Notes */}
           <div>
-            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', display: 'block', marginBottom: 5 }}>Notes</label>
-            <textarea value={description ?? ''} onChange={e => setDescription(e.target.value)} placeholder="Optional notes…" rows={3}
-              style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13.5, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '9px 11px', outline: 'none', background: '#fff', resize: 'vertical', color: '#1c1b22' }}
-              onFocus={e => (e.target.style.borderColor = accent)} onBlur={e => (e.target.style.borderColor = '#e8e4f0')} />
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</div>
+            <textarea value={description ?? ''} onChange={e => setDescription(e.target.value)} placeholder="Add notes, context, or any details…" rows={4}
+              style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', background: 'transparent', border: 'none', outline: 'none', resize: 'vertical', lineHeight: 1.75, padding: 0, minHeight: 90 }} />
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '12px 24px 18px', borderTop: '1px solid #f1ecf6', flexShrink: 0 }}>
+        {/* Footer */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 32px', borderTop: '1px solid #f1ecf6', flexShrink: 0 }}>
           <button onClick={onClose} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 18px', cursor: 'pointer' }}>Cancel</button>
           <button onClick={save} disabled={!title.trim()}
-            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: title.trim() ? accent : '#c9c4d5', border: 'none', borderRadius: 8, padding: '9px 22px', cursor: title.trim() ? 'pointer' : 'default' }}>
+            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: title.trim() ? effectiveAccent : '#c9c4d5', border: 'none', borderRadius: 8, padding: '9px 22px', cursor: title.trim() ? 'pointer' : 'default' }}>
             {initial ? 'Save' : 'Add'}
           </button>
         </div>
@@ -439,7 +471,7 @@ export default function TimelineScreen() {
       </div>
 
       {adding && <MilestoneEditor accent={accent} onSave={handleAdd} onClose={() => setAdding(false)} />}
-      {editing && <MilestoneEditor accent={accent} initial={editing} onSave={data => handleSave(editing.id, data)} onClose={() => setEditing(null)} />}
+      {editing && <MilestoneEditor accent={accent} initial={editing} onSave={data => handleSave(editing.id, data)} onDelete={() => { handleDelete(editing.id); setEditing(null); }} onClose={() => setEditing(null)} />}
     </div>
   );
 }
