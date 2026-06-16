@@ -31,15 +31,15 @@ export default function OAuthConsentScreen() {
     setLoading(true);
     setError('');
     try {
-      const data = await apiFetch<{ callbackUrl: string }>('/oauth/approve', {
+      const data = await apiFetch<{ redirectUrl: string }>('/oauth/approve', {
         method: 'POST',
         body: JSON.stringify({ redirect_uri: redirectUri, state })
       });
 
-      if (data.callbackUrl) {
-        window.location.href = data.callbackUrl;
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl;
       } else {
-        throw new Error('No callback URL returned');
+        throw new Error('No redirect URL returned');
       }
     } catch (err: unknown) {
       console.error(err);

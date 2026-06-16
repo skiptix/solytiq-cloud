@@ -6,6 +6,13 @@ import { generateApiToken } from '../apiToken';
 
 const router = Router();
 
+// POST /api/oauth/register
+// Stateless dummy endpoint for Dynamic Client Registration (DCR).
+// Simply returns a static JSON response.
+router.post('/register', (req: Request, res: Response) => {
+  res.json({ client_id: 'claude_auto_client' });
+});
+
 // GET /api/oauth/authorize
 // Called by Claude. We don't authenticate here (it's a browser redirect).
 // We simply redirect to the frontend with the OAuth parameters.
@@ -17,20 +24,16 @@ router.get('/authorize', (req: Request, res: Response) => {
     return;
   }
 
-  // Assuming frontend is running on the same domain in production.
-  // We can just use an absolute path for the redirect, or derive it from the request.
-  // In development, the frontend is on port 5173 and backend on 3001.
-  // Using an absolute path is safe because it will resolve relative to the host.
-  const frontendUrl = new URL(req.protocol + '://' + req.get('host'));
+  const baseFrontendUrl = process.env.FRONTEND_URL || (req.protocol + '://' + req.get('host'));
 
-  // If we are proxying in dev, or it's production, this works best by just doing a relative redirect
-  // Actually, we can just do a relative redirect and let the browser handle it if they share the same origin
-  // Wait, if backend is API only, we might need to know the frontend origin.
-  // Let's check how other routes handle frontend URLs (like share links).
-  // Actually, wait, let's just use /oauth/consent?redirect_uri=...&state=...
-  // The frontend dev server proxies /api to backend, so a redirect to /oauth/consent will work on the same origin.
+  // Construct the absolute URL using FRONTEND_URL if available.
+  // This ensures that the browser correctly navigates to the React frontend
+  // when the backend and frontend are hosted on different origins.
+  const targetUrl = new URL('/oauth/consent', baseFrontendUrl);
+  targetUrl.searchParams.set('redirect_uri', redirect_uri as string);
+  targetUrl.searchParams.set('state', state as string);
 
-  res.redirect(`/oauth/consent?redirect_uri=${encodeURIComponent(redirect_uri as string)}&state=${encodeURIComponent(state as string)}`);
+  res.redirect(targetUrl.toString());
 });
 
 // POST /api/oauth/approve
@@ -61,7 +64,7 @@ router.post('/approve', authenticate, async (req: Request, res: Response) => {
     callbackUrl.searchParams.append('code', code);
     callbackUrl.searchParams.append('state', state as string);
 
-    res.json({ callbackUrl: callbackUrl.toString() });
+    res.json({ redirectUrl: callbackUrl.toString() });
   } catch (err) {
     console.error('oauth approve error:', err);
     res.status(500).json({ error: 'Internal server error' });

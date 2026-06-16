@@ -111,6 +111,16 @@ app.use('/api/oauth',      oauthRouter);
 // loops; the endpoint enforces its own bearer-token auth.
 app.use('/mcp',            mcpRouter);
 
+// Dynamic Client Registration (DCR) endpoint for Claude
+app.get('/.well-known/oauth-authorization-server', (req, res) => {
+  const baseUrl = req.protocol + '://' + req.get('host');
+  res.json({
+    registration_endpoint: `${baseUrl}/api/oauth/register`,
+    authorization_endpoint: `${baseUrl}/api/oauth/authorize`,
+    token_endpoint: `${baseUrl}/api/oauth/token`,
+  });
+});
+
 // Public share endpoints — no auth required
 interface ShareFileRow { id: string; original_name: string; title: string | null; note: string | null; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null; }
 
@@ -487,7 +497,7 @@ async function runMigrations() {
       code         VARCHAR(100) NOT NULL UNIQUE,
       user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       redirect_uri TEXT NOT NULL,
-      state        TEXT NOT NULL,
+      state        VARCHAR,
       expires_at   TIMESTAMPTZ NOT NULL
     )
   `);
