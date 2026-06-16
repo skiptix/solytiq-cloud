@@ -298,6 +298,24 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   const [closing, setClosing] = useState(false);
   const handleClose = () => { setClosing(true); setTimeout(() => onClose(), 190); };
 
+  // Bottom save bar — commits any pending buffered profile edits (name / email).
+  const [savedFlash, setSavedFlash] = useState(false);
+  const [savingAll, setSavingAll] = useState(false);
+  const hasPendingEdits = pwChanged || emailChanged;
+  const handleSaveAll = async () => {
+    setSavingAll(true);
+    try {
+      const tasks: Promise<void>[] = [];
+      if (pwChanged) tasks.push(handleSaveName());
+      if (emailChanged) tasks.push(handleSaveEmail());
+      await Promise.all(tasks);
+    } finally {
+      setSavingAll(false);
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 2000);
+    }
+  };
+
   const TABS: { id: SettingsTab; label: string; icon: string }[] = [
     { id: 'profile',     label: 'Profile',     icon: 'person' },
     { id: 'preferences', label: 'Preferences', icon: 'tune' },
@@ -344,7 +362,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                       color: active ? '#fff' : '#5e4dbb',
                       background: active ? '#5e4dbb' : 'transparent',
                       border: 'none', borderRadius: 10, padding: '8px 14px', cursor: 'pointer',
-                      transition: 'all 150ms', flex: '1 1 auto', justifyContent: 'center', minWidth: 0,
+                      transition: 'all 150ms', flex: '1 1 0', flexBasis: 0, justifyContent: 'center', minWidth: 0,
                     }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#ede9ff'; }}
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
@@ -770,6 +788,26 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
               <ClaudeMcpSection />
             </div>
             )}
+          </div>
+
+          {/* Footer save bar */}
+          <div style={{ flexShrink: 0, borderTop: '1px solid #f1ecf6', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 14 }}>
+            {savedFlash && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, animation: 'savedPop 320ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                <Icon name="check_circle" size={16} color="#10B981" />
+                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#10B981' }}>Saved!</span>
+              </div>
+            )}
+            <button
+              onClick={handleSaveAll}
+              disabled={savingAll || !hasPendingEdits}
+              style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: savingAll || !hasPendingEdits ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: savingAll || !hasPendingEdits ? 'not-allowed' : 'pointer', transition: 'background 150ms, transform 100ms' }}
+              onMouseEnter={e => { if (!savingAll && hasPendingEdits) { e.currentTarget.style.background = '#4d3da8'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
+              onMouseLeave={e => { if (!savingAll && hasPendingEdits) { e.currentTarget.style.background = '#5e4dbb'; e.currentTarget.style.transform = 'translateY(0)'; } }}
+            >
+              <Icon name="check" size={15} color="#fff" />
+              {savingAll ? 'Saving…' : 'Save changes'}
+            </button>
           </div>
         </div>
       </div>
