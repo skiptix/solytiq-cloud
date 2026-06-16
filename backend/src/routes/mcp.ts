@@ -59,7 +59,7 @@ async function authMcp(req: Request, res: Response, next: NextFunction): Promise
 // POST /mcp — handle a JSON-RPC MCP request (initialize, tools/list, tools/call …)
 router.post('/', authMcp, async (req: Request, res: Response) => {
   const userId = (req as Request & { mcpUserId: string }).mcpUserId;
-  const server = buildMcpServer(userId);
+  const server = buildMcpServer(userId, getPublicBaseUrl(req));
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
   res.on('close', () => {
