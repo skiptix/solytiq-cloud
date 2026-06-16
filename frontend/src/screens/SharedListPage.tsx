@@ -64,6 +64,7 @@ export default function SharedListPage() {
   const [password, setPassword] = useState('');
   const [pwError, setPwError] = useState(false);
   const [loadingContent, setLoadingContent] = useState(false);
+  const [previewTask, setPreviewTask] = useState<SharedTask | null>(null);
 
   const fetchContent = useCallback(async (pw: string | undefined) => {
     setLoadingContent(true);
@@ -252,9 +253,9 @@ export default function SharedListPage() {
                           return (
                             <div
                               key={task.id}
-                              onClick={() => { if (navigable) navigate(`/share/list/${task.linkedShareToken}`); }}
-                              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 8, cursor: navigable ? 'pointer' : 'default', transition: 'background 150ms' }}
-                              onMouseEnter={e => { if (navigable) e.currentTarget.style.background = '#F5F3FF'; }}
+                              onClick={() => { if (navigable) navigate(`/share/list/${task.linkedShareToken}`); else setPreviewTask(task); }}
+                              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 8, cursor: 'pointer', transition: 'background 150ms' }}
+                              onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
                               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                             >
                               {isLinked ? (
@@ -273,7 +274,7 @@ export default function SharedListPage() {
                                   <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: isLinked ? accent : '#1c1b22', lineHeight: 1.4, opacity: done ? 0.45 : 1, textDecoration: done ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</span>
                                   {task.badge && <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', padding: '2px 7px', borderRadius: 9999, flexShrink: 0 }}>{task.badge}</span>}
                                 </div>
-                                {task.note && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.note}</div>}
+                                {task.note && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.note.length > 40 ? `${task.note.slice(0, 40).trimEnd()}…` : task.note}</div>}
                               </div>
                               {task.deadline && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', flexShrink: 0 }}>{fmtDate(task.deadline)}</span>}
                               {navigable && <Icon name="chevron_right" size={18} color="#b0acbe" />}
@@ -299,7 +300,67 @@ export default function SharedListPage() {
         Shared via <span style={{ color: '#5e4dbb', fontWeight: 600 }}>Solytiq</span>
       </div>
 
+      {previewTask && <ItemPreview task={previewTask} accent={accent} onClose={() => setPreviewTask(null)} />}
+
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+// Read-only item preview — mirrors the task dialog chrome (accent stripe,
+// properties panel, notes) but without any edit controls.
+const PRIORITY_COLORS: Record<string, string> = { High: '#ea580c', Medium: '#f59e0b', Low: '#787584' };
+
+function PreviewRow({ icon, label, children, last = false }: { icon: string; label: string; children: React.ReactNode; last?: boolean }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', padding: '11px 16px', borderBottom: last ? 'none' : '1px solid rgba(229,231,235,0.5)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: 120, flexShrink: 0 }}>
+        <Icon name={icon} size={14} color="#b9b3cb" />
+        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>{label}</span>
+      </div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22' }}>{children}</div>
+    </div>
+  );
+}
+
+function ItemPreview({ task, accent, onClose }: { task: SharedTask; accent: string; onClose: () => void }) {
+  const hasProps = !!(task.deadline || task.time || task.priority || task.badge);
+  const rows: Array<{ icon: string; label: string; node: React.ReactNode }> = [];
+  if (task.deadline) rows.push({ icon: 'calendar_today', label: 'Date', node: fmtDate(task.deadline) });
+  if (task.time) rows.push({ icon: 'schedule', label: 'Time', node: task.time });
+  if (task.priority) rows.push({ icon: 'flag', label: 'Priority', node: <span style={{ fontWeight: 600, color: PRIORITY_COLORS[task.priority] ?? '#787584' }}>{task.priority}</span> });
+  if (task.badge) rows.push({ icon: 'sell', label: 'Tag', node: <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', padding: '2px 8px', borderRadius: 9999 }}>{task.badge}</span> });
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', animation: 'backdropIn 200ms ease both' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 560, maxHeight: '88vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(0,0,0,0.22)', animation: 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+        <div style={{ height: 3, background: accent, flexShrink: 0 }} />
+        <div style={{ overflowY: 'auto', padding: '24px 28px 28px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: hasProps || task.note ? 22 : 0 }}>
+            <div style={{ marginTop: 3, width: 22, height: 22, borderRadius: 6, border: `2px solid ${task.checked ? accent : '#c9c4d5'}`, background: task.checked ? accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {task.checked && <Icon name="check" size={13} color="#fff" />}
+            </div>
+            <div style={{ flex: 1, minWidth: 0, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', lineHeight: 1.3, paddingTop: 1, textDecoration: task.checked ? 'line-through' : 'none' }}>{task.title}</div>
+            <button onClick={onClose} title="Close" style={{ width: 34, height: 34, borderRadius: 9, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#F5F3FF')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+              <Icon name="close" size={18} color="#787584" />
+            </button>
+          </div>
+
+          {hasProps && (
+            <div style={{ background: '#faf9ff', borderRadius: 12, border: '1px solid #F0EEF8', marginBottom: task.note ? 24 : 0 }}>
+              {rows.map((r, i) => <PreviewRow key={r.label} icon={r.icon} label={r.label} last={i === rows.length - 1}>{r.node}</PreviewRow>)}
+            </div>
+          )}
+
+          {task.note && (
+            <div>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{task.note}</div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
