@@ -269,7 +269,7 @@ export default function TaskItem({ task, onToggle, onRowClick, onDragStart, onDr
             onRowClick?.(task, e);
           }}>
           <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: linkedListId ? (linkedList?.color ?? '#5e4dbb') : '#1c1b22', lineHeight: 1.4, opacity: (checked || isLinkedComplete) ? 0.4 : 1, textDecoration: (checked || isLinkedComplete) ? 'line-through' : 'none', textUnderlineOffset: linkedListId ? 2 : undefined }}>{title}</div>
-          {note && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{note}</div>}
+          {note && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{note.length > 40 ? `${note.slice(0, 40).trimEnd()}…` : note}</div>}
           {(deadline || time || priority || badge || (task._listName && !hideListBadge)) && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
               {task._listName && !hideListBadge && (

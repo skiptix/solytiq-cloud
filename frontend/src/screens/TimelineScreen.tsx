@@ -692,7 +692,7 @@ export default function TimelineScreen() {
                             </div>
                           )}
                           {m.description && layout !== 'compact' && (
-                            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#5a5664', marginTop: 6, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{m.description}</div>
+                            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#5a5664', marginTop: 6, lineHeight: 1.55, whiteSpace: 'pre-wrap', display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{m.description}</div>
                           )}
                         </div>
                         {isOwner && (

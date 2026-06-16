@@ -67,6 +67,7 @@ export default function SharedTimelinePage() {
   const [password, setPassword] = useState('');
   const [pwError, setPwError] = useState(false);
   const [loadingContent, setLoadingContent] = useState(false);
+  const [previewMilestone, setPreviewMilestone] = useState<SharedMilestone | null>(null);
 
   // Re-render every minute so intra-day ("hourly") progress keeps advancing.
   const [, forceTick] = useState(0);
@@ -279,7 +280,11 @@ export default function SharedTimelinePage() {
                             {effectivelyDone && <Icon name="check" size={9} color="#fff" />}
                             {!effectivelyDone && effectiveStatus === 'in-progress' && <div style={{ width: 5, height: 5, borderRadius: '50%', background: dot }} />}
                           </div>
-                          <div style={{ flex: 1, minWidth: 0, background: effectivelyDone ? `${dot}08` : '#fff', border: `1px solid ${effectivelyDone ? dot + '30' : '#ece8f4'}`, borderLeft: `3px solid ${dot}`, borderRadius: 12, padding: '12px 14px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                          <div
+                            onClick={() => setPreviewMilestone(m)}
+                            style={{ flex: 1, minWidth: 0, background: effectivelyDone ? `${dot}08` : '#fff', border: `1px solid ${effectivelyDone ? dot + '30' : '#ece8f4'}`, borderLeft: `3px solid ${dot}`, borderRadius: 12, padding: '12px 14px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)', cursor: 'pointer', transition: 'box-shadow 150ms' }}
+                            onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.07)')}
+                            onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)')}>
                             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                               {m.emoji && <span style={{ fontSize: 16, lineHeight: 1.2, flexShrink: 0 }}>{m.emoji}</span>}
                               <div style={{ flex: 1, minWidth: 0 }}>
@@ -296,7 +301,7 @@ export default function SharedTimelinePage() {
                                     {fmtDate(m.date)}{m.time ? `${m.date ? ' · ' : ''}${m.time}` : ''}
                                   </div>
                                 )}
-                                {m.description && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#484552', lineHeight: 1.55, marginTop: 6, whiteSpace: 'pre-wrap' }}>{m.description}</div>}
+                                {m.description && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#484552', lineHeight: 1.55, marginTop: 6, whiteSpace: 'pre-wrap', display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{m.description}</div>}
                               </div>
                             </div>
                           </div>
@@ -319,7 +324,66 @@ export default function SharedTimelinePage() {
         Shared via <span style={{ color: '#5e4dbb', fontWeight: 600 }}>Solytiq</span>
       </div>
 
+      {previewMilestone && <MilestonePreview milestone={previewMilestone} onClose={() => setPreviewMilestone(null)} />}
+
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+// Read-only milestone preview — mirrors the milestone editor chrome (accent
+// stripe, properties panel, notes) but without any edit controls.
+function PreviewRow({ icon, label, children, last = false }: { icon: string; label: string; children: React.ReactNode; last?: boolean }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', padding: '11px 16px', borderBottom: last ? 'none' : '1px solid rgba(229,231,235,0.5)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: 120, flexShrink: 0 }}>
+        <Icon name={icon} size={14} color="#b9b3cb" />
+        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>{label}</span>
+      </div>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22' }}>{children}</div>
+    </div>
+  );
+}
+
+function MilestonePreview({ milestone: m, onClose }: { milestone: SharedMilestone; onClose: () => void }) {
+  const st = statusOf(m.status);
+  const stripe = m.color ?? st.color;
+  const hasProps = !!(m.date || m.time || m.status);
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', animation: 'backdropIn 200ms ease both' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 560, maxHeight: '88vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(0,0,0,0.22)', animation: 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+        <div style={{ height: 3, background: stripe, flexShrink: 0 }} />
+        <div style={{ overflowY: 'auto', padding: '24px 28px 28px' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: hasProps || m.description ? 22 : 0 }}>
+            {m.emoji && <span style={{ fontSize: 26, lineHeight: 1.1, flexShrink: 0 }}>{m.emoji}</span>}
+            <div style={{ flex: 1, minWidth: 0, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', lineHeight: 1.3, paddingTop: 2 }}>{m.title}</div>
+            <button onClick={onClose} title="Close" style={{ width: 34, height: 34, borderRadius: 9, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#F5F3FF')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+              <Icon name="close" size={18} color="#787584" />
+            </button>
+          </div>
+
+          {hasProps && (
+            <div style={{ background: '#faf9ff', borderRadius: 12, border: '1px solid #F0EEF8', marginBottom: m.description ? 24 : 0 }}>
+              {m.date && <PreviewRow icon="calendar_today" label="Date">{fmtDate(m.date)}</PreviewRow>}
+              {m.time && <PreviewRow icon="schedule" label="Time">{m.time}</PreviewRow>}
+              <PreviewRow icon="flag" label="Status" last>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: st.color, background: `${st.color}1a`, padding: '3px 9px', borderRadius: 9999, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  <Icon name={st.icon} size={12} color={st.color} />{st.label}
+                </span>
+              </PreviewRow>
+            </div>
+          )}
+
+          {m.description && (
+            <div>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{m.description}</div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
