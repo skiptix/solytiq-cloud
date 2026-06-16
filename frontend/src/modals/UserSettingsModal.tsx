@@ -11,7 +11,6 @@ import {
   api2FAEnable,
   api2FADisable,
   apiGetApiTokens,
-  apiCreateApiToken,
   apiDeleteApiToken,
   type ApiAccessToken,
 } from '../api/client';
@@ -658,10 +657,10 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
               </div>
             </div>
 
-            {/* ── AI ACCESS ── */}
+            {/* ── CLAUDE MCP ── */}
             <div style={{ animation: 'sectionFadeUp 340ms 120ms cubic-bezier(0.22,1,0.36,1) both' }}>
-              {sectionLabel('AI Access')}
-              <AiAccessSection />
+              {sectionLabel('Claude MCP')}
+              <ClaudeMcpSection />
             </div>
           </div>
         </div>
@@ -790,14 +789,9 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   );
 }
 
-// ── AI Access (Personal Access Tokens for external MCP agents) ─────────────────
+// ── Claude MCP (connect Claude via the OAuth-secured MCP server) ───────────────
 
-const EXPIRY_OPTIONS: { label: string; days: number | null }[] = [
-  { label: 'Never', days: null },
-  { label: '30 days', days: 30 },
-  { label: '90 days', days: 90 },
-  { label: '1 year', days: 365 },
-];
+const CLAUDE_CONNECTORS_URL = 'https://claude.ai/settings/connectors';
 
 function fmtTokenDate(iso: string | null): string {
   if (!iso) return '—';
@@ -805,18 +799,10 @@ function fmtTokenDate(iso: string | null): string {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function AiAccessSection() {
+function ClaudeMcpSection() {
   const [tokens, setTokens] = useState<ApiAccessToken[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [name, setName] = useState('');
-  const [nameFocus, setNameFocus] = useState(false);
-  const [expiryDays, setExpiryDays] = useState<number | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [newSecret, setNewSecret] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [snippetCopied, setSnippetCopied] = useState(false);
+  const [urlCopied, setUrlCopied] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
   const mcpUrl = `${window.location.origin}/mcp`;
@@ -828,28 +814,19 @@ function AiAccessSection() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleCreate = async () => {
-    const trimmed = name.trim();
-    if (!trimmed || creating) return;
-    setCreating(true);
-    setError(null);
-    try {
-      const { token } = await apiCreateApiToken(trimmed, expiryDays);
-      setNewSecret(token.secret);
-      const { secret: _secret, ...meta } = token;
-      void _secret;
-      setTokens(prev => [meta, ...prev]);
-      setName('');
-      setExpiryDays(null);
-      setShowForm(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create token');
-    } finally {
-      setCreating(false);
-    }
+  const copyUrl = () => {
+    navigator.clipboard.writeText(mcpUrl).then(() => {
+      setUrlCopied(true);
+      setTimeout(() => setUrlCopied(false), 2000);
+    }).catch(() => {});
   };
 
-  const handleRevoke = async (id: string) => {
+  const handleConnect = () => {
+    copyUrl();
+    window.open(CLAUDE_CONNECTORS_URL, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleDisconnect = async (id: string) => {
     setRevokingId(id);
     try {
       await apiDeleteApiToken(id);
@@ -859,21 +836,6 @@ function AiAccessSection() {
     } finally {
       setRevokingId(null);
     }
-  };
-
-  const copySecret = () => {
-    if (!newSecret) return;
-    navigator.clipboard.writeText(newSecret).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {});
-  };
-
-  const copySnippet = () => {
-    navigator.clipboard.writeText(mcpUrl).then(() => {
-      setSnippetCopied(true);
-      setTimeout(() => setSnippetCopied(false), 2000);
-    }).catch(() => {});
   };
 
   return (
@@ -886,166 +848,77 @@ function AiAccessSection() {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>
-              Connect an external AI
+              Connect Claude
             </div>
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#787584', lineHeight: 1.5, marginTop: 3 }}>
-              Generate an access token to let AI agents like Claude Desktop manage your tasks, lists, and timelines through the Solytiq MCP server. Tokens act on your behalf only.
+              Add Solytiq as a custom connector in Claude using the URL below. Claude signs in securely with your account and can then do anything you can do in Solytiq — nothing more.
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
               <code style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, color: '#5e4dbb', background: '#F5F3FF', border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {mcpUrl}
               </code>
               <button
-                onClick={copySnippet}
+                onClick={copyUrl}
                 title="Copy MCP server URL"
-                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: snippetCopied ? '#10B981' : '#5e4dbb', background: snippetCopied ? 'rgba(16,185,129,0.1)' : '#F5F3FF', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', transition: 'background 150ms, color 150ms' }}
+                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: urlCopied ? '#10B981' : '#5e4dbb', background: urlCopied ? 'rgba(16,185,129,0.1)' : '#F5F3FF', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', transition: 'background 150ms, color 150ms' }}
               >
-                <Icon name={snippetCopied ? 'check' : 'content_copy'} size={13} color={snippetCopied ? '#10B981' : '#5e4dbb'} />
-                {snippetCopied ? 'Copied' : 'Copy'}
+                <Icon name={urlCopied ? 'check' : 'content_copy'} size={13} color={urlCopied ? '#10B981' : '#5e4dbb'} />
+                {urlCopied ? 'Copied' : 'Copy'}
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Newly created secret — shown once */}
-      {newSecret && (
-        <div style={{ background: '#F5F3FF', border: '1.5px solid #5e4dbb', borderRadius: 14, padding: '14px 18px', animation: 'wizardStepIn 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <Icon name="key" size={15} color="#5e4dbb" />
-            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22' }}>Your new access token</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <code style={{ flex: 1, fontFamily: 'monospace', fontSize: 12.5, color: '#1c1b22', background: '#fff', border: '1px solid #e8e4f0', borderRadius: 8, padding: '9px 11px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
-              {newSecret}
-            </code>
-            <button
-              onClick={copySecret}
-              style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#fff', background: copied ? '#10B981' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '9px 13px', cursor: 'pointer', transition: 'background 150ms' }}
-            >
-              <Icon name={copied ? 'check' : 'content_copy'} size={13} color="#fff" />
-              {copied ? 'Copied' : 'Copy'}
-            </button>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9 }}>
-            <Icon name="warning" size={13} color="#d97706" />
-            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#d97706' }}>
-              Copy it now — for your security, it won't be shown again.
-            </span>
-          </div>
-          <button
-            onClick={() => setNewSecret(null)}
-            style={{ marginTop: 10, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 500, color: '#484552', background: '#fff', border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 14px', cursor: 'pointer' }}
-          >
-            Done
-          </button>
-        </div>
-      )}
+      {/* Connect to Claude */}
+      <button
+        onClick={handleConnect}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 12, padding: '13px 0', cursor: 'pointer', transition: 'background 150ms, transform 100ms' }}
+        onMouseEnter={e => { e.currentTarget.style.background = '#4d3da8'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = '#5e4dbb'; e.currentTarget.style.transform = 'translateY(0)'; }}
+      >
+        <Icon name="open_in_new" size={16} color="#fff" />
+        Connect to Claude
+      </button>
+      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', textAlign: 'center', marginTop: -4 }}>
+        Opens Claude connector settings and copies the URL. Paste it into "Add custom connector".
+      </div>
 
-      {/* Existing tokens */}
+      {/* Connected clients */}
       {!loading && tokens.length > 0 && (
         <div style={card}>
           {tokens.map((t, i) => (
             <div key={t.id} style={{ ...rowStyle, borderTop: i === 0 ? 'none' : '1px solid #f1ecf6' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                 <div style={{ width: 34, height: 34, borderRadius: 9, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Icon name="vpn_key" size={16} color="#5e4dbb" />
+                  <Icon name="link" size={16} color="#5e4dbb" />
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
                   <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#787584', marginTop: 1 }}>
-                    <code style={{ fontFamily: 'monospace', fontSize: 11 }}>{t.prefix}</code>
-                    {'  ·  '}Created {fmtTokenDate(t.createdAt)}
-                    {'  ·  '}{t.lastUsedAt ? `Used ${fmtTokenDate(t.lastUsedAt)}` : 'Never used'}
-                    {t.expiresAt ? `  ·  Expires ${fmtTokenDate(t.expiresAt)}` : ''}
+                    Connected {fmtTokenDate(t.createdAt)}
+                    {'  ·  '}{t.lastUsedAt ? `Last used ${fmtTokenDate(t.lastUsedAt)}` : 'Never used'}
                   </div>
                 </div>
               </div>
               <button
-                onClick={() => handleRevoke(t.id)}
+                onClick={() => handleDisconnect(t.id)}
                 disabled={revokingId === t.id}
-                title="Revoke token"
+                title="Disconnect"
                 style={{ flexShrink: 0, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#ba1a1a', background: '#fff5f5', border: '1px solid #ffdad6', borderRadius: 8, padding: '7px 12px', cursor: revokingId === t.id ? 'wait' : 'pointer', transition: 'background 150ms' }}
                 onMouseEnter={e => { if (revokingId !== t.id) e.currentTarget.style.background = '#ffe9e6'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = '#fff5f5'; }}
               >
-                {revokingId === t.id ? 'Revoking…' : 'Revoke'}
+                {revokingId === t.id ? 'Disconnecting…' : 'Disconnect'}
               </button>
             </div>
           ))}
         </div>
       )}
 
-      {/* Generate form / button */}
-      {showForm ? (
-        <div style={{ ...card, padding: '16px 18px', animation: 'wizardStepIn 200ms cubic-bezier(0.22,1,0.36,1) both' }}>
-          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b0acbe', marginBottom: 6 }}>Token name</div>
-          <input
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onFocus={() => setNameFocus(true)}
-            onBlur={() => setNameFocus(false)}
-            onKeyDown={e => { if (e.key === 'Enter') handleCreate(); }}
-            placeholder="e.g. Claude Desktop"
-            maxLength={100}
-            autoFocus
-            style={inputStyle(nameFocus)}
-          />
-          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b0acbe', margin: '16px 0 8px' }}>Expires</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {EXPIRY_OPTIONS.map(opt => {
-              const selected = expiryDays === opt.days;
-              return (
-                <button
-                  key={opt.label}
-                  onClick={() => setExpiryDays(opt.days)}
-                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: selected ? '#5e4dbb' : '#787584', background: selected ? '#f0edff' : '#fff', border: `1.5px solid ${selected ? '#5e4dbb' : '#e8e4f0'}`, borderRadius: 9, padding: '7px 14px', cursor: 'pointer', transition: 'all 150ms', display: 'flex', alignItems: 'center', gap: 5 }}
-                >
-                  {selected && <Icon name="check" size={13} color="#5e4dbb" />}
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-          {error && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 12, padding: '9px 12px', background: '#fff5f5', borderRadius: 8, border: '1px solid #ffdad6' }}>
-              <Icon name="error" size={14} color="#ba1a1a" />
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a' }}>{error}</span>
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-            <button
-              onClick={() => { setShowForm(false); setName(''); setError(null); }}
-              style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 9, padding: '11px 0', cursor: 'pointer', transition: 'background 150ms' }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleCreate}
-              disabled={!name.trim() || creating}
-              style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: !name.trim() || creating ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 9, padding: '11px 0', cursor: !name.trim() || creating ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}
-            >
-              {creating ? 'Generating…' : 'Generate token'}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button
-          onClick={() => { setShowForm(true); setError(null); }}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: '1.5px dashed rgba(94,77,187,0.3)', borderRadius: 12, padding: '12px 0', cursor: 'pointer', transition: 'background 150ms, transform 100ms' }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#ede9ff'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.transform = 'translateY(0)'; }}
-        >
-          <Icon name="add" size={16} color="#5e4dbb" />
-          Generate access token
-        </button>
-      )}
-
-      {!loading && tokens.length === 0 && !showForm && (
+      {!loading && tokens.length === 0 && (
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', textAlign: 'center', padding: '2px 0' }}>
-          No access tokens yet.
+          No connected clients yet.
         </div>
       )}
     </div>

@@ -570,14 +570,25 @@ export interface ApiAccessToken {
 export const apiGetApiTokens = () =>
   apiFetch<{ tokens: ApiAccessToken[] }>('/tokens');
 
-export const apiCreateApiToken = (name: string, expiresInDays?: number | null) =>
-  apiFetch<{ token: ApiAccessToken & { secret: string } }>('/tokens', {
-    method: 'POST',
-    body: JSON.stringify({ name, expiresInDays }),
-  });
-
 export const apiDeleteApiToken = (id: string) =>
   apiFetch<{ success: boolean }>(`/tokens/${id}`, { method: 'DELETE' });
+
+// ── Claude MCP OAuth consent ────────────────────────────────────────────────
+export interface OAuthApproveParams {
+  client_id: string;
+  redirect_uri: string;
+  code_challenge: string;
+  code_challenge_method: string;
+  state?: string;
+  scope?: string;
+  resource?: string;
+}
+
+export const apiOAuthApprove = (params: OAuthApproveParams) =>
+  apiFetch<{ redirectUrl: string }>('/oauth/approve', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
 
 // AI File Attachments
 export function apiUploadAIFile(

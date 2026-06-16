@@ -1,15 +1,14 @@
 // ---------------------------------------------------------------------------
 // /api/tokens — Personal Access Token management (session-JWT authenticated).
 //
-// Users generate long-lived AI access tokens here for use with external MCP
-// clients. The raw secret is returned exactly once (on creation); afterwards
-// only metadata (name, prefix, last used, expiry) is ever exposed.
+// Tokens are minted by the Claude OAuth flow (routes/oauth.ts); this router
+// only lists the user's connected clients and lets them revoke (disconnect)
+// one. The raw secret is never exposed here.
 // ---------------------------------------------------------------------------
 
 import { Router, Request, Response } from 'express';
 import { query } from '../db';
 import { authenticate } from '../middleware';
-import { generateApiToken } from '../apiToken';
 
 const router = Router();
 router.use(authenticate);
@@ -49,55 +48,7 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/tokens — create a token; returns the raw secret ONCE
-router.post('/', async (req: Request, res: Response) => {
-  try {
-    const { name, expiresInDays } = req.body as { name?: string; expiresInDays?: number | null };
-    const trimmed = (name ?? '').trim();
-    if (!trimmed) {
-      res.status(400).json({ error: 'name is required' });
-      return;
-    }
-    if (trimmed.length > 100) {
-      res.status(400).json({ error: 'name must be 100 characters or fewer' });
-      return;
-    }
-
-    // Cap the number of active tokens per user to keep the surface small.
-    const countRes = await query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM api_tokens WHERE user_id = $1`,
-      [req.userId]
-    );
-    if (parseInt(countRes.rows[0].count, 10) >= 20) {
-      res.status(400).json({ error: 'Token limit reached (20). Revoke an unused token first.' });
-      return;
-    }
-
-    let expiresAt: string | null = null;
-    if (expiresInDays != null && Number.isFinite(expiresInDays) && expiresInDays > 0) {
-      const d = new Date();
-      d.setDate(d.getDate() + Math.floor(expiresInDays));
-      expiresAt = d.toISOString();
-    }
-
-    const { raw, hash, prefix } = generateApiToken();
-    const result = await query<TokenRow>(
-      `INSERT INTO api_tokens (user_id, name, token_hash, token_prefix, expires_at)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, name, token_prefix, last_used_at, expires_at, created_at`,
-      [req.userId, trimmed, hash, prefix, expiresAt]
-    );
-
-    res.status(201).json({
-      token: { ...sanitize(result.rows[0]), secret: raw },
-    });
-  } catch (err) {
-    console.error('tokens POST error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// DELETE /api/tokens/:id — revoke a token
+// DELETE /api/tokens/:id — revoke (disconnect) a token
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const result = await query(
