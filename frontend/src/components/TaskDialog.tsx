@@ -290,18 +290,11 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
     setNewSubItem('');
     setAddingSubItem(false);
 
-    console.log('[SubItem] ── start ──────────────────────────────');
-    console.log('[SubItem] task.id:', task.id, '| task._source:', task._source, '| task._listId:', task._listId);
-    console.log('[SubItem] linkedListId (local state):', linkedListId);
-    console.log('[SubItem] linkedList in store:', linkedList ? `found (${linkedList.id}, ${linkedList.sections.length} sections)` : 'NOT FOUND');
-    console.log('[SubItem] itemTitle:', itemTitle);
-
     try {
       let listId = linkedListId;
       let sectionId: string;
 
       if (!listId) {
-        console.log('[SubItem] No linkedListId → creating new sublist…');
         setCreatingList(true);
         const newListId = `list_${crypto.randomUUID()}`;
         const newSecId = `sec_${crypto.randomUUID()}`;
@@ -309,16 +302,12 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
         // Inherit workspaceId from the parent list (list tasks) or the active workspace (dash tasks)
         const parentList = task._source === 'list' ? lists.find(l => l.id === task._listId) : null;
         const workspaceId = parentList?.workspaceId ?? currentWorkspaceId ?? undefined;
-        console.log('[SubItem] 1/4 apiCreateList id:', newListId, '| workspaceId:', workspaceId ?? 'none');
         const newDepth = (parentList?.depth ?? 0) + 1;
         const res = await apiCreateList({ id: newListId, name: title, color: '#5e4dbb', isPublic: false, workspaceId, parentTaskId: task.id, depth: newDepth });
         const actualListId = res.list?.id ?? newListId;
-        console.log('[SubItem] 1/4 ✓ list created → actualListId:', actualListId, '(res.list?.id:', res.list?.id, ')');
 
-        console.log('[SubItem] 2/4 apiCreateSection id:', newSecId, 'in list:', actualListId);
         const secRes = await apiCreateSection(actualListId, { id: newSecId, label: 'Tasks' });
         const actualSecId = secRes.section?.id ?? newSecId;
-        console.log('[SubItem] 2/4 ✓ section created → actualSecId:', actualSecId, '(secRes.section?.id:', secRes.section?.id, ')');
 
         // Optimistically add the new sublist to the store so it appears immediately
         // without waiting for the DB reload (which can be discarded by a concurrent SSE reload)
@@ -335,17 +324,11 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
             sections: [{ id: actualSecId, label: 'Tasks', tasks: [] }],
           },
         ]);
-        console.log('[SubItem] ✓ sublist added to store optimistically');
 
-        console.log('[SubItem] 3/4 linking task → source:', task._source, '| updating linkedListId to:', actualListId);
         if (task._source === 'list' && task._listId) {
-          console.log('[SubItem] 3/4 using apiUpdateListTask (list task) listId:', task._listId);
-          const updRes = await apiUpdateListTask(task._listId, task.id, { linkedListId: actualListId, linkedListType: 'sublist' });
-          console.log('[SubItem] 3/4 ✓ apiUpdateListTask response linkedListId:', (updRes as {task?: {linkedListId?: string}})?.task?.linkedListId);
+          await apiUpdateListTask(task._listId, task.id, { linkedListId: actualListId, linkedListType: 'sublist' });
         } else {
-          console.log('[SubItem] 3/4 using apiUpdateTask (dash task) taskId:', task.id);
-          const updRes = await apiUpdateTask(task.id, { linkedListId: actualListId, linkedListType: 'sublist' });
-          console.log('[SubItem] 3/4 ✓ apiUpdateTask response linkedListId:', (updRes as {task?: {linkedListId?: string}})?.task?.linkedListId);
+          await apiUpdateTask(task.id, { linkedListId: actualListId, linkedListType: 'sublist' });
         }
 
         setLinkedListId(actualListId);
@@ -353,30 +336,22 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
         sectionId = actualSecId;
         setCreatingList(false);
       } else {
-        console.log('[SubItem] linkedListId already set:', listId);
         let currentLinkedList = linkedList;
         if (!currentLinkedList) {
-          console.log('[SubItem] ⚠ list not in store — calling loadFromApi() to refresh…');
           await loadFromApi();
           currentLinkedList = useAppStore.getState().lists.find(l => l.id === listId) ?? null;
-          console.log('[SubItem] after reload — list found:', currentLinkedList ? `yes (${currentLinkedList.sections.length} sections)` : 'STILL NOT FOUND');
         }
         sectionId = currentLinkedList?.sections[0]?.id ?? '';
-        console.log('[SubItem] resolved sectionId:', sectionId || '⚠ EMPTY — will bail');
         if (!sectionId) {
           console.error('[SubItem] ✗ no section found in linked list', listId, '— aborting');
           return;
         }
       }
 
-      console.log('[SubItem] 4/4 apiAddListTask → listId:', listId, 'sectionId:', sectionId, 'title:', itemTitle);
-      const addRes = await apiAddListTask(listId, sectionId, { title: itemTitle });
-      console.log('[SubItem] 4/4 ✓ task added → id:', (addRes as {task?: {id?: number}})?.task?.id, 'title:', (addRes as {task?: {title?: string}})?.task?.title);
+      await apiAddListTask(listId, sectionId, { title: itemTitle });
 
       const wsId = useWorkspaceStore.getState().currentWorkspaceId;
-      console.log('[SubItem] loadFromApi(wsId=' + (wsId ?? 'null') + ') — refreshing store…');
       await loadFromApi(wsId ?? undefined);
-      console.log('[SubItem] ✓ done. lists in store now:', useAppStore.getState().lists.length, '| linked list sections:', useAppStore.getState().lists.find(l => l.id === listId)?.sections.length ?? 'list not found');
     } catch (err) {
       console.error('[SubItem] ✗ ERROR:', err);
       setCreatingList(false);
