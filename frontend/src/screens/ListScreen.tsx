@@ -1,5 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useRef } from 'react';
+import { useMobile } from '../hooks/useBreakpoint';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Task } from '../types';
 import useAppStore from '../store/useAppStore';
@@ -16,6 +17,7 @@ export default function ListScreen() {
   const { userId: currentUserId } = useAuthStore();
   const { lists, listsLoading, updateList, updateListTask, deleteListTask, addToTrash, setLists } = useAppStore();
   const list = lists.find(l => l.id === listId);
+  const isMobile = useMobile();
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
@@ -317,7 +319,7 @@ export default function ListScreen() {
 
   return (
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
-      <div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
+      <div style={{ maxWidth: 680, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
 
         {/* Hero */}
         <div style={{ background: list.colorBg ?? '#F9FAFB', border: `1px solid ${list.color ?? '#E5E7EB'}40`, borderRadius: 16, padding: '20px 24px', position: 'relative', overflow: 'hidden' }}>
@@ -335,7 +337,7 @@ export default function ListScreen() {
                       if (e.key === 'Enter') handleUpdateTitle();
                       if (e.key === 'Escape') setEditingTitle(false);
                     }}
-                    style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22', border: 'none', borderBottom: `2px solid ${list.color || '#5e4dbb'}`, outline: 'none', background: 'transparent', padding: '0 0 2px', width: '100%', maxWidth: 400 }}
+                    style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22', border: 'none', borderBottom: `2px solid ${list.color || '#5e4dbb'}`, outline: 'none', background: 'transparent', padding: '0 0 2px', width: '100%', maxWidth: isMobile ? '100%' : 400 }}
                   />
                 ) : (
                   <h1

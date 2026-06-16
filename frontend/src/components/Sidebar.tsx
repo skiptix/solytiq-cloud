@@ -1005,6 +1005,9 @@ interface SidebarProps {
   onReorderLists: (fromId: string, toId: string) => void;
   onResizeStart: (startX: number) => void;
   onTaskDropToList: (taskId: number, listId: string) => void;
+  isMobile?: boolean;
+  drawerOpen?: boolean;
+  onClose?: () => void;
 }
 
 function fmtDistShort(m?: number | null) {
@@ -1012,8 +1015,8 @@ function fmtDistShort(m?: number | null) {
   return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`;
 }
 
-export default function Sidebar({ active, activeListId, activeTimelineId, activeFolderId, activeGpsFileId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList }: SidebarProps) {
-  const collapsed = width <= 72;
+export default function Sidebar({ active, activeListId, activeTimelineId, activeFolderId, activeGpsFileId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList, isMobile, drawerOpen, onClose }: SidebarProps) {
+  const collapsed = isMobile ? false : width <= 72;
   const [addHov, setAddHov] = useState(false);
   const [folderHov, setFolderHov] = useState(false);
   const [handleHov, setHandleHov] = useState(false);
@@ -1162,13 +1165,34 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   // ── GPS sidebar mode ───────────────────────────────────────────────────────
   if (active === 'gps') {
     return (
-      <aside style={{ width, minWidth: width, height: '100vh', background: '#f7f2fc', borderRight: '1px solid #E5E7EB', display: 'flex', flexDirection: 'column', padding: collapsed ? '16px 6px' : '16px 12px', gap: 4, position: 'fixed', left: 0, top: 0, zIndex: 40, overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box' }}>
-        {/* Resize handle */}
-        <div onMouseDown={e => { e.preventDefault(); onResizeStart(e.clientX); }}
-          onMouseEnter={() => setHandleHov(true)} onMouseLeave={() => setHandleHov(false)}
-          style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, background: handleHov ? 'rgba(94,77,187,0.10)' : 'transparent', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {handleHov && <div style={{ width: 2, height: 48, borderRadius: 2, background: '#9d8dff', opacity: 0.7 }} />}
-        </div>
+      <aside style={{
+        width: isMobile ? 280 : width,
+        minWidth: isMobile ? 280 : width,
+        height: '100vh',
+        background: '#f7f2fc',
+        borderRight: '1px solid #E5E7EB',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: collapsed ? '16px 6px' : '16px 12px',
+        gap: 4,
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        zIndex: 40,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        boxSizing: 'border-box',
+        transform: isMobile ? (drawerOpen ? 'translateX(0)' : 'translateX(-100%)') : 'translateX(0)',
+        transition: isMobile ? 'transform 260ms cubic-bezier(0.22,1,0.36,1)' : undefined,
+      }}>
+        {/* Resize handle — desktop only */}
+        {!isMobile && (
+          <div onMouseDown={e => { e.preventDefault(); onResizeStart(e.clientX); }}
+            onMouseEnter={() => setHandleHov(true)} onMouseLeave={() => setHandleHov(false)}
+            style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, background: handleHov ? 'rgba(94,77,187,0.10)' : 'transparent', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {handleHov && <div style={{ width: 2, height: 48, borderRadius: 2, background: '#9d8dff', opacity: 0.7 }} />}
+          </div>
+        )}
 
         {/* Logo / header */}
         <button type="button" onClick={() => onNavigate('/dashboard')} title={collapsed ? 'Dashboard' : undefined}
@@ -1273,7 +1297,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.19.1
+              v1.20.0
             </div>
           )}
         </div>
@@ -1282,14 +1306,35 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   }
 
   return (
-    <aside style={{ width, minWidth: width, height: '100vh', background: '#f7f2fc', borderRight: '1px solid #E5E7EB', display: 'flex', flexDirection: 'column', padding: collapsed ? '16px 6px' : '16px 12px', gap: 4, position: 'fixed', left: 0, top: 0, zIndex: 40, overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box' }}>
+    <aside style={{
+      width: isMobile ? 280 : width,
+      minWidth: isMobile ? 280 : width,
+      height: '100vh',
+      background: '#f7f2fc',
+      borderRight: '1px solid #E5E7EB',
+      display: 'flex',
+      flexDirection: 'column',
+      padding: collapsed ? '16px 6px' : '16px 12px',
+      gap: 4,
+      position: 'fixed',
+      left: 0,
+      top: 0,
+      zIndex: 40,
+      overflowY: 'auto',
+      overflowX: 'hidden',
+      boxSizing: 'border-box',
+      transform: isMobile ? (drawerOpen ? 'translateX(0)' : 'translateX(-100%)') : 'translateX(0)',
+      transition: isMobile ? 'transform 260ms cubic-bezier(0.22,1,0.36,1)' : undefined,
+    }}>
 
-      {/* Resize handle */}
-      <div onMouseDown={e => { e.preventDefault(); onResizeStart(e.clientX); }}
-        onMouseEnter={() => setHandleHov(true)} onMouseLeave={() => setHandleHov(false)}
-        style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, background: handleHov ? 'rgba(94,77,187,0.10)' : 'transparent', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {handleHov && <div style={{ width: 2, height: 48, borderRadius: 2, background: '#9d8dff', opacity: 0.7 }} />}
-      </div>
+      {/* Resize handle — desktop only */}
+      {!isMobile && (
+        <div onMouseDown={e => { e.preventDefault(); onResizeStart(e.clientX); }}
+          onMouseEnter={() => setHandleHov(true)} onMouseLeave={() => setHandleHov(false)}
+          style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, background: handleHov ? 'rgba(94,77,187,0.10)' : 'transparent', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {handleHov && <div style={{ width: 2, height: 48, borderRadius: 2, background: '#9d8dff', opacity: 0.7 }} />}
+        </div>
+      )}
 
       {/* Logo / header */}
       <button type="button" onClick={() => onNavigate('/dashboard')} title={collapsed ? 'Dashboard' : undefined}
@@ -1466,7 +1511,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.19.1
+            v1.20.0
           </div>
         )}
       </div>

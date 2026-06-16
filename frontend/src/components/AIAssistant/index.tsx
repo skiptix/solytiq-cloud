@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useMobile } from '../../hooks/useBreakpoint';
 import useAIStore, {
   buildContext,
   buildSystemPrompt,
@@ -97,6 +98,7 @@ async function getSharedToolDefs(): Promise<AiToolDef[]> {
 }
 
 export default function AIAssistant() {
+  const isMobile = useMobile();
   const location = useLocation();
   const {
     isOpen,
@@ -1092,8 +1094,8 @@ export default function AIAssistant() {
     <div
       style={{
         position: 'fixed',
-        bottom: 30,
-        right: 30,
+        bottom: isMobile ? 16 : 30,
+        right: isMobile ? 12 : 30,
         zIndex: 9000,
         display: 'flex',
         flexDirection: 'column',

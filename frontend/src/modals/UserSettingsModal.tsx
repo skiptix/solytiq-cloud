@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import Icon from '../components/Icon';
+import { useMobile } from '../hooks/useBreakpoint';
 import useAuthStore from '../store/useAuthStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
 import {
@@ -61,6 +62,7 @@ const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 type SettingsTab = 'profile' | 'preferences' | 'security' | 'connections';
 
 export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
+  const isMobile = useMobile();
   const { username, fullName, email, profileImage, isAdmin, totpEnabled, setProfile, setTotpEnabled } = useAuthStore();
   const { timezone, setTimezone } = useUserPrefsStore();
 
@@ -327,11 +329,11 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
     <>
       {/* Backdrop */}
       <div
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.24)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: closing ? 'backdropOut 190ms ease both' : 'backdropIn 220ms ease both' }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.24)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : 24, animation: closing ? 'backdropOut 190ms ease both' : 'backdropIn 220ms ease both' }}
         onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
       >
         <div
-          style={{ background: '#fff', borderRadius: 22, width: '100%', maxWidth: 720, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: closing ? 'settingsModalOut 190ms ease-in both' : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both', overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
+          style={{ background: '#fff', borderRadius: isMobile ? '16px 16px 0 0' : 22, width: '100%', maxWidth: isMobile ? undefined : 720, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: closing ? 'settingsModalOut 190ms ease-in both' : (isMobile ? 'slideUp 300ms cubic-bezier(0.22,1,0.36,1) both' : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both'), overflow: 'hidden', maxHeight: '95vh', display: 'flex', flexDirection: 'column' }}
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
@@ -349,7 +351,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
 
           {/* Tab bar */}
           <div style={{ padding: '16px 24px 0' }}>
-            <div style={{ display: 'flex', gap: 4, background: '#F5F3FF', borderRadius: 14, padding: 4 }}>
+            <div style={{ display: 'flex', gap: 4, background: '#F5F3FF', borderRadius: 14, padding: 4, overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch', flexShrink: 0 }}>
               {TABS.map(tab => {
                 const active = activeTab === tab.id;
                 return (

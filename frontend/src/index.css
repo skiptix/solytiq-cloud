@@ -1,5 +1,39 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; width: 100%; }
+
+/* ─── Responsive design tokens ───────────────────────────────────────────── */
+:root {
+  --modal-pad: 24px;
+  --modal-radius: 18px;
+  --page-h-pad: 32px;
+}
+
+@media (max-width: 639px) {
+  :root {
+    --modal-pad: 10px;
+    --modal-radius: 14px;
+    --page-h-pad: 16px;
+  }
+
+  html, body, #root { overscroll-behavior: none; }
+
+  @keyframes slideUp {
+    from { transform: translateY(100%); opacity: 0.6; }
+    to   { transform: translateY(0);   opacity: 1; }
+  }
+
+  /* 44px minimum tap targets for small icon buttons */
+  button[data-touch] { min-height: 44px; min-width: 44px; }
+
+  /* Prevent horizontal overflow on mobile */
+  body { overflow-x: hidden; }
+}
+
+/* Safe-area padding for iPhone notch / home indicator */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .safe-bottom { padding-bottom: calc(12px + env(safe-area-inset-bottom)) !important; }
+  .safe-top    { padding-top: calc(0px + env(safe-area-inset-top)); }
+}
 body { font-family: 'Inter', sans-serif; background: #fdf8ff; color: #1c1b22; -webkit-font-smoothing: antialiased; }
 .material-symbols-outlined {
   font-family: 'Material Symbols Outlined';

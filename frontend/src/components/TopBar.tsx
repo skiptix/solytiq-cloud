@@ -10,6 +10,8 @@ interface TopBarProps {
   tasks: Task[];
   lists: List[];
   onNavigate: (path: string) => void;
+  isMobile?: boolean;
+  onOpenDrawer?: () => void;
 }
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
@@ -33,12 +35,13 @@ function highlight(text: string, query: string): React.ReactNode {
   );
 }
 
-export default function TopBar({ tasks, lists, onNavigate }: TopBarProps) {
+export default function TopBar({ tasks, lists, onNavigate, isMobile, onOpenDrawer }: TopBarProps) {
   const navigate = useNavigate();
 
   // Search state
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
+  const [searchExpanded, setSearchExpanded] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
@@ -311,9 +314,29 @@ export default function TopBar({ tasks, lists, onNavigate }: TopBarProps) {
 
   return (
     <>
-      <header style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(253,248,255,0.92)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #e8e4f0', display: 'flex', alignItems: 'center', gap: 16, padding: '10px 24px', height: 56 }}>
-        {/* Search */}
-        <div style={{ flex: 1, maxWidth: 440, margin: '0 auto', position: 'relative' }}>
+      <header style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(253,248,255,0.92)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #e8e4f0', display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16, padding: isMobile ? '10px 16px' : '10px 24px', height: 56 }}>
+        {/* Hamburger — mobile only */}
+        {isMobile && (
+          <button
+            data-touch
+            onClick={onOpenDrawer}
+            style={{ width: 40, height: 40, borderRadius: 10, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+          >
+            <Icon name="menu" size={22} color="#484552" />
+          </button>
+        )}
+
+        {/* Search — full on desktop, icon-or-expanded on mobile */}
+        {isMobile && !searchExpanded ? (
+          <button
+            data-touch
+            onClick={() => { setSearchExpanded(true); setTimeout(() => inputRef.current?.focus(), 50); }}
+            style={{ width: 40, height: 40, borderRadius: 10, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+          >
+            <Icon name="search" size={20} color="#787584" />
+          </button>
+        ) : (
+        <div style={{ flex: 1, maxWidth: isMobile ? undefined : 440, margin: isMobile ? undefined : '0 auto', position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: focused ? '#fff' : '#f7f4fc', borderRadius: focused ? 10 : 9999, border: `1.5px solid ${focused ? '#5e4dbb' : 'transparent'}`, padding: '7px 14px', transition: 'all 200ms', boxShadow: focused ? '0 0 0 4px rgba(94,77,187,0.12)' : 'none' }}>
             <Icon name="search" size={16} color="#787584" />
             <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
@@ -355,11 +378,12 @@ export default function TopBar({ tasks, lists, onNavigate }: TopBarProps) {
             </div>
           )}
         </div>
+        )} {/* end mobile search conditional */}
 
         {/* Right controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
-          {/* Admin settings button — admins only */}
-          {isAdmin && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, marginLeft: 'auto' }}>
+          {/* Admin settings button — admins only, desktop only */}
+          {isAdmin && !isMobile && (
             <button
               onClick={() => { setProfileOpen(false); onNavigate('/settings'); }}
               title="Admin Settings"
@@ -371,19 +395,21 @@ export default function TopBar({ tasks, lists, onNavigate }: TopBarProps) {
             </button>
           )}
 
-          {/* GPS Routes button */}
-          <button
-            onClick={() => onNavigate('/gps')}
-            title="GPS Routes"
-            style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid #e8e4f0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.borderColor = '#c4b8f0'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#e8e4f0'; }}
-          >
-            <Icon name="route" size={17} color="#787584" />
-          </button>
+          {/* GPS Routes button — desktop only (available via sidebar on mobile) */}
+          {!isMobile && (
+            <button
+              onClick={() => onNavigate('/gps')}
+              title="GPS Routes"
+              style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid #e8e4f0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms' }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.borderColor = '#c4b8f0'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#e8e4f0'; }}
+            >
+              <Icon name="route" size={17} color="#787584" />
+            </button>
+          )}
 
-          {/* Files button + drag-to-upload */}
-          <div
+          {/* Files button + drag-to-upload — desktop only */}
+          {!isMobile && <div
             style={{ position: 'relative' }}
             onDragEnter={e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setFileDropHover(true); } }}
             onDragLeave={e => {
@@ -451,7 +477,7 @@ export default function TopBar({ tasks, lists, onNavigate }: TopBarProps) {
                 )}
               </div>
             )}
-          </div>
+          </div>}
 
           {/* Profile avatar + dropdown */}
           <div ref={profileDropRef} style={{ position: 'relative' }}>
@@ -474,7 +500,7 @@ export default function TopBar({ tasks, lists, onNavigate }: TopBarProps) {
 
             {/* Profile dropdown */}
             {profileOpen && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: 300, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', zIndex: 200, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: Math.min(300, window.innerWidth - 24), background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', zIndex: 200, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
 
                 {/* Avatar header */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '22px 20px 16px', background: '#faf9ff', borderBottom: '1px solid #f1ecf6', gap: 8 }}>

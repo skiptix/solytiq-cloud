@@ -1,5 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect } from 'react';
+import { useMobile } from '../hooks/useBreakpoint';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import type { Task, List } from '../types';
 import useAppStore from '../store/useAppStore';
@@ -167,6 +168,7 @@ export default function FolderDashboardScreen() {
   const { folderId } = useParams<{ folderId: string }>();
   const navigate = useNavigate();
   const { folders, lists, listsLoading } = useAppStore();
+  const isMobile = useMobile();
 
   // On a page refresh the workspace data is fetched asynchronously, so `folders`
   // is empty for the first render(s). Wait for at least one load cycle to settle
@@ -222,7 +224,7 @@ export default function FolderDashboardScreen() {
 
   return (
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
-      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', padding: isMobile ? '20px 16px 80px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
 
         {/* ── Header ─────────────────────────────────────────── */}
         <header style={{ animation: 'folderDashIn 420ms ease both' }}>
@@ -279,7 +281,7 @@ export default function FolderDashboardScreen() {
         <UpcomingTimelineWidget folderId={folderId} accent={ac} />
 
         {/* ── Stat cards ─────────────────────────────────────── */}
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, animation: 'folderDashIn 420ms 80ms ease both' }}>
+        <section style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 12, animation: 'folderDashIn 420ms 80ms ease both' }}>
           <StatCard num={open} label="Open Tasks" sub="remaining" icon="inventory_2" iconBg="#F5F3FF" iconColor="#5e4dbb" />
           <StatCard num={done} label="Completed" sub={total > 0 ? `${pct}%` : 'none yet'} icon="check_circle" iconBg="rgba(16,185,129,0.10)" iconColor="#10B981" accent="#10B981" />
           <StatCard num={todayTasks.length} label="Due Today" sub="urgent" icon="today" iconBg="rgba(234,88,12,0.10)" iconColor="#ea580c" accent="#ea580c" />
@@ -287,7 +289,7 @@ export default function FolderDashboardScreen() {
         </section>
 
         {/* ── Task panels ─────────────────────────────────────── */}
-        <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, animation: 'folderDashIn 420ms 160ms ease both' }}>
+        <section style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, animation: 'folderDashIn 420ms 160ms ease both' }}>
           <TaskPanel
             title="Due Today" icon="today" accent="#ea580c" accentBg="rgba(234,88,12,0.08)"
             tasks={todayTasks} emptyText="Nothing due today — you're on track!"

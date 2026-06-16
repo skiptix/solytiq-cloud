@@ -6,6 +6,7 @@ import useAppStore from './store/useAppStore';
 import useMembersStore from './store/useMembersStore';
 import useWorkspaceStore from './store/useWorkspaceStore';
 import { apiCheckSetupRequired, connectSSE, disconnectSSE } from './api/client';
+import { useMobile } from './hooks/useBreakpoint';
 
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
@@ -46,6 +47,8 @@ function AppLayout() {
   const { dashTasks, lists, timelines, listsLoading, sidebarWidth, setSidebarWidth, loadFromApi, setLists, setFolders, updateList, moveTaskToList } = useAppStore();
   const prevWorkspaceRef = useRef<string | null | undefined>(undefined);
   const [modal, setModal] = useState<'add' | 'completed' | 'trash' | null>(null);
+  const isMobile = useMobile();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const loadMembers = useMembersStore(s => s.load);
   const { currentWorkspaceId, workspaces, workspacesLoaded, loadWorkspaces } = useWorkspaceStore();
@@ -120,6 +123,11 @@ function AppLayout() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspaceId]);
 
+  // Close drawer on route change (mobile)
+  useEffect(() => {
+    if (isMobile) setDrawerOpen(false);
+  }, [location.pathname, isMobile]);
+
   // Sidebar resize
   const handleResizeStart = useCallback((initialX: number) => {
     const startW = sidebarWidth;
@@ -169,6 +177,18 @@ function AppLayout() {
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {/* Mobile sidebar backdrop */}
+      {isMobile && drawerOpen && (
+        <div
+          onClick={() => setDrawerOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 39,
+            background: 'rgba(0,0,0,0.32)',
+            backdropFilter: 'blur(2px)',
+            animation: 'backdropIn 180ms ease both',
+          }}
+        />
+      )}
       <Sidebar
         active={getActive()}
         activeListId={activeListId}
@@ -182,12 +202,17 @@ function AppLayout() {
         onReorderLists={handleReorderLists}
         onResizeStart={handleResizeStart}
         onTaskDropToList={moveTaskToList}
+        isMobile={isMobile}
+        drawerOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
       />
-      <div style={{ marginLeft: sidebarWidth, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+      <div style={{ marginLeft: isMobile ? 0 : sidebarWidth, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <TopBar
           tasks={allTasks}
           lists={lists}
           onNavigate={navigate}
+          isMobile={isMobile}
+          onOpenDrawer={() => setDrawerOpen(true)}
         />
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', position: 'relative' }}>
           {/* Keying by pathname re-mounts the screen on navigation, replaying the

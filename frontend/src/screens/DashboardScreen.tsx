@@ -1,5 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState } from 'react';
+import { useMobile } from '../hooks/useBreakpoint';
 import type { Task, List } from '../types';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
@@ -209,6 +210,7 @@ export default function DashboardScreen() {
   usePageTitle("Dashboard");
   const { dashTasks, setDashTasks, lists, updateDashTask, updateListTask, deleteListTask, addToTrash } = useAppStore();
   const timezone = useUserPrefsStore(s => s.timezone);
+  const isMobile = useMobile();
 
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState<string | null>(null);
@@ -279,7 +281,7 @@ export default function DashboardScreen() {
 
   return (
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
-      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', padding: isMobile ? '20px 16px 80px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
 
         <header style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div>
@@ -299,7 +301,7 @@ export default function DashboardScreen() {
 
         <UpcomingTimelineWidget accent="#5e4dbb" />
 
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        <section style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 12 }}>
           <StatCard num={openCount} label="Open Tasks" sub={`${totalCount} total`} icon="inventory_2" iconBg="#F5F3FF" iconColor="#5e4dbb" />
           <StatCard num={completedCount} label="Completed" sub={completedCount > 0 ? `${pct}%` : 'Get started'} icon="check_circle" iconBg="rgba(16,185,129,0.10)" iconColor="#10B981" accent="#10B981" />
           <StatCard num={dueTodayTasks.length} label="Due Today" sub={dueTodayTasks.length > 0 ? 'Focus' : 'Clear'} icon="today" iconBg="#fff7ed" iconColor="#ea580c" accent={dueTodayTasks.length > 0 ? '#ea580c' : undefined} />
@@ -316,7 +318,7 @@ export default function DashboardScreen() {
           </div>
         </section>
 
-        <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <section style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 14 }}>
           <ObserverPanel title="Due Today" icon="today" accent="#ea580c" accentBg="#fff7ed" tasks={dueTodayTasks} emptyText="Nothing on your plate today." onToggle={toggle} onOpen={openTask} timezone={timezone} onSeeMore={() => setDetailModal({ source: 'today', title: 'Due Today', icon: 'today', accent: '#ea580c', accentBg: '#fff7ed' })} />
           <ObserverPanel title="This Week" icon="calendar_month" accent="#1D4ED8" accentBg="#eff6ff" tasks={dueWeekTasks} emptyText="No deadlines this week." onToggle={toggle} onOpen={openTask} timezone={timezone} onSeeMore={() => setDetailModal({ source: 'week', title: 'Due This Week', icon: 'calendar_month', accent: '#1D4ED8', accentBg: '#eff6ff' })} />
         </section>
