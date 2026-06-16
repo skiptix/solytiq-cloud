@@ -7,6 +7,7 @@ import { genId } from '../utils/id';
 import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
 import CalendarPicker from '../components/CalendarPicker';
+import TimePicker from '../components/TimePicker';
 
 const COLORS = [
   { color: '#5e4dbb', bg: '#F5F3FF' },
@@ -74,6 +75,8 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
   const [mEmoji, setMEmoji] = useState('📍');
   const [showCal, setShowCal] = useState(false);
   const calRef = useRef<HTMLDivElement>(null);
+  const [showTime, setShowTime] = useState(false);
+  const timeRef = useRef<HTMLDivElement>(null);
 
   // Close calendar on outside click
   useEffect(() => {
@@ -84,6 +87,16 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showCal]);
+
+  // Close time picker on outside click
+  useEffect(() => {
+    if (!showTime) return;
+    const handler = (e: MouseEvent) => {
+      if (timeRef.current && !timeRef.current.contains(e.target as Node)) setShowTime(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showTime]);
 
   const [loading, setLoading] = useState(false);
   const [createError, setCreateError] = useState('');
@@ -324,10 +337,25 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
                       </div>
                     )}
                   </div>
-                  <div style={{ width: 120 }}>
+                  <div style={{ width: 120, position: 'relative' }} ref={timeRef}>
                     <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10.5, fontWeight: 600, color: '#787584', display: 'block', marginBottom: 3 }}>Time</label>
-                    <input type="time" value={mTime} onChange={e => setMTime(e.target.value)}
-                      style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none', background: '#fff', color: '#1c1b22' }} />
+                    <button
+                      type="button"
+                      onClick={() => setShowTime(v => !v)}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${showTime ? selectedColor.color : '#e8e4f0'}`, background: '#fff', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: mTime ? '#1c1b22' : '#b0acbe', transition: 'border-color 150ms', textAlign: 'left' }}
+                    >
+                      <Icon name="schedule" size={14} color={mTime ? selectedColor.color : '#c9c4d5'} />
+                      {mTime || '--:--'}
+                    </button>
+                    {showTime && (
+                      <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 50 }}>
+                        <TimePicker
+                          value={mTime || undefined}
+                          onChange={t => setMTime(t)}
+                          onClear={() => { setMTime(''); setShowTime(false); }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div>
