@@ -107,7 +107,7 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
   return (
     <div
       onClick={e => { if (e.target === e.currentTarget && !forced) handleClose(); }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: backdropAnim }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: backdropAnim }}>
       <div
         onClick={e => e.stopPropagation()}
         style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 500, boxShadow: '0 20px 60px rgba(0,0,0,0.18)', animation: panelAnim, overflow: 'hidden', position: 'relative' }}>

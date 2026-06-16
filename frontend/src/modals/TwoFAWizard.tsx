@@ -104,7 +104,7 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={e => { if (e.target === e.currentTarget && step !== 'done') onClose(); }}
     >
       <div

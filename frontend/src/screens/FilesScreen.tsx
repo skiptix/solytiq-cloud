@@ -1,4 +1,5 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useMobile } from '../hooks/useBreakpoint';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SharedFile } from '../types';
 import { apiGetFiles, apiUpdateFile, apiDeleteFile, apiUploadFile, apiGetStorageUsage, apiPreviewFile } from '../api/client';
@@ -276,6 +277,7 @@ interface FileDetailModalProps {
 }
 
 function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
+  const isMobile = useMobile();
   const [closing, setClosing] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(true);
@@ -333,9 +335,9 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
 
   return (
     <div onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: backdropAnim }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : 24, animation: backdropAnim }}>
       <div onClick={e => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 560, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', animation: panelAnim, overflow: 'hidden' }}>
+        style={{ background: '#fff', borderRadius: isMobile ? '16px 16px 0 0' : 20, width: '100%', maxWidth: 560, maxHeight: isMobile ? '90vh' : '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', animation: panelAnim, overflow: 'hidden' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 20px 14px', borderBottom: '1px solid #f1ecf6', flexShrink: 0 }}>
@@ -388,7 +390,7 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
             {/* Share title */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Share title</label>
@@ -430,7 +432,7 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
             {/* Password */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
@@ -545,6 +547,7 @@ function RecentCard({ file, onEdit, onDelete }: { file: SharedFile; onEdit: () =
 
 export default function FilesScreen() {
   usePageTitle("Files");
+  const isMobile = useMobile();
   const { userId } = useAuthStore();
   const [files, setFiles] = useState<SharedFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -626,7 +629,7 @@ export default function FilesScreen() {
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setPageDragOver(false); }}
       onDrop={e => { e.preventDefault(); setPageDragOver(false); if (e.dataTransfer.files.length) setUploadOpen(true); }}
     >
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 28, width: '100%', animation: 'sectionFadeUp 360ms cubic-bezier(0.22,1,0.36,1) both' }}>
+      <div style={{ maxWidth: 860, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 28, width: '100%', animation: 'sectionFadeUp 360ms cubic-bezier(0.22,1,0.36,1) both' }}>
 
         {/* Page header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

@@ -1,5 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from 'react';
+import { useMobile } from '../hooks/useBreakpoint';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import useAIStore from '../store/useAIStore';
@@ -78,6 +79,7 @@ export default function SettingsScreen() {
   usePageTitle("Settings");
   const navigate = useNavigate();
   const { isAdmin, userId } = useAuthStore();
+  const isMobile = useMobile();
   const [activeTab, setActiveTab] = useState<TabId>('system');
   const [nukeStep, setNukeStep] = useState(0);
   const [nukeText, setNukeText] = useState('');
@@ -448,13 +450,13 @@ export default function SettingsScreen() {
 
   return (
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
-      <div style={{ maxWidth: 720, margin: '0 auto', padding: '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
         <h1 style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 28, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.02em' }}>Settings</h1>
 
         {isAdmin ? (
           <>
             {/* Tab bar */}
-            <div style={{ display: 'flex', gap: 4, background: '#F5F3FF', borderRadius: 14, padding: 4, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 4, background: '#F5F3FF', borderRadius: 14, padding: 4, overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch', flexShrink: 0 }}>
               {TABS.map(tab => {
                 const active = activeTab === tab.id;
                 const isDanger = tab.id === 'danger';

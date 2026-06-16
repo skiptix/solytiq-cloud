@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { Task, TaskAttachment, SharedFile } from '../types';
 import Icon from './Icon';
+import { useMobile } from '../hooks/useBreakpoint';
 import CalendarPicker from './CalendarPicker';
 import CopyButton from './CopyButton';
 import CreatorBubble from './CreatorBubble';
@@ -178,6 +179,7 @@ interface TaskDialogProps {
 }
 
 export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic }: TaskDialogProps) {
+  const isMobile = useMobile();
   const owner = useMembersStore(s => (task.creatorId ? s.members[task.creatorId] : undefined));
   const showOwner = Boolean(isPublic && task.creatorId);
   const [title, setTitle] = useState(task.title);
@@ -367,24 +369,32 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
         style={{
           position: 'fixed', inset: 0, zIndex: 1200,
           background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(6px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '24px 20px',
+          display: 'flex',
+          alignItems: isMobile ? 'flex-end' : 'center',
+          justifyContent: 'center',
+          padding: isMobile ? 0 : '24px 20px',
         }}>
 
         <div
           onClick={e => e.stopPropagation()}
           style={{
-            background: '#fff', borderRadius: 18, width: '100%', maxWidth: 800,
-            maxHeight: '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+            background: '#fff',
+            borderRadius: isMobile ? '16px 16px 0 0' : 18,
+            width: '100%',
+            maxWidth: isMobile ? undefined : 800,
+            maxHeight: isMobile ? '94vh' : '92vh',
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
             boxShadow: '0 32px 80px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.08)',
-            animation: 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both',
+            animation: isMobile ? 'slideUp 280ms cubic-bezier(0.22,1,0.36,1) both' : 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both',
           }}>
 
           {/* Priority accent stripe */}
           <div style={{ height: 3, background: priority ? PRIORITY_COLORS[priority] : '#F0EEF8', flexShrink: 0, transition: 'background 200ms' }} />
 
           {/* Scrollable body */}
-          <div style={{ overflowY: 'auto', flex: 1, padding: '28px 32px 36px' }}>
+          <div style={{ overflowY: 'auto', flex: 1, padding: isMobile ? '20px 16px 24px' : '28px 32px 36px' }}>
 
             {/* Title row */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 26 }}>
@@ -770,13 +780,14 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
 }
 
 function PropRow({ icon, label, children, last = false, first = false }: { icon: string; label: string; children: React.ReactNode; last?: boolean; first?: boolean }) {
+  const isMobile = useMobile();
   return (
-    <div style={{ display: 'flex', alignItems: 'center', padding: '11px 16px', borderBottom: last ? 'none' : '1px solid rgba(229,231,235,0.5)', borderRadius: first ? '11px 11px 0 0' : last ? '0 0 11px 11px' : 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: 130, flexShrink: 0 }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', padding: isMobile ? '10px 12px' : '11px 16px', borderBottom: last ? 'none' : '1px solid rgba(229,231,235,0.5)', borderRadius: first ? '11px 11px 0 0' : last ? '0 0 11px 11px' : 0, gap: isMobile ? 4 : 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isMobile ? 'auto' : 130, flexShrink: 0 }}>
         <Icon name={icon} size={14} color="#b9b3cb" />
         <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>{label}</span>
       </div>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
         {children}
       </div>
     </div>

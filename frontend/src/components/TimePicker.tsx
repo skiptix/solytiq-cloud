@@ -84,7 +84,7 @@ export default function TimePicker({ value, onChange, onClear }: TimePickerProps
   );
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '14px 16px', width: 220, transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '14px 16px', width: Math.min(220, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
         <Icon name="schedule" size={16} color="#5e4dbb" />
         <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22', letterSpacing: '0.02em', fontVariantNumeric: 'tabular-nums' }}>

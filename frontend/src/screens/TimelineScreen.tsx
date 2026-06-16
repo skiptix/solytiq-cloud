@@ -1,4 +1,5 @@
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useMobile } from '../hooks/useBreakpoint';
 import { useState, useRef, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -66,10 +67,10 @@ function sortMilestones(ms: Milestone[]): Milestone[] {
 
 // Properties-panel row — mirrors TaskDialog's PropRow so the milestone dialog
 // reads like the item dialog.
-function PropRow({ icon, label, children, last = false, first = false }: { icon: string; label: string; children: ReactNode; last?: boolean; first?: boolean }) {
+function PropRow({ icon, label, children, last = false, first = false, isMobile = false }: { icon: string; label: string; children: ReactNode; last?: boolean; first?: boolean; isMobile?: boolean }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', padding: '11px 16px', borderBottom: last ? 'none' : '1px solid rgba(229,231,235,0.5)', borderRadius: first ? '11px 11px 0 0' : last ? '0 0 11px 11px' : 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: 130, flexShrink: 0 }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', padding: '11px 16px', borderBottom: last ? 'none' : '1px solid rgba(229,231,235,0.5)', borderRadius: first ? '11px 11px 0 0' : last ? '0 0 11px 11px' : 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isMobile ? undefined : 130, flexShrink: 0, marginBottom: isMobile ? 6 : 0 }}>
         <Icon name={icon} size={14} color="#b9b3cb" />
         <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>{label}</span>
       </div>
@@ -91,6 +92,7 @@ interface MilestoneEditorProps {
   ownerId?: string;
 }
 function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }: MilestoneEditorProps) {
+  const isMobile = useMobile();
   const owner = useMembersStore(s => (ownerId ? s.members[ownerId] : undefined));
   const [title, setTitle] = useState(initial?.title ?? '');
   const [date, setDate] = useState(initial?.date ?? '');
@@ -198,9 +200,9 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
   return (
     <>
     <div onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', animation: 'backdropIn 200ms ease both' }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : '24px 20px', animation: 'backdropIn 200ms ease both' }}>
       <div onClick={e => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 800, maxHeight: '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.08)', animation: 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+        style={{ background: '#fff', borderRadius: isMobile ? '16px 16px 0 0' : 18, width: '100%', maxWidth: 800, maxHeight: isMobile ? '94vh' : '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.08)', animation: isMobile ? 'slideUp 280ms cubic-bezier(0.22,1,0.36,1) both' : 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
 
         {/* Accent stripe */}
         <div style={{ height: 3, background: effectiveAccent, flexShrink: 0, transition: 'background 200ms' }} />
@@ -235,7 +237,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
 
           {/* Properties panel */}
           <div style={{ background: '#faf9ff', borderRadius: 12, marginBottom: 28, border: '1px solid #F0EEF8' }}>
-            <PropRow icon="calendar_today" label="Date" first>
+            <PropRow icon="calendar_today" label="Date" first isMobile={isMobile}>
               <div style={{ position: 'relative' }} ref={calRef}>
                 <button type="button" onClick={() => { setShowCal(v => !v); setDateError(false); }}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 8, border: `1px solid ${dateError ? '#ba1a1a' : showCal ? effectiveAccent : (date ? '#c4b5fd' : 'transparent')}`, background: dateError ? '#fff8f7' : (date ? '#F5F3FF' : 'transparent'), cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: date ? '#5e4dbb' : '#c9c4d5', transition: 'all 120ms', textAlign: 'left' }}>
@@ -255,7 +257,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
               </div>
             </PropRow>
 
-            <PropRow icon="schedule" label="Time">
+            <PropRow icon="schedule" label="Time" isMobile={isMobile}>
               <div style={{ position: 'relative' }} ref={timeRef}>
                 <button type="button" onClick={() => setShowTime(v => !v)}
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 8, border: `1px solid ${showTime ? effectiveAccent : (time ? '#c4b5fd' : 'transparent')}`, background: time ? '#F5F3FF' : 'transparent', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: time ? '#5e4dbb' : '#c9c4d5', transition: 'all 120ms', textAlign: 'left' }}>
@@ -274,7 +276,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
               </div>
             </PropRow>
 
-            <PropRow icon="flag" label="Status">
+            <PropRow icon="flag" label="Status" isMobile={isMobile}>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {STATUSES.map(s => {
                   const sel = status === s.key;
@@ -288,7 +290,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
               </div>
             </PropRow>
 
-            <PropRow icon="palette" label="Accent" last={!ownerId}>
+            <PropRow icon="palette" label="Accent" last={!ownerId} isMobile={isMobile}>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center' }}>
                 <button onClick={() => setColor(null)} title="Match status"
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 24, padding: '0 10px', borderRadius: 9999, background: color === null ? '#f0edff' : '#fff', border: `1.5px solid ${color === null ? accent : '#e8e4f0'}`, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: color === null ? accent : '#787584' }}>
@@ -302,7 +304,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
             </PropRow>
 
             {ownerId && (
-              <PropRow icon="account_circle" label="Owner" last>
+              <PropRow icon="account_circle" label="Owner" last isMobile={isMobile}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <CreatorBubble creatorId={ownerId} taskHovered />
                   <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#484552' }}>
@@ -432,6 +434,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
 
 // ── Timeline screen ────────────────────────────────────────────────────────────
 export default function TimelineScreen() {
+  const isMobile = useMobile();
   const { timelineId } = useParams<{ timelineId: string }>();
   const navigate = useNavigate();
   const { userId: currentUserId } = useAuthStore();
@@ -552,7 +555,7 @@ export default function TimelineScreen() {
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: '#fff' }}>
       {/* Hero */}
-      <div style={{ background: bg, borderBottom: '1px solid #f0ecf8', padding: '32px 40px 26px' }}>
+      <div style={{ background: bg, borderBottom: '1px solid #f0ecf8', padding: isMobile ? '20px 16px 16px' : '32px 40px 26px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, maxWidth: 860, margin: '0 auto' }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', flexShrink: 0 }}>
             {timeline.emoji ?? <Icon name="timeline" size={28} color={accent} />}
@@ -586,7 +589,7 @@ export default function TimelineScreen() {
       </div>
 
       {/* Timeline body */}
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: '28px 40px 80px' }}>
+      <div style={{ maxWidth: 860, margin: '0 auto', padding: isMobile ? '16px 16px 80px' : '28px 40px 80px' }}>
         {total === 0 ? (
           <div style={{ textAlign: 'center', padding: '56px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
             <div style={{ width: 64, height: 64, borderRadius: 18, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

@@ -4,6 +4,7 @@ import type { Task, List } from '../types';
 import useAppStore, { apiCreateTask, apiAddListTask } from '../store/useAppStore';
 import TaskDialog from '../components/TaskDialog';
 import Icon from '../components/Icon';
+import { useMobile } from '../hooks/useBreakpoint';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -123,12 +124,14 @@ function AddToDateModal({ date, lists, onAdd, onClose }: AddToDateModalProps) {
 export default function CalendarScreen() {
   usePageTitle("Calendar");
   const { dashTasks, lists, updateDashTask, updateListTask, setDashTasks, setLists, addToTrash, deleteListTask } = useAppStore();
+  const isMobile = useMobile();
   const today = new Date(); today.setHours(0,0,0,0);
   const [viewDate, setViewDate] = useState({ year: today.getFullYear(), month: today.getMonth() });
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [search, setSearch] = useState('');
   const [dragTaskId, setDragTaskId] = useState<number | null>(null);
   const [addingToDate, setAddingToDate] = useState<string | null>(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const allTasks = getAllTasks(dashTasks, lists);
 
@@ -235,7 +238,7 @@ export default function CalendarScreen() {
                   onDragOver={e => { if (cell.current) e.preventDefault(); }}
                   onDrop={e => { e.preventDefault(); if (!cell.current) return; const id = Number(e.dataTransfer.getData('text/plain')); if (id) { assignDeadline(id, iso); setDragTaskId(null); } }}
                   onClick={() => { if (cell.current) setAddingToDate(iso); }}
-                  style={{ minHeight: 96, border: isTodayCell ? '1.5px solid #c8bfff' : '1px solid #f1ecf6', background: isTodayCell ? '#faf8ff' : cell.current ? '#fff' : '#fafafa', borderRadius: 6, padding: 4, transition: 'background 150ms', cursor: cell.current ? 'pointer' : 'default', position: 'relative' }}
+                  style={{ minHeight: isMobile ? 72 : 96, border: isTodayCell ? '1.5px solid #c8bfff' : '1px solid #f1ecf6', background: isTodayCell ? '#faf8ff' : cell.current ? '#fff' : '#fafafa', borderRadius: 6, padding: 4, transition: 'background 150ms', cursor: cell.current ? 'pointer' : 'default', position: 'relative' }}
                   className="cal-cell">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, padding: '0 2px' }}>
                     <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: isTodayCell ? 700 : 400, color: isTodayCell ? '#5e4dbb' : cell.current ? '#1c1b22' : '#c9c4d5' }}>
@@ -268,34 +271,79 @@ export default function CalendarScreen() {
         </div>
       </div>
 
-      {/* Unscheduled sidebar */}
-      <div style={{ width: 240, borderLeft: '1px solid #E5E7EB', background: '#f7f2fc', display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 0 }}>
-        <div style={{ padding: '16px 12px 10px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
-          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#b0acbe', marginBottom: 8 }}>Unscheduled</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', borderRadius: 8, padding: '6px 10px', border: '1px solid #e8e4f0' }}>
-            <Icon name="search" size={13} color="#787584" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
-              style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#1c1b22', flex: 1 }} />
+      {/* Unscheduled panel — inline on desktop, bottom sheet on mobile */}
+      {isMobile ? (
+        <>
+          {/* Mobile toggle button */}
+          {filteredUnscheduled.length > 0 && (
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 100, background: '#5e4dbb', color: '#fff', border: 'none', borderRadius: 24, padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 16px rgba(94,77,187,0.35)' }}
+            >
+              <Icon name="event_busy" size={17} color="#fff" />
+              {filteredUnscheduled.length} Unscheduled
+            </button>
+          )}
+          {/* Bottom sheet */}
+          {mobileSidebarOpen && (
+            <>
+              <div onClick={() => setMobileSidebarOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(2px)', animation: 'backdropIn 180ms ease both' }} />
+              <div className="safe-bottom" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201, background: '#f7f2fc', borderRadius: '16px 16px 0 0', maxHeight: '65vh', display: 'flex', flexDirection: 'column', animation: 'slideUp 260ms cubic-bezier(0.22,1,0.36,1) both', boxShadow: '0 -4px 24px rgba(0,0,0,0.12)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 16px 10px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
+                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#b0acbe' }}>Unscheduled</div>
+                  <button onClick={() => setMobileSidebarOpen(false)} style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="close" size={15} color="#484552" />
+                  </button>
+                </div>
+                <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', borderRadius: 8, padding: '6px 10px', border: '1px solid #e8e4f0' }}>
+                    <Icon name="search" size={13} color="#787584" />
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
+                      style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#1c1b22', flex: 1 }} />
+                  </div>
+                </div>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
+                  {filteredUnscheduled.map(t => (
+                    <div key={`${t._listId}-${t.id}`}
+                      style={{ padding: '10px 12px', borderRadius: 8, background: '#fff', border: '1px solid #e8e4f0', marginBottom: 6 }}>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', fontWeight: 400, marginBottom: 2 }}>{t.title}</div>
+                      {t._listName && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584' }}>{t._listName}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </>
+      ) : (
+        <div style={{ width: 240, borderLeft: '1px solid #E5E7EB', background: '#f7f2fc', display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 0 }}>
+          <div style={{ padding: '16px 12px 10px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#b0acbe', marginBottom: 8 }}>Unscheduled</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', borderRadius: 8, padding: '6px 10px', border: '1px solid #e8e4f0' }}>
+              <Icon name="search" size={13} color="#787584" />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
+                style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#1c1b22', flex: 1 }} />
+            </div>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
+            {filteredUnscheduled.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px 8px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>All tasks scheduled!</div>
+            ) : (
+              filteredUnscheduled.map(t => (
+                <div key={`${t._listId}-${t.id}`} draggable
+                  onDragStart={e => { e.dataTransfer.setData('text/plain', String(t.id)); e.dataTransfer.effectAllowed = 'move'; setDragTaskId(t.id); }}
+                  onDragEnd={() => setDragTaskId(null)}
+                  style={{ padding: '8px 10px', borderRadius: 8, background: '#fff', border: '1px solid #e8e4f0', marginBottom: 4, cursor: 'grab', transition: 'all 150ms', opacity: dragTaskId === t.id ? 0.4 : 1 }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = '#9d8dff')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = '#e8e4f0')}>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22', fontWeight: 400, marginBottom: 2 }}>{t.title}</div>
+                  {t._listName && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: '#787584' }}>{t._listName}</div>}
+                </div>
+              ))
+            )}
           </div>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
-          {filteredUnscheduled.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px 8px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>All tasks scheduled!</div>
-          ) : (
-            filteredUnscheduled.map(t => (
-              <div key={`${t._listId}-${t.id}`} draggable
-                onDragStart={e => { e.dataTransfer.setData('text/plain', String(t.id)); e.dataTransfer.effectAllowed = 'move'; setDragTaskId(t.id); }}
-                onDragEnd={() => setDragTaskId(null)}
-                style={{ padding: '8px 10px', borderRadius: 8, background: '#fff', border: '1px solid #e8e4f0', marginBottom: 4, cursor: 'grab', transition: 'all 150ms', opacity: dragTaskId === t.id ? 0.4 : 1 }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = '#9d8dff')}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = '#e8e4f0')}>
-                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22', fontWeight: 400, marginBottom: 2 }}>{t.title}</div>
-                {t._listName && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: '#787584' }}>{t._listName}</div>}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+      )}
 
       {selectedTask && (
         <TaskDialog
