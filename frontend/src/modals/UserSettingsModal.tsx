@@ -58,9 +58,13 @@ const rowStyle: React.CSSProperties = {
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
+type SettingsTab = 'profile' | 'preferences' | 'security' | 'connections';
+
 export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
-  const { username, fullName, profileImage, isAdmin, totpEnabled, setProfile, setTotpEnabled } = useAuthStore();
+  const { username, fullName, email, profileImage, isAdmin, totpEnabled, setProfile, setTotpEnabled } = useAuthStore();
   const { timezone, setTimezone } = useUserPrefsStore();
+
+  const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
 
   // Feature flag
   const [twoFAFeatureEnabled, setTwoFAFeatureEnabled] = useState(true);
@@ -153,6 +157,33 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
       setNameError('Failed to save. Please try again.');
     } finally {
       setNameSaving(false);
+    }
+  };
+
+  // Email editing
+  const [emailValue, setEmailValue] = useState(email || '');
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailSaved, setEmailSaved] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const emailChanged = emailValue.trim() !== (email || '').trim() && emailValue.trim().length > 0;
+
+  const handleSaveEmail = async () => {
+    const next = emailValue.trim();
+    if (!next || next === (email || '').trim()) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)) { setEmailError('Please enter a valid email address.'); return; }
+    setEmailSaving(true);
+    setEmailError('');
+    try {
+      const res = await apiUpdateProfile({ email: next });
+      setProfile({ email: res.user.email });
+      setEmailSaved(true);
+      setTimeout(() => setEmailSaved(false), 2500);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
+      setEmailError(msg.includes('already in use') ? 'That email is already in use.' : msg.includes('valid') ? 'Please enter a valid email address.' : 'Failed to save. Please try again.');
+    } finally {
+      setEmailSaving(false);
     }
   };
 
@@ -267,6 +298,13 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   const [closing, setClosing] = useState(false);
   const handleClose = () => { setClosing(true); setTimeout(() => onClose(), 190); };
 
+  const TABS: { id: SettingsTab; label: string; icon: string }[] = [
+    { id: 'profile',     label: 'Profile',     icon: 'person' },
+    { id: 'preferences', label: 'Preferences', icon: 'tune' },
+    { id: 'security',    label: 'Security',    icon: 'shield_lock' },
+    { id: 'connections', label: 'Connections', icon: 'smart_toy' },
+  ];
+
   return (
     <>
       {/* Backdrop */}
@@ -275,7 +313,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
         onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
       >
         <div
-          style={{ background: '#fff', borderRadius: 22, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: closing ? 'settingsModalOut 190ms ease-in both' : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both', overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
+          style={{ background: '#fff', borderRadius: 22, width: '100%', maxWidth: 720, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: closing ? 'settingsModalOut 190ms ease-in both' : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both', overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
@@ -291,10 +329,39 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
             </button>
           </div>
 
+          {/* Tab bar */}
+          <div style={{ padding: '16px 24px 0' }}>
+            <div style={{ display: 'flex', gap: 4, background: '#F5F3FF', borderRadius: 14, padding: 4 }}>
+              {TABS.map(tab => {
+                const active = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600,
+                      color: active ? '#fff' : '#5e4dbb',
+                      background: active ? '#5e4dbb' : 'transparent',
+                      border: 'none', borderRadius: 10, padding: '8px 14px', cursor: 'pointer',
+                      transition: 'all 150ms', flex: '1 1 auto', justifyContent: 'center', minWidth: 0,
+                    }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#ede9ff'; }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    <Icon name={tab.icon} size={15} color={active ? '#fff' : '#5e4dbb'} />
+                    <span style={{ whiteSpace: 'nowrap' }}>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Scrollable body */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px 28px', display: 'flex', flexDirection: 'column', gap: 24 }}>
 
             {/* ── PROFILE ── */}
+            {activeTab === 'profile' && (
             <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
               {sectionLabel('Profile')}
               <div style={card}>
@@ -374,6 +441,40 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                   {nameSaved && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#10B981', marginTop: 5, animation: 'savedPop 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>Saved!</div>}
                 </div>
 
+                {/* Email */}
+                <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1ecf6' }}>
+                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Email</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="email"
+                      value={emailValue}
+                      onChange={e => { setEmailValue(e.target.value); setEmailError(''); setEmailSaved(false); }}
+                      onFocus={() => setEmailFocused(true)}
+                      onBlur={() => setEmailFocused(false)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleSaveEmail(); if (e.key === 'Escape') setEmailValue(email || ''); }}
+                      style={{ ...inputStyle(emailFocused), flex: 1 }}
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                    />
+                    {emailChanged && (
+                      <button
+                        onClick={handleSaveEmail}
+                        disabled={emailSaving}
+                        style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 7, background: emailSaved ? 'rgba(16,185,129,0.1)' : '#F5F3FF', border: 'none', cursor: emailSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 150ms' }}
+                        onMouseEnter={e => { if (!emailSaving && !emailSaved) e.currentTarget.style.background = '#ede9ff'; }}
+                        onMouseLeave={e => { if (!emailSaving && !emailSaved) e.currentTarget.style.background = '#F5F3FF'; }}
+                      >
+                        <Icon name="check" size={14} color={emailSaved ? '#10B981' : '#5e4dbb'} />
+                      </button>
+                    )}
+                  </div>
+                  {emailError && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#ba1a1a', marginTop: 5 }}>{emailError}</div>}
+                  {emailSaved && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#10B981', marginTop: 5, animation: 'savedPop 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>Saved!</div>}
+                  {!emailValue.trim() && !emailError && (
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 5 }}>Add an email address to your account.</div>
+                  )}
+                </div>
+
                 {/* Handle (read-only) */}
                 <div style={{ padding: '14px 18px' }}>
                   <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Username</div>
@@ -384,8 +485,10 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                 </div>
               </div>
             </div>
+            )}
 
             {/* ── PREFERENCES ── */}
+            {activeTab === 'preferences' && (
             <div style={{ position: 'relative', zIndex: 10, animation: 'sectionFadeUp 340ms 40ms cubic-bezier(0.22,1,0.36,1) both' }}>
               {sectionLabel('Preferences')}
               <div style={{ ...card, overflow: 'visible' }}>
@@ -402,8 +505,10 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                 </div>
               </div>
             </div>
+            )}
 
             {/* ── SECURITY ── */}
+            {activeTab === 'security' && (
             <div style={{ animation: 'sectionFadeUp 340ms 80ms cubic-bezier(0.22,1,0.36,1) both' }}>
               {sectionLabel('Security')}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -656,12 +761,15 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                 )}
               </div>
             </div>
+            )}
 
-            {/* ── CLAUDE MCP ── */}
-            <div style={{ animation: 'sectionFadeUp 340ms 120ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            {/* ── CONNECTIONS (Claude MCP) ── */}
+            {activeTab === 'connections' && (
+            <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
               {sectionLabel('Claude MCP')}
               <ClaudeMcpSection />
             </div>
+            )}
           </div>
         </div>
       </div>

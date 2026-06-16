@@ -218,13 +218,27 @@ router.put('/profile', authenticate, async (req: Request, res: Response) => {
       email?: string;
     };
 
+    // Validate email format when provided (a non-empty change).
+    let normalizedEmail: string | null = null;
+    if (email !== undefined && email !== null) {
+      const trimmed = email.trim();
+      if (trimmed.length > 0) {
+        const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) && trimmed.length <= 255;
+        if (!emailOk) {
+          res.status(400).json({ error: 'Please enter a valid email address.' });
+          return;
+        }
+        normalizedEmail = trimmed.toLowerCase();
+      }
+    }
+
     const result = await query<UserRow>(
       `UPDATE users
        SET full_name = COALESCE($1, full_name),
            email     = COALESCE($2, email)
        WHERE id = $3
        RETURNING *`,
-      [fullName ?? null, email ?? null, req.userId]
+      [fullName ?? null, normalizedEmail, req.userId]
     );
 
     if (result.rows.length === 0) {
@@ -234,6 +248,11 @@ router.put('/profile', authenticate, async (req: Request, res: Response) => {
 
     res.json({ user: sanitizeUser(result.rows[0]) });
   } catch (err) {
+    // Unique violation → the email is already in use by another account.
+    if (err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === '23505') {
+      res.status(409).json({ error: 'That email is already in use.' });
+      return;
+    }
     console.error('profile update error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
