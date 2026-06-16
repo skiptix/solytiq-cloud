@@ -18,6 +18,7 @@ import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
 import CalendarPicker from '../components/CalendarPicker';
 import TimePicker from '../components/TimePicker';
+import CopyButton from '../components/CopyButton';
 import CreatorBubble from '../components/CreatorBubble';
 import { FilePicker, AttachBadge } from '../components/TaskDialog';
 import { DeleteConfirmModal } from '../components/TaskItem';
@@ -314,7 +315,10 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
 
           {/* Notes */}
           <div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</div>
+              {description.trim() && <CopyButton text={description} title="Copy notes to clipboard" />}
+            </div>
             <textarea value={description ?? ''} onChange={e => setDescription(e.target.value)} placeholder="Add notes, context, or any details…" rows={4}
               style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', background: 'transparent', border: 'none', outline: 'none', resize: 'vertical', lineHeight: 1.75, padding: 0, minHeight: 90 }} />
           </div>

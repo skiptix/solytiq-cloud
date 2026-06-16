@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Task, TaskAttachment, SharedFile } from '../types';
 import Icon from './Icon';
 import CalendarPicker from './CalendarPicker';
+import CopyButton from './CopyButton';
 import CreatorBubble from './CreatorBubble';
 import { DeleteConfirmModal } from './TaskItem';
 import useAppStore from '../store/useAppStore';
@@ -529,7 +530,10 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
 
             {/* Notes */}
             <div style={{ marginBottom: 28 }}>
-              <SectionLabel>Notes</SectionLabel>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <SectionLabel>Notes</SectionLabel>
+                {notes.trim() && <CopyButton text={notes} title="Copy notes to clipboard" />}
+              </div>
               <textarea
                 ref={notesRef}
                 value={notes}
