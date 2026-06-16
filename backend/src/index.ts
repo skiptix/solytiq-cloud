@@ -541,6 +541,9 @@ async function runMigrations() {
   await pool.query(`ALTER TABLE oauth_codes ADD COLUMN IF NOT EXISTS code_challenge_method TEXT DEFAULT 'S256'`);
   await pool.query(`ALTER TABLE oauth_codes ADD COLUMN IF NOT EXISTS scope TEXT`);
   await pool.query(`ALTER TABLE oauth_codes ADD COLUMN IF NOT EXISTS resource TEXT`);
+  // The original draft had a NOT NULL `state` column; the PKCE flow doesn't use
+  // it. Drop the dead column so inserts don't trip its constraint.
+  await pool.query(`ALTER TABLE oauth_codes DROP COLUMN IF EXISTS state`);
   await pool.query(`CREATE INDEX IF NOT EXISTS oauth_codes_expires_idx ON oauth_codes(expires_at)`);
 
   await pool.query(`
