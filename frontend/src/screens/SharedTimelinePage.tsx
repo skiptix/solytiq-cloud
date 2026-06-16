@@ -2,6 +2,8 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import Icon from '../components/Icon';
+import { localIso } from '../utils/date';
+import { milestoneCompletion, railFillIndex } from '../utils/timeline';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -66,7 +68,16 @@ export default function SharedTimelinePage() {
   const [pwError, setPwError] = useState(false);
   const [loadingContent, setLoadingContent] = useState(false);
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Re-render every minute so intra-day ("hourly") progress keeps advancing.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => forceTick(t => t + 1), 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const now = new Date();
+  const today = localIso(now);
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
   const fetchContent = useCallback(async (pw: string | undefined) => {
     setLoadingContent(true);
@@ -112,10 +123,13 @@ export default function SharedTimelinePage() {
 
   const milestones = content?.milestones ?? [];
   const total = milestones.length;
-  const reached = milestones.filter(m => m.status === 'done' || (m.date != null && m.date <= today)).length;
-  const done = milestones.filter(m => m.status === 'done').length;
-  const pct = total > 0 ? Math.round((reached / total) * 100) : 0;
-  const lastReachedIdx = milestones.reduce((acc, m, i) => (m.status === 'done' || (m.date != null && m.date <= today)) ? i : acc, -1);
+  const completions = milestones.map(m => milestoneCompletion(m, today, nowMinutes));
+  const done = completions.filter(c => c >= 1).length;
+  const totalCompletion = completions.reduce((a, c) => a + c, 0);
+  const pct = total > 0 ? Math.round((totalCompletion / total) * 100) : 0;
+  const fillIndex = railFillIndex(completions);
+  const fillPct = total > 1 ? Math.max(0, Math.min(1, fillIndex / (total - 1))) * 100 : 0;
+  const railActive = fillIndex > -1 && fillIndex < total - 1 && fillIndex % 1 !== 0;
 
   let pageTitle = 'Loading timeline...';
   if (state === 'notfound') {
@@ -244,14 +258,18 @@ export default function SharedTimelinePage() {
               ) : (
                 <div style={{ position: 'relative', paddingLeft: 8 }}>
                   <div style={{ position: 'absolute', left: 8 + 8 - 1, top: 8, bottom: 8, width: 2, background: '#e8e4f0', borderRadius: 2 }} />
-                  {lastReachedIdx >= 0 && (
-                    <div style={{ position: 'absolute', left: 8 + 8 - 1, top: 8, height: `calc(${(lastReachedIdx / Math.max(total - 1, 1)) * 100}% + 0px)`, width: 2, background: accent, borderRadius: 2, transition: 'height 600ms cubic-bezier(0.4,0,0.2,1)' }} />
+                  {fillIndex > -1 && (
+                    <div className={railActive ? 'timeline-rail-flow' : undefined} style={{ position: 'absolute', left: 8 + 8 - 1, top: 8, height: `${fillPct}%`, width: 2, borderRadius: 2, backgroundColor: accent, backgroundImage: railActive ? 'linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%)' : undefined, backgroundSize: '100% 50%', backgroundRepeat: 'repeat-y', transition: 'height 600ms cubic-bezier(0.4,0,0.2,1)', animation: railActive ? 'railFlow 1.8s linear infinite' : undefined }} />
+                  )}
+                  {railActive && (
+                    <div className="timeline-rail-tip" style={{ position: 'absolute', left: 8 + 8, top: `calc(8px + ${fillPct}%)`, width: 7, height: 7, marginTop: -3.5, borderRadius: '50%', background: accent, transition: 'top 600ms cubic-bezier(0.4,0,0.2,1)', animation: 'railTipPulse 1.8s ease-in-out infinite' }} />
                   )}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {milestones.map(m => {
-                      const dateReached = m.date != null && m.date <= today;
-                      const effectivelyDone = m.status === 'done' || dateReached;
-                      const effectiveStatus: MilestoneStatus = effectivelyDone ? 'done' : m.status;
+                    {milestones.map((m, i) => {
+                      const completion = completions[i];
+                      const effectivelyDone = completion >= 1;
+                      const inProgress = completion > 0 && completion < 1;
+                      const effectiveStatus: MilestoneStatus = effectivelyDone ? 'done' : inProgress ? 'in-progress' : m.status;
                       const st = statusOf(effectiveStatus);
                       const dot = m.color ?? st.color;
                       const isToday = m.date === today;

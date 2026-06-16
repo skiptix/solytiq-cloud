@@ -6,7 +6,8 @@ import type { Milestone, MilestoneStatus, TimelineLayout, MilestoneAttachment, S
 import useAppStore from '../store/useAppStore';
 import useAuthStore from '../store/useAuthStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
-import { todayInTz } from '../utils/date';
+import { todayInTz, minutesSinceMidnightInTz } from '../utils/date';
+import { milestoneCompletion, railFillIndex } from '../utils/timeline';
 import {
   apiCreateMilestone, apiUpdateMilestone, apiDeleteMilestone,
   apiGetMilestoneAttachments, apiUploadMilestoneAttachment, apiLinkMilestoneAttachment,
@@ -18,6 +19,7 @@ import EmojiSelector from '../components/EmojiSelector';
 import CalendarPicker from '../components/CalendarPicker';
 import CreatorBubble from '../components/CreatorBubble';
 import { FilePicker, AttachBadge } from '../components/TaskDialog';
+import { DeleteConfirmModal } from '../components/TaskItem';
 import useMembersStore from '../store/useMembersStore';
 
 function fmtAttSize(bytes: number): string {
@@ -97,6 +99,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
   const [color, setColor] = useState<string | null>(initial?.color ?? null);
   const [dateError, setDateError] = useState(false);
   const [showCal, setShowCal] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
   const calRef = useRef<HTMLDivElement>(null);
   const effectiveAccent = color ?? statusOf(status).color;
 
@@ -200,7 +203,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
               style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none', lineHeight: 1.3, padding: '6px 0', marginTop: 2 }} />
             <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginTop: 4 }}>
               {initial && onDelete && (
-                <button onClick={onDelete} title="Delete milestone"
+                <button onClick={() => setShowDelete(true)} title="Delete milestone"
                   style={{ width: 34, height: 34, borderRadius: 9, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 120ms' }}
                   onMouseEnter={e => (e.currentTarget.style.background = '#ffdad6')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
@@ -383,6 +386,15 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
       </div>
     </div>
     {showFilePicker && <FilePicker onSelect={handleLinkFile} onClose={() => setShowFilePicker(false)} />}
+    {showDelete && onDelete && (
+      <DeleteConfirmModal
+        name={title.trim() || initial?.title || 'this milestone'}
+        heading="Delete milestone?"
+        description={<>"<span style={{ color: '#1c1b22', fontWeight: 500 }}>{title.trim() || initial?.title}</span>" will be moved to trash.</>}
+        onConfirm={() => { setShowDelete(false); onDelete(); }}
+        onCancel={() => setShowDelete(false)}
+      />
+    )}
     </>
   );
 }
@@ -399,6 +411,15 @@ export default function TimelineScreen() {
 
   const [editing, setEditing] = useState<Milestone | null>(null);
   const [adding, setAdding] = useState(false);
+  const [deleting, setDeleting] = useState<Milestone | null>(null);
+
+  // Re-render every minute so intra-day ("hourly") progress keeps advancing
+  // without a page reload.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => forceTick(t => t + 1), 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   let pageTitle = 'Loading timeline...';
   if (!timeline && !listsLoading) {
@@ -434,15 +455,21 @@ export default function TimelineScreen() {
   const milestones = sortMilestones(timeline.milestones);
   const total = milestones.length;
 
-  // Date-based progress: a milestone counts as reached when its date <= today,
-  // OR when it was manually marked done.
-  const reachedCount = milestones.filter(m => m.status === 'done' || (m.date != null && m.date <= today)).length;
-  const done = milestones.filter(m => m.status === 'done').length;
-  const pct = total > 0 ? Math.round((reachedCount / total) * 100) : 0;
+  // Hourly progress: a milestone dated today is not "reached" the instant the day
+  // begins — it fills gradually across the day (toward its set time, or end of
+  // day) and only counts as complete once that moment passes or it's marked done.
+  const nowMinutes = minutesSinceMidnightInTz(timezone);
+  const completions = milestones.map(m => milestoneCompletion(m, today, nowMinutes));
+  const done = completions.filter(c => c >= 1).length;
+  const totalCompletion = completions.reduce((a, c) => a + c, 0);
+  const pct = total > 0 ? Math.round((totalCompletion / total) * 100) : 0;
 
-  // Index of the last milestone that is reached (for rail fill height).
-  const lastReachedIdx = milestones.reduce((acc, m, i) =>
-    (m.status === 'done' || (m.date != null && m.date <= today)) ? i : acc, -1);
+  // Continuous fill position along the rail (fractional → stops mid-segment for
+  // a milestone that's partway through today).
+  const fillIndex = railFillIndex(completions);
+  const fillPct = total > 1 ? Math.max(0, Math.min(1, fillIndex / (total - 1))) * 100 : 0;
+  // Whether the leading edge is currently inside a partially-complete segment.
+  const railActive = fillIndex > -1 && fillIndex < total - 1 && fillIndex % 1 !== 0;
 
   // Layout density knobs.
   const gap = layout === 'compact' ? 8 : layout === 'detailed' ? 26 : 16;
@@ -549,27 +576,49 @@ export default function TimelineScreen() {
           <div style={{ position: 'relative', paddingLeft: 8 }}>
             {/* Vertical rail — grey background track */}
             <div style={{ position: 'absolute', left: 8 + nodeSize / 2 - 1, top: nodeSize / 2, bottom: nodeSize / 2, width: 2, background: '#e8e4f0', borderRadius: 2 }} />
-            {/* Accent progress fill — grows from top to last reached node */}
-            {lastReachedIdx >= 0 && (
-              <div style={{
+            {/* Accent progress fill — grows toward the leading milestone, partially
+                into the segment of the one that's still in progress today. */}
+            {fillIndex > -1 && (
+              <div className={railActive ? 'timeline-rail-flow' : undefined} style={{
                 position: 'absolute',
                 left: 8 + nodeSize / 2 - 1,
                 top: nodeSize / 2,
-                // Fill to the center of the last reached node
-                height: `calc(${((lastReachedIdx) / Math.max(total - 1, 1)) * 100}% + 0px)`,
+                height: `${fillPct}%`,
                 width: 2,
-                background: accent,
                 borderRadius: 2,
-                transition: 'height 600ms cubic-bezier(0.4,0,0.2,1)',
                 zIndex: 0,
+                backgroundColor: accent,
+                backgroundImage: railActive ? 'linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%)' : undefined,
+                backgroundSize: '100% 50%',
+                backgroundRepeat: 'repeat-y',
+                transition: 'height 600ms cubic-bezier(0.4,0,0.2,1)',
+                animation: railActive ? 'railFlow 1.8s linear infinite' : undefined,
+              }} />
+            )}
+            {/* Pulsing tip marking the live leading edge of an in-progress segment. */}
+            {railActive && (
+              <div className="timeline-rail-tip" style={{
+                position: 'absolute',
+                left: 8 + nodeSize / 2,
+                top: `calc(${nodeSize / 2}px + ${fillPct}%)`,
+                width: 7,
+                height: 7,
+                marginTop: -3.5,
+                borderRadius: '50%',
+                background: accent,
+                zIndex: 0,
+                transition: 'top 600ms cubic-bezier(0.4,0,0.2,1)',
+                animation: 'railTipPulse 1.8s ease-in-out infinite',
               }} />
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap }}>
-              {milestones.map((m) => {
-                // A milestone is visually "reached" if its date is past/today OR manually done
-                const dateReached = m.date != null && m.date <= today;
-                const effectivelyDone = m.status === 'done' || dateReached;
-                const effectiveStatus: MilestoneStatus = effectivelyDone ? 'done' : m.status;
+              {milestones.map((m, i) => {
+                // Hourly completion: fully reached (1) shows as done; a milestone
+                // partway through today (0 < c < 1) reads as in-progress.
+                const completion = completions[i];
+                const effectivelyDone = completion >= 1;
+                const inProgress = completion > 0 && completion < 1;
+                const effectiveStatus: MilestoneStatus = effectivelyDone ? 'done' : inProgress ? 'in-progress' : m.status;
                 const st = statusOf(effectiveStatus);
                 const dot = m.color ?? st.color;
                 const dateLabel = fmtDate(m.date);
@@ -623,7 +672,7 @@ export default function TimelineScreen() {
                               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                               <Icon name="edit" size={15} color="#787584" />
                             </button>
-                            <button onClick={() => handleDelete(m.id)} title="Delete milestone"
+                            <button onClick={() => setDeleting(m)} title="Delete milestone"
                               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 7, border: 'none', background: 'transparent', cursor: 'pointer' }}
                               onMouseEnter={e => (e.currentTarget.style.background = '#fff0ef')}
                               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
@@ -653,6 +702,15 @@ export default function TimelineScreen() {
 
       {adding && <MilestoneEditor accent={accent} onSave={handleAdd} onClose={() => setAdding(false)} ownerId={timeline.isPublic ? timeline.userId : undefined} />}
       {editing && <MilestoneEditor accent={accent} initial={editing} onSave={data => handleSave(editing.id, data)} onDelete={() => { handleDelete(editing.id); setEditing(null); }} onClose={() => setEditing(null)} ownerId={timeline.isPublic ? timeline.userId : undefined} />}
+      {deleting && (
+        <DeleteConfirmModal
+          name={deleting.title}
+          heading="Delete milestone?"
+          description={<>"<span style={{ color: '#1c1b22', fontWeight: 500 }}>{deleting.title}</span>" will be moved to trash.</>}
+          onConfirm={() => { handleDelete(deleting.id); setDeleting(null); }}
+          onCancel={() => setDeleting(null)}
+        />
+      )}
     </div>
   );
 }

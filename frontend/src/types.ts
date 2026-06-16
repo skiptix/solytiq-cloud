@@ -109,6 +109,15 @@ export interface TrashedTimeline {
   expiresAt: string;
 }
 
+export interface TrashedMilestone {
+  id: number;
+  milestoneId: string;
+  timelineId: string;
+  milestone: Milestone;
+  deletedAt: string;
+  expiresAt: string;
+}
+
 // A milestone enriched with its parent timeline's context, as returned by the
 // /timelines/upcoming endpoint that powers the dashboard "Upcoming" widget.
 export interface UpcomingMilestone {
@@ -400,6 +409,7 @@ export interface AppState {
   trashLists: TrashedList[];
   trashFolders: TrashedFolder[];
   trashTimelines: TrashedTimeline[];
+  trashMilestones: TrashedMilestone[];
   sidebarWidth: number;
   setDashTasks: (tasks: Task[] | ((prev: Task[]) => Task[])) => void;
   setLists: (lists: List[] | ((prev: List[]) => List[])) => void;
@@ -409,6 +419,8 @@ export interface AppState {
   deleteTimeline: (timelineId: string) => void;
   restoreTimelineFromTrash: (trashId: number) => void;
   deleteTimelineFromTrash: (trashId: number) => void;
+  restoreMilestoneFromTrash: (trashId: number) => void;
+  deleteMilestoneFromTrash: (trashId: number) => void;
   addFolder: (folder: Folder) => void;
   updateFolder: (id: string, updates: Partial<Folder>) => void;
   deleteFolder: (id: string) => void;

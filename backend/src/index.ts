@@ -971,6 +971,20 @@ async function runMigrations() {
     )
   `);
 
+  // Individually deleted milestones are soft-deleted here so they can be
+  // restored into their parent timeline (which must still exist on restore).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS trash_milestones (
+      id             SERIAL PRIMARY KEY,
+      milestone_id   VARCHAR(100) NOT NULL,
+      timeline_id    VARCHAR(100) NOT NULL,
+      user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      milestone_data JSONB NOT NULL,
+      deleted_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at     TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
+    )
+  `);
+
   // GPS files table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS gps_files (
