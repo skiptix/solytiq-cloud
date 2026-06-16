@@ -357,7 +357,7 @@ function MilestonePreview({ milestone: m, onClose }: { milestone: SharedMileston
         <div style={{ overflowY: 'auto', padding: '24px 28px 28px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: hasProps || m.description ? 22 : 0 }}>
             {m.emoji && <span style={{ fontSize: 26, lineHeight: 1.1, flexShrink: 0 }}>{m.emoji}</span>}
-            <div style={{ flex: 1, minWidth: 0, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', lineHeight: 1.3, paddingTop: 2 }}>{m.title}</div>
+            <div style={{ flex: 1, minWidth: 0, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', lineHeight: 1.3, paddingTop: 2, overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{m.title}</div>
             <button onClick={onClose} title="Close" style={{ width: 34, height: 34, borderRadius: 9, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
               onMouseEnter={e => (e.currentTarget.style.background = '#F5F3FF')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
               <Icon name="close" size={18} color="#787584" />
@@ -379,7 +379,7 @@ function MilestonePreview({ milestone: m, onClose }: { milestone: SharedMileston
           {m.description && (
             <div>
               <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{m.description}</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', lineHeight: 1.7, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{m.description}</div>
             </div>
           )}
         </div>
