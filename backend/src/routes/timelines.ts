@@ -606,7 +606,8 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
     }
 
     const validStatus = status !== undefined && ['upcoming', 'in-progress', 'done'].includes(status) ? status : null;
-    // Allow explicitly clearing date/time/emoji/color when the key is present.
+    // Allow explicitly clearing description/date/time/emoji/color when the key is present.
+    const updateDescription = 'description' in req.body;
     const updateDate = 'date' in req.body;
     const updateTime = 'time' in req.body;
     const updateEmoji = 'emoji' in req.body;
@@ -615,18 +616,18 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
     const result = await query<MilestoneRow>(
       `UPDATE milestones
        SET title          = COALESCE($1, title),
-           description     = COALESCE($2, description),
-           milestone_date  = CASE WHEN $3 THEN $4 ELSE milestone_date END,
-           time_val        = CASE WHEN $5 THEN $6 ELSE time_val END,
-           status          = COALESCE($7, status),
-           emoji           = CASE WHEN $8 THEN $9 ELSE emoji END,
-           color           = CASE WHEN $10 THEN $11 ELSE color END,
-           position        = COALESCE($12, position)
-       WHERE id = $13
+           description     = CASE WHEN $2 THEN $3 ELSE description END,
+           milestone_date  = CASE WHEN $4 THEN $5 ELSE milestone_date END,
+           time_val        = CASE WHEN $6 THEN $7 ELSE time_val END,
+           status          = COALESCE($8, status),
+           emoji           = CASE WHEN $9 THEN $10 ELSE emoji END,
+           color           = CASE WHEN $11 THEN $12 ELSE color END,
+           position        = COALESCE($13, position)
+       WHERE id = $14
        RETURNING *`,
       [
         title ?? null,
-        description ?? null,
+        updateDescription, description ?? null,
         updateDate, date ?? null,
         updateTime, time ?? null,
         validStatus,
