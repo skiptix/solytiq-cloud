@@ -27,6 +27,7 @@ import milestoneAttachmentsRouter from './routes/milestoneAttachments';
 import tokensRouter from './routes/tokens';
 import oauthRouter from './routes/oauth';
 import mcpRouter from './routes/mcp';
+import { getPublicBaseUrl } from './publicUrl';
 import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
 import { addSseClient, removeSseClient } from './sse';
@@ -111,13 +112,32 @@ app.use('/api/oauth',      oauthRouter);
 // loops; the endpoint enforces its own bearer-token auth.
 app.use('/mcp',            mcpRouter);
 
-// Dynamic Client Registration (DCR) endpoint for Claude
-app.get('/.well-known/oauth-authorization-server', (req, res) => {
-  const baseUrl = req.protocol + '://' + req.get('host');
+// OAuth discovery for the Claude MCP connector.
+// Protected Resource Metadata (RFC 9728) — the /mcp endpoint is the resource;
+// it points clients at this server as its authorization server.
+function protectedResourceMetadata(req: express.Request, res: express.Response) {
+  const baseUrl = getPublicBaseUrl(req);
   res.json({
-    registration_endpoint: `${baseUrl}/api/oauth/register`,
+    resource: `${baseUrl}/mcp`,
+    authorization_servers: [baseUrl],
+    bearer_methods_supported: ['header'],
+  });
+}
+app.get('/.well-known/oauth-protected-resource', protectedResourceMetadata);
+app.get('/.well-known/oauth-protected-resource/mcp', protectedResourceMetadata);
+
+// Authorization Server Metadata (RFC 8414).
+app.get('/.well-known/oauth-authorization-server', (req, res) => {
+  const baseUrl = getPublicBaseUrl(req);
+  res.json({
+    issuer: baseUrl,
     authorization_endpoint: `${baseUrl}/api/oauth/authorize`,
     token_endpoint: `${baseUrl}/api/oauth/token`,
+    registration_endpoint: `${baseUrl}/api/oauth/register`,
+    response_types_supported: ['code'],
+    grant_types_supported: ['authorization_code'],
+    code_challenge_methods_supported: ['S256'],
+    token_endpoint_auth_methods_supported: ['none'],
   });
 });
 
@@ -490,18 +510,38 @@ async function runMigrations() {
   await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_user_idx ON api_tokens(user_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_hash_idx ON api_tokens(token_hash)`);
 
-  // OAuth 2.0 authorization codes for native integrations (e.g. Claude)
+  // OAuth 2.1 for the Claude MCP connector. Registered clients (Dynamic Client
+  // Registration) and single-use, PKCE-bound authorization codes.
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS oauth_codes (
-      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      code         VARCHAR(100) NOT NULL UNIQUE,
-      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      redirect_uri TEXT NOT NULL,
-      state        VARCHAR,
-      expires_at   TIMESTAMPTZ NOT NULL
+    CREATE TABLE IF NOT EXISTS oauth_clients (
+      client_id     TEXT PRIMARY KEY,
+      client_name   TEXT,
+      redirect_uris JSONB NOT NULL,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS oauth_codes_code_idx ON oauth_codes(code)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS oauth_codes (
+      code                  TEXT PRIMARY KEY,
+      user_id               UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      client_id             TEXT NOT NULL,
+      redirect_uri          TEXT NOT NULL,
+      code_challenge        TEXT NOT NULL,
+      code_challenge_method TEXT NOT NULL DEFAULT 'S256',
+      scope                 TEXT,
+      resource              TEXT,
+      expires_at            TIMESTAMPTZ NOT NULL,
+      created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  // Heal databases created by the earlier (pre-PKCE) draft of this feature.
+  await pool.query(`ALTER TABLE oauth_codes ADD COLUMN IF NOT EXISTS client_id TEXT`);
+  await pool.query(`ALTER TABLE oauth_codes ADD COLUMN IF NOT EXISTS code_challenge TEXT`);
+  await pool.query(`ALTER TABLE oauth_codes ADD COLUMN IF NOT EXISTS code_challenge_method TEXT DEFAULT 'S256'`);
+  await pool.query(`ALTER TABLE oauth_codes ADD COLUMN IF NOT EXISTS scope TEXT`);
+  await pool.query(`ALTER TABLE oauth_codes ADD COLUMN IF NOT EXISTS resource TEXT`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS oauth_codes_expires_idx ON oauth_codes(expires_at)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS lists (

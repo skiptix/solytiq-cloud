@@ -2,26 +2,33 @@ import { useSearchParams } from 'react-router-dom';
 import { usePageTitle } from '../hooks/usePageTitle';
 import useAuthStore from '../store/useAuthStore';
 import { useState } from 'react';
-import { apiFetch } from '../api/client';
+import { apiOAuthApprove } from '../api/client';
 import Icon from '../components/Icon';
 
 export default function OAuthConsentScreen() {
   usePageTitle('Connect Claude');
   const [searchParams] = useSearchParams();
+  const clientId = searchParams.get('client_id');
   const redirectUri = searchParams.get('redirect_uri');
-  const state = searchParams.get('state');
+  const codeChallenge = searchParams.get('code_challenge');
+  const codeChallengeMethod = searchParams.get('code_challenge_method');
+  const state = searchParams.get('state') ?? undefined;
+  const scope = searchParams.get('scope') ?? undefined;
+  const resource = searchParams.get('resource') ?? undefined;
 
   const { fullName, username } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  if (!redirectUri || !state) {
+  const missingParams = !clientId || !redirectUri || !codeChallenge || codeChallengeMethod !== 'S256';
+
+  if (missingParams) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb' }}>
         <div style={{ background: '#fff', padding: 40, borderRadius: 16, boxShadow: '0 4px 20px rgba(0,0,0,0.05)', textAlign: 'center', maxWidth: 400 }}>
           <Icon name="error" size={48} color="#ba1a1a" />
           <h2 style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 24, marginTop: 16, marginBottom: 8 }}>Invalid Request</h2>
-          <p style={{ fontFamily: 'Inter, sans-serif', color: '#787584', fontSize: 14 }}>The authorization request is missing required parameters.</p>
+          <p style={{ fontFamily: 'Inter, sans-serif', color: '#787584', fontSize: 14 }}>The authorization request is missing required parameters or uses an unsupported method.</p>
         </div>
       </div>
     );
@@ -31,25 +38,27 @@ export default function OAuthConsentScreen() {
     setLoading(true);
     setError('');
     try {
-      const data = await apiFetch<{ redirectUrl: string }>('/oauth/approve', {
-        method: 'POST',
-        body: JSON.stringify({ redirect_uri: redirectUri, state })
+      const data = await apiOAuthApprove({
+        client_id: clientId!,
+        redirect_uri: redirectUri!,
+        code_challenge: codeChallenge!,
+        code_challenge_method: codeChallengeMethod!,
+        state,
+        scope,
+        resource,
       });
-
       if (data.redirectUrl) {
         window.location.href = data.redirectUrl;
       } else {
         throw new Error('No redirect URL returned');
       }
     } catch (err: unknown) {
-      console.error(err);
       setError(err instanceof Error ? err.message : 'An error occurred');
       setLoading(false);
     }
   };
 
   const handleDeny = () => {
-    // Just close the window or go back. Claude will handle the timeout/cancellation.
     window.location.href = '/dashboard';
   };
 
@@ -77,7 +86,7 @@ export default function OAuthConsentScreen() {
 
         <div style={{ width: '100%', background: '#F5F3FF', borderRadius: 12, padding: 20, textAlign: 'left', marginBottom: 32 }}>
           <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#5e4dbb', marginBottom: 16 }}>
-            This will allow Claude to:
+            Claude will be able to do anything you can do in Solytiq:
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -86,7 +95,7 @@ export default function OAuthConsentScreen() {
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <Icon name="check_circle" size={18} color="#5e4dbb" />
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', lineHeight: 1.4 }}>Create, update, and manage tasks on your behalf</span>
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', lineHeight: 1.4 }}>Create, update, and delete tasks on your behalf</span>
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <Icon name="check_circle" size={18} color="#5e4dbb" />
@@ -124,7 +133,7 @@ export default function OAuthConsentScreen() {
         </div>
 
         <div style={{ marginTop: 24, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>
-          You can revoke this access at any time in Settings.
+          You can disconnect Claude at any time in Settings.
         </div>
       </div>
     </div>

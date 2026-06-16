@@ -118,7 +118,8 @@ Copy `.env.example` to `.env` at the repository root. Docker Compose reads this 
 | `POSTGRES_USER` | Yes | DB username (default: `solytiq`) |
 | `POSTGRES_PASSWORD` | Yes | DB password — must be changed in production |
 | `JWT_SECRET` | Yes | Long random string for signing JWTs — **fails startup if default** |
-| `FRONTEND_URL` | Yes | Origin allowed by CORS (e.g. `http://localhost`). When unset, CORS allows `*` without credentials |
+| `FRONTEND_URL` | Yes | Origin allowed by CORS (e.g. `http://localhost`). When unset, CORS allows `*` without credentials. Also used as the public origin for OAuth/MCP discovery when `PUBLIC_URL` is unset |
+| `PUBLIC_URL` | No | Public origin (scheme + host) for OAuth issuer/endpoints and the MCP resource pointer. Falls back to `FRONTEND_URL`, then the request's forwarded host |
 | `PORT` | No | Backend listen port (default: `3001`); also the host port for the frontend container |
 | `OPENROUTER_API_KEY` | No | Enables the AI assistant via OpenRouter |
 | `OPENROUTER_MODEL` | No | Model name (default: `openai/gpt-4o-mini`) |
@@ -244,8 +245,15 @@ Sharing model for lists/timelines (distinct from the workspace `is_public` flag 
 
 ### MCP Server (external AI agents)
 
-- **`/mcp`** (mounted in `index.ts`, handler in `routes/mcp.ts`) is a Model Context Protocol server over **Streamable HTTP** (`@modelcontextprotocol/sdk`, stateless: one server+transport per request). It exposes the shared registry to external agents (e.g. Claude Desktop). Nginx proxies `/mcp` with buffering off.
-- **Auth: Personal Access Tokens (PATs).** Agents send `Authorization: Bearer solytiq_pat_…`. Tokens live in `api_tokens` (only a SHA-256 hash is stored), are long-lived, individually revocable, and optionally expiring. Managed at `/api/tokens` (`routes/tokens.ts`) and generated/copied/revoked from the **AI Access** section of the per-user `UserSettingsModal`. PAT helpers are in `backend/src/apiToken.ts`.
+- **`/mcp`** (mounted in `index.ts`, handler in `routes/mcp.ts`) is a Model Context Protocol server over **Streamable HTTP** (`@modelcontextprotocol/sdk`, stateless: one server+transport per request). It exposes the shared registry to external agents (e.g. the Claude MCP connector). Nginx proxies `/mcp` with buffering off.
+- **Auth: bearer tokens minted via OAuth.** Agents send `Authorization: Bearer solytiq_pat_…`. Tokens live in `api_tokens` (only a SHA-256 hash is stored), are long-lived and individually revocable. PAT helpers are in `backend/src/apiToken.ts`. A missing/invalid token returns `401` with a `WWW-Authenticate: Bearer … resource_metadata="…"` header pointing at the Protected Resource Metadata doc, which kicks off the OAuth handshake.
+- **OAuth 2.1 connector flow** (`routes/oauth.ts`): the user connects Claude from the **Claude MCP** section of the per-user `UserSettingsModal` by pasting the `/mcp` URL into Claude as a custom connector. Claude then runs OAuth discovery → Dynamic Client Registration → authorization → token exchange:
+  - **Discovery:** `GET /.well-known/oauth-protected-resource[/mcp]` (RFC 9728, resource→authorization-server pointer) and `GET /.well-known/oauth-authorization-server` (RFC 8414, endpoint metadata) — both served from `index.ts`, using `getPublicBaseUrl()` (`publicUrl.ts`, prefers `PUBLIC_URL`/`FRONTEND_URL`).
+  - **DCR:** `POST /api/oauth/register` (RFC 7591) stores the client (`oauth_clients`: `client_id`, `client_name`, `redirect_uris`) and returns a public PKCE `client_id` (`token_endpoint_auth_method: none`).
+  - **Authorize:** `GET /api/oauth/authorize` validates `response_type=code`, the client + `redirect_uri`, and that PKCE `code_challenge` (S256) is present, then redirects to the React `/oauth/consent` screen.
+  - **Consent:** `POST /api/oauth/approve` (session-JWT authenticated) mints a single-use, 5-minute authorization code bound to `user_id` + `client_id` + `redirect_uri` + `code_challenge` (`oauth_codes`).
+  - **Token:** `POST /api/oauth/token` (`grant_type=authorization_code`) consumes the code atomically, verifies the PKCE `code_verifier` (S256, constant-time), and returns a `api_tokens` PAT scoped to the consenting user — so the connector can only ever do what that user can do in-app.
+- **Token management:** `GET`/`DELETE /api/tokens` (`routes/tokens.ts`) list and revoke (disconnect) connected clients; there is no manual token-creation endpoint — tokens are minted only by the OAuth flow.
 
 ---
 

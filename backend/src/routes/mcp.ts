@@ -1,10 +1,15 @@
 // ---------------------------------------------------------------------------
 // MCP endpoint — Streamable HTTP transport, mounted at /mcp.
 //
-// External AI agents (e.g. Claude Desktop via an MCP connector / mcp-remote)
-// authenticate with a Personal Access Token in the Authorization header:
+// External AI agents (e.g. the Claude MCP connector) authenticate with a
+// bearer token in the Authorization header:
 //
 //     Authorization: Bearer solytiq_pat_xxxxxxxx
+//
+// Tokens are minted by the OAuth flow (routes/oauth.ts) when the user connects
+// Claude from Settings. On a missing/invalid token the 401 advertises the
+// Protected Resource Metadata document (RFC 9728) so the connector can
+// discover the authorization server and run the OAuth handshake automatically.
 //
 // The verified userId is injected into every tool call by buildMcpServer, so
 // no user identity ever travels through tool arguments. The transport runs in
@@ -16,6 +21,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { buildMcpServer } from '../mcpServer';
 import { authenticateApiToken } from '../apiToken';
+import { getPublicBaseUrl } from '../publicUrl';
 
 const router = Router();
 
@@ -23,17 +29,26 @@ function jsonRpcError(code: number, message: string) {
   return { jsonrpc: '2.0' as const, error: { code, message }, id: null };
 }
 
-// Bearer-PAT authentication for the MCP endpoint.
+// Point unauthenticated clients at the resource metadata so they can begin OAuth.
+function setWwwAuthenticate(req: Request, res: Response): void {
+  const resourceMetadata = `${getPublicBaseUrl(req)}/.well-known/oauth-protected-resource`;
+  res.setHeader(
+    'WWW-Authenticate',
+    `Bearer realm="Solytiq MCP", error="invalid_token", resource_metadata="${resourceMetadata}"`
+  );
+}
+
+// Bearer-token authentication for the MCP endpoint.
 async function authMcp(req: Request, res: Response, next: NextFunction): Promise<void> {
   const header = req.headers.authorization;
   if (!header || !header.startsWith('Bearer ')) {
-    res.setHeader('WWW-Authenticate', 'Bearer realm="Solytiq MCP", error="invalid_token"');
-    res.status(401).json(jsonRpcError(-32001, 'Missing bearer token. Generate an AI access token in Solytiq settings.'));
+    setWwwAuthenticate(req, res);
+    res.status(401).json(jsonRpcError(-32001, 'Authentication required. Connect Claude from Solytiq settings.'));
     return;
   }
   const auth = await authenticateApiToken(header.slice(7));
   if (!auth) {
-    res.setHeader('WWW-Authenticate', 'Bearer realm="Solytiq MCP", error="invalid_token"');
+    setWwwAuthenticate(req, res);
     res.status(401).json(jsonRpcError(-32001, 'Invalid or expired access token.'));
     return;
   }
