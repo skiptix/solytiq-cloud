@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import useAppStore, { apiEmptyTrash } from '../store/useAppStore';
 import Icon from '../components/Icon';
-import type { TrashedTask, TrashedList, TrashedFolder, TrashedTimeline } from '../types';
+import type { TrashedTask, TrashedList, TrashedFolder, TrashedTimeline, TrashedMilestone } from '../types';
 
 function friendlyTime(iso: string) {
   const d = new Date(iso);
@@ -21,7 +21,7 @@ function taskCount(list: TrashedList['list']) {
   return list.sections.reduce((acc, s) => acc + s.tasks.length, 0);
 }
 
-type TrashTab = 'all' | 'tasks' | 'lists' | 'timelines' | 'folders';
+type TrashTab = 'all' | 'tasks' | 'lists' | 'timelines' | 'milestones' | 'folders';
 
 interface TrashModalProps {
   onClose: () => void;
@@ -32,6 +32,7 @@ export default function TrashModal({ onClose }: TrashModalProps) {
     trashTasks, restoreFromTrash, deleteFromTrash,
     trashLists, restoreListFromTrash, deleteListFromTrash,
     trashTimelines, restoreTimelineFromTrash, deleteTimelineFromTrash,
+    trashMilestones, restoreMilestoneFromTrash, deleteMilestoneFromTrash,
     trashFolders, restoreFolderFromTrash, deleteFolderFromTrash,
   } = useAppStore();
 
@@ -40,7 +41,7 @@ export default function TrashModal({ onClose }: TrashModalProps) {
   const [confirmEmpty, setConfirmEmpty] = useState(false);
   const [emptyLoading, setEmptyLoading] = useState(false);
 
-  const totalCount = trashTasks.length + trashLists.length + trashTimelines.length + trashFolders.length;
+  const totalCount = trashTasks.length + trashLists.length + trashTimelines.length + trashMilestones.length + trashFolders.length;
   const q = search.trim().toLowerCase();
 
   const filteredTasks = trashTasks.filter(t =>
@@ -52,6 +53,9 @@ export default function TrashModal({ onClose }: TrashModalProps) {
   const filteredTimelines = trashTimelines.filter(t =>
     !q || t.timeline.name.toLowerCase().includes(q)
   );
+  const filteredMilestones = trashMilestones.filter(t =>
+    !q || t.milestone.title.toLowerCase().includes(q)
+  );
   const filteredFolders = trashFolders.filter(t =>
     !q || t.folder.name.toLowerCase().includes(q)
   );
@@ -60,24 +64,20 @@ export default function TrashModal({ onClose }: TrashModalProps) {
     | { kind: 'task'; deletedAt: string; item: TrashedTask }
     | { kind: 'list'; deletedAt: string; item: TrashedList }
     | { kind: 'timeline'; deletedAt: string; item: TrashedTimeline }
+    | { kind: 'milestone'; deletedAt: string; item: TrashedMilestone }
     | { kind: 'folder'; deletedAt: string; item: TrashedFolder };
 
   const allItems: AnyTrashItem[] = [
     ...filteredTasks.map(t => ({ kind: 'task' as const, deletedAt: t.deletedAt, item: t })),
     ...filteredLists.map(t => ({ kind: 'list' as const, deletedAt: t.deletedAt, item: t })),
     ...filteredTimelines.map(t => ({ kind: 'timeline' as const, deletedAt: t.deletedAt, item: t })),
+    ...filteredMilestones.map(t => ({ kind: 'milestone' as const, deletedAt: t.deletedAt, item: t })),
     ...filteredFolders.map(t => ({ kind: 'folder' as const, deletedAt: t.deletedAt, item: t })),
   ].sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
 
   const visibleItems = tab === 'all'
     ? allItems
-    : tab === 'tasks'
-      ? allItems.filter(i => i.kind === 'task')
-      : tab === 'lists'
-        ? allItems.filter(i => i.kind === 'list')
-        : tab === 'timelines'
-          ? allItems.filter(i => i.kind === 'timeline')
-          : allItems.filter(i => i.kind === 'folder');
+    : allItems.filter(i => i.kind === tab.slice(0, -1));
 
   const handleEmptyTrash = async () => {
     setEmptyLoading(true);
@@ -89,6 +89,7 @@ export default function TrashModal({ onClose }: TrashModalProps) {
     trashTasks.forEach(t => deleteFromTrash(t.id));
     trashLists.forEach(t => deleteListFromTrash(t.id));
     trashTimelines.forEach(t => deleteTimelineFromTrash(t.id));
+    trashMilestones.forEach(t => deleteMilestoneFromTrash(t.id));
     trashFolders.forEach(t => deleteFolderFromTrash(t.id));
     setEmptyLoading(false);
     setConfirmEmpty(false);
@@ -99,6 +100,7 @@ export default function TrashModal({ onClose }: TrashModalProps) {
     { id: 'tasks', label: 'Tasks', count: trashTasks.length },
     { id: 'lists', label: 'Lists', count: trashLists.length },
     { id: 'timelines', label: 'Timelines', count: trashTimelines.length },
+    { id: 'milestones', label: 'Milestones', count: trashMilestones.length },
     { id: 'folders', label: 'Folders', count: trashFolders.length },
   ];
 
@@ -203,6 +205,16 @@ export default function TrashModal({ onClose }: TrashModalProps) {
                       item={item}
                       onRestore={() => restoreTimelineFromTrash(item.id)}
                       onDelete={() => deleteTimelineFromTrash(item.id)} />
+                  );
+                }
+                if (entry.kind === 'milestone') {
+                  const item = entry.item as TrashedMilestone;
+                  return (
+                    <MilestoneTrashRow
+                      key={`milestone-${item.id}`}
+                      item={item}
+                      onRestore={() => restoreMilestoneFromTrash(item.id)}
+                      onDelete={() => deleteMilestoneFromTrash(item.id)} />
                   );
                 }
                 const item = entry.item as TrashedFolder;
@@ -344,6 +356,34 @@ function TimelineTrashRow({ item, onRestore, onDelete }: { item: TrashedTimeline
         </div>
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe', marginTop: 2 }}>
           Timeline · {count} milestone{count !== 1 ? 's' : ''} · {friendlyTime(item.deletedAt)}
+        </div>
+      </div>
+      <ActionButtons onRestore={onRestore} onDelete={onDelete} hov={hov} />
+    </div>
+  );
+}
+
+function MilestoneTrashRow({ item, onRestore, onDelete }: { item: TrashedMilestone; onRestore: () => void; onDelete: () => void }) {
+  const [hov, setHov] = useState(false);
+  const dot = item.milestone.color ?? '#1D4ED8';
+  const timelineName = useAppStore(s => s.timelines.find(t => t.id === item.timelineId)?.name);
+
+  return (
+    <div
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: hov ? '#eef2ff' : '#fafafa', border: `1px solid ${hov ? '#c7d2fe' : '#f1ecf6'}`, transition: 'all 150ms' }}>
+      <div style={{ width: 32, height: 32, borderRadius: 8, background: '#e0e7ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {item.milestone.emoji
+          ? <span style={{ fontSize: 16 }}>{item.milestone.emoji}</span>
+          : <Icon name="flag" size={15} color={dot} />
+        }
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, fontWeight: 500, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {item.milestone.title}
+        </div>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe', marginTop: 2 }}>
+          Milestone{timelineName ? ` · ${timelineName}` : ''} · {friendlyTime(item.deletedAt)}
         </div>
       </div>
       <ActionButtons onRestore={onRestore} onDelete={onDelete} hov={hov} />

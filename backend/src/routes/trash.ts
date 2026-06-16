@@ -47,6 +47,16 @@ interface TrashTimelineRow {
   expires_at: string;
 }
 
+interface TrashMilestoneRow {
+  id: number;
+  milestone_id: string;
+  timeline_id: string;
+  user_id: string;
+  milestone_data: Record<string, unknown>;
+  deleted_at: string;
+  expires_at: string;
+}
+
 interface TaskRow {
   id: string;
   user_id: string;
@@ -111,6 +121,18 @@ function sanitizeTrashTimeline(row: TrashTimelineRow) {
     timelineData: row.timeline_data,
     deletedAt:    row.deleted_at,
     expiresAt:    row.expires_at,
+  };
+}
+
+function sanitizeTrashMilestone(row: TrashMilestoneRow) {
+  return {
+    id:            row.id,
+    milestoneId:   row.milestone_id,
+    timelineId:    row.timeline_id,
+    userId:        row.user_id,
+    milestoneData: row.milestone_data,
+    deletedAt:     row.deleted_at,
+    expiresAt:     row.expires_at,
   };
 }
 
@@ -237,6 +259,7 @@ router.delete('/empty', async (req: Request, res: Response) => {
       query('DELETE FROM trash_lists WHERE user_id = $1', [req.userId]),
       query('DELETE FROM trash_folders WHERE user_id = $1', [req.userId]),
       query('DELETE FROM trash_timelines WHERE user_id = $1', [req.userId]),
+      query('DELETE FROM trash_milestones WHERE user_id = $1', [req.userId]),
     ]);
     res.json({ success: true });
     broadcastToUser(req.userId!, 'trash');
@@ -570,6 +593,102 @@ router.delete('/folders/:trashId', async (req: Request, res: Response) => {
     broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     console.error('trash folders delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Milestone trash routes
+// ---------------------------------------------------------------------------
+
+// GET /api/trash/milestones
+router.get('/milestones', async (req: Request, res: Response) => {
+  try {
+    const result = await query<TrashMilestoneRow>(
+      `SELECT * FROM trash_milestones WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`,
+      [req.userId]
+    );
+    res.json({ trash: result.rows.map(sanitizeTrashMilestone) });
+  } catch (err) {
+    console.error('trash milestones GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/trash/milestones/:trashId/restore
+router.post('/milestones/:trashId/restore', async (req: Request, res: Response) => {
+  try {
+    const trashId = parseInt(req.params.trashId, 10);
+    if (isNaN(trashId)) {
+      res.status(400).json({ error: 'Invalid trash id' });
+      return;
+    }
+
+    const trashResult = await query<TrashMilestoneRow>(
+      `SELECT * FROM trash_milestones WHERE id = $1 AND user_id = $2 AND expires_at > NOW()`,
+      [trashId, req.userId]
+    );
+    if (trashResult.rows.length === 0) {
+      res.status(404).json({ error: 'Trash item not found or expired' });
+      return;
+    }
+
+    const trashRow = trashResult.rows[0];
+    const d = trashRow.milestone_data as Record<string, unknown>;
+
+    // The parent timeline must still exist (and belong to the user) to restore into.
+    const timelineCheck = await query<{ id: string }>(
+      'SELECT id FROM timelines WHERE id = $1 AND user_id = $2',
+      [trashRow.timeline_id, req.userId]
+    );
+    if (timelineCheck.rows.length === 0) {
+      res.status(409).json({ error: 'The timeline this milestone belonged to no longer exists. Restore the timeline instead.' });
+      return;
+    }
+
+    const ms = ['upcoming', 'in-progress', 'done'].includes(d.status as string) ? d.status : 'upcoming';
+    await query(
+      `INSERT INTO milestones (id, timeline_id, title, description, milestone_date, time_val, status, emoji, color, position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       ON CONFLICT (id) DO NOTHING`,
+      [
+        d.id ?? trashRow.milestone_id, trashRow.timeline_id, d.title ?? '', d.description ?? null,
+        d.date ?? null, d.time ?? null, ms, d.emoji ?? null, d.color ?? null, d.position ?? 0,
+      ]
+    );
+
+    await query('DELETE FROM trash_milestones WHERE id = $1', [trashId]);
+    res.json({ success: true });
+    broadcastToUser(req.userId!, 'trash');
+    broadcastToUser(req.userId!, 'timelines');
+  } catch (err) {
+    console.error('trash milestones restore error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/trash/milestones/:trashId
+router.delete('/milestones/:trashId', async (req: Request, res: Response) => {
+  try {
+    const trashId = parseInt(req.params.trashId, 10);
+    if (isNaN(trashId)) {
+      res.status(400).json({ error: 'Invalid trash id' });
+      return;
+    }
+
+    const result = await query(
+      'DELETE FROM trash_milestones WHERE id = $1 AND user_id = $2',
+      [trashId, req.userId]
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Trash item not found' });
+      return;
+    }
+
+    res.json({ success: true });
+    broadcastToUser(req.userId!, 'trash');
+  } catch (err) {
+    console.error('trash milestones delete error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

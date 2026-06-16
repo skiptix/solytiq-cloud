@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Task, List } from '../types';
 import Icon from './Icon';
@@ -161,13 +161,20 @@ export function EditModal({ task = {}, mode = 'edit', onSave, onClose, available
 }
 
 // ── Delete Confirm Modal ──────────────────────────────────────────
+// Reusable across entities. Pass a `task` for the default "task → trash"
+// copy, or supply `name`/`heading`/`description` to confirm any other entity
+// (e.g. timeline milestones, which are deleted permanently rather than trashed).
 interface DeleteConfirmProps {
-  task: Task;
+  task?: Task;
+  name?: string;
+  heading?: string;
+  description?: ReactNode;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-export function DeleteConfirmModal({ task, onConfirm, onCancel }: DeleteConfirmProps) {
+export function DeleteConfirmModal({ task, name, heading, description, onConfirm, onCancel }: DeleteConfirmProps) {
+  const entityName = name ?? task?.title ?? '';
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
       onClick={onCancel}>
@@ -176,9 +183,9 @@ export function DeleteConfirmModal({ task, onConfirm, onCancel }: DeleteConfirmP
         <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
           <Icon name="delete" size={20} color="#ba1a1a" />
         </div>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Delete task?</div>
+        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>{heading ?? 'Delete task?'}</div>
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.5, marginBottom: 24 }}>
-          "<span style={{ color: '#1c1b22', fontWeight: 500 }}>{task.title}</span>" will be moved to trash.
+          {description ?? <>"<span style={{ color: '#1c1b22', fontWeight: 500 }}>{entityName}</span>" will be moved to trash.</>}
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>

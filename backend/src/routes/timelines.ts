@@ -674,28 +674,39 @@ router.put('/:timelineId/milestones/reorder', async (req: Request, res: Response
   }
 });
 
-// DELETE /api/timelines/milestones/:milestoneId
+// DELETE /api/timelines/milestones/:milestoneId  — soft delete to trash
 router.delete('/milestones/:milestoneId', async (req: Request, res: Response) => {
   try {
     const { milestoneId } = req.params;
 
-    const ownerCheck = await query<{ user_id: string }>(
-      `SELECT t.user_id FROM milestones m JOIN timelines t ON m.timeline_id = t.id WHERE m.id = $1`,
+    const existing = await query<MilestoneRow & { user_id: string }>(
+      `SELECT m.*, t.user_id FROM milestones m JOIN timelines t ON m.timeline_id = t.id WHERE m.id = $1`,
       [milestoneId]
     );
-    if (ownerCheck.rows.length === 0) {
+    if (existing.rows.length === 0) {
       res.status(404).json({ error: 'Milestone not found' });
       return;
     }
-    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+    const row = existing.rows[0];
+    if (row.user_id !== req.userId && !req.user?.isAdmin) {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }
 
-    await query('DELETE FROM milestones WHERE id = $1', [milestoneId]);
+    // Snapshot the milestone into trash, then remove it — atomically.
+    const milestoneData = sanitizeMilestone(row);
+    await withTransaction(async (c) => {
+      await c.query(
+        `INSERT INTO trash_milestones (milestone_id, timeline_id, user_id, milestone_data)
+         VALUES ($1, $2, $3, $4)`,
+        [milestoneId, row.timeline_id, row.user_id, JSON.stringify(milestoneData)]
+      );
+      await c.query('DELETE FROM milestones WHERE id = $1', [milestoneId]);
+    });
 
     res.json({ success: true });
-    broadcastToUser(req.userId!, 'timelines');
+    broadcastToUser(row.user_id, 'timelines');
+    broadcastToUser(row.user_id, 'trash');
   } catch (err) {
     werr('milestones DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });

@@ -274,6 +274,15 @@ export const apiRestoreTimelineFromTrash = (trashId: number) =>
 export const apiDeleteTimelineFromTrash = (trashId: number) =>
   apiFetch<{ success: boolean }>(`/trash/timelines/${trashId}`, { method: 'DELETE' });
 
+export const apiGetTrashMilestones = () =>
+  apiFetch<{ trash: Array<{ id: number; milestoneId: string; timelineId: string; milestoneData: Milestone; deletedAt: string; expiresAt: string }> }>('/trash/milestones');
+
+export const apiRestoreMilestoneFromTrash = (trashId: number) =>
+  apiFetch<{ success: boolean }>(`/trash/milestones/${trashId}/restore`, { method: 'POST' });
+
+export const apiDeleteMilestoneFromTrash = (trashId: number) =>
+  apiFetch<{ success: boolean }>(`/trash/milestones/${trashId}`, { method: 'DELETE' });
+
 // Folders
 export const apiGetFolders = (workspaceId?: string) =>
   apiFetch<{ folders: Folder[] }>(`/folders${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`);
