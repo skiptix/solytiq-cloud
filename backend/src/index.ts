@@ -54,6 +54,9 @@ app.use(helmet({
   contentSecurityPolicy: false,
 }));
 app.use(express.json({ limit: '4mb' }));
+// The OAuth 2.1 token endpoint receives application/x-www-form-urlencoded bodies
+// (RFC 6749), so parse those too — otherwise /api/oauth/token sees an empty body.
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Rate limiting
 const apiLimiter = rateLimit({
