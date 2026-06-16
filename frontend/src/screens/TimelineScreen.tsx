@@ -17,6 +17,7 @@ import { genId } from '../utils/id';
 import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
 import CalendarPicker from '../components/CalendarPicker';
+import TimePicker from '../components/TimePicker';
 import CreatorBubble from '../components/CreatorBubble';
 import { FilePicker, AttachBadge } from '../components/TaskDialog';
 import { DeleteConfirmModal } from '../components/TaskItem';
@@ -100,7 +101,9 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
   const [dateError, setDateError] = useState(false);
   const [showCal, setShowCal] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [showTime, setShowTime] = useState(false);
   const calRef = useRef<HTMLDivElement>(null);
+  const timeRef = useRef<HTMLDivElement>(null);
   const effectiveAccent = color ?? statusOf(status).color;
 
   // Attachments (edit mode only — a milestone must exist before files attach to it)
@@ -122,6 +125,16 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showCal]);
+
+  // Close time picker on outside click
+  useEffect(() => {
+    if (!showTime) return;
+    const handler = (e: MouseEvent) => {
+      if (timeRef.current && !timeRef.current.contains(e.target as Node)) setShowTime(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showTime]);
 
   useEffect(() => {
     if (!milestoneId) return;
@@ -242,8 +255,22 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
             </PropRow>
 
             <PropRow icon="schedule" label="Time">
-              <input type="time" value={time ?? ''} onChange={e => setTime(e.target.value)}
-                style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1px solid #E5E7EB', borderRadius: 8, padding: '5px 10px', outline: 'none', background: '#fff', color: '#1c1b22' }} />
+              <div style={{ position: 'relative' }} ref={timeRef}>
+                <button type="button" onClick={() => setShowTime(v => !v)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 8, border: `1px solid ${showTime ? effectiveAccent : (time ? '#c4b5fd' : 'transparent')}`, background: time ? '#F5F3FF' : 'transparent', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: time ? '#5e4dbb' : '#c9c4d5', transition: 'all 120ms', textAlign: 'left' }}>
+                  <Icon name="schedule" size={13} color={time ? effectiveAccent : '#c9c4d5'} />
+                  {time || 'Set a time…'}
+                </button>
+                {showTime && (
+                  <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50 }}>
+                    <TimePicker
+                      value={time || undefined}
+                      onChange={t => setTime(t)}
+                      onClear={() => { setTime(''); setShowTime(false); }}
+                    />
+                  </div>
+                )}
+              </div>
             </PropRow>
 
             <PropRow icon="flag" label="Status">
