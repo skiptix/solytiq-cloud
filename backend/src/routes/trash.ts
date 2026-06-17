@@ -347,24 +347,57 @@ router.post('/lists/:trashId/restore', async (req: Request, res: Response) => {
     );
 
     const sections = (d.sections as Array<Record<string, unknown>>) ?? [];
+    const sectionValues: unknown[] = [];
+    const taskValues: unknown[] = [];
+
     for (const section of sections) {
-      await query(
-        `INSERT INTO sections (id, list_id, label, emoji, position)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (id) DO NOTHING`,
-        [section.id, d.id, section.label, section.emoji ?? null, section.position ?? 0]
+      sectionValues.push(
+        section.id, d.id, section.label, section.emoji ?? null, section.position ?? 0
       );
+
       const tasks = (section.tasks as Array<Record<string, unknown>>) ?? [];
       for (const task of tasks) {
+        taskValues.push(
+          task.id, req.userId, task.title, task.note ?? null, task.checked ?? false,
+          task.deadline ?? null, task.time ?? null, task.priority ?? null, task.badge ?? null,
+          d.id, section.id, task.position ?? 0
+        );
+      }
+    }
+
+    if (sectionValues.length > 0) {
+      const rowCount = sectionValues.length / 5;
+      const placeholders = Array.from({ length: rowCount }, (_, i) =>
+        `($${i * 5 + 1}, $${i * 5 + 2}, $${i * 5 + 3}, $${i * 5 + 4}, $${i * 5 + 5})`
+      ).join(', ');
+
+      await query(
+        `INSERT INTO sections (id, list_id, label, emoji, position)
+         VALUES ${placeholders}
+         ON CONFLICT (id) DO NOTHING`,
+        sectionValues
+      );
+    }
+
+    if (taskValues.length > 0) {
+      const itemsPerRow = 12;
+      const tasksCount = taskValues.length / itemsPerRow;
+      const chunkSize = 500; // max 500 tasks per batch (500 * 12 = 6000 params, well under 65535 limit)
+
+      for (let i = 0; i < tasksCount; i += chunkSize) {
+        const batchTasks = Math.min(chunkSize, tasksCount - i);
+        const batchValues = taskValues.slice(i * itemsPerRow, (i + batchTasks) * itemsPerRow);
+
+        const placeholders = Array.from({ length: batchTasks }, (_, idx) => {
+          const offset = idx * itemsPerRow;
+          return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, 'list', $${offset + 10}, $${offset + 11}, $${offset + 12})`;
+        }).join(', ');
+
         await query(
           `INSERT INTO tasks (id, user_id, title, note, checked, deadline, time_val, priority, badge, source, list_id, section_id, position)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'list', $10, $11, $12)
+           VALUES ${placeholders}
            ON CONFLICT (id) DO NOTHING`,
-          [
-            task.id, req.userId, task.title, task.note ?? null, task.checked ?? false,
-            task.deadline ?? null, task.time ?? null, task.priority ?? null, task.badge ?? null,
-            d.id, section.id, task.position ?? 0,
-          ]
+          batchValues
         );
       }
     }
