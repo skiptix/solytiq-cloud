@@ -43,6 +43,20 @@ const PORT = parseInt(process.env.PORT ?? '3001', 10);
 app.set('trust proxy', 1);
 
 // ---------------------------------------------------------------------------
+// CalDAV server (Apple Calendar / Thunderbird / …) — mounted FIRST, before the
+// global cors()/helmet()/json middleware. CalDAV clients are not browsers, so
+// they don't need CORS; more importantly, the cors() middleware answers every
+// OPTIONS request with a bare 204 (no `DAV` header), which makes Apple's
+// capability probe conclude the server isn't a calendar and fail verification.
+// Handling OPTIONS in caldavHandler (200 + `DAV: calendar-access`) requires it
+// to run before cors(). It enforces its own HTTP Basic auth, and the text body
+// parser captures the XML/iCalendar bodies WebDAV uses.
+// ---------------------------------------------------------------------------
+app.use('/caldav', express.text({ type: () => true, limit: '1mb' }), caldavHandler);
+// CalDAV service discovery: clients probe /.well-known/caldav for the real root.
+app.use('/.well-known/caldav', (_req, res) => res.redirect(301, '/caldav/'));
+
+// ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
 
@@ -123,14 +137,6 @@ app.use('/api/oauth',      oauthRouter);
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
 // loops; the endpoint enforces its own bearer-token auth.
 app.use('/mcp',            mcpRouter);
-
-// CalDAV server (Apple Calendar / Thunderbird / …). Outside /api so the API
-// rate limiter doesn't throttle the client's frequent polling; it enforces its
-// own HTTP Basic auth (email + generated CalDAV password). The text body parser
-// captures the XML/iCalendar request bodies WebDAV uses.
-app.use('/caldav', express.text({ type: () => true, limit: '1mb' }), caldavHandler);
-// CalDAV service discovery: clients probe /.well-known/caldav for the real root.
-app.use('/.well-known/caldav', (_req, res) => res.redirect(301, '/caldav/'));
 
 // OAuth discovery for the Claude MCP connector.
 // Protected Resource Metadata (RFC 9728) — the /mcp endpoint is the resource;
