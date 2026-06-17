@@ -776,6 +776,144 @@ export const aiTools: AiTool[] = [
       return ok(`Content of "${original_name}":\n\n${contentText ?? '(empty)'}`);
     },
   },
+  // ───────────────────────────── meetings ─────────────────────────────
+  {
+    name: 'list_meetings',
+    description: "List the user's calendar meetings. Optionally filter by date range (from_date to to_date, format YYYY-MM-DD).",
+    parameters: {
+      type: 'object',
+      properties: {
+        from_date: { type: 'string', description: 'Start date (YYYY-MM-DD)' },
+        to_date: { type: 'string', description: 'End date (YYYY-MM-DD)' },
+      },
+    },
+    handler: async (userId, args) => {
+      const from = str(args.from_date);
+      const to = str(args.to_date);
+      const params: unknown[] = [userId];
+      let filter = '';
+      if (from) { params.push(from); filter += ` AND meeting_date >= $${params.length}`; }
+      if (to) { params.push(to); filter += ` AND meeting_date <= $${params.length}`; }
+      const r = await query<{ id: string; title: string; meeting_date: string; start_time: string | null; end_time: string | null; all_day: boolean; location: string | null }>(
+        `SELECT id, title, meeting_date, start_time, end_time, all_day, location FROM meetings WHERE user_id = $1 ${filter} ORDER BY meeting_date ASC, start_time ASC NULLS FIRST`,
+        params
+      );
+      if (!r.rows.length) return ok('No meetings found.');
+      return ok(r.rows.map(m => `• [${m.meeting_date}] ${m.all_day ? '(All Day)' : `${m.start_time ?? '?'} - ${m.end_time ?? '?'}`} "${m.title}" (id: ${m.id})${m.location ? ` at ${m.location}` : ''}`).join('\n'));
+    },
+  },
+  {
+    name: 'create_meeting',
+    description: 'Schedule a new calendar meeting.',
+    parameters: {
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        description: { type: 'string' },
+        location: { type: 'string' },
+        date: { type: 'string', description: 'YYYY-MM-DD' },
+        start_time: { type: 'string', description: 'HH:MM (24-hour)' },
+        end_time: { type: 'string', description: 'HH:MM (24-hour)' },
+        all_day: { type: 'boolean' },
+        color: { type: 'string', description: 'Hex color string (e.g. #3b82f6)' },
+      },
+      required: ['title', 'date'],
+    },
+    handler: async (userId, args) => {
+      const title = str(args.title);
+      const date = str(args.date);
+      if (!title || !date) return fail('title and date are required');
+      const allDay = args.all_day === true;
+      const meetingId = `mt_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+      await query(
+        `INSERT INTO meetings (id, user_id, title, description, location, meeting_date, start_time, end_time, all_day, color)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [meetingId, userId, title, str(args.description) ?? null, str(args.location) ?? null, date, allDay ? null : (str(args.start_time) ?? null), allDay ? null : (str(args.end_time) ?? null), allDay, str(args.color) ?? null]
+      );
+      broadcastToUser(userId, 'meetings');
+      return ok(`Scheduled meeting "${title}" on ${date}`, `Scheduled meeting "${title}"`);
+    },
+  },
+  {
+    name: 'update_meeting',
+    description: 'Update an existing calendar meeting.',
+    parameters: {
+      type: 'object',
+      properties: {
+        meeting_id: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        location: { type: 'string' },
+        date: { type: 'string', description: 'YYYY-MM-DD' },
+        start_time: { type: 'string', description: 'HH:MM (24-hour)' },
+        end_time: { type: 'string', description: 'HH:MM (24-hour)' },
+        all_day: { type: 'boolean' },
+        color: { type: 'string' },
+      },
+      required: ['meeting_id'],
+    },
+    handler: async (userId, args) => {
+      const id = str(args.meeting_id);
+      if (!id) return fail('meeting_id is required');
+      
+      const allDayParam = typeof args.all_day === 'boolean' ? args.all_day : null;
+      
+      const r = await query<{ title: string }>(
+        `UPDATE meetings
+         SET title = COALESCE($1, title), description = $2, location = $3, meeting_date = COALESCE($4, meeting_date),
+             start_time = $5, end_time = $6, all_day = COALESCE($7, all_day), color = $8, updated_at = NOW()
+         WHERE id = $9 AND user_id = $10 RETURNING title`,
+        [str(args.title) ?? null, str(args.description) ?? null, str(args.location) ?? null, str(args.date) ?? null, 
+         str(args.start_time) ?? null, str(args.end_time) ?? null, allDayParam, str(args.color) ?? null, id, userId]
+      );
+      if (!r.rows.length) return fail('meeting not found');
+      broadcastToUser(userId, 'meetings');
+      return ok(`Updated meeting "${r.rows[0].title}"`, `Updated meeting "${r.rows[0].title}"`);
+    },
+  },
+  {
+    name: 'delete_meeting',
+    description: 'Delete a calendar meeting.',
+    parameters: {
+      type: 'object',
+      properties: { meeting_id: { type: 'string' } },
+      required: ['meeting_id'],
+    },
+    handler: async (userId, args) => {
+      const id = str(args.meeting_id);
+      if (!id) return fail('meeting_id is required');
+      const r = await query<{ title: string }>(`DELETE FROM meetings WHERE id = $1 AND user_id = $2 RETURNING title`, [id, userId]);
+      if (!r.rows.length) return fail('meeting not found');
+      broadcastToUser(userId, 'meetings');
+      return ok(`Deleted meeting "${r.rows[0].title}"`, `Deleted meeting "${r.rows[0].title}"`);
+    },
+  },
+  // ───────────────────────────── global search ─────────────────────────────
+  {
+    name: 'search_tasks',
+    description: 'Search across all tasks (dashboard and inside lists) by text query.',
+    parameters: {
+      type: 'object',
+      properties: { query: { type: 'string', description: 'Text to search for in task titles/notes' } },
+      required: ['query'],
+    },
+    handler: async (userId, args) => {
+      const q = str(args.query);
+      if (!q) return fail('query is required');
+      const term = `%${q}%`;
+      const rows = await query<{ id: string; title: string; checked: boolean; deadline: string | null; priority: string | null; source: string; list_id: string | null }>(
+        `SELECT id, title, checked, deadline, priority, source, list_id FROM tasks
+         WHERE user_id = $1 AND (title ILIKE $2 OR notes ILIKE $2)
+         ORDER BY created_at DESC LIMIT 50`,
+        [userId, term]
+      );
+      if (!rows.rows.length) return ok(`No tasks found matching "${q}".`);
+      const text = rows.rows
+        .map((t) => `- [${t.checked ? 'x' : ' '}] ${t.title} (task_id: ${t.id}; in ${t.source === 'dash' ? 'dashboard' : `list ${t.list_id}`})`)
+        .join('\n');
+      return ok(text);
+    },
+  },
 ];
 
 // ── lookup & execution ───────────────────────────────────────────────────────
