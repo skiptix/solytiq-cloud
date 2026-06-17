@@ -20,6 +20,7 @@ interface TaskRow {
   source: string;
   list_id: string | null;
   section_id: string | null;
+  workspace_id: string | null;
   position: number;
   created_at: string;
   updated_at: string;
@@ -42,6 +43,7 @@ function sanitizeTask(task: TaskRow) {
     source:         task.source,
     listId:         task.list_id,
     sectionId:      task.section_id,
+    workspaceId:    task.workspace_id ?? undefined,
     position:       task.position,
     createdAt:      task.created_at,
     updatedAt:      task.updated_at,

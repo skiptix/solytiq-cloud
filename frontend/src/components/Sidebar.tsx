@@ -1330,7 +1330,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.20.2
+              v1.21.0
             </div>
           )}
         </div>
@@ -1384,7 +1384,6 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <WorkspaceSwitcher collapsed={collapsed} />
-        <NavItem icon="calendar_month" label="Calendar" active={active === 'calendar'} onClick={() => onNavigate('/calendar')} collapsed={collapsed} />
 
         <div style={{ height: 1, background: '#e8e4f0', margin: '6px 8px' }} />
 
@@ -1545,7 +1544,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.20.2
+            v1.21.0
           </div>
         )}
       </div>

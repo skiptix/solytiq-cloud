@@ -8,12 +8,29 @@ export interface Task {
   priority?: 'High' | 'Medium' | 'Low';
   badge?: string;
   note?: string;
+  workspaceId?: string;
   _source?: 'dash' | 'list';
   _listId?: string;
   _listName?: string;
   linkedListId?: string | null;
   linkedListType?: 'sublist' | 'link' | null;
   attachmentCount?: number;
+}
+
+/** A standalone calendar event that belongs to no list/timeline/workspace —
+ *  it lives purely on the Calendar and is scoped to the owning user. */
+export interface Meeting {
+  id: string;
+  title: string;
+  description?: string | null;
+  location?: string | null;
+  date: string;              // YYYY-MM-DD
+  startTime?: string | null; // HH:MM (24h)
+  endTime?: string | null;   // HH:MM (24h)
+  allDay?: boolean;
+  color?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Section {
