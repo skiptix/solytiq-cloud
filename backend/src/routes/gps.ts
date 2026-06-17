@@ -111,10 +111,10 @@ function parseFit(buffer: Buffer): Promise<GpsPoint[]> {
 async function readAndParse(filePath: string, fileType: string): Promise<ParsedGpxData> {
   const abs = path.join(UPLOAD_DIR, path.basename(filePath));
   if (fileType === 'fit') {
-    const points = await parseFit(fs.readFileSync(abs));
+    const points = await parseFit(await fs.promises.readFile(abs));
     return { points, waypoints: [], routePoints: [] };
   }
-  return parseGpxFull(fs.readFileSync(abs, 'utf-8'));
+  return parseGpxFull(await fs.promises.readFile(abs, 'utf-8'));
 }
 
 function rowToGpsFile(row: GpsFileRow) {
