@@ -7,6 +7,8 @@ import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors } from '../visibility';
+import { nextPosition } from '../nextPosition';
+import { TaskRow, sanitizeTask } from '../taskTypes';
 
 const router = Router();
 router.use(authenticate);
@@ -45,55 +47,9 @@ interface SectionRow {
   position: number;
 }
 
-interface TaskRow {
-  id: string;
-  user_id: string;
-  title: string;
-  note: string | null;
-  checked: boolean;
-  deadline: string | null;
-  time_val: string | null;
-  priority: string | null;
-  badge: string | null;
-  source: string;
-  list_id: string | null;
-  section_id: string | null;
-  position: number;
-  created_at: string;
-  updated_at: string;
-  linked_list_id: string | null;
-  linked_list_type: string | null;
-  attachment_count?: string;
-}
-
 // ---------------------------------------------------------------------------
 // Sanitizers
 // ---------------------------------------------------------------------------
-
-function sanitizeTask(task: TaskRow) {
-  return {
-    id:             task.id,
-    creatorId:      task.user_id,
-    title:          task.title,
-    note:           task.note,
-    checked:        task.checked,
-    deadline:       task.deadline,
-    time:           task.time_val,
-    priority:       task.priority,
-    badge:          task.badge,
-    source:         task.source,
-    listId:         task.list_id,
-    sectionId:      task.section_id,
-    position:       task.position,
-    createdAt:      task.created_at,
-    updatedAt:      task.updated_at,
-    _source:        task.source,
-    _listId:        task.list_id,
-    linkedListId:    task.linked_list_id ?? null,
-    linkedListType:  task.linked_list_type ?? null,
-    attachmentCount: Number(task.attachment_count ?? 0),
-  };
-}
 
 function sanitizeSection(section: SectionRow, tasks: ReturnType<typeof sanitizeTask>[]) {
   return {
@@ -270,13 +226,7 @@ router.post('/', async (req: Request, res: Response) => {
     // it reliably reappears on reload.
     const resolvedWs = await resolveWorkspaceForUser(req.userId!, workspaceId);
 
-    const posResult = await query<{ max: string | null }>(
-      'SELECT MAX(position) AS max FROM lists WHERE user_id = $1',
-      [req.userId]
-    );
-    const nextPos = posResult.rows[0].max !== null
-      ? parseInt(posResult.rows[0].max, 10) + 1
-      : 0;
+    const nextPos = await nextPosition('lists', 'user_id = $1', [req.userId]);
 
     const result = await query<ListRow>(
       `INSERT INTO lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, folder_id, position, parent_task_id, depth, workspace_id)
@@ -628,13 +578,7 @@ router.post('/:listId/sections', async (req: Request, res: Response) => {
 
     const sectionId = id ?? `section_${uuidv4()}`;
 
-    const posResult = await query<{ max: string | null }>(
-      'SELECT MAX(position) AS max FROM sections WHERE list_id = $1',
-      [listId]
-    );
-    const nextPos = posResult.rows[0].max !== null
-      ? parseInt(posResult.rows[0].max, 10) + 1
-      : 0;
+    const nextPos = await nextPosition('sections', 'list_id = $1', [listId]);
 
     const result = await query<SectionRow>(
       `INSERT INTO sections (id, list_id, label, emoji, position)
@@ -847,13 +791,7 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
     // workspace its list lives in (which would make it vanish on reload).
     const itemWorkspaceId = ownerCheck.rows[0].workspace_id;
 
-    const posResult = await query<{ max: string | null }>(
-      `SELECT MAX(position) AS max FROM tasks WHERE section_id = $1`,
-      [sectionId]
-    );
-    const nextPos = posResult.rows[0].max !== null
-      ? parseInt(posResult.rows[0].max, 10) + 1
-      : 0;
+    const nextPos = await nextPosition('tasks', 'section_id = $1', [sectionId]);
 
     const result = await query<TaskRow>(
       `INSERT INTO tasks
@@ -1114,8 +1052,7 @@ router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, r
     // + the back-reference. A partial failure can no longer leave a sublist
     // without a task (or a task pointing at a half-created list).
     const { newList, newTask } = await withTransaction(async (client) => {
-      const posResult = await client.query<{ max: string | null }>('SELECT MAX(position) AS max FROM lists WHERE user_id = $1', [req.userId]);
-      const nextPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
+      const nextPos = await nextPosition('lists', 'user_id = $1', [req.userId], client);
 
       const listRes = await client.query<ListRow>(
         `INSERT INTO lists (id, user_id, name, is_public, position, depth, workspace_id) VALUES ($1, $2, $3, false, $4, $5, $6) RETURNING *`,
@@ -1127,8 +1064,7 @@ router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, r
         [newSectionId, newListId]
       );
 
-      const taskPosResult = await client.query<{ max: string | null }>('SELECT MAX(position) AS max FROM tasks WHERE section_id = $1', [sectionId]);
-      const taskPos = taskPosResult.rows[0].max !== null ? parseInt(taskPosResult.rows[0].max, 10) + 1 : 0;
+      const taskPos = await nextPosition('tasks', 'section_id = $1', [sectionId], client);
 
       const taskRes = await client.query<TaskRow>(
         `INSERT INTO tasks (id, user_id, title, source, list_id, section_id, position, linked_list_id, linked_list_type, workspace_id)
@@ -1186,8 +1122,7 @@ router.post('/:listId/sections/:sectionId/tasks/link', async (req: Request, res:
     }
 
     const taskId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
-    const posResult = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM tasks WHERE section_id = $1', [sectionId]);
-    const taskPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
+    const taskPos = await nextPosition('tasks', 'section_id = $1', [sectionId]);
 
     // The linking task inherits the parent list's workspace (authoritative).
     const finalWorkspaceId = ownerCheck.rows[0].workspace_id;

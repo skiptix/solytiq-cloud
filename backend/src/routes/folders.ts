@@ -4,6 +4,7 @@ import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
+import { nextPosition } from '../nextPosition';
 import {
   getPrivateAncestors, buildPromoteConflict, promoteAncestors,
   getPublicDescendants, buildRestrictConflict, restrictDescendants,
@@ -81,11 +82,7 @@ router.post('/', async (req: Request, res: Response) => {
     // Resolve to a workspace the user can access so the folder always has a
     // real, visible home (consistent with lists/items).
     const resolvedWs = await resolveWorkspaceForUser(req.userId!, workspaceId);
-    const posRes = await query<{ max: string | null }>(
-      'SELECT MAX(position) AS max FROM folders WHERE user_id = $1',
-      [req.userId]
-    );
-    const nextPos = posRes.rows[0].max !== null ? parseInt(posRes.rows[0].max, 10) + 1 : 0;
+    const nextPos = await nextPosition('folders', 'user_id = $1', [req.userId]);
     const result = await query<FolderRow>(
       `INSERT INTO folders (id, user_id, name, emoji, color, position, is_public, workspace_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

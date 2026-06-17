@@ -1,5 +1,4 @@
 import { Router, Request, Response } from 'express';
-import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -7,25 +6,13 @@ import { query } from '../db';
 import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
+import { createUpload, UPLOAD_DIR } from '../uploadStorage';
+import { sendFileDownload, resolveUploadPath } from '../fileDownload';
 
-export const UPLOAD_DIR = process.env.UPLOAD_DIR ?? '/app/uploads';
+/** @deprecated — import UPLOAD_DIR from '../uploadStorage' instead */
+export { UPLOAD_DIR };
 
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: UPLOAD_DIR,
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${crypto.randomUUID()}${ext}`);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 200 * 1024 * 1024 },
-});
+const upload = createUpload('');
 
 const router = Router();
 
@@ -264,32 +251,10 @@ router.get('/:id/preview', async (req: Request, res: Response) => {
     );
     if (result.rows.length === 0) { res.status(404).json({ error: 'File not found' }); return; }
     const { file_path, mime_type: untrustedMime, original_name } = result.rows[0];
-    const filePath = path.join(path.resolve(UPLOAD_DIR), file_path);
-    if (!fs.existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
+    const filePath = resolveUploadPath(UPLOAD_DIR, file_path);
+    if (!filePath) { res.status(404).json({ error: 'File not found on disk' }); return; }
 
-    // FIND-02: Secure file preview. Only allow safe types inline.
-    const safeMimeTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'text/plain'];
-    const isSafe = safeMimeTypes.includes(untrustedMime);
-
-    const disposition = isSafe ? 'inline' : 'attachment';
-    const sanitizedName = original_name.replace(/[^\w\s\-_.]/g, '_');
-
-    res.setHeader('Content-Disposition', `${disposition}; filename="${encodeURIComponent(sanitizedName)}"`);
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Cache-Control', 'private, no-store');
-
-    if (isSafe) {
-      res.setHeader('Content-Type', untrustedMime);
-      if (untrustedMime === 'text/plain') {
-        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      }
-      // Content-Security-Policy: sandbox to prevent any script execution even in images (e.g. SVG if allowed later)
-      res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'; img-src 'self' data: blob:;");
-    } else {
-      res.setHeader('Content-Type', 'application/octet-stream');
-    }
-
-    res.sendFile(filePath);
+    sendFileDownload(res, filePath, original_name, untrustedMime);
   } catch (err) {
     console.error('files preview error:', err);
     res.status(500).json({ error: 'Internal server error' });

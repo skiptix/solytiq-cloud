@@ -2,7 +2,6 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import crypto from 'crypto';
 import { LRUCache } from 'lru-cache';
 import { query } from '../db';
 import { authenticate } from '../middleware';
@@ -31,19 +30,10 @@ const _fitLib: any = require('fit-file-parser');
 const FitParserClass = (_fitLib.default ?? _fitLib) as FitParserCtor;
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
-const UPLOAD_DIR = process.env.UPLOAD_DIR ?? '/app/uploads';
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: UPLOAD_DIR,
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, `gps_${crypto.randomUUID()}${ext}`);
-  },
-});
+import { createUploadStorage, UPLOAD_DIR } from '../uploadStorage';
 
 const upload = multer({
-  storage,
+  storage: createUploadStorage('gps'),
   limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();

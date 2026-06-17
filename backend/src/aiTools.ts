@@ -20,7 +20,8 @@ import { query } from './db';
 import { broadcastToUser } from './sse';
 import { resolveWorkspaceForUser } from './workspaceUtil';
 import { extractTextFromBuffer } from './fileText';
-import { UPLOAD_DIR } from './routes/files';
+import { UPLOAD_DIR } from './uploadStorage';
+import { nextPosition } from './nextPosition';
 
 // A minimal JSON Schema object for a tool's parameters.
 export interface JsonSchema {
@@ -226,11 +227,7 @@ export const aiTools: AiTool[] = [
       const priority = str(args.priority);
       if (priority && !PRIORITIES.has(priority)) return fail('priority must be High, Medium, or Low');
       const ws = await resolveWorkspaceForUser(userId, null);
-      const pos = await query<{ max: string | null }>(
-        `SELECT MAX(position) AS max FROM tasks WHERE user_id = $1 AND source = 'dash'`,
-        [userId]
-      );
-      const nextPos = pos.rows[0].max !== null ? parseInt(pos.rows[0].max, 10) + 1 : 0;
+      const nextPos = await nextPosition('tasks', `user_id = $1 AND source = 'dash'`, [userId]);
       const id = genTaskId();
       await query(
         `INSERT INTO tasks (id, user_id, title, note, deadline, priority, source, position, workspace_id)
@@ -270,8 +267,7 @@ export const aiTools: AiTool[] = [
       if (!list.rows.length) return fail('list not found');
       const sec = await query(`SELECT 1 FROM sections WHERE id = $1 AND list_id = $2`, [sectionId, listId]);
       if (!sec.rows.length) return fail('section not found in that list');
-      const pos = await query<{ max: string | null }>(`SELECT MAX(position) AS max FROM tasks WHERE section_id = $1`, [sectionId]);
-      const nextPos = pos.rows[0].max !== null ? parseInt(pos.rows[0].max, 10) + 1 : 0;
+      const nextPos = await nextPosition('tasks', 'section_id = $1', [sectionId]);
       const id = genTaskId();
       await query(
         `INSERT INTO tasks (id, user_id, title, note, deadline, priority, source, list_id, section_id, position, workspace_id)
@@ -367,8 +363,7 @@ export const aiTools: AiTool[] = [
       }
       const ws = await resolveWorkspaceForUser(userId, null);
       const listId = `list_${uuidv4()}`;
-      const pos = await query<{ max: string | null }>(`SELECT MAX(position) AS max FROM lists WHERE user_id = $1`, [userId]);
-      const nextPos = pos.rows[0].max !== null ? parseInt(pos.rows[0].max, 10) + 1 : 0;
+      const nextPos = await nextPosition('lists', 'user_id = $1', [userId]);
       await query(
         `INSERT INTO lists (id, user_id, name, emoji, is_public, folder_id, position, depth, workspace_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 0, $8)`,
@@ -448,8 +443,7 @@ export const aiTools: AiTool[] = [
       if (!listId || !label) return fail('list_id and label are required');
       const list = await query(`SELECT 1 FROM lists WHERE id = $1 AND user_id = $2`, [listId, userId]);
       if (!list.rows.length) return fail('list not found');
-      const pos = await query<{ max: string | null }>(`SELECT MAX(position) AS max FROM sections WHERE list_id = $1`, [listId]);
-      const nextPos = pos.rows[0].max !== null ? parseInt(pos.rows[0].max, 10) + 1 : 0;
+      const nextPos = await nextPosition('sections', 'list_id = $1', [listId]);
       const id = `sec_${uuidv4()}`;
       await query(`INSERT INTO sections (id, list_id, label, emoji, position) VALUES ($1, $2, $3, $4, $5)`, [id, listId, label, str(args.emoji) ?? null, nextPos]);
       broadcastToUser(userId, 'lists');
@@ -475,8 +469,7 @@ export const aiTools: AiTool[] = [
       if (!name) return fail('name is required');
       const ws = await resolveWorkspaceForUser(userId, null);
       const id = `folder_${uuidv4()}`;
-      const pos = await query<{ max: string | null }>(`SELECT MAX(position) AS max FROM folders WHERE user_id = $1`, [userId]);
-      const nextPos = pos.rows[0].max !== null ? parseInt(pos.rows[0].max, 10) + 1 : 0;
+      const nextPos = await nextPosition('folders', 'user_id = $1', [userId]);
       await query(
         `INSERT INTO folders (id, user_id, name, emoji, position, is_public, workspace_id) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [id, userId, name, str(args.emoji) ?? null, nextPos, args.is_public !== false, ws]
@@ -560,8 +553,7 @@ export const aiTools: AiTool[] = [
       if (layout && !LAYOUTS.has(layout)) return fail('layout must be vertical, compact, or detailed');
       const ws = await resolveWorkspaceForUser(userId, null);
       const id = `timeline_${uuidv4()}`;
-      const pos = await query<{ max: string | null }>(`SELECT MAX(position) AS max FROM timelines WHERE user_id = $1`, [userId]);
-      const nextPos = pos.rows[0].max !== null ? parseInt(pos.rows[0].max, 10) + 1 : 0;
+      const nextPos = await nextPosition('timelines', 'user_id = $1', [userId]);
       await query(
         `INSERT INTO timelines (id, user_id, name, emoji, subtitle, color, layout, is_public, folder_id, position, workspace_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
@@ -654,8 +646,7 @@ export const aiTools: AiTool[] = [
       if (status && !STATUSES.has(status)) return fail('status must be upcoming, in-progress, or done');
       const tl = await query(`SELECT 1 FROM timelines WHERE id = $1 AND user_id = $2`, [tlId, userId]);
       if (!tl.rows.length) return fail('timeline not found');
-      const pos = await query<{ max: string | null }>(`SELECT MAX(position) AS max FROM milestones WHERE timeline_id = $1`, [tlId]);
-      const nextPos = pos.rows[0].max !== null ? parseInt(pos.rows[0].max, 10) + 1 : 0;
+      const nextPos = await nextPosition('milestones', 'timeline_id = $1', [tlId]);
       const id = `milestone_${uuidv4()}`;
       await query(
         `INSERT INTO milestones (id, timeline_id, title, description, milestone_date, time_val, status, emoji, color, position)

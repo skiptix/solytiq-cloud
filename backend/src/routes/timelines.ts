@@ -7,6 +7,7 @@ import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors } from '../visibility';
+import { nextPosition } from '../nextPosition';
 
 const router = Router();
 router.use(authenticate);
@@ -260,11 +261,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     const resolvedWs = await resolveWorkspaceForUser(req.userId!, workspaceId);
 
-    const posResult = await query<{ max: string | null }>(
-      'SELECT MAX(position) AS max FROM timelines WHERE user_id = $1',
-      [req.userId]
-    );
-    const nextPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
+    const nextPos = await nextPosition('timelines', 'user_id = $1', [req.userId]);
 
     const result = await query<TimelineRow>(
       `INSERT INTO timelines (id, user_id, name, emoji, color, color_bg, subtitle, layout, is_public, folder_id, position, workspace_id)
@@ -556,11 +553,7 @@ router.post('/:timelineId/milestones', async (req: Request, res: Response) => {
     const validStatus = ['upcoming', 'in-progress', 'done'].includes(status ?? '') ? status : 'upcoming';
     const milestoneId = id ?? `milestone_${uuidv4()}`;
 
-    const posResult = await query<{ max: string | null }>(
-      'SELECT MAX(position) AS max FROM milestones WHERE timeline_id = $1',
-      [timelineId]
-    );
-    const nextPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
+    const nextPos = await nextPosition('milestones', 'timeline_id = $1', [timelineId]);
 
     const result = await query<MilestoneRow>(
       `INSERT INTO milestones (id, timeline_id, title, description, milestone_date, time_val, status, emoji, color, position)

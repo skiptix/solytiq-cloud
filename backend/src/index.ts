@@ -17,7 +17,9 @@ import listsRouter      from './routes/lists';
 import trashRouter      from './routes/trash';
 import adminRouter      from './routes/admin';
 import foldersRouter    from './routes/folders';
-import filesRouter, { UPLOAD_DIR } from './routes/files';
+import filesRouter from './routes/files';
+import { UPLOAD_DIR } from './uploadStorage';
+import { sendFileDownload, resolveUploadPath } from './fileDownload';
 import aiRouter         from './routes/ai';
 import workspacesRouter from './routes/workspaces';
 import timelinesRouter  from './routes/timelines';
@@ -197,14 +199,10 @@ app.get('/api/share/:token/download', async (req, res) => {
       const valid = await comparePassword(pw, file.password_hash);
       if (!valid) { res.status(401).json({ error: 'Invalid password' }); return; }
     }
-    const filePath = path.join(path.resolve(UPLOAD_DIR), file.file_path);
-    if (!require('fs').existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
+    const filePath = resolveUploadPath(UPLOAD_DIR, file.file_path);
+    if (!filePath) { res.status(404).json({ error: 'File not found on disk' }); return; }
 
-    const sanitizedName = file.original_name.replace(/[^\w\s\-_.]/g, '_');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(sanitizedName)}"`);
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Type', 'application/octet-stream');
-    res.sendFile(filePath);
+    sendFileDownload(res, filePath, file.original_name, file.mime_type, 'attachment');
   } catch (err) {
     console.error('share download error:', err);
     res.status(500).json({ error: 'Internal server error' });
