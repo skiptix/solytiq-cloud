@@ -204,7 +204,6 @@ function AppLayout() {
         onTaskDropToList={moveTaskToList}
         isMobile={isMobile}
         drawerOpen={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
       />
       <div style={{ marginLeft: isMobile ? 0 : sidebarWidth, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <TopBar

@@ -1007,7 +1007,6 @@ interface SidebarProps {
   onTaskDropToList: (taskId: number, listId: string) => void;
   isMobile?: boolean;
   drawerOpen?: boolean;
-  onClose?: () => void;
 }
 
 function fmtDistShort(m?: number | null) {
@@ -1015,7 +1014,7 @@ function fmtDistShort(m?: number | null) {
   return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`;
 }
 
-export default function Sidebar({ active, activeListId, activeTimelineId, activeFolderId, activeGpsFileId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList, isMobile, drawerOpen, onClose }: SidebarProps) {
+export default function Sidebar({ active, activeListId, activeTimelineId, activeFolderId, activeGpsFileId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList, isMobile, drawerOpen }: SidebarProps) {
   const collapsed = isMobile ? false : width <= 72;
   const [addHov, setAddHov] = useState(false);
   const [folderHov, setFolderHov] = useState(false);
