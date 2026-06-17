@@ -401,17 +401,17 @@ router.put('/:listId/share', async (req: Request, res: Response) => {
         if (saved.share_enabled) {
           // Share each descendant, minting a token where missing and inheriting
           // the parent's password + expiry so protection stays consistent.
-          for (const id of descendants) {
-            await query(
-              `UPDATE lists
-               SET share_enabled = true,
-                   share_token = COALESCE(share_token, $2),
-                   share_password_hash = $3,
-                   share_expires_at = $4
-               WHERE id = $1`,
-              [id, randomBytes(24).toString('hex'), saved.share_password_hash, saved.share_expires_at]
-            );
-          }
+          const tokens = descendants.map(() => randomBytes(24).toString('hex'));
+          await query(
+            `UPDATE lists l
+             SET share_enabled = true,
+                 share_token = COALESCE(l.share_token, map.token),
+                 share_password_hash = $3,
+                 share_expires_at = $4
+             FROM unnest($1::varchar[], $2::varchar[]) AS map(id, token)
+             WHERE l.id = map.id`,
+            [descendants, tokens, saved.share_password_hash, saved.share_expires_at]
+          );
         } else {
           await query(`UPDATE lists SET share_enabled = false WHERE id = ANY($1::varchar[])`, [descendants]);
         }
