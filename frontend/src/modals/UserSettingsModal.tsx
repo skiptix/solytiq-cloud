@@ -13,7 +13,11 @@ import {
   api2FADisable,
   apiGetApiTokens,
   apiDeleteApiToken,
+  apiGetCaldavStatus,
+  apiGenerateCaldavPassword,
+  apiRevokeCaldav,
   type ApiAccessToken,
+  type CaldavStatus,
 } from '../api/client';
 
 interface UserSettingsModalProps {
@@ -59,7 +63,7 @@ const rowStyle: React.CSSProperties = {
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
-type SettingsTab = 'profile' | 'preferences' | 'security' | 'connections';
+type SettingsTab = 'profile' | 'preferences' | 'security' | 'connections' | 'calendar';
 
 export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   const isMobile = useMobile();
@@ -323,6 +327,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
     { id: 'preferences', label: 'Preferences', icon: 'tune' },
     { id: 'security',    label: 'Security',    icon: 'shield_lock' },
     { id: 'connections', label: 'Connections', icon: 'smart_toy' },
+    { id: 'calendar',    label: 'Calendar Sync', icon: 'event_available' },
   ];
 
   return (
@@ -790,6 +795,14 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
               <ClaudeMcpSection />
             </div>
             )}
+
+            {/* ── CALENDAR SYNC (CalDAV) ── */}
+            {activeTab === 'calendar' && (
+            <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
+              {sectionLabel('Calendar Sync (CalDAV)')}
+              <CalDavSection />
+            </div>
+            )}
           </div>
 
           {/* Footer save bar */}
@@ -1067,6 +1080,140 @@ function ClaudeMcpSection() {
       {!loading && tokens.length === 0 && (
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', textAlign: 'center', padding: '2px 0' }}>
           No connected clients yet.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Calendar Sync (CalDAV) ─────────────────────────────────────────────────────
+
+function CalDavSection() {
+  const [status, setStatus] = useState<CaldavStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [revoking, setRevoking] = useState(false);
+  const [password, setPassword] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const refresh = () => apiGetCaldavStatus().then(setStatus).catch(() => setStatus(null));
+  useEffect(() => { refresh().finally(() => setLoading(false)); }, []);
+
+  const copy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(null), 2000); }).catch(() => {});
+  };
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try { const r = await apiGenerateCaldavPassword(); setPassword(r.password); await refresh(); }
+    catch { /* ignore */ } finally { setGenerating(false); }
+  };
+
+  const handleRevoke = async () => {
+    setRevoking(true);
+    try { await apiRevokeCaldav(); setPassword(null); await refresh(); }
+    catch { /* ignore */ } finally { setRevoking(false); }
+  };
+
+  const serverUrl = status?.serverUrl ?? `${window.location.origin}/caldav/`;
+  const username = status?.username ?? '';
+  const connected = !!status?.connected;
+
+  const copyRow = (label: string, value: string, key: string) => (
+    <div>
+      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 4 }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <code style={{ flex: 1, fontFamily: 'monospace', fontSize: 12.5, color: '#5e4dbb', background: '#F5F3FF', border: '1px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value || '—'}</code>
+        <button onClick={() => copy(value, key)} title={`Copy ${label}`}
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: copied === key ? '#10B981' : '#5e4dbb', background: copied === key ? 'rgba(16,185,129,0.1)' : '#F5F3FF', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
+          <Icon name={copied === key ? 'check' : 'content_copy'} size={13} color={copied === key ? '#10B981' : '#5e4dbb'} />
+          {copied === key ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+    </div>
+  );
+
+  const step = (n: number, text: React.ReactNode) => (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      <div style={{ flexShrink: 0, width: 20, height: 20, borderRadius: '50%', background: '#5e4dbb', color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{n}</div>
+      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#484552', lineHeight: 1.55 }}>{text}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Intro */}
+      <div style={{ ...card, padding: '14px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="event_available" size={19} color="#5e4dbb" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Connect a calendar app</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#787584', lineHeight: 1.5, marginTop: 3 }}>
+              Subscribe from Apple Calendar, Thunderbird or any CalDAV app. Everything on your Calendar page — tasks, milestones and meetings across all your workspaces — appears automatically, with each workspace as its own calendar. Meetings stay in two-way sync.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Connection details */}
+      <div style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {copyRow('Server address', serverUrl, 'url')}
+        {copyRow('User name', username, 'user')}
+
+        {/* Password area */}
+        {password ? (
+          <div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 4 }}>Password</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <code style={{ flex: 1, fontFamily: 'monospace', fontSize: 13.5, fontWeight: 700, letterSpacing: '0.04em', color: '#1c1b22', background: '#fff8e6', border: '1px solid #f3e2b3', borderRadius: 8, padding: '8px 10px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{password}</code>
+              <button onClick={() => copy(password, 'pw')} title="Copy password"
+                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: copied === 'pw' ? '#10B981' : '#5e4dbb', background: copied === 'pw' ? 'rgba(16,185,129,0.1)' : '#F5F3FF', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>
+                <Icon name={copied === 'pw' ? 'check' : 'content_copy'} size={13} color={copied === 'pw' ? '#10B981' : '#5e4dbb'} />
+                {copied === 'pw' ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7 }}>
+              <Icon name="warning" size={13} color="#d97706" />
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#d97706' }}>Copy it now — for your security it won't be shown again.</span>
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>
+            {connected
+              ? `Connected${status?.lastUsedAt ? ` · Last synced ${fmtTokenDate(status.lastUsedAt)}` : ' · Not synced yet'}. Generate a new password if you need to reconnect.`
+              : 'Generate a password to finish setup.'}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <button onClick={handleGenerate} disabled={generating}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: generating ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 10, padding: '10px 18px', cursor: generating ? 'wait' : 'pointer', transition: 'background 150ms' }}>
+            <Icon name={connected ? 'autorenew' : 'key'} size={15} color="#fff" />
+            {generating ? 'Generating…' : connected ? 'Regenerate password' : 'Generate password'}
+          </button>
+          {connected && (
+            <button onClick={handleRevoke} disabled={revoking}
+              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#ba1a1a', background: '#fff5f5', border: '1px solid #ffdad6', borderRadius: 10, padding: '10px 18px', cursor: revoking ? 'wait' : 'pointer', transition: 'background 150ms' }}>
+              {revoking ? 'Disconnecting…' : 'Disconnect'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* How-to */}
+      {!loading && (
+        <div style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22' }}>Add to Apple Calendar</div>
+          {step(1, <>Generate a password above and copy it.</>)}
+          {step(2, <>On <b>Mac</b>: Calendar → Settings → Accounts → <b>+</b> → <b>Other CalDAV Account</b>. On <b>iPhone/iPad</b>: Settings → Calendar → Accounts → Add Account → Other → <b>Add CalDAV Account</b>.</>)}
+          {step(3, <>Set <b>Account Type</b> to <b>Manual</b>, then enter the <b>Server address</b>, your <b>User name</b> (email) and the generated <b>password</b> from above.</>)}
+          {step(4, <>Save. Each workspace appears as its own calendar, plus a <b>Meetings</b> calendar you can add events to.</>)}
+          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', lineHeight: 1.5, marginTop: 2 }}>
+            Tasks appear as to-dos (in Reminders / your to-do view); milestones and meetings appear as events. Tasks &amp; milestones are read-only; meetings sync both ways.
+          </div>
         </div>
       )}
     </div>

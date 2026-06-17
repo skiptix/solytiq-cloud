@@ -301,6 +301,20 @@ export const apiUpdateMeeting = (id: string, data: Partial<Meeting>) =>
 export const apiDeleteMeeting = (id: string) =>
   apiFetch<{ success: boolean }>(`/meetings/${id}`, { method: 'DELETE' });
 
+// CalDAV connection (Apple Calendar / Thunderbird / … sync)
+export interface CaldavStatus {
+  connected: boolean;
+  createdAt: string | null;
+  lastUsedAt: string | null;
+  username: string;
+  serverUrl: string;
+}
+export const apiGetCaldavStatus = () => apiFetch<CaldavStatus>('/caldav');
+export const apiGenerateCaldavPassword = () =>
+  apiFetch<{ password: string; username: string; serverUrl: string }>('/caldav/password', { method: 'POST' });
+export const apiRevokeCaldav = () =>
+  apiFetch<{ success: boolean }>('/caldav', { method: 'DELETE' });
+
 // Folders
 export const apiGetFolders = (workspaceId?: string) =>
   apiFetch<{ folders: Folder[] }>(`/folders${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`);
