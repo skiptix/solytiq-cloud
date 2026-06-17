@@ -839,6 +839,10 @@ async function runMigrations() {
     INSERT INTO app_settings (key, value) VALUES ('two_fa_feature_enabled', 'true')
     ON CONFLICT (key) DO NOTHING
   `);
+  await pool.query(`
+    INSERT INTO app_settings (key, value) VALUES ('mcp_enabled', 'true')
+    ON CONFLICT (key) DO NOTHING
+  `);
 
   // ── Workspaces ──────────────────────────────────────────────────────────────
   await pool.query(`

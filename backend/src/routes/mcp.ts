@@ -22,6 +22,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { buildMcpServer } from '../mcpServer';
 import { authenticateApiToken } from '../apiToken';
 import { getPublicBaseUrl } from '../publicUrl';
+import { query } from '../db';
 
 const router = Router();
 
@@ -36,6 +37,22 @@ function setWwwAuthenticate(req: Request, res: Response): void {
     'WWW-Authenticate',
     `Bearer realm="Solytiq MCP", error="invalid_token", resource_metadata="${resourceMetadata}"`
   );
+}
+
+// Guard: reject all requests when MCP is disabled by the admin.
+async function checkMcpEnabled(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { rows } = await query<{ value: string }>(
+      "SELECT value FROM app_settings WHERE key = 'mcp_enabled'"
+    );
+    if (rows[0]?.value === 'false') {
+      res.status(503).json(jsonRpcError(-32000, 'MCP is disabled by the administrator.'));
+      return;
+    }
+  } catch {
+    // If we can't read the setting, fail open (allow) to avoid a hard outage.
+  }
+  next();
 }
 
 // Bearer-token authentication for the MCP endpoint.
@@ -57,7 +74,7 @@ async function authMcp(req: Request, res: Response, next: NextFunction): Promise
 }
 
 // POST /mcp — handle a JSON-RPC MCP request (initialize, tools/list, tools/call …)
-router.post('/', authMcp, async (req: Request, res: Response) => {
+router.post('/', checkMcpEnabled, authMcp, async (req: Request, res: Response) => {
   const userId = (req as Request & { mcpUserId: string }).mcpUserId;
   const server = buildMcpServer(userId, getPublicBaseUrl(req));
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
@@ -79,10 +96,10 @@ router.post('/', authMcp, async (req: Request, res: Response) => {
 });
 
 // Stateless mode does not support server-initiated streams or session teardown.
-router.get('/', (_req: Request, res: Response) => {
+router.get('/', checkMcpEnabled, (_req: Request, res: Response) => {
   res.status(405).json(jsonRpcError(-32000, 'Method not allowed. This MCP server is stateless; use POST.'));
 });
-router.delete('/', (_req: Request, res: Response) => {
+router.delete('/', checkMcpEnabled, (_req: Request, res: Response) => {
   res.status(405).json(jsonRpcError(-32000, 'Method not allowed.'));
 });
 

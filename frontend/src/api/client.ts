@@ -113,7 +113,7 @@ export const apiChangePassword = (currentPassword: string, newPassword: string) 
   apiFetch<{ success: boolean }>('/auth/password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) });
 
 export const apiGetFeatureFlags = () =>
-  apiFetch<{ twoFAEnabled: boolean }>('/auth/feature-flags');
+  apiFetch<{ twoFAEnabled: boolean; mcpEnabled: boolean }>('/auth/feature-flags');
 
 export const apiUpdateProfile = (data: { fullName?: string; email?: string }) =>
   apiFetch<{ user: { id: string; username: string; email: string; fullName: string } }>(
@@ -674,6 +674,12 @@ export const apiUpdateFeatureFlags = (data: { twoFAFeatureEnabled?: boolean }) =
   apiFetch<{ settings: Record<string, string> }>('/admin/settings', {
     method: 'PUT',
     body: JSON.stringify(data),
+  });
+
+export const apiUpdateAppSettingsMcp = (mcpEnabled: boolean) =>
+  apiFetch<{ settings: Record<string, string> }>('/admin/settings', {
+    method: 'PUT',
+    body: JSON.stringify({ mcpEnabled }),
   });
 
 // Workspaces

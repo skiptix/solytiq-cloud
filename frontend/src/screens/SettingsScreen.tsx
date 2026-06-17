@@ -4,7 +4,7 @@ import { useMobile } from '../hooks/useBreakpoint';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import useAIStore from '../store/useAIStore';
-import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiGetAIUsage, type AIUsageDay, type AIUsageModel, type AIUsageTotals } from '../api/client';
+import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiUpdateAppSettingsMcp, apiGetAIUsage, type AIUsageDay, type AIUsageModel, type AIUsageTotals } from '../api/client';
 import Icon from '../components/Icon';
 
 interface UserEntry {
@@ -152,6 +152,11 @@ export default function SettingsScreen() {
   const [securitySaving, setSecuritySaving] = useState(false);
   const [securitySaved, setSecuritySaved] = useState(false);
 
+  // MCP enable/disable
+  const [mcpEnabled, setMcpEnabled] = useState(true);
+  const [mcpSaving, setMcpSaving] = useState(false);
+  const [showMcpDisableConfirm, setShowMcpDisableConfirm] = useState(false);
+
   const loadUsers = useCallback(async () => {
     if (!isAdmin) return;
     setUsersLoading(true);
@@ -181,6 +186,7 @@ export default function SettingsScreen() {
         const bytes = parseInt(res.settings['storage_quota_per_user'] ?? '0', 10);
         setQuotaGb(bytes > 0 ? (bytes / (1024 ** 3)).toFixed(0) : '15');
         setTwoFAFeatureEnabled(res.settings['two_fa_feature_enabled'] !== 'false');
+        setMcpEnabled(res.settings['mcp_enabled'] !== 'false');
       })
       .catch(() => setQuotaGb('15'));
   }, [isAdmin]);
@@ -250,6 +256,34 @@ export default function SettingsScreen() {
         .catch(() => {});
     } finally {
       setSecuritySaving(false);
+    }
+  };
+
+  const handleToggleMcp = (newValue: boolean) => {
+    if (!newValue) {
+      // Disabling: show confirmation dialog first
+      setShowMcpDisableConfirm(true);
+    } else {
+      // Enabling: no confirmation needed
+      setMcpSaving(true);
+      setMcpEnabled(true);
+      apiUpdateAppSettingsMcp(true)
+        .catch(() => setMcpEnabled(false))
+        .finally(() => setMcpSaving(false));
+    }
+  };
+
+  const handleConfirmDisableMcp = async () => {
+    setMcpSaving(true);
+    setShowMcpDisableConfirm(false);
+    try {
+      await apiUpdateAppSettingsMcp(false);
+      setMcpEnabled(false);
+    } catch {
+      // Revert on error
+      setMcpEnabled(true);
+    } finally {
+      setMcpSaving(false);
     }
   };
 
@@ -664,6 +698,68 @@ export default function SettingsScreen() {
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <SaveButton onClick={handleSaveAI} saving={aiSaving} saved={aiSaved} />
+                </div>
+
+                {/* ── Claude MCP Integration ── */}
+                {sectionLabel('Claude MCP Integration')}
+                <div style={{ ...card }}>
+                  <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {/* Toggle row */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div>
+                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Enable Claude MCP</div>
+                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Allow users to connect Claude via the MCP server. Disabling immediately revokes all active connections for all users.</div>
+                      </div>
+                      <button
+                        onClick={() => !mcpSaving && handleToggleMcp(!mcpEnabled)}
+                        disabled={mcpSaving}
+                        style={{
+                          width: 44, height: 24, borderRadius: 12,
+                          background: mcpSaving ? '#c9c4d5' : mcpEnabled ? '#5e4dbb' : '#e8e4f0',
+                          border: 'none', cursor: mcpSaving ? 'wait' : 'pointer',
+                          position: 'relative', flexShrink: 0,
+                          transition: 'background 200ms',
+                        }}
+                      >
+                        <span style={{
+                          position: 'absolute', top: 2,
+                          left: mcpEnabled ? 22 : 2,
+                          width: 20, height: 20, borderRadius: '50%',
+                          background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                          transition: 'left 200ms',
+                        }} />
+                      </button>
+                    </div>
+
+                    {/* Confirmation dialog — shown inline when admin clicks to disable */}
+                    {showMcpDisableConfirm && (
+                      <div style={{ background: '#fff8f5', border: '1.5px solid #ffdad6', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12, animation: 'menuIn 160ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                          <Icon name="warning" size={18} color="#ba1a1a" />
+                          <div>
+                            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#ba1a1a', marginBottom: 4 }}>Disable Claude MCP for all users?</div>
+                            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#484552', lineHeight: 1.55 }}>
+                              This will <strong>immediately revoke all Claude connections</strong> across the entire instance. Every user will be disconnected and will need to reconnect once MCP is re-enabled. This action cannot be undone.
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                          <button
+                            onClick={() => setShowMcpDisableConfirm(false)}
+                            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#484552', background: '#f5f5f5', border: '1px solid #e8e4f0', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleConfirmDisableMcp}
+                            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
+                          >
+                            Disable MCP &amp; revoke all connections
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* ── Usage Analytics ── */}

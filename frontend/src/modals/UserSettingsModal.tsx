@@ -72,10 +72,14 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
 
-  // Feature flag
+  // Feature flags
   const [twoFAFeatureEnabled, setTwoFAFeatureEnabled] = useState(true);
+  const [mcpEnabled, setMcpEnabled] = useState(true);
   useEffect(() => {
-    apiGetFeatureFlags().then(r => setTwoFAFeatureEnabled(r.twoFAEnabled)).catch(() => {});
+    apiGetFeatureFlags().then(r => {
+      setTwoFAFeatureEnabled(r.twoFAEnabled);
+      setMcpEnabled(r.mcpEnabled);
+    }).catch(() => {});
   }, []);
 
   // Profile image upload wizard
@@ -326,7 +330,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
     { id: 'profile',     label: 'Profile',     icon: 'person' },
     { id: 'preferences', label: 'Preferences', icon: 'tune' },
     { id: 'security',    label: 'Security',    icon: 'shield_lock' },
-    { id: 'connections', label: 'Connections', icon: 'smart_toy' },
+    ...(mcpEnabled ? [{ id: 'connections' as SettingsTab, label: 'Connections', icon: 'smart_toy' }] : []),
     { id: 'calendar',    label: 'Calendar Sync', icon: 'event_available' },
   ];
 
@@ -789,7 +793,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
             )}
 
             {/* ── CONNECTIONS (Claude MCP) ── */}
-            {activeTab === 'connections' && (
+            {activeTab === 'connections' && mcpEnabled && (
             <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
               {sectionLabel('Claude MCP')}
               <ClaudeMcpSection />
