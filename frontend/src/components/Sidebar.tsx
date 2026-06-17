@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { List, Folder, Timeline, GpsFile } from '../types';
 import Icon from './Icon';
 import useAppStore from '../store/useAppStore';
@@ -44,7 +45,7 @@ function RenameDialog({ value, accentColor = '#5e4dbb', onChange, onSave, onCanc
   value: string; accentColor?: string;
   onChange: (v: string) => void; onSave: () => void; onCancel: () => void;
 }) {
-  return (
+  return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', animation: 'backdropIn 180ms ease both' }}
       onClick={onCancel}>
       <div style={{ background: '#fff', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 360, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
@@ -68,7 +69,8 @@ function RenameDialog({ value, accentColor = '#5e4dbb', onChange, onSave, onCanc
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -284,10 +286,10 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
       )}
 
       {/* Delete confirmation dialog */}
-      {showDeleteDialog && (
+      {showDeleteDialog && createPortal(
         <div
           onClick={() => setShowDeleteDialog(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
           <div
             onClick={e => e.stopPropagation()}
             style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
@@ -303,7 +305,8 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
               <button onClick={handleDelete} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
@@ -485,10 +488,10 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
       )}
 
       {/* Delete confirmation dialog */}
-      {showDeleteDialog && (
+      {showDeleteDialog && createPortal(
         <div
           onClick={() => setShowDeleteDialog(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
           <div
             onClick={e => e.stopPropagation()}
             style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
@@ -504,7 +507,8 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
               <button onClick={handleDelete} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
@@ -789,10 +793,10 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
       )}
 
       {/* Delete folder confirmation */}
-      {showDeleteDialog && (
+      {showDeleteDialog && createPortal(
         <div
           onClick={() => setShowDeleteDialog(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
           <div
             onClick={e => e.stopPropagation()}
             style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
@@ -808,7 +812,8 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
               <button onClick={handleDelete} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
