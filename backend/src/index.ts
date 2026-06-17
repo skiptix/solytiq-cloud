@@ -203,7 +203,7 @@ app.get('/api/share/:token/download', async (req, res) => {
       const valid = await comparePassword(pw, file.password_hash);
       if (!valid) { res.status(401).json({ error: 'Invalid password' }); return; }
     }
-    const filePath = path.join(path.resolve(UPLOAD_DIR), file.file_path);
+    const filePath = path.join(path.resolve(UPLOAD_DIR), path.basename(file.file_path));
     if (!require('fs').existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
 
     const sanitizedName = file.original_name.replace(/[^\w\s\-_.]/g, '_');

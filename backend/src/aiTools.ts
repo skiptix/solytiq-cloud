@@ -767,7 +767,7 @@ export const aiTools: AiTool[] = [
       const { file_path, mime_type, original_name } = r.rows[0];
       // Resolve safely and confirm the path stays inside the upload dir.
       const baseDir = path.resolve(UPLOAD_DIR);
-      const filePath = path.resolve(baseDir, file_path);
+      const filePath = path.resolve(baseDir, path.basename(file_path));
       if (!filePath.startsWith(baseDir + path.sep)) return fail('invalid file path');
       if (!fs.existsSync(filePath)) return fail('file not found on disk');
       const buffer = await fs.promises.readFile(filePath);

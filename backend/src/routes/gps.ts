@@ -109,7 +109,7 @@ function parseFit(buffer: Buffer): Promise<GpsPoint[]> {
 }
 
 async function readAndParse(filePath: string, fileType: string): Promise<ParsedGpxData> {
-  const abs = path.join(UPLOAD_DIR, filePath);
+  const abs = path.join(UPLOAD_DIR, path.basename(filePath));
   if (fileType === 'fit') {
     const points = await parseFit(fs.readFileSync(abs));
     return { points, waypoints: [], routePoints: [] };
@@ -264,7 +264,7 @@ router.post('/:id/smooth-save', async (req, res) => {
     );
     if (!result.rows.length) { res.status(404).json({ error: 'Not found' }); return; }
     const row = result.rows[0];
-    const filePath = path.join(UPLOAD_DIR, row.file_path);
+    const filePath = path.join(UPLOAD_DIR, path.basename(row.file_path));
 
     const { points } = await readAndParse(row.file_path, row.file_type);
     const smoothed = gaussianSmooth(points, sigmaNum);
@@ -420,7 +420,7 @@ router.get('/:id/download', async (req, res) => {
     const result = await query<GpsFileRow>('SELECT * FROM gps_files WHERE id = $1 AND user_id = $2', [req.params.id, userId]);
     const row = result.rows[0];
     if (!row) return res.status(404).json({ error: 'File not found' });
-    const abs = path.join(UPLOAD_DIR, row.file_path);
+    const abs = path.join(UPLOAD_DIR, path.basename(row.file_path));
     if (!fs.existsSync(abs)) return res.status(404).json({ error: 'File not on disk' });
     const mime = row.file_type === 'fit' ? 'application/octet-stream' : 'application/gpx+xml';
     res.setHeader('Content-Type', mime);
@@ -497,7 +497,7 @@ router.put('/:id/points', async (req, res) => {
     const routeStateJson = JSON.stringify(stateToSave);
 
     if (saveAs === 'replace') {
-      try { fs.unlinkSync(path.join(UPLOAD_DIR, origFile.file_path)); } catch { /* ignore */ }
+      try { fs.unlinkSync(path.join(UPLOAD_DIR, path.basename(origFile.file_path))); } catch { /* ignore */ }
       await query(
         `UPDATE gps_files SET file_path = $1, original_name = $2, file_size = $3, metadata = $4, route_state = $5 WHERE id = $6 AND user_id = $7`,
         [newFileName, `${outputName}.gpx`, fileSize, JSON.stringify(metadata), routeStateJson, id, userId],
@@ -550,7 +550,7 @@ router.delete('/:id', async (req, res) => {
     const result = await query<GpsFileRow>('DELETE FROM gps_files WHERE id = $1 AND user_id = $2 RETURNING *', [req.params.id, userId]);
     const row = result.rows[0];
     if (!row) return res.status(404).json({ error: 'File not found' });
-    fs.unlink(path.join(UPLOAD_DIR, row.file_path), () => {});
+    fs.unlink(path.join(UPLOAD_DIR, path.basename(row.file_path)), () => {});
     res.json({ ok: true });
   } catch (err) { console.error('GPS delete:', err); res.status(500).json({ error: 'Failed to delete' }); }
 });
