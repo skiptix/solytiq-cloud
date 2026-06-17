@@ -324,6 +324,18 @@ The per-item **"More settings…"** menu in the `Sidebar` opens `ItemSettingsMod
 
 The two editor dialogs — `TaskDialog` (task/item editing) and the milestone editor in `TimelineScreen` — share one chrome: a wide (800px) card with a colored accent stripe, a large title-with-emoji/checkbox heading row, a light-purple **properties panel** of icon+label rows (`PropRow`), a Notes section, and an explicit **Cancel / Save** footer. When the containing list/timeline is **workspace-public**, the panel also shows an **Owner** row — a `CreatorBubble` avatar + name (task `creatorId` for items; the timeline owner for milestones). Both use **buffered editing** — field edits live in local state and only persist on Save; Cancel/close/Escape discards them. (In `TaskDialog`, attachments and sub-items are the exception: they remain immediate actions.)
 
+### Mobile Responsiveness
+
+Every new component, screen, modal, dialog, and popup **must work correctly on mobile (≥ 390px, e.g. iPhone 15 Pro)**. Desktop layout is the design priority; mobile is an adaptive layer on top.
+
+Rules:
+- Call `useMobile()` (from `src/hooks/useBreakpoint.ts`) at the composition root (screen, modal, or layout shell). Never call it inside leaf/reusable components — pass `isMobile` as a prop if needed.
+- Never set `transform` on a `position: fixed` container (e.g. the sidebar). CSS spec makes `transform` a new containing block for fixed descendants, trapping them inside and breaking overflow. Use `left`/`top` properties instead for slide animations on fixed elements.
+- All fixed overlays (dropdowns, dialogs, rename modals) must use `position: fixed` with `zIndex` ≥ 400 so they escape any parent `overflow: hidden`.
+- Pickers (`CalendarPicker`, `TimePicker`) use `Math.min(N, window.innerWidth - 32)` for their width to stay on-screen.
+- Use `padding: 'var(--modal-pad)'` (defined in `index.css`) for modal backdrops so padding shrinks on mobile without JS.
+- Test both 390px (mobile) and 1440px (desktop) after every change — desktop must remain unchanged.
+
 ### Styling — "Luminous List" Design System
 
 - Tailwind CSS v4 provides base styles (`src/index.css`), but components predominantly use **inline `style={{}}` objects** with the design tokens below. Match the surrounding component's approach when editing.

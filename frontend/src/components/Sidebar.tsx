@@ -39,6 +39,39 @@ function NavItem({ icon, label, active, onClick, collapsed }: NavItemProps) {
   );
 }
 
+// ── RenameDialog ──────────────────────────────────────────────────────────────
+function RenameDialog({ value, accentColor = '#5e4dbb', onChange, onSave, onCancel }: {
+  value: string; accentColor?: string;
+  onChange: (v: string) => void; onSave: () => void; onCancel: () => void;
+}) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', animation: 'backdropIn 180ms ease both' }}
+      onClick={onCancel}>
+      <div style={{ background: '#fff', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 360, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 16 }}>Rename</div>
+        <input
+          autoFocus
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
+          style={{ width: '100%', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, border: `1.5px solid ${accentColor}`, borderRadius: 8, outline: 'none', padding: '10px 12px', color: '#1c1b22', background: '#faf8ff', boxSizing: 'border-box' }}
+        />
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
+          <button onClick={onCancel}
+            style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #e8e4f0', background: '#f7f2fc', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#787584', cursor: 'pointer' }}>
+            Cancel
+          </button>
+          <button onClick={onSave}
+            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: accentColor, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer' }}>
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── ListItemRow ───────────────────────────────────────────────────────────────
 interface ListItemRowProps {
   list: List;
@@ -122,38 +155,22 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
           paddingLeft: indented ? 8 : 0,
         }}>
 
-        {editingName && !collapsed ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '4px 8px', animation: 'menuItemIn 140ms ease both' }}>
-            <input
-              autoFocus
-              value={nameInput}
-              onChange={e => setNameInput(e.target.value)}
-              onBlur={handleRename}
-              onKeyDown={e => {
-                if (e.key === 'Enter') handleRename();
-                if (e.key === 'Escape') { setEditingName(false); setNameInput(list.name); }
-              }}
-              style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, border: 'none', borderBottom: '1.5px solid #5e4dbb', outline: 'none', background: 'transparent', color: '#1c1b22', padding: '2px 4px' }}
+        <button title={collapsed ? list.name : undefined}
+          onClick={() => onNavigate(`/list/${list.id}`)}
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, background: hov ? (list.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? (list.color ?? '#5e4dbb') : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+          {!collapsed && (
+            <Icon
+              name={list.isPublic ? 'public' : 'lock'}
+              size={13}
+              color="#b0acbe"
             />
-          </div>
-        ) : (
-          <button title={collapsed ? list.name : undefined}
-            onClick={() => onNavigate(`/list/${list.id}`)}
-            style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, background: hov ? (list.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? (list.color ?? '#5e4dbb') : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
-            {!collapsed && (
-              <Icon
-                name={list.isPublic ? 'public' : 'lock'}
-                size={13}
-                color="#b0acbe"
-              />
-            )}
-            {list.emoji
-              ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{list.emoji}</span>
-              : <Icon name="format_list_bulleted" size={19} color={isActive ? (list.color ?? '#5e4dbb') : '#787584'} />
-            }
-            {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>}
-          </button>
-        )}
+          )}
+          {list.emoji
+            ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{list.emoji}</span>
+            : <Icon name="format_list_bulleted" size={19} color={isActive ? (list.color ?? '#5e4dbb') : '#787584'} />
+          }
+          {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>}
+        </button>
 
         {!collapsed && !isTaskDropTarget && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 4, flexShrink: 0 }}>
@@ -254,6 +271,15 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
           onVisibilityApplied={(p: boolean) => setLists(prev => prev.map(l => l.id === list.id ? { ...l, isPublic: p } : l))}
           onChange={handleSettingsChange}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {editingName && (
+        <RenameDialog
+          value={nameInput}
+          onChange={setNameInput}
+          onSave={handleRename}
+          onCancel={() => { setEditingName(false); setNameInput(list.name); }}
         />
       )}
 
@@ -359,24 +385,9 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
         onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
         style={{ display: 'flex', alignItems: 'center', borderRadius: 8, position: 'relative', paddingLeft: indented ? 8 : 0, borderTop: dragOverId === timeline.id ? '2px solid #9d8dff' : '2px solid transparent', transition: 'border-color 120ms' }}>
 
-        {editingName && !collapsed ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '4px 8px', animation: 'menuItemIn 140ms ease both' }}>
-            <input
-              autoFocus
-              value={nameInput}
-              onChange={e => setNameInput(e.target.value)}
-              onBlur={handleRename}
-              onKeyDown={e => {
-                if (e.key === 'Enter') handleRename();
-                if (e.key === 'Escape') { setEditingName(false); setNameInput(timeline.name); }
-              }}
-              style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, border: 'none', borderBottom: `1.5px solid ${accent}`, outline: 'none', background: 'transparent', color: '#1c1b22', padding: '2px 4px' }}
-            />
-          </div>
-        ) : (
-          <button title={collapsed ? timeline.name : undefined}
-            onClick={() => onNavigate(`/timeline/${timeline.id}`)}
-            style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, background: hov ? (timeline.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? accent : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+        <button title={collapsed ? timeline.name : undefined}
+          onClick={() => onNavigate(`/timeline/${timeline.id}`)}
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, background: hov ? (timeline.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? accent : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
             {!collapsed && (
               <Icon name={timeline.isPublic ? 'public' : 'lock'} size={13} color="#b0acbe" />
             )}
@@ -386,7 +397,6 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
             }
             {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{timeline.name}</span>}
           </button>
-        )}
 
         {!collapsed && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 4, flexShrink: 0 }}>
@@ -461,6 +471,16 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
           onVisibilityApplied={(p: boolean) => setTimelines(prev => prev.map(t => t.id === timeline.id ? { ...t, isPublic: p } : t))}
           onChange={handleSettingsChange}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {editingName && (
+        <RenameDialog
+          value={nameInput}
+          accentColor={accent}
+          onChange={setNameInput}
+          onSave={handleRename}
+          onCancel={() => { setEditingName(false); setNameInput(timeline.name); }}
         />
       )}
 
@@ -1028,11 +1048,19 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   const [addingFolder, setAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
   const [gpsFiles, setGpsFiles] = useState<GpsFile[]>([]);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsSearch, setGpsSearch] = useState('');
 
   const { folders, timelines, addFolder, updateList, updateFolder, updateTimeline, setFolders, setTimelines, loadFromApi } = useAppStore();
+
+  // Scroll sidebar to top whenever the mobile drawer opens so the logo is always visible.
+  useEffect(() => {
+    if (isMobile && drawerOpen) {
+      asideRef.current?.scrollTo({ top: 0 });
+    }
+  }, [drawerOpen, isMobile]);
 
   useEffect(() => {
     const clearTaskDrag = () => { setDragOverTaskListId(null); setDragOverTimelineId(null); };
@@ -1164,7 +1192,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   // ── GPS sidebar mode ───────────────────────────────────────────────────────
   if (active === 'gps') {
     return (
-      <aside style={{
+      <aside ref={asideRef} style={{
         width: isMobile ? 280 : width,
         minWidth: isMobile ? 280 : width,
         height: '100vh',
@@ -1172,17 +1200,18 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         borderRight: '1px solid #E5E7EB',
         display: 'flex',
         flexDirection: 'column',
-        padding: collapsed ? '16px 6px' : '16px 12px',
+        padding: isMobile
+          ? 'calc(env(safe-area-inset-top, 0px) + 16px) 12px 16px'
+          : collapsed ? '16px 6px' : '16px 12px',
         gap: 4,
         position: 'fixed',
-        left: 0,
+        left: isMobile ? (drawerOpen ? 0 : -280) : 0,
         top: 0,
         zIndex: 40,
         overflowY: 'auto',
         overflowX: 'hidden',
         boxSizing: 'border-box',
-        transform: isMobile ? (drawerOpen ? 'translateX(0)' : 'translateX(-100%)') : 'translateX(0)',
-        transition: isMobile ? 'transform 260ms cubic-bezier(0.22,1,0.36,1)' : undefined,
+        transition: isMobile ? 'left 260ms cubic-bezier(0.22,1,0.36,1)' : undefined,
       }}>
         {/* Resize handle — desktop only */}
         {!isMobile && (
@@ -1296,7 +1325,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.20.0
+              v1.20.2
             </div>
           )}
         </div>
@@ -1305,7 +1334,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   }
 
   return (
-    <aside style={{
+    <aside ref={asideRef} style={{
       width: isMobile ? 280 : width,
       minWidth: isMobile ? 280 : width,
       height: '100vh',
@@ -1313,17 +1342,18 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
       borderRight: '1px solid #E5E7EB',
       display: 'flex',
       flexDirection: 'column',
-      padding: collapsed ? '16px 6px' : '16px 12px',
+      padding: isMobile
+        ? 'calc(env(safe-area-inset-top, 0px) + 16px) 12px 16px'
+        : collapsed ? '16px 6px' : '16px 12px',
       gap: 4,
       position: 'fixed',
-      left: 0,
+      left: isMobile ? (drawerOpen ? 0 : -280) : 0,
       top: 0,
       zIndex: 40,
       overflowY: 'auto',
       overflowX: 'hidden',
       boxSizing: 'border-box',
-      transform: isMobile ? (drawerOpen ? 'translateX(0)' : 'translateX(-100%)') : 'translateX(0)',
-      transition: isMobile ? 'transform 260ms cubic-bezier(0.22,1,0.36,1)' : undefined,
+      transition: isMobile ? 'left 260ms cubic-bezier(0.22,1,0.36,1)' : undefined,
     }}>
 
       {/* Resize handle — desktop only */}
@@ -1510,7 +1540,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.20.0
+            v1.20.2
           </div>
         )}
       </div>

@@ -4,9 +4,10 @@ interface Props {
   isOpen: boolean;
   isThinking: boolean;
   onClick: () => void;
+  size?: number;
 }
 
-export default function AIBubble({ isOpen, isThinking, onClick }: Props) {
+export default function AIBubble({ isOpen, isThinking, onClick, size = 52 }: Props) {
   const bubbleRef = useRef<HTMLButtonElement>(null);
   const [pupil, setPupil] = useState({ x: 0, y: 0 });
   const [blink, setBlink] = useState(false);
@@ -63,8 +64,8 @@ export default function AIBubble({ isOpen, isThinking, onClick }: Props) {
       onMouseLeave={() => setHovered(false)}
       aria-label="AI Assistant"
       style={{
-        width: 52,
-        height: 52,
+        width: size,
+        height: size,
         borderRadius: '50%',
         border: 'none',
         cursor: 'pointer',
@@ -77,7 +78,7 @@ export default function AIBubble({ isOpen, isThinking, onClick }: Props) {
         animation: !isOpen && !isThinking ? 'aiBubbleFloat 7s ease-in-out infinite' : undefined,
       }}
     >
-      <svg viewBox="0 0 52 52" width="52" height="52" style={{ display: 'block' }}>
+      <svg viewBox="0 0 52 52" width={size} height={size} style={{ display: 'block' }}>
         <defs>
           <radialGradient id="bubbleGrad" cx="40%" cy="35%" r="65%">
             <stop offset="0%" stopColor="#9d8dff" />
