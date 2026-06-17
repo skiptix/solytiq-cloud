@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { query } from '../db';
 import { authenticate, requireAdmin } from '../middleware';
@@ -7,7 +7,7 @@ import { hashPassword, comparePassword } from '../auth';
 import { ensurePersonalWorkspace, wlog } from '../workspaceUtil';
 import { generateAndLogSetupToken } from '../setupToken';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 const router = Router();
 
@@ -340,7 +340,7 @@ router.get('/ai/usage', authenticate, requireAdmin, async (_req: Request, res: R
 // GET /api/admin/system/storage
 router.get('/system/storage', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {
-    const { stdout } = await execAsync('df -P /');
+    const { stdout } = await execFileAsync('df', ['-P', '/']);
     const parts = stdout.trim().split('\n')[1].trim().split(/\s+/);
     const totalBytes = parseInt(parts[1]) * 1024;
     const usedBytes  = parseInt(parts[2]) * 1024;
