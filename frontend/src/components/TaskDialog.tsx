@@ -346,7 +346,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
         }
         sectionId = currentLinkedList?.sections[0]?.id ?? '';
         if (!sectionId) {
-          console.error('[SubItem] ✗ no section found in linked list', listId, '— aborting');
           return;
         }
       }
@@ -356,7 +355,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
       const wsId = useWorkspaceStore.getState().currentWorkspaceId;
       await loadFromApi(wsId ?? undefined);
     } catch (err) {
-      console.error('[SubItem] ✗ ERROR:', err);
       setCreatingList(false);
     }
   };
