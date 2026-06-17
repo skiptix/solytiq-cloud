@@ -1094,6 +1094,7 @@ function CalDavSection() {
   const [generating, setGenerating] = useState(false);
   const [revoking, setRevoking] = useState(false);
   const [password, setPassword] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
   const refresh = () => apiGetCaldavStatus().then(setStatus).catch(() => setStatus(null));
@@ -1163,29 +1164,53 @@ function CalDavSection() {
         {copyRow('User name', username, 'user')}
 
         {/* Password area */}
-        {password ? (
-          <div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 4 }}>Password</div>
+        <div>
+          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 4 }}>Password</div>
+          {password ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <code style={{ flex: 1, fontFamily: 'monospace', fontSize: 13.5, fontWeight: 700, letterSpacing: showPassword ? '0.04em' : '0.15em', color: '#1c1b22', background: '#fff8e6', border: '1px solid #f3e2b3', borderRadius: 8, padding: '8px 10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {showPassword ? password : '••••••••••••••••'}
+                </code>
+                <button onClick={() => setShowPassword(v => !v)} title={showPassword ? 'Hide password' : 'Show password'}
+                  style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '8px 10px', cursor: 'pointer', transition: 'background 150ms' }}>
+                  <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={15} color="#5e4dbb" />
+                </button>
+                <button onClick={() => copy(password, 'pw')} title="Copy password"
+                  style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: copied === 'pw' ? '#10B981' : '#5e4dbb', background: copied === 'pw' ? 'rgba(16,185,129,0.1)' : '#F5F3FF', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
+                  <Icon name={copied === 'pw' ? 'check' : 'content_copy'} size={13} color={copied === 'pw' ? '#10B981' : '#5e4dbb'} />
+                  {copied === 'pw' ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7 }}>
+                <Icon name="warning" size={13} color="#d97706" />
+                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#d97706' }}>Copy it now — for your security it won't be shown again after you close this window.</span>
+              </div>
+            </>
+          ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <code style={{ flex: 1, fontFamily: 'monospace', fontSize: 13.5, fontWeight: 700, letterSpacing: '0.04em', color: '#1c1b22', background: '#fff8e6', border: '1px solid #f3e2b3', borderRadius: 8, padding: '8px 10px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{password}</code>
-              <button onClick={() => copy(password, 'pw')} title="Copy password"
-                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: copied === 'pw' ? '#10B981' : '#5e4dbb', background: copied === 'pw' ? 'rgba(16,185,129,0.1)' : '#F5F3FF', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}>
-                <Icon name={copied === 'pw' ? 'check' : 'content_copy'} size={13} color={copied === 'pw' ? '#10B981' : '#5e4dbb'} />
-                {copied === 'pw' ? 'Copied' : 'Copy'}
+              <code style={{ flex: 1, fontFamily: 'monospace', fontSize: 13.5, letterSpacing: '0.15em', color: '#b0acbe', background: '#fafafa', border: '1px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                ••••••••••••••••
+              </code>
+              <button disabled title="No password generated yet"
+                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f5', border: 'none', borderRadius: 8, padding: '8px 10px', cursor: 'not-allowed', opacity: 0.4 }}>
+                <Icon name="visibility" size={15} color="#b0acbe" />
+              </button>
+              <button disabled title="No password generated yet"
+                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#b0acbe', background: '#f5f5f5', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'not-allowed', opacity: 0.4 }}>
+                <Icon name="content_copy" size={13} color="#b0acbe" />
+                Copy
               </button>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7 }}>
-              <Icon name="warning" size={13} color="#d97706" />
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#d97706' }}>Copy it now — for your security it won't be shown again.</span>
+          )}
+          {!password && (
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', marginTop: 6 }}>
+              {connected
+                ? `Connected${status?.lastUsedAt ? ` · Last synced ${fmtTokenDate(status.lastUsedAt)}` : ' · Not synced yet'}. Regenerate to get a new copyable password.`
+                : 'Generate a password to finish setup.'}
             </div>
-          </div>
-        ) : (
-          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>
-            {connected
-              ? `Connected${status?.lastUsedAt ? ` · Last synced ${fmtTokenDate(status.lastUsedAt)}` : ' · Not synced yet'}. Generate a new password if you need to reconnect.`
-              : 'Generate a password to finish setup.'}
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
