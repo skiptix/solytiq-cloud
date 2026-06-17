@@ -45,10 +45,14 @@ app.set('trust proxy', 1);
 // ---------------------------------------------------------------------------
 
 const frontendUrl = process.env.FRONTEND_URL;
+if (!frontendUrl) {
+  console.error('FATAL: FRONTEND_URL environment variable is missing.');
+  process.exit(1);
+}
 
 app.use(cors({
-  origin: frontendUrl ?? '*',
-  credentials: Boolean(frontendUrl),
+  origin: frontendUrl,
+  credentials: true,
 }));
 
 app.use(helmet({
