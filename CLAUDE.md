@@ -1,5 +1,10 @@
 # CLAUDE.md — Solytiq Cloud
 
+
+CRITICAL SYNCHRONIZATION RULE: Whenever you make changes, updates, or additions to this CLAUDE.md file, you MUST immediately apply the exact same modifications to the GEMINI.md and .antigravity.md file in the repository root. Both files must remain perfectly synchronized at all times to ensure all AI agents share the same context and rules.
+
+---
+
 Solytiq Cloud is a self-hosted, full-stack productivity suite: task lists, project timelines, file sharing, shared workspaces, a GPS/GPX route planner, and an AI assistant. The stack is React 19 + Vite (frontend), Express + TypeScript (backend), PostgreSQL 16, and Nginx — orchestrated with Docker Compose.
 
 ---
