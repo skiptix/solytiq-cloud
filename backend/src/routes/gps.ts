@@ -424,7 +424,7 @@ router.get('/:id/download', async (req, res) => {
     if (!fs.existsSync(abs)) return res.status(404).json({ error: 'File not on disk' });
     const mime = row.file_type === 'fit' ? 'application/octet-stream' : 'application/gpx+xml';
     res.setHeader('Content-Type', mime);
-    const sanitizedName = String(row.original_name).replace(/[^\w\s\-_.]/g, '_');
+    const sanitizedName = String(row.original_name).replace(/[^\x20-\x7E]/g, '').replace(/[^\w\s\-_.]/g, '_');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(sanitizedName)}"`);
     res.sendFile(abs);
   } catch (err) { console.error('GPS download:', err); res.status(500).json({ error: 'Failed to download' }); }
