@@ -1088,12 +1088,16 @@ function ClaudeMcpSection() {
 
 // ── Calendar Sync (CalDAV) ─────────────────────────────────────────────────────
 
+const CALDAV_PW_KEY = 'solytiq_caldav_pw';
+
 function CalDavSection() {
   const [status, setStatus] = useState<CaldavStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [revoking, setRevoking] = useState(false);
-  const [password, setPassword] = useState<string | null>(null);
+  const [password, setPassword] = useState<string | null>(
+    () => sessionStorage.getItem(CALDAV_PW_KEY)
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -1106,14 +1110,22 @@ function CalDavSection() {
 
   const handleGenerate = async () => {
     setGenerating(true);
-    try { const r = await apiGenerateCaldavPassword(); setPassword(r.password); await refresh(); }
-    catch { /* ignore */ } finally { setGenerating(false); }
+    try {
+      const r = await apiGenerateCaldavPassword();
+      sessionStorage.setItem(CALDAV_PW_KEY, r.password);
+      setPassword(r.password);
+      await refresh();
+    } catch { /* ignore */ } finally { setGenerating(false); }
   };
 
   const handleRevoke = async () => {
     setRevoking(true);
-    try { await apiRevokeCaldav(); setPassword(null); await refresh(); }
-    catch { /* ignore */ } finally { setRevoking(false); }
+    try {
+      await apiRevokeCaldav();
+      sessionStorage.removeItem(CALDAV_PW_KEY);
+      setPassword(null);
+      await refresh();
+    } catch { /* ignore */ } finally { setRevoking(false); }
   };
 
   const serverUrl = status?.serverUrl ?? `${window.location.origin}/caldav/`;
@@ -1184,7 +1196,7 @@ function CalDavSection() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 7 }}>
                 <Icon name="warning" size={13} color="#d97706" />
-                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#d97706' }}>Copy it now — for your security it won't be shown again after you close this window.</span>
+                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#d97706' }}>Copy it now — available in this tab until you close it, then gone for security.</span>
               </div>
             </>
           ) : (
