@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, Meeting, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -282,6 +282,24 @@ export const apiRestoreMilestoneFromTrash = (trashId: number) =>
 
 export const apiDeleteMilestoneFromTrash = (trashId: number) =>
   apiFetch<{ success: boolean }>(`/trash/milestones/${trashId}`, { method: 'DELETE' });
+
+// Calendar meetings (standalone events, user-scoped, no workspace)
+export const apiGetMeetings = (opts?: { from?: string; to?: string }) => {
+  const p = new URLSearchParams();
+  if (opts?.from) p.set('from', opts.from);
+  if (opts?.to) p.set('to', opts.to);
+  const qs = p.toString();
+  return apiFetch<{ meetings: Meeting[] }>(`/meetings${qs ? `?${qs}` : ''}`);
+};
+
+export const apiCreateMeeting = (data: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) =>
+  apiFetch<{ meeting: Meeting }>('/meetings', { method: 'POST', body: JSON.stringify(data) });
+
+export const apiUpdateMeeting = (id: string, data: Partial<Meeting>) =>
+  apiFetch<{ meeting: Meeting }>(`/meetings/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const apiDeleteMeeting = (id: string) =>
+  apiFetch<{ success: boolean }>(`/meetings/${id}`, { method: 'DELETE' });
 
 // Folders
 export const apiGetFolders = (workspaceId?: string) =>

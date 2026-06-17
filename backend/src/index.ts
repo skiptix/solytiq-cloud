@@ -22,6 +22,7 @@ import aiRouter         from './routes/ai';
 import workspacesRouter from './routes/workspaces';
 import timelinesRouter  from './routes/timelines';
 import gpsRouter from './routes/gps';
+import meetingsRouter from './routes/meetings';
 import taskAttachmentsRouter from './routes/taskAttachments';
 import milestoneAttachmentsRouter from './routes/milestoneAttachments';
 import tokensRouter from './routes/tokens';
@@ -107,6 +108,7 @@ app.use('/api/workspaces', workspacesRouter);
 app.use('/api/timelines/milestones/:milestoneId/attachments', milestoneAttachmentsRouter);
 app.use('/api/timelines',  timelinesRouter);
 app.use('/api/gps',        gpsRouter);
+app.use('/api/meetings',   meetingsRouter);
 app.use('/api/tokens',     tokensRouter);
 app.use('/api/oauth',      oauthRouter);
 
@@ -1002,6 +1004,26 @@ async function runMigrations() {
   await pool.query(`ALTER TABLE gps_files ADD COLUMN IF NOT EXISTS smoothed BOOLEAN NOT NULL DEFAULT false`);
   // Route Planner State v1 — rich editing state (POIs, controls, spans) alongside the GPX
   await pool.query(`ALTER TABLE gps_files ADD COLUMN IF NOT EXISTS route_state JSONB`);
+
+  // Calendar meetings — standalone events with no list/timeline/workspace.
+  // Scoped strictly to the owning user (no sharing, no workspace).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS meetings (
+      id            VARCHAR(100) PRIMARY KEY,
+      user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title         VARCHAR(500) NOT NULL,
+      description   TEXT,
+      location      VARCHAR(500),
+      meeting_date  DATE NOT NULL,
+      start_time    VARCHAR(20),
+      end_time      VARCHAR(20),
+      all_day       BOOLEAN NOT NULL DEFAULT false,
+      color         VARCHAR(50),
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS meetings_user_date_idx ON meetings(user_id, meeting_date)`);
 
   console.log('Database migrations applied.');
 }
