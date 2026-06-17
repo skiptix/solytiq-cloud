@@ -44,7 +44,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { dashTasks, lists, timelines, listsLoading, sidebarWidth, setSidebarWidth, loadFromApi, setLists, setFolders, updateList, moveTaskToList } = useAppStore();
+  const { dashTasks, lists, timelines, listsLoading, sidebarWidth, setSidebarWidth, loadFromApi, setLists, setFolders, setTimelines, updateList, moveTaskToList } = useAppStore();
   const prevWorkspaceRef = useRef<string | null | undefined>(undefined);
   const [modal, setModal] = useState<'add' | 'completed' | 'trash' | null>(null);
   const isMobile = useMobile();
@@ -111,6 +111,7 @@ function AppLayout() {
     if (isSwitch) {
       setLists([]);
       setFolders([]);
+      setTimelines([]);
     }
 
     loadFromApi(currentWorkspaceId);
