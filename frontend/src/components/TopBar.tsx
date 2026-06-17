@@ -1,14 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Task, List } from '../types';
 import Icon from './Icon';
 import useAuthStore from '../store/useAuthStore';
-import { apiUpdateProfile, apiUploadProfileImage, apiUploadFile } from '../api/client';
+import useWorkspaceStore from '../store/useWorkspaceStore';
+import { apiUpdateProfile, apiUploadProfileImage, apiUploadFile, apiGlobalSearch, type GlobalSearchResult } from '../api/client';
 import UserSettingsModal from '../modals/UserSettingsModal';
 
 interface TopBarProps {
-  tasks: Task[];
-  lists: List[];
   onNavigate: (path: string) => void;
   isMobile?: boolean;
   onOpenDrawer?: () => void;
@@ -35,7 +33,7 @@ function highlight(text: string, query: string): React.ReactNode {
   );
 }
 
-export default function TopBar({ tasks, lists, onNavigate, isMobile, onOpenDrawer }: TopBarProps) {
+export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarProps) {
   const navigate = useNavigate();
 
   // Search state
@@ -132,16 +130,34 @@ export default function TopBar({ tasks, lists, onNavigate, isMobile, onOpenDrawe
   // Search logic
   const q = query.trim().toLowerCase();
   const showDrop = focused && q.length > 0;
-  const taskResults = q ? tasks.filter(t => t.title.toLowerCase().includes(q)).slice(0, 5) : [];
-  const listResults = q ? lists.filter(l => l.name.toLowerCase().includes(q)).slice(0, 3) : [];
+  
+  const [serverResults, setServerResults] = useState<GlobalSearchResult[]>([]);
+  // searchLoading is kept for future spinner support if needed
+
+  useEffect(() => {
+    if (!q || q.length < 2) {
+      setServerResults([]);
+      return;
+    }
+    // setSearchLoading(true);
+    const ac = new AbortController();
+    const timer = setTimeout(() => {
+      apiGlobalSearch(q, ac.signal)
+        .then(res => setServerResults(res.results))
+        .catch(err => { if (err.name !== 'AbortError') console.error(err); })
+        // .finally(() => setSearchLoading(false));
+    }, 250);
+    return () => { clearTimeout(timer); ac.abort(); };
+  }, [q]);
+
   const settingsResults = q ? SETTINGS_RESULTS.filter(s => s.label.toLowerCase().includes(q)).slice(0, 3) : [];
-  const allResults: Array<{ type: 'task' | 'list' | 'setting'; label: string; sub?: string; path: string; icon?: string; task?: Task; list?: List }> = [
-    ...taskResults.map(t => ({ type: 'task' as const, label: t.title, sub: t._listName ?? 'Dashboard', path: t._source === 'list' && t._listId ? `/list/${t._listId}` : '/dashboard', task: t })),
-    ...listResults.map(l => ({ type: 'list' as const, label: l.name, sub: `${l.sections.flatMap(s => s.tasks).length} tasks`, path: `/list/${l.id}`, list: l })),
+  
+  const allResults: Array<GlobalSearchResult | { type: 'setting'; label: string; sub: string; path: string; icon: string }> = [
+    ...serverResults,
     ...settingsResults.map(s => ({ type: 'setting' as const, label: s.label, sub: s.sub, path: s.path, icon: s.icon })),
   ];
 
-  useEffect(() => { setActiveIdx(0); }, [query]);
+  useEffect(() => { setActiveIdx(0); }, [query, serverResults]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -151,17 +167,24 @@ export default function TopBar({ tasks, lists, onNavigate, isMobile, onOpenDrawe
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
-  const goTo = useCallback((path: string) => {
+  const { setCurrentWorkspace } = useWorkspaceStore();
+
+  const goTo = useCallback((result: typeof allResults[0]) => {
     setQuery(''); setFocused(false);
-    navigate(path);
-    onNavigate(path);
-  }, [navigate, onNavigate]);
+    if (result.type === 'workspace') {
+      const match = result.path.match(/workspace=([^&]+)/);
+      if (match) setCurrentWorkspace(match[1]);
+    }
+    const targetPath = result.type === 'workspace' ? '/dashboard' : result.path;
+    navigate(targetPath);
+    onNavigate(targetPath);
+  }, [navigate, onNavigate, setCurrentWorkspace]);
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') { setFocused(false); setQuery(''); }
     if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, allResults.length - 1)); }
     if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)); }
-    if (e.key === 'Enter' && allResults[activeIdx]) goTo(allResults[activeIdx].path);
+    if (e.key === 'Enter' && allResults[activeIdx]) goTo(allResults[activeIdx]);
   };
 
   // Inline edit handlers
@@ -254,8 +277,8 @@ export default function TopBar({ tasks, lists, onNavigate, isMobile, onOpenDrawe
     navigate('/login');
   };
 
-  const GROUP_COLORS: Record<string, string> = { task: '#5e4dbb', list: '#1D4ED8', setting: '#10B981' };
-  const GROUP_LABELS: Record<string, string> = { task: 'Tasks', list: 'Lists', setting: 'Settings' };
+  const GROUP_COLORS: Record<string, string> = { task: '#5e4dbb', list: '#1D4ED8', setting: '#10B981', timeline: '#D946EF', milestone: '#F59E0B', meeting: '#EF4444', workspace: '#8B5CF6' };
+  const GROUP_LABELS: Record<string, string> = { task: 'Tasks', list: 'Lists', setting: 'Settings', timeline: 'Timelines', milestone: 'Milestones', meeting: 'Meetings', workspace: 'Workspaces' };
   let renderedGroups: string[] = [];
 
   const iconBtn = {
@@ -359,12 +382,16 @@ export default function TopBar({ tasks, lists, onNavigate, isMobile, onOpenDrawe
                         {GROUP_LABELS[r.type]}
                       </div>
                     )}
-                    <div onMouseDown={() => goTo(r.path)}
+                    <div onMouseDown={() => goTo(r)}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: i === activeIdx ? '#F5F3FF' : 'transparent', cursor: 'pointer', transition: 'background 120ms' }}>
                       <div style={{ width: 28, height: 28, borderRadius: 8, background: `${GROUP_COLORS[r.type]}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         {r.type === 'task' && <Icon name="check_circle" size={14} color={GROUP_COLORS.task} />}
-                        {r.type === 'list' && <span style={{ fontSize: 14 }}>{r.list?.emoji ?? ''}</span>}
+                        {r.type === 'list' && <Icon name="format_list_bulleted" size={14} color={GROUP_COLORS.list} />}
                         {r.type === 'setting' && <Icon name={r.icon ?? 'settings'} size={14} color={GROUP_COLORS.setting} />}
+                        {r.type === 'timeline' && <Icon name="timeline" size={14} color={GROUP_COLORS.timeline} />}
+                        {r.type === 'milestone' && <Icon name="flag" size={14} color={GROUP_COLORS.milestone} />}
+                        {r.type === 'meeting' && <Icon name="event" size={14} color={GROUP_COLORS.meeting} />}
+                        {r.type === 'workspace' && <Icon name="workspaces" size={14} color={GROUP_COLORS.workspace} />}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22' }}>{highlight(r.label, query)}</div>

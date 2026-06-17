@@ -942,3 +942,17 @@ export function apiUploadFile(
     xhr.send(form);
   });
 }
+
+// ── Global Search ─────────────────────────────────────────────────────────
+
+export interface GlobalSearchResult {
+  type: 'task' | 'list' | 'timeline' | 'milestone' | 'meeting' | 'workspace';
+  id: string;
+  label: string;
+  sub?: string;
+  path: string;
+  icon?: string;
+}
+
+export const apiGlobalSearch = (q: string, signal?: AbortSignal) =>
+  apiFetch<{ results: GlobalSearchResult[] }>(`/search?q=${encodeURIComponent(q)}`, { signal });
