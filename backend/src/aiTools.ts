@@ -890,28 +890,60 @@ export const aiTools: AiTool[] = [
   },
   // ───────────────────────────── global search ─────────────────────────────
   {
-    name: 'search_tasks',
-    description: 'Search across all tasks (dashboard and inside lists) by text query.',
+    name: 'universal_search',
+    description: 'Search across all tasks, lists, timelines, milestones, workspaces, and calendar meetings by text query. Use this to find IDs of items when you only know their names.',
     parameters: {
       type: 'object',
-      properties: { query: { type: 'string', description: 'Text to search for in task titles/notes' } },
+      properties: { query: { type: 'string', description: 'Text to search for (e.g. meeting name, task title)' } },
       required: ['query'],
     },
     handler: async (userId, args) => {
       const q = str(args.query);
       if (!q) return fail('query is required');
       const term = `%${q}%`;
-      const rows = await query<{ id: string; title: string; checked: boolean; deadline: string | null; priority: string | null; source: string; list_id: string | null }>(
-        `SELECT id, title, checked, deadline, priority, source, list_id FROM tasks
-         WHERE user_id = $1 AND (title ILIKE $2 OR notes ILIKE $2)
-         ORDER BY created_at DESC LIMIT 50`,
-        [userId, term]
-      );
-      if (!rows.rows.length) return ok(`No tasks found matching "${q}".`);
-      const text = rows.rows
-        .map((t) => `- [${t.checked ? 'x' : ' '}] ${t.title} (task_id: ${t.id}; in ${t.source === 'dash' ? 'dashboard' : `list ${t.list_id}`})`)
-        .join('\n');
-      return ok(text);
+      
+      const [tasksRes, listsRes, timelinesRes, milestonesRes, meetingsRes, workspacesRes] = await Promise.all([
+        query<{ id: string; title: string; source: string; list_id: string | null }>(
+          `SELECT id, title, source, list_id FROM tasks WHERE user_id = $1 AND (title ILIKE $2 OR note ILIKE $2) LIMIT 10`,
+          [userId, term]
+        ),
+        query<{ id: string; name: string }>(
+          `SELECT id, name FROM lists WHERE user_id = $1 AND name ILIKE $2 LIMIT 5`,
+          [userId, term]
+        ),
+        query<{ id: string; name: string }>(
+          `SELECT id, name FROM timelines WHERE user_id = $1 AND name ILIKE $2 LIMIT 5`,
+          [userId, term]
+        ),
+        query<{ id: string; title: string; t_name: string }>(
+          `SELECT m.id, m.title, t.name as t_name 
+           FROM milestones m 
+           JOIN timelines t ON m.timeline_id = t.id 
+           WHERE t.user_id = $1 AND m.title ILIKE $2 LIMIT 10`,
+          [userId, term]
+        ),
+        query<{ id: string; title: string; meeting_date: string }>(
+          `SELECT id, title, meeting_date FROM meetings WHERE user_id = $1 AND (title ILIKE $2 OR location ILIKE $2) LIMIT 5`,
+          [userId, term]
+        ),
+        query<{ id: string; name: string }>(
+          `SELECT w.id, w.name FROM workspaces w
+           JOIN workspace_members wm ON w.id = wm.workspace_id
+           WHERE wm.user_id = $1 AND w.name ILIKE $2 LIMIT 5`,
+          [userId, term]
+        )
+      ]);
+
+      const lines: string[] = [];
+      if (tasksRes.rows.length) lines.push('Tasks:', ...tasksRes.rows.map(t => `  - [Task] ${t.title} (id: ${t.id}, in ${t.source === 'dash' ? 'dashboard' : `list ${t.list_id}`})`));
+      if (listsRes.rows.length) lines.push('Lists:', ...listsRes.rows.map(l => `  - [List] ${l.name} (id: ${l.id})`));
+      if (timelinesRes.rows.length) lines.push('Timelines:', ...timelinesRes.rows.map(t => `  - [Timeline] ${t.name} (id: ${t.id})`));
+      if (milestonesRes.rows.length) lines.push('Milestones:', ...milestonesRes.rows.map(m => `  - [Milestone] ${m.title} (id: ${m.id}, in timeline ${m.t_name})`));
+      if (meetingsRes.rows.length) lines.push('Meetings:', ...meetingsRes.rows.map(m => `  - [Meeting] ${m.title} (id: ${m.id}, on ${m.meeting_date})`));
+      if (workspacesRes.rows.length) lines.push('Workspaces:', ...workspacesRes.rows.map(w => `  - [Workspace] ${w.name} (id: ${w.id})`));
+
+      if (!lines.length) return ok(`No items found matching "${q}".`);
+      return ok(lines.join('\n'));
     },
   },
 ];
