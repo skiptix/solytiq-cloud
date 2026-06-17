@@ -111,7 +111,7 @@ router.post('/chat', authenticate, async (req: Request, res: Response) => {
         `INSERT INTO ai_usage (user_id, session_id, model, prompt_tokens, completion_tokens, total_tokens)
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [req.userId, sessionId ?? null, model, prompt_tokens, completion_tokens, total_tokens]
-      ).catch(() => {});
+      ).catch((err) => { console.error('ai/usage insert failed:', err instanceof Error ? err.message : err); });
     }
 
     res.json(data);

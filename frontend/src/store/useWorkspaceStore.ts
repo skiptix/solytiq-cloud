@@ -50,7 +50,8 @@ const useWorkspaceStore = create<WorkspaceState>()(
               workspacesLoaded: true,
             };
           });
-        } catch {
+        } catch (err) {
+          console.warn('[useWorkspaceStore] loadWorkspaces failed:', err instanceof Error ? err.message : err);
           set({ workspacesLoaded: true });
         }
       },

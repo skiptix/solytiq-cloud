@@ -1052,3 +1052,12 @@ async function start() {
 }
 
 start();
+
+// Global safety nets — log unexpected crashes instead of silently dying
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  process.exit(1);
+});

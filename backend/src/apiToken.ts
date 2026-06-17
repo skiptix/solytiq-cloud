@@ -66,7 +66,8 @@ export async function authenticateApiToken(raw: string): Promise<ApiTokenAuthRes
   if (row.expires_at && new Date(row.expires_at) < new Date()) return null;
 
   // Touch last_used_at without blocking the request.
-  query(`UPDATE api_tokens SET last_used_at = NOW() WHERE id = $1`, [row.id]).catch(() => {});
+  query(`UPDATE api_tokens SET last_used_at = NOW() WHERE id = $1`, [row.id])
+    .catch((err) => { console.error('api_tokens last_used_at update failed:', err instanceof Error ? err.message : err); });
 
   return { userId: row.user_id, tokenId: row.id };
 }

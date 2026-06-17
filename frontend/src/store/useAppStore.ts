@@ -143,12 +143,12 @@ const useAppStore = create<AppState>()(
           timelines: [...s.timelines, entry.timeline],
           trashTimelines: s.trashTimelines.filter((t) => t.id !== trashId),
         }));
-        apiRestoreTimelineFromTrash(trashId).catch(() => {});
+        apiRestoreTimelineFromTrash(trashId).catch(() => { get().loadFromApi(); });
       },
 
       deleteTimelineFromTrash: (trashId) => {
         set((s) => ({ trashTimelines: s.trashTimelines.filter((t) => t.id !== trashId) }));
-        apiDeleteTimelineFromTrash(trashId).catch(() => {});
+        apiDeleteTimelineFromTrash(trashId).catch(() => { get().loadFromApi(); });
       },
 
       restoreMilestoneFromTrash: (trashId) => {
@@ -169,7 +169,7 @@ const useAppStore = create<AppState>()(
 
       deleteMilestoneFromTrash: (trashId) => {
         set((s) => ({ trashMilestones: s.trashMilestones.filter((t) => t.id !== trashId) }));
-        apiDeleteMilestoneFromTrash(trashId).catch(() => {});
+        apiDeleteMilestoneFromTrash(trashId).catch(() => { get().loadFromApi(); });
       },
 
       addFolder: (folder) => {
@@ -376,7 +376,7 @@ const useAppStore = create<AppState>()(
           deletedAt: new Date().toISOString(),
         };
         set((state) => ({ trashTasks: [...state.trashTasks, trashEntry] }));
-        apiAddToTrash(task.id, task, meta).catch(() => {});
+        apiAddToTrash(task.id, task, meta).catch(() => { get().loadFromApi(); });
       },
 
       restoreFromTrash: (trashId) => {
@@ -411,12 +411,12 @@ const useAppStore = create<AppState>()(
         } else {
           set((s) => ({ trashTasks: s.trashTasks.filter((t) => t.id !== trashId) }));
         }
-        apiRestoreFromTrash(trashId).catch(() => {});
+        apiRestoreFromTrash(trashId).catch(() => { get().loadFromApi(); });
       },
 
       deleteFromTrash: (trashId) => {
         set((state) => ({ trashTasks: state.trashTasks.filter((t) => t.id !== trashId) }));
-        apiDeleteFromTrash(trashId).catch(() => {});
+        apiDeleteFromTrash(trashId).catch(() => { get().loadFromApi(); });
       },
 
       restoreListFromTrash: (trashId) => {
@@ -427,12 +427,12 @@ const useAppStore = create<AppState>()(
           lists: [...s.lists, entry.list],
           trashLists: s.trashLists.filter((t) => t.id !== trashId),
         }));
-        apiRestoreListFromTrash(trashId).catch(() => {});
+        apiRestoreListFromTrash(trashId).catch(() => { get().loadFromApi(); });
       },
 
       deleteListFromTrash: (trashId) => {
         set((s) => ({ trashLists: s.trashLists.filter((t) => t.id !== trashId) }));
-        apiDeleteListFromTrash(trashId).catch(() => {});
+        apiDeleteListFromTrash(trashId).catch(() => { get().loadFromApi(); });
       },
 
       restoreFolderFromTrash: (trashId) => {
@@ -447,12 +447,12 @@ const useAppStore = create<AppState>()(
           ),
           trashFolders: s.trashFolders.filter((t) => t.id !== trashId),
         }));
-        apiRestoreFolderFromTrash(trashId).catch(() => {});
+        apiRestoreFolderFromTrash(trashId).catch(() => { get().loadFromApi(); });
       },
 
       deleteFolderFromTrash: (trashId) => {
         set((s) => ({ trashFolders: s.trashFolders.filter((t) => t.id !== trashId) }));
-        apiDeleteFolderFromTrash(trashId).catch(() => {});
+        apiDeleteFolderFromTrash(trashId).catch(() => { get().loadFromApi(); });
       },
 
       setSidebarWidth: (w) => set({ sidebarWidth: w }),
@@ -521,16 +521,20 @@ const useAppStore = create<AppState>()(
         const myLoadId = ++currentLoadId;
         set({ listsLoading: true });
         try {
+          const suppress = (label: string) => (err: unknown) => {
+            console.warn(`[loadFromApi] ${label} failed:`, err instanceof Error ? err.message : err);
+            return null;
+          };
           const [tasksRes, listsRes, foldersRes, timelinesRes, trashRes, trashListsRes, trashFoldersRes, trashTimelinesRes, trashMilestonesRes] = await Promise.all([
-            apiGetTasks(workspaceId).catch(() => null),
-            apiGetLists(workspaceId).catch(() => null),
-            apiGetFolders(workspaceId).catch(() => null),
-            apiGetTimelines(workspaceId).catch(() => null),
-            apiGetTrash().catch(() => null),
-            apiGetTrashLists().catch(() => null),
-            apiGetTrashFolders().catch(() => null),
-            apiGetTrashTimelines().catch(() => null),
-            apiGetTrashMilestones().catch(() => null),
+            apiGetTasks(workspaceId).catch(suppress('tasks')),
+            apiGetLists(workspaceId).catch(suppress('lists')),
+            apiGetFolders(workspaceId).catch(suppress('folders')),
+            apiGetTimelines(workspaceId).catch(suppress('timelines')),
+            apiGetTrash().catch(suppress('trash')),
+            apiGetTrashLists().catch(suppress('trashLists')),
+            apiGetTrashFolders().catch(suppress('trashFolders')),
+            apiGetTrashTimelines().catch(suppress('trashTimelines')),
+            apiGetTrashMilestones().catch(suppress('trashMilestones')),
           ]);
           // Discard results if a newer load has been requested (e.g. workspace switched mid-load)
           if (myLoadId !== currentLoadId) return;

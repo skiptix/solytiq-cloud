@@ -35,26 +35,22 @@ const useAuthStore = create<AuthState>()(
       },
 
       signIn: async (username, password) => {
-        try {
-          const data = await apiLogin(username, password);
-          if (data.requires2FA || !data.token || !data.user) return false;
-          localStorage.setItem('solytiq_token', data.token);
-          set({
-            adminRegistered: true,
-            loggedIn: true,
-            userId: data.user.id,
-            username: data.user.username,
-            email: data.user.email,
-            fullName: data.user.fullName || '',
-            profileImage: data.user.profileImage ?? null,
-            isAdmin: data.user.isAdmin ?? false,
-            totpEnabled: data.user.totpEnabled ?? false,
-            token: data.token,
-          });
-          return true;
-        } catch {
-          return false;
-        }
+        const data = await apiLogin(username, password);
+        if (data.requires2FA || !data.token || !data.user) return false;
+        localStorage.setItem('solytiq_token', data.token);
+        set({
+          adminRegistered: true,
+          loggedIn: true,
+          userId: data.user.id,
+          username: data.user.username,
+          email: data.user.email,
+          fullName: data.user.fullName || '',
+          profileImage: data.user.profileImage ?? null,
+          isAdmin: data.user.isAdmin ?? false,
+          totpEnabled: data.user.totpEnabled ?? false,
+          token: data.token,
+        });
+        return true;
       },
 
       setAuthFromToken: (token: string, user: AuthUser) => {

@@ -98,8 +98,13 @@ export default function LoginScreen() {
         const from = location.state?.from || '/';
         navigate(from);
       }
-    } catch {
-      setError('Invalid username or password.');
+    } catch (err: unknown) {
+      const status = err && typeof err === 'object' && 'status' in err ? (err as { status: number }).status : 0;
+      if (status === 401 || status === 403) {
+        setError('Invalid username or password.');
+      } else {
+        setError('Something went wrong — please try again.');
+      }
       triggerShake();
     } finally {
       setLoading(false);

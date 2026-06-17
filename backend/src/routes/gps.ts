@@ -151,6 +151,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
   const fileType = ext === 'fit' ? 'fit' : 'gpx';
   try {
     let points: GpsPoint[];
+    let parseWarning: string | undefined;
     try {
       if (fileType === 'fit') {
         points = await parseFit(fs.readFileSync(file.path));
@@ -158,8 +159,10 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         const parsed = parseGpxFull(fs.readFileSync(file.path, 'utf-8'));
         points = parsed.points;
       }
-    } catch {
+    } catch (parseErr) {
+      console.warn('GPS upload: file parsed with errors, storing without track metadata:', parseErr instanceof Error ? parseErr.message : parseErr);
       points = [];
+      parseWarning = 'File could not be fully parsed — metadata may be incomplete';
     }
     const metadata = computeMetadata(points);
     const id = crypto.randomUUID();
@@ -168,7 +171,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       'INSERT INTO gps_files (id, user_id, original_name, file_type, file_path, file_size, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7)',
       [id, userId, file.originalname, fileType, relPath, file.size, metadata ? JSON.stringify(metadata) : null],
     );
-    res.json({ file: { id, userId, name: file.originalname, fileType, size: file.size, metadata, createdAt: new Date().toISOString() } });
+    res.json({ file: { id, userId, name: file.originalname, fileType, size: file.size, metadata, createdAt: new Date().toISOString() }, ...(parseWarning ? { warning: parseWarning } : {}) });
   } catch (err) {
     fs.unlink(file.path, () => {});
     console.error('GPS upload:', err);

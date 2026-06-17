@@ -55,7 +55,7 @@ export async function authenticate(
     query(
       `UPDATE users SET last_online = NOW() WHERE id = $1 AND (last_online IS NULL OR last_online < NOW() - INTERVAL '5 minutes')`,
       [userId]
-    ).catch(() => {/* ignore */});
+    ).catch((err) => { console.error('last_online update failed:', err instanceof Error ? err.message : err); });
     next();
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
