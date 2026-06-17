@@ -1,13 +1,10 @@
 import { Router, Request, Response } from 'express';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import fs from 'fs';
 import { query } from '../db';
 import { authenticate, requireAdmin } from '../middleware';
 import { hashPassword, comparePassword } from '../auth';
 import { ensurePersonalWorkspace, wlog } from '../workspaceUtil';
 import { generateAndLogSetupToken } from '../setupToken';
-
-const execAsync = promisify(exec);
 
 const router = Router();
 
@@ -340,11 +337,10 @@ router.get('/ai/usage', authenticate, requireAdmin, async (_req: Request, res: R
 // GET /api/admin/system/storage
 router.get('/system/storage', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {
-    const { stdout } = await execAsync('df -P /');
-    const parts = stdout.trim().split('\n')[1].trim().split(/\s+/);
-    const totalBytes = parseInt(parts[1]) * 1024;
-    const usedBytes  = parseInt(parts[2]) * 1024;
-    const availBytes = parseInt(parts[3]) * 1024;
+    const stats = await fs.promises.statfs('/');
+    const totalBytes = stats.blocks * stats.bsize;
+    const availBytes = stats.bavail * stats.bsize;
+    const usedBytes  = totalBytes - (stats.bfree * stats.bsize);
     res.json({ total: totalBytes, used: usedBytes, available: availBytes });
   } catch (err) {
     console.error('admin/system/storage error:', err);

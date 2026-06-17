@@ -33,6 +33,7 @@ import { query as dbQuery } from './db';
 import { addSseClient, removeSseClient } from './sse';
 import { verifyToken } from './auth';
 import { ensureSetupTokenLogged } from './setupToken';
+import { safeResolve } from './safePath';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -44,6 +45,9 @@ app.set('trust proxy', 1);
 // ---------------------------------------------------------------------------
 
 const frontendUrl = process.env.FRONTEND_URL;
+if (!frontendUrl) {
+  console.warn('⚠️  WARNING: FRONTEND_URL is not set — CORS allows all origins. Set FRONTEND_URL in production.');
+}
 
 app.use(cors({
   origin: frontendUrl ?? '*',
@@ -197,8 +201,8 @@ app.get('/api/share/:token/download', async (req, res) => {
       const valid = await comparePassword(pw, file.password_hash);
       if (!valid) { res.status(401).json({ error: 'Invalid password' }); return; }
     }
-    const filePath = path.join(path.resolve(UPLOAD_DIR), file.file_path);
-    if (!require('fs').existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
+    const filePath = safeResolve(UPLOAD_DIR, file.file_path);
+    if (!filePath || !require('fs').existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
 
     const sanitizedName = file.original_name.replace(/[^\w\s\-_.]/g, '_');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(sanitizedName)}"`);
@@ -437,7 +441,17 @@ app.get('/api/events', async (req, res) => {
 
   let userId: string;
   try {
-    ({ userId } = verifyToken(token));
+    const decoded = verifyToken(token);
+    userId = decoded.userId;
+    // Validate token_version to reject revoked sessions
+    const userRow = await dbQuery<{ token_version: number }>(
+      'SELECT token_version FROM users WHERE id = $1',
+      [decoded.userId]
+    );
+    if (userRow.rows.length === 0 || userRow.rows[0].token_version !== decoded.tokenVersion) {
+      res.status(401).json({ error: 'Session expired - please log in again' });
+      return;
+    }
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
     return;

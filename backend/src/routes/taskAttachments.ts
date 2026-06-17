@@ -7,6 +7,7 @@ import { query } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
 import { UPLOAD_DIR } from './files';
+import { safeResolve } from '../safePath';
 
 const storage = multer.diskStorage({
   destination: UPLOAD_DIR,
@@ -179,8 +180,8 @@ router.delete('/:attachmentId', async (req: Request, res: Response) => {
     await query(`DELETE FROM task_attachments WHERE id = $1`, [attachmentId]);
 
     if (att.attachment_type === 'upload' && att.file_path) {
-      const filePath = path.join(path.resolve(UPLOAD_DIR), att.file_path);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      const filePath = safeResolve(UPLOAD_DIR, att.file_path);
+      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 
     res.json({ success: true });
@@ -215,8 +216,8 @@ router.get('/:attachmentId/download', async (req: Request, res: Response) => {
 
     const rawPath = att.attachment_type === 'upload' ? att.file_path : att.sf_file_path;
     if (!rawPath) { res.status(404).json({ error: 'File not found' }); return; }
-    const filePath = path.join(path.resolve(UPLOAD_DIR), rawPath);
-    if (!fs.existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
+    const filePath = safeResolve(UPLOAD_DIR, rawPath);
+    if (!filePath || !fs.existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
 
     const safeMimes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'text/plain'];
     const isSafe = safeMimes.includes(att.mime_type);

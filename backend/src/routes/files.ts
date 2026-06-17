@@ -7,6 +7,7 @@ import { query } from '../db';
 import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
+import { safeResolve } from '../safePath';
 
 export const UPLOAD_DIR = process.env.UPLOAD_DIR ?? '/app/uploads';
 
@@ -243,8 +244,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     await query('DELETE FROM shared_files WHERE id = $1', [id]);
 
-    const filePath = path.join(UPLOAD_DIR, existing.rows[0].file_path);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    const filePath = safeResolve(UPLOAD_DIR, existing.rows[0].file_path);
+    if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
 
     res.json({ success: true });
     broadcastToUser(req.userId!, 'files');
@@ -264,8 +265,8 @@ router.get('/:id/preview', async (req: Request, res: Response) => {
     );
     if (result.rows.length === 0) { res.status(404).json({ error: 'File not found' }); return; }
     const { file_path, mime_type: untrustedMime, original_name } = result.rows[0];
-    const filePath = path.join(path.resolve(UPLOAD_DIR), file_path);
-    if (!fs.existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
+    const filePath = safeResolve(UPLOAD_DIR, file_path);
+    if (!filePath || !fs.existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
 
     // FIND-02: Secure file preview. Only allow safe types inline.
     const safeMimeTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'text/plain'];

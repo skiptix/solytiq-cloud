@@ -2,10 +2,12 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
 const JWT_SECRET_ENV = process.env.JWT_SECRET;
-if (process.env.NODE_ENV === 'production') {
-  if (!JWT_SECRET_ENV || JWT_SECRET_ENV === 'changeme-secret' || JWT_SECRET_ENV === 'change_this_secret_in_production' || JWT_SECRET_ENV === 'solytiq_secret') {
+const INSECURE_DEFAULTS = ['changeme-secret', 'change_this_secret_in_production', 'change_this_to_a_long_random_secret', 'solytiq_secret'];
+if (!JWT_SECRET_ENV || INSECURE_DEFAULTS.includes(JWT_SECRET_ENV)) {
+  if (process.env.NODE_ENV === 'production') {
     throw new Error('JWT_SECRET must be set to a secure, non-default value in production!');
   }
+  console.warn('⚠️  WARNING: JWT_SECRET is not set or uses an insecure default. Set a strong secret before deploying.');
 }
 const JWT_SECRET = JWT_SECRET_ENV || 'changeme-secret';
 
