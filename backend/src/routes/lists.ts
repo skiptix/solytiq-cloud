@@ -323,7 +323,7 @@ router.put('/:listId/reorder', async (req: Request, res: Response) => {
 
 // Recursively collect the ids of every sublist nested under a list.
 async function collectDescendantListIds(rootId: string): Promise<string[]> {
-  const out: string[] = [];
+  const out = new Set<string>();
   const visit = async (id: string) => {
     const sub = await query<{ id: string }>(
       `SELECT l.id FROM lists l
@@ -332,13 +332,13 @@ async function collectDescendantListIds(rootId: string): Promise<string[]> {
       [id]
     );
     for (const row of sub.rows) {
-      if (out.includes(row.id)) continue;
-      out.push(row.id);
+      if (out.has(row.id)) continue;
+      out.add(row.id);
       await visit(row.id);
     }
   };
   await visit(rootId);
-  return out;
+  return Array.from(out);
 }
 
 // PUT /api/lists/:listId/share — manage the public read-only share link.
