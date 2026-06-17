@@ -9,6 +9,7 @@ import {
   apiCreateMeeting, apiUpdateMeeting, apiDeleteMeeting,
 } from '../api/client';
 import useWorkspaceStore from '../store/useWorkspaceStore';
+import useUserPrefsStore from '../store/useUserPrefsStore';
 import TaskDialog from '../components/TaskDialog';
 import CalendarPicker from '../components/CalendarPicker';
 import TimePicker from '../components/TimePicker';
@@ -525,9 +526,17 @@ export default function CalendarScreen() {
   const [timelines, setTimelines] = useState<Timeline[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
 
-  const [view, setView] = useState<'week' | 'month' | 'year'>('month');
+  // View + workspace filter persist (localStorage) until logout / cache clear.
+  const view = useUserPrefsStore(s => s.calendarView);
+  const setView = useUserPrefsStore(s => s.setCalendarView);
+  const hiddenWsArr = useUserPrefsStore(s => s.calendarHiddenWorkspaces);
+  const hiddenWs = useMemo(() => new Set(hiddenWsArr), [hiddenWsArr]);
+  const setHiddenWs = useCallback((next: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    const cur = new Set(useUserPrefsStore.getState().calendarHiddenWorkspaces);
+    const result = typeof next === 'function' ? next(cur) : next;
+    useUserPrefsStore.getState().setCalendarHiddenWorkspaces([...result]);
+  }, []);
   const [anchor, setAnchor] = useState<Date>(today);
-  const [hiddenWs, setHiddenWs] = useState<Set<string>>(new Set());
   const [showFilter, setShowFilter] = useState(false);
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);

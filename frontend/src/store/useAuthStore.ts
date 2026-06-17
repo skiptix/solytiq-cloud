@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiLogin, apiRegister } from '../api/client';
+import useUserPrefsStore from './useUserPrefsStore';
 import type { AuthState, AuthUser } from '../types';
 
 const useAuthStore = create<AuthState>()(
@@ -79,6 +80,8 @@ const useAuthStore = create<AuthState>()(
 
       signOut: () => {
         localStorage.removeItem('solytiq_token');
+        // Forget session-scoped UI preferences (calendar view + filter).
+        useUserPrefsStore.getState().resetCalendarPrefs();
         set({
           loggedIn: false,
           userId: null,
