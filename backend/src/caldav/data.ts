@@ -161,6 +161,17 @@ export async function getResource(userId: string, colId: string, name: string): 
   return all.find(r => r.name === name) ?? null;
 }
 
+/** Whole collection as a single VCALENDAR (used for a plain GET on a collection). */
+export async function getCollectionCalendar(userId: string, colId: string): Promise<string> {
+  const resources = await getResources(userId, colId);
+  const components = resources.map(r =>
+    r.ics.split(/\r?\n/)
+      .filter(l => !/^(BEGIN:VCALENDAR|VERSION:|PRODID:|CALSCALE:|END:VCALENDAR)/.test(l))
+      .join('\r\n').trim()
+  ).filter(Boolean);
+  return wrapCalendar(components);
+}
+
 /** Collection tag — changes whenever any resource in the collection changes. */
 export async function getCtag(userId: string, colId: string): Promise<string> {
   const res = await getResources(userId, colId);
