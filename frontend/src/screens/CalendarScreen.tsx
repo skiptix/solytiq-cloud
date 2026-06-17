@@ -26,6 +26,19 @@ const MEETING_COLORS = ['#5e4dbb', '#3b82f6', '#0ea5e9', '#10b981', '#f59e0b', '
 const DEFAULT_MEETING_COLOR = '#3b82f6';
 const DEFAULT_MILESTONE_COLOR = '#0ea5e9';
 
+const HOUR_H = 48;                 // px per hour in the Week time-grid
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+
+/** "HH:MM" → minutes since midnight, or null. */
+function parseMin(t?: string | null): number | null {
+  if (!t) return null;
+  const m = /^(\d{1,2}):(\d{2})/.exec(t);
+  if (!m) return null;
+  const h = Number(m[1]), mm = Number(m[2]);
+  if (h < 0 || h > 23 || mm < 0 || mm > 59) return null;
+  return h * 60 + mm;
+}
+
 function toIso(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -75,7 +88,39 @@ interface Chip {
   priorityColor?: string;
   subtitle?: string | null;
   allDay?: boolean;
+  startMin?: number;        // set when the item has a time-of-day (Week grid)
+  endMin?: number;
+  dragData?: string;        // when set, the chip can be dragged to reschedule
   onClick: () => void;
+}
+
+/** Greedy column layout for overlapping timed chips within one day. */
+function layoutDay(chips: Chip[]): Map<Chip, { col: number; cols: number }> {
+  const result = new Map<Chip, { col: number; cols: number }>();
+  const sorted = [...chips].sort((a, b) => (a.startMin! - b.startMin!) || (a.endMin! - b.endMin!));
+  let cluster: Chip[] = [];
+  let clusterEnd = -1;
+  const flush = () => {
+    const colEnds: number[] = [];
+    const colOf = new Map<Chip, number>();
+    for (const ev of cluster) {
+      let placed = false;
+      for (let i = 0; i < colEnds.length; i++) {
+        if (colEnds[i] <= ev.startMin!) { colEnds[i] = ev.endMin!; colOf.set(ev, i); placed = true; break; }
+      }
+      if (!placed) { colOf.set(ev, colEnds.length); colEnds.push(ev.endMin!); }
+    }
+    const cols = Math.max(colEnds.length, 1);
+    for (const ev of cluster) result.set(ev, { col: colOf.get(ev) ?? 0, cols });
+    cluster = []; clusterEnd = -1;
+  };
+  for (const ev of sorted) {
+    if (cluster.length && ev.startMin! >= clusterEnd) flush();
+    cluster.push(ev);
+    clusterEnd = Math.max(clusterEnd, ev.endMin!);
+  }
+  flush();
+  return result;
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -423,7 +468,9 @@ function ChipCompact({ chip }: { chip: Chip }) {
   return (
     <div onClick={e => { e.stopPropagation(); chip.onClick(); }}
       title={chip.label}
-      style={{ display: 'flex', alignItems: 'center', gap: 4, background: chip.bg, borderRadius: 4, padding: '2px 5px', cursor: 'pointer', transition: 'filter 120ms' }}
+      draggable={!!chip.dragData}
+      onDragStart={chip.dragData ? e => { e.dataTransfer.setData('text/plain', chip.dragData!); e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); } : undefined}
+      style={{ display: 'flex', alignItems: 'center', gap: 4, background: chip.bg, borderRadius: 4, padding: '2px 5px', cursor: chip.dragData ? 'grab' : 'pointer', transition: 'filter 120ms' }}
       onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(0.96)')}
       onMouseLeave={e => (e.currentTarget.style.filter = 'none')}>
       {chip.priorityColor
@@ -439,7 +486,9 @@ function ChipCompact({ chip }: { chip: Chip }) {
 function ChipCard({ chip }: { chip: Chip }) {
   return (
     <div onClick={chip.onClick}
-      style={{ display: 'flex', gap: 7, background: chip.bg, borderRadius: 8, padding: '7px 9px', cursor: 'pointer', borderLeft: `3px solid ${chip.accent}`, transition: 'filter 120ms' }}
+      draggable={!!chip.dragData}
+      onDragStart={chip.dragData ? e => { e.dataTransfer.setData('text/plain', chip.dragData!); e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); } : undefined}
+      style={{ display: 'flex', gap: 7, background: chip.bg, borderRadius: 8, padding: '7px 9px', cursor: chip.dragData ? 'grab' : 'pointer', borderLeft: `3px solid ${chip.accent}`, transition: 'filter 120ms' }}
       onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(0.97)')}
       onMouseLeave={e => (e.currentTarget.style.filter = 'none')}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -490,8 +539,12 @@ export default function CalendarScreen() {
   const [search, setSearch] = useState('');
   const [dragTaskId, setDragTaskId] = useState<number | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [showUnscheduled, setShowUnscheduled] = useState(false);
+  const [mobileScheduleTask, setMobileScheduleTask] = useState<Task | null>(null);
 
   const filterRef = useRef<HTMLDivElement>(null);
+  const unschedRef = useRef<HTMLDivElement>(null);
+  const weekScrollRef = useRef<HTMLDivElement>(null);
 
   // ── Data loading ───────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -529,6 +582,23 @@ export default function CalendarScreen() {
     return () => document.removeEventListener('mousedown', onClick);
   }, [showFilter]);
 
+  // Close unscheduled popover on outside click.
+  useEffect(() => {
+    if (!showUnscheduled) return;
+    const onClick = (e: MouseEvent) => {
+      if (unschedRef.current && !unschedRef.current.contains(e.target as Node)) setShowUnscheduled(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [showUnscheduled]);
+
+  // Auto-scroll the Week time-grid to the morning when it opens.
+  useEffect(() => {
+    if (view === 'week' && weekScrollRef.current) {
+      weekScrollRef.current.scrollTop = 7 * HOUR_H;
+    }
+  }, [view, anchor]);
+
   const wsVisible = useCallback((wsId?: string) => !wsId || !hiddenWs.has(wsId), [hiddenWs]);
   const toggleWs = (id: string) => setHiddenWs(prev => {
     const next = new Set(prev);
@@ -546,11 +616,14 @@ export default function CalendarScreen() {
     for (const t of allTasks) {
       if (!t.deadline || t.checked) continue;
       if (!wsVisible(t.workspaceId)) continue;
+      const s = parseMin(t.time);
       push(t.deadline, {
         key: `t-${t._listId}-${t.id}`, kind: 'task', date: t.deadline, time: t.time ?? null,
         label: t.title, accent: '#5e4dbb', bg: '#F5F3FF',
         priorityColor: t.priority ? PRIORITY_COLORS[t.priority] : undefined,
         subtitle: t._listName && t._listName !== 'Dashboard' ? t._listName : null,
+        startMin: s ?? undefined, endMin: s != null ? s + 30 : undefined,
+        dragData: String(t.id),
         onClick: () => setSelectedTask(t),
       });
     }
@@ -560,10 +633,12 @@ export default function CalendarScreen() {
       const accent = tl.color || DEFAULT_MILESTONE_COLOR;
       for (const m of tl.milestones) {
         if (!m.date || m.status === 'done') continue;
+        const s = parseMin(m.time);
         push(m.date, {
           key: `m-${m.id}`, kind: 'milestone', date: m.date, time: m.time ?? null,
           label: m.title, accent, bg: tint(accent),
           emoji: m.emoji || tl.emoji || null, subtitle: tl.name,
+          startMin: s ?? undefined, endMin: s != null ? s + 30 : undefined,
           onClick: () => navigate(`/timeline/${tl.id}`),
         });
       }
@@ -571,9 +646,13 @@ export default function CalendarScreen() {
 
     for (const mt of meetings) {
       const accent = mt.color || DEFAULT_MEETING_COLOR;
+      const s = mt.allDay ? null : parseMin(mt.startTime);
+      const e = mt.allDay ? null : (parseMin(mt.endTime) ?? (s != null ? s + 60 : null));
       push(mt.date, {
         key: `e-${mt.id}`, kind: 'meeting', date: mt.date, time: mt.allDay ? null : (mt.startTime ?? null),
         label: mt.title, accent, bg: tint(accent), allDay: mt.allDay, subtitle: mt.location || null,
+        startMin: s ?? undefined, endMin: e ?? undefined,
+        dragData: `meeting:${mt.id}`,
         onClick: () => setEditingMeeting(mt),
       });
     }
@@ -628,6 +707,16 @@ export default function CalendarScreen() {
 
   const assignDeadline = (taskId: number, iso: string) => saveTask(taskId, { deadline: iso });
 
+  // Drop a task or meeting onto a day → set its date (date only, per design).
+  const handleDayDrop = (iso: string, e: React.DragEvent) => {
+    e.preventDefault();
+    const data = e.dataTransfer.getData('text/plain');
+    if (!data) return;
+    if (data.startsWith('meeting:')) rescheduleMeeting(data.slice('meeting:'.length), iso);
+    else { const id = Number(data); if (id) assignDeadline(id, iso); }
+    setDragTaskId(null);
+  };
+
   const handleAddToDate = async (title: string, destination: { type: 'dash' } | { type: 'list'; listId: string; sectionId: string }) => {
     const deadline = addingTaskDate ?? undefined;
     setAddingTaskDate(null);
@@ -675,6 +764,19 @@ export default function CalendarScreen() {
     setEditingMeeting(null);
     setMeetings(ms => ms.filter(m => m.id !== id));
     apiDeleteMeeting(id).catch(() => loadData());
+  };
+
+  // Move a meeting to another day (keeps its time). Sends the full object
+  // because the backend PUT replaces nullable fields.
+  const rescheduleMeeting = (id: string, date: string) => {
+    const m = meetings.find(x => x.id === id);
+    if (!m || m.date === date) return;
+    setMeetings(ms => ms.map(x => x.id === id ? { ...x, date } : x));
+    apiUpdateMeeting(id, {
+      title: m.title, date, allDay: m.allDay,
+      startTime: m.startTime, endTime: m.endTime,
+      location: m.location, description: m.description, color: m.color,
+    }).catch(() => loadData());
   };
 
   // ── Period navigation ──────────────────────────────────────────
@@ -727,7 +829,7 @@ export default function CalendarScreen() {
             return (
               <div key={i}
                 onDragOver={e => { if (cell.current) e.preventDefault(); }}
-                onDrop={e => { e.preventDefault(); if (!cell.current) return; const id = Number(e.dataTransfer.getData('text/plain')); if (id) { assignDeadline(id, iso); setDragTaskId(null); } }}
+                onDrop={e => { if (cell.current) handleDayDrop(iso, e); }}
                 onClick={() => { if (cell.current) setDayChooser(iso); }}
                 style={{ minHeight: isMobile ? 76 : 100, border: isToday ? '1.5px solid #c8bfff' : '1px solid #f1ecf6', background: isToday ? '#faf8ff' : cell.current ? '#fff' : '#fafafa', borderRadius: 6, padding: 4, transition: 'background 150ms', cursor: cell.current ? 'pointer' : 'default', position: 'relative' }}
                 className="cal-cell">
@@ -754,36 +856,95 @@ export default function CalendarScreen() {
   const renderWeek = () => {
     const ws = startOfWeek(anchor);
     const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(ws); d.setDate(d.getDate() + i); return d; });
+    const gutter = isMobile ? 42 : 56;
+    const gridCols = `${gutter}px repeat(7, 1fr)`;
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+
+    const dayData = days.map(d => {
+      const iso = toIso(d);
+      const chips = chipsByDate[iso] ?? [];
+      const timed = chips.filter(c => c.startMin != null);
+      const untimed = chips.filter(c => c.startMin == null);
+      return { d, iso, isToday: iso === todayIso, timed, untimed, layout: layoutDay(timed) };
+    });
+
     return (
-      <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px 16px' }}>
-        <div style={{ display: isMobile ? 'flex' : 'grid', flexDirection: 'column', gridTemplateColumns: isMobile ? undefined : 'repeat(7, 1fr)', gap: isMobile ? 10 : 8 }}>
-          {days.map((d, i) => {
-            const iso = toIso(d);
-            const isToday = iso === todayIso;
-            const chips = chipsByDate[iso] ?? [];
-            return (
-              <div key={i}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Day headers */}
+        <div style={{ display: 'grid', gridTemplateColumns: gridCols, borderBottom: '1px solid #f1ecf6', flexShrink: 0 }}>
+          <div />
+          {dayData.map(({ d, iso, isToday }) => (
+            <div key={iso} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 4px', borderLeft: '1px solid #f4f1f9' }}>
+              <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10.5, fontWeight: 700, color: '#b0acbe', textTransform: 'uppercase' }}>{DAYS_SHORT[d.getDay()]}</span>
+              <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: isToday ? '#fff' : '#1c1b22', background: isToday ? '#5e4dbb' : 'transparent', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{d.getDate()}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* All-day / untimed row */}
+        <div style={{ display: 'grid', gridTemplateColumns: gridCols, borderBottom: '1px solid #e8e4f0', flexShrink: 0, maxHeight: 132, overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', padding: '6px 6px 0', fontFamily: 'Inter, sans-serif', fontSize: 9, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' }}>all-day</div>
+          {dayData.map(({ iso, untimed }) => (
+            <div key={iso}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => handleDayDrop(iso, e)}
+              style={{ borderLeft: '1px solid #f4f1f9', padding: 4, display: 'flex', flexDirection: 'column', gap: 3, minHeight: 30 }}>
+              {untimed.map(c => <ChipCard key={c.key} chip={c} />)}
+            </div>
+          ))}
+        </div>
+
+        {/* Time grid */}
+        <div ref={weekScrollRef} style={{ flex: 1, overflowY: 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: gridCols }}>
+            {/* Hour gutter */}
+            <div style={{ position: 'relative', height: 24 * HOUR_H }}>
+              {HOURS.map(h => h === 0 ? null : (
+                <div key={h} style={{ position: 'absolute', top: h * HOUR_H - 6, right: 6, fontFamily: 'Inter, sans-serif', fontSize: 9.5, color: '#b0acbe' }}>
+                  {String(h).padStart(2, '0')}:00
+                </div>
+              ))}
+            </div>
+            {/* Day columns */}
+            {dayData.map(({ iso, isToday, timed, layout }) => (
+              <div key={iso}
+                onClick={() => setDayChooser(iso)}
                 onDragOver={e => e.preventDefault()}
-                onDrop={e => { e.preventDefault(); const id = Number(e.dataTransfer.getData('text/plain')); if (id) { assignDeadline(id, iso); setDragTaskId(null); } }}
-                style={{ display: 'flex', flexDirection: 'column', minHeight: isMobile ? 'auto' : 360, background: isToday ? '#faf8ff' : '#fff', border: isToday ? '1.5px solid #c8bfff' : '1px solid #f1ecf6', borderRadius: 10, overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderBottom: '1px solid #f1ecf6', background: isToday ? '#f3efff' : '#faf9ff' }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#b0acbe', textTransform: 'uppercase' }}>{DAYS_SHORT[d.getDay()]}</span>
-                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: isToday ? '#5e4dbb' : '#1c1b22' }}>{d.getDate()}</span>
+                onDrop={e => handleDayDrop(iso, e)}
+                style={{ position: 'relative', height: 24 * HOUR_H, borderLeft: '1px solid #f4f1f9', background: isToday ? '#fbfaff' : '#fff', cursor: 'pointer' }}>
+                {HOURS.map(h => (
+                  <div key={h} style={{ position: 'absolute', top: h * HOUR_H, left: 0, right: 0, borderTop: '1px solid #f4f1f9' }} />
+                ))}
+                {isToday && (
+                  <div style={{ position: 'absolute', top: (nowMin / 60) * HOUR_H, left: 0, right: 0, height: 2, background: '#ef4444', zIndex: 3 }}>
+                    <div style={{ position: 'absolute', left: -3, top: -3, width: 7, height: 7, borderRadius: '50%', background: '#ef4444' }} />
                   </div>
-                  <button onClick={() => setDayChooser(iso)} title="Add"
-                    style={{ width: 22, height: 22, borderRadius: '50%', border: 'none', background: '#F5F3FF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon name="add" size={13} color="#5e4dbb" />
-                  </button>
-                </div>
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, padding: 8 }}>
-                  {chips.length === 0
-                    ? <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#c9c4d5', textAlign: 'center', padding: '12px 0' }}>—</div>
-                    : chips.map(c => <ChipCard key={c.key} chip={c} />)}
-                </div>
+                )}
+                {timed.map(c => {
+                  const lay = layout.get(c) ?? { col: 0, cols: 1 };
+                  const top = (c.startMin! / 60) * HOUR_H;
+                  const height = Math.max(((c.endMin! - c.startMin!) / 60) * HOUR_H, 18);
+                  const wPct = 100 / lay.cols;
+                  return (
+                    <div key={c.key}
+                      onClick={e => { e.stopPropagation(); c.onClick(); }}
+                      draggable={!!c.dragData}
+                      onDragStart={c.dragData ? e => { e.dataTransfer.setData('text/plain', c.dragData!); e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); } : undefined}
+                      title={c.label}
+                      style={{ position: 'absolute', top: top + 1, height: height - 2, left: `calc(${lay.col * wPct}% + 2px)`, width: `calc(${wPct}% - 4px)`, background: c.bg, borderLeft: `3px solid ${c.accent}`, borderRadius: 5, padding: '2px 5px', overflow: 'hidden', cursor: c.dragData ? 'grab' : 'pointer', zIndex: 2 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {c.priorityColor && <div style={{ width: 5, height: 5, borderRadius: '50%', background: c.priorityColor, flexShrink: 0 }} />}
+                        {c.emoji && <span style={{ fontSize: 10, lineHeight: 1, flexShrink: 0 }}>{c.emoji}</span>}
+                        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: c.accent, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</span>
+                      </div>
+                      {height > 30 && c.time && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 9.5, color: '#787584' }}>{c.time}</div>}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -911,6 +1072,56 @@ export default function CalendarScreen() {
               )}
             </div>
 
+            {/* Unscheduled tasks — lightning popover (desktop) / bottom sheet (mobile) */}
+            {showPanel && (
+              <div ref={unschedRef} style={{ position: 'relative' }}>
+                <button onClick={() => { if (isMobile) setMobileSidebarOpen(true); else setShowUnscheduled(v => !v); }}
+                  title="Unscheduled tasks"
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: showUnscheduled ? '#5e4dbb' : '#787584', background: showUnscheduled ? '#F5F3FF' : 'transparent', border: `1px solid ${showUnscheduled ? '#c4b8f0' : '#e8e4f0'}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
+                  <Icon name="bolt" size={16} color={showUnscheduled ? '#5e4dbb' : '#787584'} />
+                  {!isMobile && 'Unscheduled'}
+                  {unscheduled.length > 0 && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 700, color: '#fff', background: '#5e4dbb', borderRadius: 9999, padding: '1px 6px' }}>{unscheduled.length}</span>}
+                </button>
+                {!isMobile && showUnscheduled && (
+                  <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 280, maxHeight: '60vh', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 14, border: '1px solid #E5E7EB', boxShadow: '0 8px 32px rgba(94,77,187,0.14)', zIndex: 400, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+                    <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid #f0ecf8', flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                        <Icon name="bolt" size={15} color="#5e4dbb" />
+                        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b0acbe' }}>Unscheduled</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#faf9ff', borderRadius: 8, padding: '6px 10px', border: '1px solid #e8e4f0' }}>
+                        <Icon name="search" size={13} color="#787584" />
+                        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
+                          style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#1c1b22', flex: 1 }} />
+                      </div>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe', marginTop: 7 }}>Drag a task onto a day to schedule it.</div>
+                    </div>
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
+                      {filteredUnscheduled.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '20px 8px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>All tasks scheduled!</div>
+                      ) : (
+                        filteredUnscheduled.map(t => (
+                          <div key={`${t._listId}-${t.id}`} draggable
+                            onDragStart={e => { e.dataTransfer.setData('text/plain', String(t.id)); e.dataTransfer.effectAllowed = 'move'; setDragTaskId(t.id); }}
+                            onDragEnd={() => setDragTaskId(null)}
+                            onClick={() => setSelectedTask(t)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: '#fff', border: '1px solid #e8e4f0', marginBottom: 4, cursor: 'grab', transition: 'all 150ms', opacity: dragTaskId === t.id ? 0.4 : 1 }}
+                            onMouseEnter={e => (e.currentTarget.style.borderColor = '#9d8dff')}
+                            onMouseLeave={e => (e.currentTarget.style.borderColor = '#e8e4f0')}>
+                            <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
+                              {t._listName && t._listName !== 'Dashboard' && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: '#787584' }}>{t._listName}</div>}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* New meeting */}
             <button onClick={() => setCreatingMeeting({ date: view === 'year' ? todayIso : toIso(anchor) })}
               style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(94,77,187,0.25)', transition: 'background 150ms' }}
@@ -926,76 +1137,59 @@ export default function CalendarScreen() {
         {view === 'month' ? renderMonth() : view === 'week' ? renderWeek() : renderYear()}
       </div>
 
-      {/* Unscheduled tasks panel (month & week) */}
-      {showPanel && (isMobile ? (
+      {/* Unscheduled tasks — mobile bottom sheet (opened from the ⚡ toolbar button) */}
+      {isMobile && showPanel && mobileSidebarOpen && (
         <>
-          {filteredUnscheduled.length > 0 && (
-            <button onClick={() => setMobileSidebarOpen(true)}
-              style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 100, background: '#5e4dbb', color: '#fff', border: 'none', borderRadius: 24, padding: '10px 18px', display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 16px rgba(94,77,187,0.35)' }}>
-              <Icon name="event_busy" size={17} color="#fff" />
-              {filteredUnscheduled.length} Unscheduled
-            </button>
-          )}
-          {mobileSidebarOpen && (
-            <>
-              <div onClick={() => setMobileSidebarOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(2px)', animation: 'backdropIn 180ms ease both' }} />
-              <div className="safe-bottom" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201, background: '#f7f2fc', borderRadius: '16px 16px 0 0', maxHeight: '65vh', display: 'flex', flexDirection: 'column', animation: 'slideUp 260ms cubic-bezier(0.22,1,0.36,1) both', boxShadow: '0 -4px 24px rgba(0,0,0,0.12)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 16px 10px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
-                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#b0acbe' }}>Unscheduled</div>
-                  <button onClick={() => setMobileSidebarOpen(false)} style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon name="close" size={15} color="#484552" />
-                  </button>
-                </div>
-                <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', borderRadius: 8, padding: '6px 10px', border: '1px solid #e8e4f0' }}>
-                    <Icon name="search" size={13} color="#787584" />
-                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
-                      style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#1c1b22', flex: 1 }} />
-                  </div>
-                </div>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
-                  {filteredUnscheduled.map(t => (
-                    <div key={`${t._listId}-${t.id}`} onClick={() => { setMobileSidebarOpen(false); setSelectedTask(t); }}
-                      style={{ padding: '10px 12px', borderRadius: 8, background: '#fff', border: '1px solid #e8e4f0', marginBottom: 6, cursor: 'pointer' }}>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', fontWeight: 400, marginBottom: 2 }}>{t.title}</div>
-                      {t._listName && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584' }}>{t._listName}</div>}
-                    </div>
-                  ))}
-                </div>
+          <div onClick={() => setMobileSidebarOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(2px)', animation: 'backdropIn 180ms ease both' }} />
+          <div className="safe-bottom" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201, background: '#f7f2fc', borderRadius: '16px 16px 0 0', maxHeight: '65vh', display: 'flex', flexDirection: 'column', animation: 'slideUp 260ms cubic-bezier(0.22,1,0.36,1) both', boxShadow: '0 -4px 24px rgba(0,0,0,0.12)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 16px 10px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon name="bolt" size={15} color="#5e4dbb" />
+                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#b0acbe' }}>Unscheduled</div>
               </div>
-            </>
-          )}
-        </>
-      ) : (
-        <div style={{ width: 240, borderLeft: '1px solid #E5E7EB', background: '#f7f2fc', display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 0 }}>
-          <div style={{ padding: '16px 12px 10px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#b0acbe', marginBottom: 8 }}>Unscheduled</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', borderRadius: 8, padding: '6px 10px', border: '1px solid #e8e4f0' }}>
-              <Icon name="search" size={13} color="#787584" />
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
-                style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#1c1b22', flex: 1 }} />
+              <button onClick={() => setMobileSidebarOpen(false)} style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="close" size={15} color="#484552" />
+              </button>
+            </div>
+            <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', borderRadius: 8, padding: '6px 10px', border: '1px solid #e8e4f0' }}>
+                <Icon name="search" size={13} color="#787584" />
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
+                  style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#1c1b22', flex: 1 }} />
+              </div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 7 }}>Tap a task to schedule it.</div>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
+              {filteredUnscheduled.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '24px 8px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>All tasks scheduled!</div>
+              ) : filteredUnscheduled.map(t => (
+                <div key={`${t._listId}-${t.id}`} onClick={() => setMobileScheduleTask(t)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, background: '#fff', border: '1px solid #e8e4f0', marginBottom: 6, cursor: 'pointer' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
+                    {t._listName && t._listName !== 'Dashboard' && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584' }}>{t._listName}</div>}
+                  </div>
+                  <Icon name="event_available" size={17} color="#5e4dbb" />
+                </div>
+              ))}
             </div>
           </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
-            {filteredUnscheduled.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '24px 8px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>All tasks scheduled!</div>
-            ) : (
-              filteredUnscheduled.map(t => (
-                <div key={`${t._listId}-${t.id}`} draggable
-                  onDragStart={e => { e.dataTransfer.setData('text/plain', String(t.id)); e.dataTransfer.effectAllowed = 'move'; setDragTaskId(t.id); }}
-                  onDragEnd={() => setDragTaskId(null)}
-                  onClick={() => setSelectedTask(t)}
-                  style={{ padding: '8px 10px', borderRadius: 8, background: '#fff', border: '1px solid #e8e4f0', marginBottom: 4, cursor: 'grab', transition: 'all 150ms', opacity: dragTaskId === t.id ? 0.4 : 1 }}
-                  onMouseEnter={e => (e.currentTarget.style.borderColor = '#9d8dff')}
-                  onMouseLeave={e => (e.currentTarget.style.borderColor = '#e8e4f0')}>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22', fontWeight: 400, marginBottom: 2 }}>{t.title}</div>
-                  {t._listName && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: '#787584' }}>{t._listName}</div>}
-                </div>
-              ))
-            )}
+        </>
+      )}
+
+      {/* Mobile: pick a date to schedule a tapped task */}
+      {mobileScheduleTask && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+          onClick={() => setMobileScheduleTask(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <div style={{ background: '#fff', borderRadius: 12, padding: '10px 16px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', maxWidth: 280 }}>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Schedule “{mobileScheduleTask.title}”</div>
+            </div>
+            <CalendarPicker value={mobileScheduleTask.deadline}
+              onChange={d => { assignDeadline(mobileScheduleTask.id, d); setMobileScheduleTask(null); }} />
           </div>
         </div>
-      ))}
+      )}
 
       {/* Modals */}
       {selectedTask && (
