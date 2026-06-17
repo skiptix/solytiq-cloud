@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 // ---------------------------------------------------------------------------
 // Shared AI tool registry — THE single source of truth for AI capabilities.
 //
@@ -52,7 +53,7 @@ const STATUSES = new Set(['upcoming', 'in-progress', 'done']);
 const LAYOUTS = new Set(['vertical', 'compact', 'detailed']);
 
 function genTaskId(): number {
-  return Date.now() * 1000 + Math.floor(Math.random() * 1000);
+  return Date.now() * 1000 + crypto.randomInt(1000);
 }
 
 function ok(result: string, summary?: string): ToolResult {
