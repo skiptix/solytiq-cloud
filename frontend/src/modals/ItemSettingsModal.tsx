@@ -154,7 +154,7 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
           )}
 
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', lineHeight: 1.4 }}>
-            <Icon name="visibility" size={13} color="#b0acbe" style={{ marginTop: 1, flexShrink: 0 }} />
+            <span style={{ marginTop: 1, flexShrink: 0, display: 'flex' }}><Icon name="visibility" size={13} color="#b0acbe" /></span>
             Anyone with this link can view a read-only copy. No sign-in required.
           </div>
 
