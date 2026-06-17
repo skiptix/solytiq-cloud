@@ -1094,8 +1094,8 @@ export default function AIAssistant() {
     <div
       style={{
         position: 'fixed',
-        bottom: isMobile ? 16 : 30,
-        right: isMobile ? 12 : 30,
+        bottom: isMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 60px)' : 30,
+        right: isMobile ? 14 : 30,
         zIndex: 9000,
         display: 'flex',
         flexDirection: 'column',
@@ -1122,7 +1122,7 @@ export default function AIAssistant() {
           sessionId={useAIStore.getState().currentSessionId}
         />
       )}
-      <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} />
+      <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} size={isMobile ? 44 : 52} />
     </div>
   );
 }

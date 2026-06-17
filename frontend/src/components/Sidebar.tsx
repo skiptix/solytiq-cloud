@@ -1028,11 +1028,19 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   const [addingFolder, setAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
   const [gpsFiles, setGpsFiles] = useState<GpsFile[]>([]);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsSearch, setGpsSearch] = useState('');
 
   const { folders, timelines, addFolder, updateList, updateFolder, updateTimeline, setFolders, setTimelines, loadFromApi } = useAppStore();
+
+  // Scroll sidebar to top whenever the mobile drawer opens so the logo is always visible.
+  useEffect(() => {
+    if (isMobile && drawerOpen) {
+      asideRef.current?.scrollTo({ top: 0 });
+    }
+  }, [drawerOpen, isMobile]);
 
   useEffect(() => {
     const clearTaskDrag = () => { setDragOverTaskListId(null); setDragOverTimelineId(null); };
@@ -1164,7 +1172,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   // ── GPS sidebar mode ───────────────────────────────────────────────────────
   if (active === 'gps') {
     return (
-      <aside style={{
+      <aside ref={asideRef} style={{
         width: isMobile ? 280 : width,
         minWidth: isMobile ? 280 : width,
         height: '100vh',
@@ -1172,7 +1180,9 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         borderRight: '1px solid #E5E7EB',
         display: 'flex',
         flexDirection: 'column',
-        padding: collapsed ? '16px 6px' : '16px 12px',
+        padding: isMobile
+          ? 'calc(env(safe-area-inset-top, 0px) + 16px) 12px 16px'
+          : collapsed ? '16px 6px' : '16px 12px',
         gap: 4,
         position: 'fixed',
         left: 0,
@@ -1296,7 +1306,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.20.0
+              v1.20.1
             </div>
           )}
         </div>
@@ -1305,7 +1315,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   }
 
   return (
-    <aside style={{
+    <aside ref={asideRef} style={{
       width: isMobile ? 280 : width,
       minWidth: isMobile ? 280 : width,
       height: '100vh',
@@ -1313,7 +1323,9 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
       borderRight: '1px solid #E5E7EB',
       display: 'flex',
       flexDirection: 'column',
-      padding: collapsed ? '16px 6px' : '16px 12px',
+      padding: isMobile
+        ? 'calc(env(safe-area-inset-top, 0px) + 16px) 12px 16px'
+        : collapsed ? '16px 6px' : '16px 12px',
       gap: 4,
       position: 'fixed',
       left: 0,
@@ -1510,7 +1522,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.20.0
+            v1.20.1
           </div>
         )}
       </div>
