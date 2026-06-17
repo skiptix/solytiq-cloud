@@ -15,7 +15,7 @@ import { Request, Response } from 'express';
 import { verifyCaldavLogin } from '../caldav/credentials';
 import {
   getCollections, getCollection, getResources, getResource, getCtag,
-  upsertMeetingFromICal, deleteMeetingByResource, CalCollection,
+  getCollectionCalendar, upsertMeetingFromICal, deleteMeetingByResource, CalCollection,
 } from '../caldav/data';
 
 const BASE = '/caldav';
@@ -190,13 +190,33 @@ async function handleReport(req: Request, res: Response, uid: string) {
 
 async function handleGet(req: Request, res: Response, uid: string, head: boolean) {
   const segs = segments(req);
-  if (segs[0] !== 'calendars' || segs.length !== 4) { res.sendStatus(405); return; }
-  const colId = segs[2];
-  const name = segs[3].replace(/\.ics$/i, '');
-  const r = await getResource(uid, colId, name);
-  if (!r) { res.sendStatus(404); return; }
-  res.status(200).set('Content-Type', 'text/calendar; charset=utf-8').set('ETag', r.etag);
-  if (head) res.end(); else res.send(r.ics);
+
+  // A single resource → its iCalendar document.
+  if (segs[0] === 'calendars' && segs.length === 4) {
+    const colId = segs[2];
+    const name = segs[3].replace(/\.ics$/i, '');
+    const r = await getResource(uid, colId, name);
+    if (!r) { res.sendStatus(404); return; }
+    res.status(200).set('Content-Type', 'text/calendar; charset=utf-8').set('ETag', r.etag);
+    if (head) res.end(); else res.send(r.ics);
+    return;
+  }
+
+  // A whole calendar collection → merged VCALENDAR (so a browser/GET-only client
+  // can still download it instead of seeing "Method Not Allowed").
+  if (segs[0] === 'calendars' && segs.length === 3) {
+    const col = await getCollection(uid, segs[2]);
+    if (!col) { res.sendStatus(404); return; }
+    const ics = await getCollectionCalendar(uid, segs[2]);
+    res.status(200).set('Content-Type', 'text/calendar; charset=utf-8');
+    if (head) res.end(); else res.send(ics);
+    return;
+  }
+
+  // Root / principal / home → a friendly note (CalDAV is not browsable by GET).
+  res.status(200).set('Content-Type', 'text/plain; charset=utf-8');
+  if (head) res.end();
+  else res.send('Solytiq CalDAV endpoint. Add this URL to a CalDAV client (e.g. Apple Calendar) — it is not browsable in a web browser.');
 }
 
 async function handlePut(req: Request, res: Response, uid: string) {
