@@ -23,6 +23,8 @@ import workspacesRouter from './routes/workspaces';
 import timelinesRouter  from './routes/timelines';
 import gpsRouter from './routes/gps';
 import meetingsRouter from './routes/meetings';
+import caldavManageRouter from './routes/caldavManage';
+import caldavHandler from './routes/caldav';
 import taskAttachmentsRouter from './routes/taskAttachments';
 import milestoneAttachmentsRouter from './routes/milestoneAttachments';
 import tokensRouter from './routes/tokens';
@@ -113,6 +115,7 @@ app.use('/api/timelines/milestones/:milestoneId/attachments', milestoneAttachmen
 app.use('/api/timelines',  timelinesRouter);
 app.use('/api/gps',        gpsRouter);
 app.use('/api/meetings',   meetingsRouter);
+app.use('/api/caldav',     caldavManageRouter);
 app.use('/api/tokens',     tokensRouter);
 app.use('/api/oauth',      oauthRouter);
 
@@ -120,6 +123,14 @@ app.use('/api/oauth',      oauthRouter);
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
 // loops; the endpoint enforces its own bearer-token auth.
 app.use('/mcp',            mcpRouter);
+
+// CalDAV server (Apple Calendar / Thunderbird / …). Outside /api so the API
+// rate limiter doesn't throttle the client's frequent polling; it enforces its
+// own HTTP Basic auth (email + generated CalDAV password). The text body parser
+// captures the XML/iCalendar request bodies WebDAV uses.
+app.use('/caldav', express.text({ type: () => true, limit: '1mb' }), caldavHandler);
+// CalDAV service discovery: clients probe /.well-known/caldav for the real root.
+app.use('/.well-known/caldav', (_req, res) => res.redirect(301, '/caldav/'));
 
 // OAuth discovery for the Claude MCP connector.
 // Protected Resource Metadata (RFC 9728) — the /mcp endpoint is the resource;
@@ -1028,6 +1039,20 @@ async function runMigrations() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS meetings_user_date_idx ON meetings(user_id, meeting_date)`);
+  // Resource name a CalDAV client assigned to a meeting it created (so GET/PUT/
+  // DELETE by that href map back to the right row).
+  await pool.query(`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS caldav_uid VARCHAR(255)`);
+
+  // CalDAV app-specific credentials (email + generated password; only a hash is
+  // stored). One per user; regenerating replaces it.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS caldav_credentials (
+      user_id       UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      password_hash VARCHAR(255) NOT NULL,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_used_at  TIMESTAMPTZ
+    )
+  `);
 
   console.log('Database migrations applied.');
 }

@@ -156,6 +156,8 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 | `task_attachments` | Files attached to tasks: `attachment_type` (`upload｜linked`), optional `shared_file_id` |
 | `milestone_attachments` | Files attached to milestones — same shape as `task_attachments` (`milestone_id` FK, `upload｜linked`) |
 | `gps_files` | `file_type` (`gpx｜fit`), `file_path`, `metadata JSONB`, `smoothed`, `route_state JSONB` (Route Planner State v1) |
+| `meetings` | Standalone calendar events (no list/timeline/workspace): `user_id`, `title`, `meeting_date`, `start_time`/`end_time`, `all_day`, `location`, `color`, `caldav_uid` (CalDAV resource mapping) |
+| `caldav_credentials` | Per-user CalDAV app password: `user_id` PK, `password_hash` (bcrypt), `last_used_at` |
 | `trash`, `trash_lists`, `trash_folders`, `trash_timelines` | Soft-delete payloads as JSONB with a 30-day `expires_at` |
 | `app_settings` | Key/value config (storage quota, `ai_assistant_enabled`, `ai_model`, `two_fa_feature_enabled`) |
 | `ai_chat_sessions`, `ai_chats`, `ai_chat_files`, `ai_usage` | AI conversations, messages, uploaded files (30-day TTL), and per-call token usage |
@@ -242,6 +244,13 @@ Sharing model for lists/timelines (distinct from the workspace `is_public` flag 
 - **Security invariant:** handlers receive `userId` from the verified credential only — there is **no `user_id` tool parameter**, and every query is scoped by `user_id`. This removes any prompt-injection path to another user's data. New tools must follow this rule.
 - **Internal AI** (`Sol`) fetches these defs from `GET /api/ai/tools` and executes data tools via `POST /api/ai/execute`; the frontend keeps only client-coupled tools (navigation, GPS browser-downloads, reorder/move, sublists, workspaces) — see `SUPERSEDED_CLIENT_TOOLS` in `components/AIAssistant/index.tsx`.
 - File→text extraction is centralized in **`backend/src/fileText.ts`** (used by both `/api/ai/files` and the `read_file` tool).
+
+### CalDAV Server (external calendar apps)
+
+- **`/caldav`** (mounted in `index.ts`, handler in `routes/caldav.ts`) is a read/write CalDAV server (a focused subset of RFC 4791 / WebDAV: `OPTIONS`, `PROPFIND`, `REPORT` `calendar-query`/`calendar-multiget`/`sync-collection`, `GET`, `PUT`, `DELETE`, `PROPPATCH`). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page. Mounted outside `/api` (no rate limiter) and proxied by Nginx (`/caldav` + `/.well-known/caldav`).
+- **Auth: HTTP Basic** with the user's email + a generated CalDAV app password (`caldav_credentials`, bcrypt hash only, one per user, revocable) — never the account password. Helpers in `caldav/credentials.ts`.
+- **Collections:** one calendar per accessible workspace (`ws-<id>`) exposing milestones as **VEVENT** and tasks as **VTODO** (both read-only), plus a writable **`meetings`** calendar (standalone meetings as VEVENT; inbound `PUT`/`DELETE` upsert/remove rows, and `meetings.caldav_uid` maps a client-chosen resource name back to its row). Data scope mirrors the in-app Calendar page (all accessible workspaces).
+- iCalendar (de)serialization is hand-rolled in **`caldav/ical.ts`** (floating local times, stable per-item `DTSTAMP`/`ETag`); the data layer is **`caldav/data.ts`**. Connection management (status / (re)generate password / revoke) is `routes/caldavManage.ts` → `/api/caldav`, surfaced in the **Calendar Sync** tab of `UserSettingsModal`.
 
 ### MCP Server (external AI agents)
 
