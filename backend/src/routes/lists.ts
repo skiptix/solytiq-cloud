@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { randomBytes } from 'crypto';
+import crypto, { randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
@@ -840,7 +840,7 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
       return;
     }
 
-    const taskId = id ?? (Date.now() * 1000 + Math.floor(Math.random() * 1000));
+    const taskId = id ?? (Date.now() * 1000 + crypto.randomInt(1000));
 
     // An item ALWAYS inherits its parent list's workspace — never trust a
     // client-supplied workspaceId here, so an item can never drift out of the
@@ -1108,7 +1108,7 @@ router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, r
 
     const newListId = `list_${uuidv4()}`;
     const newSectionId = `section_${uuidv4()}`;
-    const taskId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+    const taskId = Date.now() * 1000 + crypto.randomInt(1000);
 
     // All four writes happen atomically: list + its section + the linking task
     // + the back-reference. A partial failure can no longer leave a sublist
@@ -1185,7 +1185,7 @@ router.post('/:listId/sections/:sectionId/tasks/link', async (req: Request, res:
       return;
     }
 
-    const taskId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+    const taskId = Date.now() * 1000 + crypto.randomInt(1000);
     const posResult = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM tasks WHERE section_id = $1', [sectionId]);
     const taskPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
 

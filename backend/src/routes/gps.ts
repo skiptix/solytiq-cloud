@@ -282,7 +282,7 @@ router.post('/:id/smooth-save', async (req, res) => {
       const safeName = ((newName || `${baseName}_smoothed`)).replace(/[^\w\s\-_.]/g, '').trim() || `${baseName}_smoothed`;
       const outName = safeName.endsWith('.gpx') ? safeName : `${safeName}.gpx`;
       const gpx = writeGpx(smoothed, safeName);
-      const newId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const newId = `${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
       const filename = `gps_${newId}.gpx`;
       const fullPath = path.join(UPLOAD_DIR, filename);
       fs.writeFileSync(fullPath, gpx, 'utf8');

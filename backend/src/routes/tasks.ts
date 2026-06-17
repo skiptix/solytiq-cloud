@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Router, Request, Response } from 'express';
 import { query } from '../db';
 import { authenticate } from '../middleware';
@@ -119,7 +120,7 @@ router.post('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const taskId = id ?? (Date.now() * 1000 + Math.floor(Math.random() * 1000));
+    const taskId = id ?? (Date.now() * 1000 + crypto.randomInt(1000));
 
     // Resolve to a workspace the user can access so the dashboard task always
     // has a real, visible home (never NULL / never a dangling id).
