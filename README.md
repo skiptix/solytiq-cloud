@@ -28,9 +28,10 @@
 - 📈 **Visual Timelines** — Track project milestones and plan your schedule chronologically.
 - ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via Server-Sent Events.
 - 🔒 **Enhanced Security** — Built-in TOTP 2FA support, JWT-based authentication, and hardened security headers.
-- 🤖 **AI Assistant** — A floating AI chat powered by OpenRouter to help you break down tasks and stay productive.
+- 🤖 **AI Assistant & MCP Server** — A floating AI chat powered by OpenRouter, plus an integrated Model Context Protocol (MCP) server for external AI agents (like Claude) to securely interact with your workspace via OAuth 2.1.
 - 📎 **Cloud File Sharing** — Securely share files (up to 210MB) with password protection, expiry dates, and public links.
 - 👥 **Multi-User & Admin** — Full member management with storage quotas and admin-controlled permissions.
+- 📅 **CalDAV Server** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing meetings.
 - 🗑️ **Trash & Restore** — Comprehensive protection against accidental deletions with a 30-day recovery window.
 
 ---
@@ -62,8 +63,8 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 - **Database:** [PostgreSQL 16](https://www.postgresql.org/)
 - **Auth:** JWT + [otplib](https://github.com/yeoju/otplib) (TOTP 2FA) + bcryptjs
 - **File Handling:** Multer (with disk storage)
-- **AI Integration:** [OpenRouter API](https://openrouter.ai/)
-- **Data Parsing:** GPX & FIT file processing for workout data
+- **AI Integration:** [OpenRouter API](https://openrouter.ai/) + [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/sdk) (MCP server + OAuth 2.1)
+- **Data Parsing:** GPX & FIT file processing (`fast-xml-parser`, `fit-file-parser`)
 
 ---
 
@@ -99,14 +100,17 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 
 ## ⚙️ Configuration
 
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `POSTGRES_PASSWORD` | Database password (**Required**) | `change_me` |
-| `JWT_SECRET` | Key for session signing (**Required**) | `change_me` |
-| `FRONTEND_URL` | Allowed CORS origin | `http://localhost` |
-| `PORT` | Public host port | `80` |
-| `OPENROUTER_API_KEY` | API Key for AI Assistant | — |
-| `OPENROUTER_MODEL` | AI Model (e.g., `openai/gpt-4o-mini`) | `openai/gpt-4o-mini` |
+| Variable | Required | Description | Default |
+| :--- | :--- | :--- | :--- |
+| `POSTGRES_DB` | Yes | Database name | `solytiq` |
+| `POSTGRES_USER` | Yes | Database username | `solytiq` |
+| `POSTGRES_PASSWORD` | Yes | Database password — must be changed in production | `change_me` |
+| `JWT_SECRET` | Yes | Key for session signing — **fails startup if default** | `change_me` |
+| `FRONTEND_URL` | Yes | Origin allowed by CORS (e.g., `http://localhost`). Used for OAuth/MCP discovery when `PUBLIC_URL` is unset | `http://localhost` |
+| `PUBLIC_URL` | No | Public origin (scheme + host) for OAuth issuer/endpoints and MCP | — |
+| `PORT` | No | Public host port / backend listen port | `3001` (backend) / `80` (Docker) |
+| `OPENROUTER_API_KEY` | No | Enables the AI assistant via OpenRouter | — |
+| `OPENROUTER_MODEL` | No | AI Model (e.g., `openai/gpt-4o-mini`) | `openai/gpt-4o-mini` |
 
 ---
 
