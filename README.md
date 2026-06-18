@@ -114,6 +114,23 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 
 ---
 
+## 🏗️ Architecture & Core Concepts
+
+- **Migrations in code, not files** — `runMigrations()` in `index.ts` uses guards and idempotent data heals/seeds.
+- **No ORM** — Raw SQL keeps queries explicit and avoids N+1 pitfalls; use `JOIN` freely.
+- **Zustand over Redux** — Minimal boilerplate; each store is a standalone module. Stores call the API client directly; components call store actions.
+- **Soft delete** — Deleted tasks, lists, folders, and timelines go to their respective `trash*` tables (JSONB payload) with a 30-day `expires_at`. The live tables have no `deleted_at` column.
+- **Task IDs are BIGINT** — Generated client-side as `Date.now()` (milliseconds). Per-user FK scoping prevents cross-user collisions.
+- **Workspaces scope everything** — Lists, folders, tasks, and timelines carry a `workspace_id`. Every user gets an auto-seeded private "Personal" workspace. Workspace `visibility` plus `workspace_members` govern who can see shared content in-app.
+- **Two distinct notions of "public":**
+  1. `is_public` on lists/folders/timelines = **in-app visibility to workspace members**.
+  2. `share_enabled` + `share_token` = **anonymous read-only link** for anyone on the internet (no login), optionally password-protected and/or time-limited.
+- **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
+- **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
+- **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
+
+---
+
 ## 📁 Project Structure
 
 ```text
