@@ -36,8 +36,9 @@ jobs:
               repository: $repo
             }')
 
-          # Sendet den Request an die Solytiq-API
+          # Sendet den Request an die Solytiq-API MIT getarntem Browser-User-Agent
           curl -X POST https://solytiq.com/api/changelogs \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
             -H "Content-Type: application/json" \
             -H "X-Api-Key: $HUB_API_KEY" \
             -d "$JSON_PAYLOAD"
