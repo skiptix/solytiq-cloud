@@ -32,6 +32,7 @@ import SharedListPage from './screens/SharedListPage';
 import SharedTimelinePage from './screens/SharedTimelinePage';
 import SettingsScreen from './screens/SettingsScreen';
 import FolderDashboardScreen from './screens/FolderDashboardScreen';
+import AdminPasswordResetScreen from './screens/AdminPasswordResetScreen';
 
 // Sign out on any 401 (expired / revoked JWT) so the user is redirected to
 // /login instead of seeing the "no workspace" forced-creation wizard.
@@ -289,6 +290,7 @@ export default function App() {
       <Route path="/oauth/consent" element={loggedIn ? <OAuthConsentScreen /> : <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />} />
       <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : <LoginScreen />} />
       <Route path="/setup" element={loggedIn ? <Navigate to="/dashboard" replace /> : <SetupWizard />} />
+      <Route path="/admin-reset" element={loggedIn ? <Navigate to="/dashboard" replace /> : <AdminPasswordResetScreen />} />
       <Route path="/nuke" element={loggedIn ? <NukeScreen /> : <Navigate to="/login" replace />} />
       <Route path="/gps/:id/edit" element={loggedIn ? <GPSEditScreen /> : <Navigate to="/login" replace />} />
       <Route path="/*" element={

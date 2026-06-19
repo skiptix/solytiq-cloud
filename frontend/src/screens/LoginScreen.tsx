@@ -1,7 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import { apiLogin, api2FAVerify } from '../api/client';
 import Icon from '../components/Icon';
@@ -175,6 +175,13 @@ export default function LoginScreen() {
                 style={{ width: '100%', background: loading ? '#9d8dff' : '#5e4dbb', color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 10, border: 'none', cursor: loading ? 'wait' : 'pointer', transition: 'all 180ms', marginTop: 4 }}>
                 {loading ? 'Signing in…' : 'Sign In'}
               </button>
+              <div style={{ textAlign: 'center', marginTop: 4 }}>
+                <Link to="/admin-reset" style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#b0acbe', textDecoration: 'none', transition: 'color 150ms' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = '#5e4dbb'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = '#b0acbe'; }}>
+                  Forgot admin password?
+                </Link>
+              </div>
             </form>
           </>
         )}

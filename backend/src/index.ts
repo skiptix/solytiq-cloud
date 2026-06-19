@@ -109,6 +109,7 @@ app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/2fa/verify', authLimiter);
 app.use('/api/auth/register', setupLimiter);
 app.use('/api/auth/request-setup-token', setupLimiter);
+app.use('/api/auth/admin-password-reset', setupLimiter);
 app.use('/api/admin/nuke', setupLimiter);
 
 // ---------------------------------------------------------------------------
