@@ -5,7 +5,7 @@ import useAuthStore from './store/useAuthStore';
 import useAppStore from './store/useAppStore';
 import useMembersStore from './store/useMembersStore';
 import useWorkspaceStore from './store/useWorkspaceStore';
-import { apiCheckSetupRequired, connectSSE, disconnectSSE } from './api/client';
+import { apiCheckSetupRequired, connectSSE, disconnectSSE, setUnauthorizedHandler } from './api/client';
 import { useMobile } from './hooks/useBreakpoint';
 
 import Sidebar from './components/Sidebar';
@@ -32,6 +32,10 @@ import SharedListPage from './screens/SharedListPage';
 import SharedTimelinePage from './screens/SharedTimelinePage';
 import SettingsScreen from './screens/SettingsScreen';
 import FolderDashboardScreen from './screens/FolderDashboardScreen';
+
+// Sign out on any 401 (expired / revoked JWT) so the user is redirected to
+// /login instead of seeing the "no workspace" forced-creation wizard.
+setUnauthorizedHandler(() => useAuthStore.getState().signOut());
 
 // ── Protected route wrapper ────────────────────────────────────
 function Protected({ children }: { children: React.ReactNode }) {
