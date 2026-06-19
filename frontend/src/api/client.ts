@@ -120,6 +120,12 @@ export const apiChangePassword = (currentPassword: string, newPassword: string) 
 export const apiGetFeatureFlags = () =>
   apiFetch<{ twoFAEnabled: boolean; mcpEnabled: boolean }>('/auth/feature-flags');
 
+export const apiAdminPasswordResetRequest = () =>
+  apiFetch<{ ok: boolean }>('/auth/admin-password-reset/request', { method: 'POST' });
+
+export const apiAdminPasswordResetConfirm = (code: string, newPassword: string) =>
+  apiFetch<{ ok: boolean }>('/auth/admin-password-reset/confirm', { method: 'POST', body: JSON.stringify({ code, newPassword }) });
+
 export const apiUpdateProfile = (data: { fullName?: string; email?: string }) =>
   apiFetch<{ user: { id: string; username: string; email: string; fullName: string } }>(
     '/auth/profile', { method: 'PUT', body: JSON.stringify(data) }

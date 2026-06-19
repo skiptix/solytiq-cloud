@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Router, Request, Response } from 'express';
 import { authenticator } from 'otplib';
 import QRCode from 'qrcode';
@@ -6,6 +7,29 @@ import { generateToken, hashPassword, comparePassword, generatePendingToken, ver
 import { authenticate } from '../middleware';
 import { ensurePersonalWorkspace, wlog } from '../workspaceUtil';
 import { logSetupToken, clearSetupToken } from '../setupToken';
+
+// ---------------------------------------------------------------------------
+// Admin password reset — in-memory, single active code, 15-min TTL
+// ---------------------------------------------------------------------------
+interface ResetEntry { code: string; expiresAt: Date }
+let activeReset: ResetEntry | null = null;
+
+function generateResetCode(): string {
+  return crypto.randomBytes(4).toString('hex').toUpperCase(); // e.g. A3F2B1C8
+}
+
+function printResetBanner(code: string) {
+  const display = `${code.slice(0, 4)}-${code.slice(4)}`;
+  const line = '█'.repeat(62);
+  console.log(`\n\x1b[45m\x1b[97m${line}\x1b[0m`);
+  console.log(`\x1b[45m\x1b[97m█                                                            █\x1b[0m`);
+  console.log(`\x1b[45m\x1b[97m█     !!  SOLYTIQ CLOUD — ADMIN PASSWORD RESET CODE  !!      █\x1b[0m`);
+  console.log(`\x1b[45m\x1b[97m█                                                            █\x1b[0m`);
+  console.log(`\x1b[45m\x1b[97m${line}\x1b[0m`);
+  console.log(`\x1b[1m\x1b[97m\x1b[44m                    ${display}                    \x1b[0m`);
+  console.log(`\x1b[45m\x1b[97m${line}\x1b[0m`);
+  console.log(`\x1b[90m   Enter this code in the password reset wizard (valid 15 min).\x1b[0m\n`);
+}
 
 const router = Router();
 
@@ -469,6 +493,88 @@ router.post('/request-setup-token', async (_req: Request, res: Response) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('request-setup-token error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Admin password reset (unauthenticated — for locked-out admins)
+// ---------------------------------------------------------------------------
+
+// POST /api/auth/admin-password-reset/request
+// Generates a fresh code, prints it to backend logs, and stores it in memory.
+// Rate-limited by setupLimiter in index.ts.
+router.post('/admin-password-reset/request', async (_req: Request, res: Response) => {
+  try {
+    // Only allow if at least one admin exists
+    const adminRes = await query<{ count: string }>('SELECT COUNT(*) AS count FROM users WHERE is_admin = true');
+    if (parseInt(adminRes.rows[0].count, 10) === 0) {
+      res.status(404).json({ error: 'No admin account found' });
+      return;
+    }
+    const code = generateResetCode();
+    activeReset = { code, expiresAt: new Date(Date.now() + 15 * 60 * 1000) };
+    printResetBanner(code);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('admin-password-reset/request error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/auth/admin-password-reset/confirm
+// Verifies the code and sets a new password for the first admin.
+// Rate-limited by setupLimiter in index.ts.
+router.post('/admin-password-reset/confirm', async (req: Request, res: Response) => {
+  try {
+    const { code, newPassword } = req.body as { code?: string; newPassword?: string };
+    if (!code || !newPassword) {
+      res.status(400).json({ error: 'code and newPassword are required' });
+      return;
+    }
+    if (newPassword.length < 8) {
+      res.status(400).json({ error: 'Password must be at least 8 characters' });
+      return;
+    }
+
+    if (!activeReset) {
+      res.status(400).json({ error: 'No reset code is active — request one first' });
+      return;
+    }
+    if (new Date() > activeReset.expiresAt) {
+      activeReset = null;
+      res.status(400).json({ error: 'Reset code has expired — request a new one' });
+      return;
+    }
+
+    const givenBuf  = Buffer.from(code.replace(/-/g, '').toUpperCase());
+    const activeBuf = Buffer.from(activeReset.code);
+    const match = givenBuf.length === activeBuf.length && crypto.timingSafeEqual(givenBuf, activeBuf);
+    if (!match) {
+      res.status(401).json({ error: 'Invalid reset code' });
+      return;
+    }
+
+    // Code is valid — reset the first admin's password and invalidate all sessions
+    const adminRes = await query<UserRow>(
+      'SELECT * FROM users WHERE is_admin = true ORDER BY created_at ASC LIMIT 1'
+    );
+    if (!adminRes.rows[0]) {
+      res.status(404).json({ error: 'No admin account found' });
+      return;
+    }
+    const newHash = await hashPassword(newPassword);
+    await query(
+      'UPDATE users SET password_hash = $1, token_version = token_version + 1 WHERE id = $2',
+      [newHash, adminRes.rows[0].id]
+    );
+
+    // Consume the code
+    activeReset = null;
+    console.log(`\x1b[32m[admin-reset] Password reset successfully for admin "${adminRes.rows[0].username}".\x1b[0m`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('admin-password-reset/confirm error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
