@@ -6,6 +6,10 @@ function getToken(): string | null {
   return localStorage.getItem('solytiq_token');
 }
 
+let _onUnauthorized: (() => void) | undefined;
+/** Register a callback invoked on any 401 response (expired/revoked JWT). */
+export function setUnauthorizedHandler(fn: () => void): void { _onUnauthorized = fn; }
+
 /** Error thrown for any non-2xx response. Carries the HTTP status and the
  *  parsed JSON body (when available) so callers can react to structured errors
  *  such as the visibility-hierarchy 409 conflict. */
@@ -29,6 +33,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
   if (!res.ok) {
+    if (res.status === 401) _onUnauthorized?.();
     const text = await res.text().catch(() => res.statusText);
     let body: unknown = text;
     try { body = text ? JSON.parse(text) : text; } catch { /* keep raw text */ }
