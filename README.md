@@ -44,6 +44,7 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 *   **Lavender Surfaces:** A calming palette of soft lavender (`#5e4dbb`) and crisp whites.
 *   **Fluid Motion:** Every interaction—from dragging lists to toggling tasks—is animated for immediate feedback.
 *   **Typography:** *Hanken Grotesk* for modern headings and *Inter* for maximum readability.
+*   **Styling Engine:** Tailwind CSS v4 provides base styles, combined with inline `style={{}}` objects and design tokens.
 
 ---
 
@@ -106,7 +107,7 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 | `POSTGRES_USER` | Yes | Database username | `solytiq` |
 | `POSTGRES_PASSWORD` | Yes | Database password — must be changed in production | `change_me` |
 | `JWT_SECRET` | Yes | Key for session signing — **fails startup if default** | `change_me` |
-| `FRONTEND_URL` | Yes | Origin allowed by CORS (e.g., `http://localhost`). Used for OAuth/MCP discovery when `PUBLIC_URL` is unset | `http://localhost` |
+| `FRONTEND_URL` | Yes | Origin allowed by CORS (e.g., `http://localhost`). **Backend crashes on startup if missing.** Used for OAuth/MCP discovery when `PUBLIC_URL` is unset | `http://localhost` |
 | `PUBLIC_URL` | No | Public origin (scheme + host) for OAuth issuer/endpoints and MCP | — |
 | `PORT` | No | Public host port / backend listen port | `3001` (backend) / `80` (Docker) |
 | `OPENROUTER_API_KEY` | No | Enables the AI assistant via OpenRouter | — |
@@ -116,6 +117,7 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 
 ## 🏗️ Architecture & Core Concepts
 
+- **Version Number** — Bump `v1.24.0` in both places in `frontend/src/components/Sidebar.tsx` on every deploy.
 - **Migrations in code, not files** — `runMigrations()` in `index.ts` uses guards and idempotent data heals/seeds.
 - **No ORM** — Raw SQL keeps queries explicit and avoids N+1 pitfalls; use `JOIN` freely.
 - **Zustand over Redux** — Minimal boilerplate; each store is a standalone module. Stores call the API client directly; components call store actions.
@@ -128,6 +130,8 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 - **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
+- **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
+- **MCP Server** — Model Context Protocol server over Streamable HTTP. It exposes the shared tool registry to external agents (e.g. the Claude MCP connector) with bearer tokens minted via an OAuth 2.1 connector flow.
 
 ---
 
