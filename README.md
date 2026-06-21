@@ -21,6 +21,7 @@
 ### ✨ Key Features
 
 - 🏗️ **Workspaces** — Organize your life into separate environments (Personal, Work, Hobbies) with shared or private access.
+- 🔍 **Global Search** — Instantly find tasks, lists, timelines, milestones, meetings, and workspaces across your entire cloud.
 - 🚀 **Dashboard** — A bird's-eye view of your day featuring "Due Today" focus, priority tracking, and productivity stats.
 - 📅 **Scheduled View** — A full interactive calendar with drag-and-drop scheduling for unscheduled tasks.
 - 📂 **Folders & Lists** — Deeply nestable folders and smart lists with custom emojis, colors, and progress tracking.
@@ -128,6 +129,9 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 - **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
+- **Shared AI Tool Registry** — AI capabilities are defined in a single source of truth (`backend/src/aiTools.ts`), complete with JSON-Schema parameters and server-side SQL handlers, adapted for OpenRouter and MCP consumers. Security rules prevent prompt injection by scoping queries with `user_id` rather than passing it as a parameter.
+- **CalDAV Server** — Built-in subset of RFC 4791/WebDAV over `/caldav` to expose tasks, milestones, and meetings natively to external clients via Basic Auth with auto-generated application passwords.
+- **Task Source Duality & Linking** — Tasks belong to either the Dashboard or a specific list. Tasks can act as parent tasks for sublists (rolling up progress) or link to existing standalone lists.
 
 ---
 
