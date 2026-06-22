@@ -30,9 +30,10 @@
 - ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via Server-Sent Events.
 - 🔒 **Enhanced Security** — Built-in TOTP 2FA support, JWT-based authentication, and hardened security headers.
 - 🤖 **AI Assistant & MCP Server** — A floating AI chat powered by OpenRouter, plus an integrated Model Context Protocol (MCP) server for external AI agents (like Claude) to securely interact with your workspace via OAuth 2.1.
-- 📎 **Cloud File Sharing** — Securely share files (up to 210MB) with password protection, expiry dates, and public links.
+- 🧠 **Shared AI Tool Registry** — A single source of truth for AI capabilities; tools have a JSON-Schema parameter spec and a server-side SQL handler securely scoped to the user.
+- 📎 **Cloud File Sharing & Attachments** — Securely share files (up to 210MB) with password protection, expiry dates, and public links. Upload or link files directly to tasks and timeline milestones.
 - 👥 **Multi-User & Admin** — Full member management with storage quotas and admin-controlled permissions.
-- 📅 **CalDAV Server** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing meetings.
+- 📅 **CalDAV Server & Meetings** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing standalone calendar meetings.
 - 🗑️ **Trash & Restore** — Comprehensive protection against accidental deletions with a 30-day recovery window.
 - 🔍 **Global Search** — Quickly find and jump to tasks, lists, timelines, milestones, meetings, and workspaces across your account.
 
@@ -119,7 +120,7 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 
 ## 🏗️ Architecture & Core Concepts
 
-- **Version Number** — Bump `v1.24.0` in both places in `frontend/src/components/Sidebar.tsx` on every deploy.
+- **Version Number** — The project's version number is hardcoded in `frontend/src/components/Sidebar.tsx` (appearing in two places for expanded and collapsed states) and must be manually updated using semantic versioning on every deploy/release.
 - **Migrations in code, not files** — `runMigrations()` in `index.ts` uses guards and idempotent data heals/seeds.
 - **No ORM** — Raw SQL keeps queries explicit and avoids N+1 pitfalls; use `JOIN` freely.
 - **Zustand over Redux** — Minimal boilerplate; each store is a standalone module. Stores call the API client directly; components call store actions.
@@ -134,6 +135,9 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
 - **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
 - **MCP Server** — Model Context Protocol server over Streamable HTTP. It exposes the shared tool registry to external agents (e.g. the Claude MCP connector) with bearer tokens minted via an OAuth 2.1 connector flow.
+- **Shared AI Tool Registry** — Single source of truth for AI capabilities. Each tool has a JSON-Schema parameter spec and a server-side SQL handler.
+- **Mobile Responsiveness** — Every new component, screen, modal, dialog, and popup must work correctly on mobile (≥ 390px, e.g. iPhone 15 Pro). Desktop layout is the design priority; mobile is an adaptive layer on top.
+- **Task Source Duality** — Tasks belong to one of two sources (`'dash'` or `'list'`), determining whether to use `updateDashTask` or `updateListTask`.
 
 ---
 
