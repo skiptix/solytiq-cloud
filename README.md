@@ -33,6 +33,7 @@
 - 👥 **Multi-User & Admin** — Full member management with storage quotas and admin-controlled permissions.
 - 📅 **CalDAV Server** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing meetings.
 - 🗑️ **Trash & Restore** — Comprehensive protection against accidental deletions with a 30-day recovery window.
+- 🔍 **Global Search** — Quickly find and jump to tasks, lists, timelines, milestones, meetings, and workspaces across your account.
 
 ---
 
@@ -53,7 +54,7 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 - **Framework:** [React 19](https://react.dev/) + [Vite](https://vitejs.dev/)
 - **State Management:** [Zustand](https://github.com/pmndrs/zustand) (with persistence)
 - **Routing:** [React Router 7](https://reactrouter.com/)
-- **Styling:** Modern CSS (Design Tokens) with refined animations
+- **Styling:** Tailwind CSS v4 base + Modern CSS (Design Tokens) with refined animations
 - **Communication:** [Server-Sent Events (SSE)](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) for real-time updates
 - **Maps:** [Leaflet](https://leafletjs.com/) for rendering GPS tracks
 
@@ -64,7 +65,7 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 - **Auth:** JWT + [otplib](https://github.com/yeoju/otplib) (TOTP 2FA) + bcryptjs
 - **File Handling:** Multer (with disk storage)
 - **AI Integration:** [OpenRouter API](https://openrouter.ai/) + [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/sdk) (MCP server + OAuth 2.1)
-- **Data Parsing:** GPX & FIT file processing (`fast-xml-parser`, `fit-file-parser`)
+- **Data Parsing:** GPX & FIT file processing (`fast-xml-parser`, `fit-file-parser`), and PDF/spreadsheet data extraction (`pdf-parse`, `xlsx`)
 
 ---
 
