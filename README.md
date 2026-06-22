@@ -21,6 +21,7 @@
 ### ✨ Key Features
 
 - 🏗️ **Workspaces** — Organize your life into separate environments (Personal, Work, Hobbies) with shared or private access.
+- 🔍 **Global Search** — Instantly find tasks, lists, timelines, milestones, meetings, and workspaces across your entire cloud.
 - 🚀 **Dashboard** — A bird's-eye view of your day featuring "Due Today" focus, priority tracking, and productivity stats.
 - 📅 **Scheduled View** — A full interactive calendar with drag-and-drop scheduling for unscheduled tasks.
 - 📂 **Folders & Lists** — Deeply nestable folders and smart lists with custom emojis, colors, and progress tracking.
