@@ -53,7 +53,7 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 ## 🛠️ Tech Stack
 
 ### Frontend
-- **Framework:** [React 19](https://react.dev/) + [Vite](https://vitejs.dev/)
+- **Framework:** [React 19](https://react.dev/) + [Vite](https://vitejs.dev/) + TypeScript
 - **State Management:** [Zustand](https://github.com/pmndrs/zustand) (with persistence)
 - **Routing:** [React Router 7](https://reactrouter.com/)
 - **Styling:** Tailwind CSS v4 base + Modern CSS (Design Tokens) with refined animations
@@ -97,7 +97,26 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
     ```
 
 4.  **Access:**
-    Navigate to `http://localhost`. The first user to register automatically becomes the **System Admin**.
+    Navigate to `http://localhost`. **First run:** if no users exist yet, the backend logs a one-time **setup token** (see `setupToken.ts`). Use it on the `/setup` wizard to create the first (admin) account.
+
+### Running locally without Docker
+
+**Backend:**
+```bash
+cd backend
+npm install
+# Ensure PostgreSQL is running and PGHOST/PGUSER/PGPASSWORD/PGDATABASE env vars are set
+npm run dev        # ts-node-dev with --respawn, port 3001
+```
+
+**Frontend:**
+```bash
+cd frontend
+npm install
+npm run dev        # Vite dev server, port 5173 with HMR
+```
+
+When running the frontend separately, point it at the backend with `VITE_API_URL` (the API client defaults to `/api`), or add a `/api` proxy to `vite.config.ts` (none is configured by default).
 
 ---
 
