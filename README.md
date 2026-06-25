@@ -34,7 +34,6 @@
 - 👥 **Multi-User & Admin** — Full member management with storage quotas and admin-controlled permissions.
 - 📅 **CalDAV Server** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing meetings.
 - 🗑️ **Trash & Restore** — Comprehensive protection against accidental deletions with a 30-day recovery window.
-- 🔍 **Global Search** — Quickly find and jump to tasks, lists, timelines, milestones, meetings, and workspaces across your account.
 
 ---
 
@@ -134,6 +133,9 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
 - **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
 - **MCP Server** — Model Context Protocol server over Streamable HTTP. It exposes the shared tool registry to external agents (e.g. the Claude MCP connector) with bearer tokens minted via an OAuth 2.1 connector flow.
+- **Shared AI Tool Registry** — A single source of truth for AI capabilities (`backend/src/aiTools.ts`). Tools have a JSON-Schema parameter spec and a server-side SQL handler. Handlers receive `userId` from the verified credential only, preventing prompt-injection paths to other users' data.
+- **Task Source Duality** — Tasks originate from either the Dashboard (`'dash'`) or a specific list (`'list'`). This affects which store actions update them.
+- **Sublists & Linked Lists** — List tasks can embed child sublists or link to existing standalone lists, allowing complex task hierarchies and referencing.
 
 ---
 
