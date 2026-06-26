@@ -34,7 +34,6 @@
 - 👥 **Multi-User & Admin** — Full member management with storage quotas and admin-controlled permissions.
 - 📅 **CalDAV Server** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing meetings.
 - 🗑️ **Trash & Restore** — Comprehensive protection against accidental deletions with a 30-day recovery window.
-- 🔍 **Global Search** — Quickly find and jump to tasks, lists, timelines, milestones, meetings, and workspaces across your account.
 
 ---
 
@@ -47,6 +46,7 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 *   **Fluid Motion:** Every interaction—from dragging lists to toggling tasks—is animated for immediate feedback.
 *   **Typography:** *Hanken Grotesk* for modern headings and *Inter* for maximum readability.
 *   **Styling Engine:** Tailwind CSS v4 provides base styles, combined with inline `style={{}}` objects and design tokens.
+*   **Mobile Responsiveness:** Every component, screen, modal, dialog, and popup must work correctly on mobile (≥ 390px, e.g. iPhone 15 Pro). Desktop layout is the primary design priority with mobile as an adaptive layer.
 
 ---
 
@@ -107,8 +107,8 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 | :--- | :--- | :--- | :--- |
 | `POSTGRES_DB` | Yes | Database name | `solytiq` |
 | `POSTGRES_USER` | Yes | Database username | `solytiq` |
-| `POSTGRES_PASSWORD` | Yes | Database password — must be changed in production | `change_me` |
-| `JWT_SECRET` | Yes | Key for session signing — **fails startup if default** | `change_me` |
+| `POSTGRES_PASSWORD` | Yes | Database password — must be changed in production | `change_me_in_production` |
+| `JWT_SECRET` | Yes | Key for session signing — **fails startup if default** | `change_this_to_a_long_random_secret` |
 | `FRONTEND_URL` | Yes | Origin allowed by CORS (e.g., `http://localhost`). **Backend crashes on startup if missing.** Used for OAuth/MCP discovery when `PUBLIC_URL` is unset | `http://localhost` |
 | `PUBLIC_URL` | No | Public origin (scheme + host) for OAuth issuer/endpoints and MCP | — |
 | `PORT` | No | Public host port / backend listen port | `3001` (backend) / `80` (Docker) |
@@ -119,7 +119,8 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 
 ## 🏗️ Architecture & Core Concepts
 
-- **Version Number** — Bump `v1.24.0` in both places in `frontend/src/components/Sidebar.tsx` on every deploy.
+- **Version Number** — Bump the version string in both places in `frontend/src/components/Sidebar.tsx` on every deploy.
+- **Shared AI Tool Registry** — Centralized AI tool definitions in `backend/src/aiTools.ts` mapping JSON-Schema specs to user-scoped SQL handlers to prevent prompt injection.
 - **Migrations in code, not files** — `runMigrations()` in `index.ts` uses guards and idempotent data heals/seeds.
 - **No ORM** — Raw SQL keeps queries explicit and avoids N+1 pitfalls; use `JOIN` freely.
 - **Zustand over Redux** — Minimal boilerplate; each store is a standalone module. Stores call the API client directly; components call store actions.
