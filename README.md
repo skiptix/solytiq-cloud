@@ -134,6 +134,29 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
 - **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
 - **MCP Server** — Model Context Protocol server over Streamable HTTP. It exposes the shared tool registry to external agents (e.g. the Claude MCP connector) with bearer tokens minted via an OAuth 2.1 connector flow.
+- **Shared AI Tool Registry** — Single source of truth (`backend/src/aiTools.ts`) with JSON-Schema specs and SQL handlers to prevent prompt injection.
+- **Rate Limiting** — Three tiers defined in `index.ts`: `apiLimiter` (300 req / 15 min), `authLimiter` (10 req / 15 min), and `setupLimiter` (5 req / 1 hour).
+- **Task Source Duality** — Tasks originate from `'dash'` or `'list'`, dictating frontend store actions.
+- **Sublists & Linked Lists** — List tasks link to other lists via `linkedListId` + `linkedListType`.
+
+---
+
+## 💻 Development Guidelines
+
+### Mobile Responsiveness
+- Every new component, screen, modal, dialog, and popup must work correctly on mobile (≥ 390px, e.g. iPhone 15 Pro).
+- Call `useMobile()` at the composition root.
+
+### Styling
+- Tailwind CSS v4 provides base styles, combined with inline `style={{}}` objects and design tokens.
+
+### Tests
+- A Vitest suite exists. Add backend tests under `src/__tests__/`.
+
+### Security
+- **IDOR prevention:** All DB queries must filter by `user_id = $userId` extracted from the verified JWT.
+- **Password hashing:** Always use `bcryptjs` for account passwords AND share-link passwords.
+- **File path traversal prevention:** Use `path.resolve` / `path.join` carefully when serving files.
 
 ---
 
