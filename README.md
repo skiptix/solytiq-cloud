@@ -70,13 +70,15 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 
 ---
 
-## 🚀 Quick Start
+## 🔧 Development Setup
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/) and [Docker Compose](https://docs.docker.com/compose/)
+- Docker + Docker Compose (recommended for full stack)
+- Node.js 22+ (for local frontend/backend development)
+- PostgreSQL 16 (if running backend without Docker)
 
-### Installation
+### Running with Docker Compose (recommended)
 
 1.  **Clone the repository:**
     ```bash
@@ -92,11 +94,31 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 
 3.  **Deploy:**
     ```bash
-    docker compose up -d
+    docker compose up --build
     ```
 
-4.  **Access:**
-    Navigate to `http://localhost`. The first user to register automatically becomes the **System Admin**.
+Frontend is served at `http://localhost` (port 80 via Nginx).
+
+**First run:** if no users exist yet, the backend logs a one-time **setup token**. Use it on the `/setup` wizard to create the first (admin) account.
+
+### Running locally without Docker
+
+**Backend:**
+```bash
+cd backend
+npm install
+# Ensure PostgreSQL is running and PGHOST/PGUSER/PGPASSWORD/PGDATABASE env vars are set
+npm run dev        # ts-node-dev with --respawn, port 3001
+```
+
+**Frontend:**
+```bash
+cd frontend
+npm install
+npm run dev        # Vite dev server, port 5173 with HMR
+```
+
+When running the frontend separately, point it at the backend with `VITE_API_URL` (the API client defaults to `/api`), or add a `/api` proxy to `vite.config.ts` (none is configured by default).
 
 ---
 
@@ -137,6 +159,9 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 - **Mobile Responsiveness** — Every new component must work correctly on mobile (≥ 390px, e.g. iPhone 15 Pro) with mobile as an adaptive layer on top of desktop.
 - **Task Source Duality** — Tasks have a source duality (`'dash'` or `'list'`) which dictates the appropriate frontend store actions to use (`updateDashTask` vs `updateListTask`).
 - **Sublists & Linked Lists** — Created by having a list task link to another list via `linkedListId` and `linkedListType` properties.
+- **Security** — IDOR prevention using verified JWT `userId`, strict file path traversal checks, `bcryptjs` for password and share-link hashing, and transaction-based quota checks.
+- **Rate Limiting** — Configured in three tiers (`apiLimiter` for general API, `authLimiter` for logins/2FA, and `setupLimiter` for registration/nuke endpoints).
+- **Testing** — Vitest is the standard for both frontend and backend suites (`npm test`).
 
 ---
 
