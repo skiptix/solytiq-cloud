@@ -924,6 +924,36 @@ export async function apiRenameGpsFile(id: string, name: string): Promise<GpsFil
   return data.file;
 }
 
+export function apiUploadFilesBundle(
+  files: File[],
+  opts: { isPublic?: boolean; password?: string; expiresAt?: string; title?: string },
+  onProgress: (pct: number) => void,
+): Promise<SharedFile> {
+  return new Promise((resolve, reject) => {
+    const token = localStorage.getItem('solytiq_token');
+    const form = new FormData();
+    files.forEach(file => form.append('files', file));
+    if (opts.isPublic !== undefined) form.append('isPublic', String(opts.isPublic));
+    if (opts.password) form.append('password', opts.password);
+    if (opts.expiresAt) form.append('expiresAt', opts.expiresAt);
+    if (opts.title) form.append('title', opts.title);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${(import.meta.env.VITE_API_URL as string | undefined) ?? '/api'}/files/bundle`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve((JSON.parse(xhr.responseText) as { file: SharedFile }).file);
+      } else {
+        reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(form);
+  });
+}
+
 export function apiUploadFile(
   file: File,
   opts: { isPublic?: boolean; password?: string; expiresAt?: string; title?: string },

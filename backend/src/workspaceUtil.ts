@@ -56,12 +56,11 @@ export async function ensurePersonalWorkspace(
 
   if (existing.rows.length > 0) {
     const wsId = (existing.rows[0] as { id: string }).id;
-    // Guarantee owner membership even if it was somehow lost.
-    await exec(
-      `INSERT INTO workspace_members (workspace_id, user_id, role)
-       VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING`,
-      [wsId, userId]
-    );
+    // Guarantee owner membership for every workspace this user owns. A missing
+    // owner row hides the workspace from /api/workspaces, which in turn makes
+    // its lists/timelines look like they disappeared even though they were not
+    // deleted.
+    await ensureOwnedWorkspaceMemberships(exec, userId);
     return wsId;
   }
 
@@ -81,6 +80,21 @@ export async function ensurePersonalWorkspace(
   return wsId;
 }
 
+/** Ensure every workspace owned by the user also has an owner membership row. */
+export async function ensureOwnedWorkspaceMemberships(
+  exec: QueryExec,
+  userId: string
+): Promise<void> {
+  await exec(
+    `INSERT INTO workspace_members (workspace_id, user_id, role)
+     SELECT w.id, w.owner_id, 'owner'
+     FROM workspaces w
+     WHERE w.owner_id = $1
+     ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = 'owner'`,
+    [userId]
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Access checks & workspace resolution
 // ---------------------------------------------------------------------------
@@ -92,6 +106,8 @@ export async function userCanAccessWorkspace(
 ): Promise<boolean> {
   const r = await query(
     `SELECT 1 FROM workspace_members WHERE workspace_id = $1 AND user_id = $2
+     UNION
+     SELECT 1 FROM workspaces WHERE id = $1 AND owner_id = $2
      UNION
      SELECT 1 FROM workspaces WHERE id = $1 AND visibility = 'public'`,
     [workspaceId, userId]

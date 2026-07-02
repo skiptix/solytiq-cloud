@@ -2,7 +2,7 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useMobile } from '../hooks/useBreakpoint';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SharedFile } from '../types';
-import { apiGetFiles, apiUpdateFile, apiDeleteFile, apiUploadFile, apiGetStorageUsage, apiPreviewFile } from '../api/client';
+import { apiGetFiles, apiUpdateFile, apiDeleteFile, apiUploadFile, apiUploadFilesBundle, apiGetStorageUsage, apiPreviewFile } from '../api/client';
 import useAuthStore from '../store/useAuthStore';
 import Icon from '../components/Icon';
 import CalendarPicker from '../components/CalendarPicker';
@@ -65,9 +65,10 @@ interface UploadWizardProps {
   onClose: () => void;
   onUploaded: (file: SharedFile) => void;
   defaultIsPublic?: boolean;
+  initialFiles?: File[];
 }
 
-function UploadWizard({ onClose, onUploaded, defaultIsPublic = true }: UploadWizardProps) {
+function UploadWizard({ onClose, onUploaded, defaultIsPublic = true, initialFiles = [] }: UploadWizardProps) {
   const [queue, setQueue] = useState<UploadEntry[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [isPublic, setIsPublic] = useState(defaultIsPublic);
@@ -79,26 +80,35 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true }: UploadWiz
   const inputRef = useRef<HTMLInputElement>(null);
 
   const addFiles = useCallback((files: FileList | File[]) => {
-    const entries: UploadEntry[] = Array.from(files).map(f => ({
+    const selected = Array.from(files);
+    if (!selected.length) return;
+    const entries: UploadEntry[] = selected.map(f => ({
       id: Math.random().toString(36).slice(2),
       file: f,
       progress: 0,
       status: 'pending',
     }));
     setQueue(q => [...q, ...entries]);
+    setQueue(q => q.map(e => entries.some(entry => entry.id === e.id) ? { ...e, status: 'uploading' } : e));
 
-    entries.forEach(entry => {
-      setQueue(q => q.map(e => e.id === entry.id ? { ...e, status: 'uploading' } : e));
-      apiUploadFile(entry.file, { isPublic, title: title || undefined, password: password || undefined, expiresAt: expiresAt ? new Date(expiresAt + 'T23:59:59').toISOString() : undefined },
-        (pct) => setQueue(q => q.map(e => e.id === entry.id ? { ...e, progress: pct } : e))
-      ).then(result => {
-        setQueue(q => q.map(e => e.id === entry.id ? { ...e, status: 'done', progress: 100, result } : e));
-        onUploaded(result);
-      }).catch(err => {
-        setQueue(q => q.map(e => e.id === entry.id ? { ...e, status: 'error', error: String(err) } : e));
-      });
+    const uploadOpts = { isPublic, title: title || undefined, password: password || undefined, expiresAt: expiresAt ? new Date(expiresAt + 'T23:59:59').toISOString() : undefined };
+    const uploadPromise = selected.length > 1
+      ? apiUploadFilesBundle(selected, uploadOpts, (pct) => setQueue(q => q.map(e => entries.some(entry => entry.id === e.id) ? { ...e, progress: pct } : e)))
+      : apiUploadFile(selected[0], uploadOpts, (pct) => setQueue(q => q.map(e => e.id === entries[0].id ? { ...e, progress: pct } : e)));
+
+    uploadPromise.then(result => {
+      setQueue(q => q.map(e => entries.some(entry => entry.id === e.id) ? { ...e, status: 'done', progress: 100, result } : e));
+      onUploaded(result);
+    }).catch(err => {
+      setQueue(q => q.map(e => entries.some(entry => entry.id === e.id) ? { ...e, status: 'error', error: String(err) } : e));
     });
   }, [isPublic, title, password, expiresAt, onUploaded]);
+
+  useEffect(() => {
+    if (initialFiles.length) addFiles(initialFiles);
+  // run once for files passed in from page-level drag/drop
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -138,14 +148,14 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true }: UploadWiz
             style={{ border: `2px dashed ${dragOver ? '#5e4dbb' : '#d1d5db'}`, borderRadius: 14, padding: '32px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer', background: dragOver ? '#F5F3FF' : '#fff', transition: 'all 150ms' }}
           >
             <Icon name="cloud_upload" size={36} color={dragOver ? '#5e4dbb' : '#9ca3af'} />
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22', textAlign: 'center' }}>Choose a file or drag & drop it here.</div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22', textAlign: 'center' }}>Choose files or drag & drop them here.</div>
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#9ca3af', textAlign: 'center' }}>JPEG, PNG, PDF, MP4 and more, up to 200 MB.</div>
             <button
               onClick={e => { e.stopPropagation(); inputRef.current?.click(); }}
               style={{ marginTop: 4, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', background: 'transparent', border: '1.5px solid #E5E7EB', borderRadius: 99, padding: '7px 20px', cursor: 'pointer' }}
               onMouseEnter={e => { e.currentTarget.style.background = '#F9FAFB'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-            >Browse File</button>
+            >Browse Files</button>
           </div>
           <input ref={inputRef} type="file" multiple style={{ display: 'none' }}
             onChange={e => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }} />
@@ -513,8 +523,8 @@ function RecentCard({ file, onEdit, onDelete }: { file: SharedFile; onEdit: () =
         </span>
       </div>
       <div>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', marginTop: 2 }}>{fmtSize(file.size)} · {fmtDate(file.createdAt)}</div>
+        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.bundleCount && file.bundleCount > 1 ? (file.bundleName || `${file.bundleCount} files`) : file.name}</div>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', marginTop: 2 }}>{file.bundleCount && file.bundleCount > 1 ? `${file.bundleCount} files · ` : ''}{fmtSize(file.size)} · {fmtDate(file.createdAt)}</div>
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
         {file.isPublic && (
@@ -552,6 +562,7 @@ export default function FilesScreen() {
   const [files, setFiles] = useState<SharedFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
   const [editTarget, setEditTarget] = useState<SharedFile | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SharedFile | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -627,7 +638,7 @@ export default function FilesScreen() {
       style={{ flex: 1, height: '100%', overflowY: 'auto' }}
       onDragOver={e => { e.preventDefault(); setPageDragOver(true); }}
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setPageDragOver(false); }}
-      onDrop={e => { e.preventDefault(); setPageDragOver(false); if (e.dataTransfer.files.length) setUploadOpen(true); }}
+      onDrop={e => { e.preventDefault(); setPageDragOver(false); if (e.dataTransfer.files.length) { setPendingUploadFiles(Array.from(e.dataTransfer.files)); setUploadOpen(true); } }}
     >
       <div style={{ maxWidth: 860, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 28, width: '100%', animation: 'sectionFadeUp 360ms cubic-bezier(0.22,1,0.36,1) both' }}>
 
@@ -635,7 +646,7 @@ export default function FilesScreen() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1 style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 28, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.02em', margin: 0 }}>Files</h1>
           <button
-            onClick={() => setUploadOpen(true)}
+            onClick={() => { setPendingUploadFiles([]); setUploadOpen(true); }}
             style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 10, padding: '9px 16px', cursor: 'pointer' }}
             onMouseEnter={e => { e.currentTarget.style.background = '#4f3fa8'; }}
             onMouseLeave={e => { e.currentTarget.style.background = '#5e4dbb'; }}
@@ -706,8 +717,8 @@ export default function FilesScreen() {
           <div
             onDragOver={e => { e.preventDefault(); setPageDragOver(true); }}
             onDragLeave={() => setPageDragOver(false)}
-            onDrop={e => { e.preventDefault(); setPageDragOver(false); if (e.dataTransfer.files.length) setUploadOpen(true); }}
-            onClick={() => setUploadOpen(true)}
+            onDrop={e => { e.preventDefault(); setPageDragOver(false); if (e.dataTransfer.files.length) { setPendingUploadFiles(Array.from(e.dataTransfer.files)); setUploadOpen(true); } }}
+            onClick={() => { setPendingUploadFiles([]); setUploadOpen(true); }}
             style={{ border: `2px dashed ${pageDragOver ? '#5e4dbb' : '#d1d5db'}`, borderRadius: 16, padding: '40px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, cursor: 'pointer', background: pageDragOver ? '#F5F3FF' : '#fff', transition: 'all 150ms' }}
           >
             <Icon name="cloud_upload" size={40} color={pageDragOver ? '#5e4dbb' : '#d1d5db'} />
@@ -739,8 +750,10 @@ export default function FilesScreen() {
                   style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 18px', borderBottom: i < files.length - 1 ? '1px solid #f1ecf6' : 'none', cursor: 'pointer', transition: 'background 120ms' }}>
                   <FileBadge mime={f.mimeType} size={38} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.bundleCount && f.bundleCount > 1 ? (f.bundleName || `${f.bundleCount} files`) : f.name}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
+                      {f.bundleCount && f.bundleCount > 1 && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#5e4dbb', fontWeight: 600 }}>{f.bundleCount} files</span>}
+                      {f.bundleCount && f.bundleCount > 1 && <span style={{ color: '#e8e4f0' }}>·</span>}
                       <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>{fmtSize(f.size)}</span>
                       <span style={{ color: '#e8e4f0' }}>·</span>
                       <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>{fmtDate(f.createdAt)}</span>
@@ -784,7 +797,7 @@ export default function FilesScreen() {
       </div>
 
       {/* Upload wizard */}
-      {uploadOpen && <UploadWizard onClose={() => setUploadOpen(false)} onUploaded={handleUploaded} />}
+      {uploadOpen && <UploadWizard onClose={() => { setUploadOpen(false); setPendingUploadFiles([]); }} onUploaded={handleUploaded} initialFiles={pendingUploadFiles} />}
 
       {/* File detail modal */}
       {editTarget && <FileDetailModal file={editTarget} onClose={() => setEditTarget(null)} onSaved={handleSaved} />}

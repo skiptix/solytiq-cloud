@@ -211,6 +211,9 @@ export interface SharedFile {
   shareToken: string;
   shareUrl: string;
   createdAt: string;
+  bundleId?: string | null;
+  bundleName?: string | null;
+  bundleCount?: number;
 }
 
 export interface TaskAttachment {

@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
-import { ensurePersonalWorkspace, wlog, werr } from '../workspaceUtil';
+import { ensureOwnedWorkspaceMemberships, ensurePersonalWorkspace, wlog, werr } from '../workspaceUtil';
 import { getPublicDescendants, buildRestrictConflict, restrictDescendants } from '../visibility';
 
 const router = Router();
@@ -44,13 +44,14 @@ router.get('/', async (req: Request, res: Response) => {
     // fix for lists/items "disappearing" — without an owned workspace the
     // frontend had no stable context to load items into.
     const personalWsId = await ensurePersonalWorkspace(query, req.userId!);
+    await ensureOwnedWorkspaceMemberships(query, req.userId!);
 
     const rows = await query<WorkspaceRow>(
       `SELECT w.*, wm.role,
               (SELECT COUNT(*) FROM workspace_members wm2 WHERE wm2.workspace_id = w.id) AS member_count
        FROM workspaces w
        LEFT JOIN workspace_members wm ON w.id = wm.workspace_id AND wm.user_id = $1
-       WHERE wm.user_id = $1 OR w.visibility = 'public'
+       WHERE wm.user_id = $1 OR w.owner_id = $1 OR w.visibility = 'public'
        ORDER BY w.created_at ASC`,
       [req.userId]
     );
@@ -183,6 +184,7 @@ router.get('/:id/members', async (req: Request, res: Response) => {
     const { id } = req.params;
     const access = await query(
       `SELECT 1 FROM workspace_members WHERE workspace_id = $1 AND user_id = $2
+       UNION SELECT 1 FROM workspaces WHERE id = $1 AND owner_id = $2
        UNION SELECT 1 FROM workspaces WHERE id = $1 AND visibility = 'public'`,
       [id, req.userId]
     );
