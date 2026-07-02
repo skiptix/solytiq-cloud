@@ -98,6 +98,14 @@ function sanitizeTimeline(t: TimelineRow, milestones: ReturnType<typeof sanitize
 // Helper: build full timeline objects (timelines → milestones)
 // ---------------------------------------------------------------------------
 
+function summarizeTimelineRows(rows: TimelineRow[]): string {
+  if (rows.length === 0) return 'none';
+  return rows
+    .slice(0, 25)
+    .map((t) => `${t.id}{ws=${t.workspace_id ?? 'NULL'},folder=${t.folder_id ?? 'root'},owner=${t.user_id},public=${t.is_public}}`)
+    .join(', ') + (rows.length > 25 ? `, … +${rows.length - 25} more` : '');
+}
+
 async function buildTimelinesForUser(userId: string, workspaceId?: string) {
   const params: unknown[] = [userId];
   const wsFilter = workspaceId
@@ -144,8 +152,9 @@ async function buildTimelinesForUser(userId: string, workspaceId?: string) {
   }
 
   wlog(
-    `buildTimelines user=${userId} workspace=${workspaceId ?? 'ALL'} → ` +
-    `${timelinesResult.rows.length} timeline(s), ${milestonesResult.rows.length} milestone(s)`
+    `timelines BUILD user=${userId} requestedWorkspace=${workspaceId ?? 'ALL'} → ` +
+    `${timelinesResult.rows.length} timeline(s), ${milestonesResult.rows.length} milestone(s); ` +
+    `timelines=[${summarizeTimelineRows(timelinesResult.rows)}]`
   );
 
   return timelinesResult.rows.map((t) =>
@@ -161,7 +170,9 @@ async function buildTimelinesForUser(userId: string, workspaceId?: string) {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
+    wlog(`timelines GET ⇢ user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} rawQuery=${JSON.stringify(req.query)}`);
     const timelines = await buildTimelinesForUser(req.userId!, workspaceId);
+    wlog(`timelines GET ⇠ user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} returned=${timelines.length} ids=[${timelines.slice(0, 25).map(t => `${t.id}{ws=${t.workspaceId ?? 'NULL'},folder=${t.folderId ?? 'root'}}`).join(', ')}${timelines.length > 25 ? `, … +${timelines.length - 25} more` : ''}]`);
     res.json({ timelines });
   } catch (err) {
     werr('timelines GET error:', err);

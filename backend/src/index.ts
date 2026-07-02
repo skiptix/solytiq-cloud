@@ -41,6 +41,11 @@ const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
 app.set('trust proxy', 1);
+// API payloads are user/workspace-scoped and must never be conditionally
+// revalidated as 304 responses. A 304 has no JSON body, which caused the
+// frontend loaders to treat successful sidebar refreshes as failed requests
+// and leave lists/folders/timelines empty after workspace switches.
+app.set('etag', false);
 
 // ---------------------------------------------------------------------------
 // CalDAV server (Apple Calendar / Thunderbird / …) — mounted FIRST, before the
@@ -104,6 +109,13 @@ const setupLimiter = rateLimit({
   message: { error: 'Too many setup attempts. Please try again later.' },
 });
 
+app.use('/api/', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  next();
+});
 app.use('/api/', apiLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/2fa/verify', authLimiter);

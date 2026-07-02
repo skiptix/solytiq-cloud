@@ -43,6 +43,10 @@ import {
 let trashCounter = Date.now();
 let currentLoadId = 0;
 
+function getScopedWorkspaceId(workspaceId?: string): string | undefined {
+  return workspaceId ?? useWorkspaceStore.getState().currentWorkspaceId ?? undefined;
+}
+
 const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -518,14 +522,15 @@ const useAppStore = create<AppState>()(
       },
 
       loadFromApi: async (workspaceId?: string) => {
+        const scopedWorkspaceId = getScopedWorkspaceId(workspaceId);
         const myLoadId = ++currentLoadId;
         set({ listsLoading: true });
         try {
           const [tasksRes, listsRes, foldersRes, timelinesRes, trashRes, trashListsRes, trashFoldersRes, trashTimelinesRes, trashMilestonesRes] = await Promise.all([
-            apiGetTasks(workspaceId).catch(() => null),
-            apiGetLists(workspaceId).catch(() => null),
-            apiGetFolders(workspaceId).catch(() => null),
-            apiGetTimelines(workspaceId).catch(() => null),
+            apiGetTasks(scopedWorkspaceId).catch(() => null),
+            apiGetLists(scopedWorkspaceId).catch(() => null),
+            apiGetFolders(scopedWorkspaceId).catch(() => null),
+            apiGetTimelines(scopedWorkspaceId).catch(() => null),
             apiGetTrash().catch(() => null),
             apiGetTrashLists().catch(() => null),
             apiGetTrashFolders().catch(() => null),
@@ -533,7 +538,9 @@ const useAppStore = create<AppState>()(
             apiGetTrashMilestones().catch(() => null),
           ]);
           // Discard results if a newer load has been requested (e.g. workspace switched mid-load)
+          // or if this response was requested for a workspace that is no longer active.
           if (myLoadId !== currentLoadId) return;
+          if (scopedWorkspaceId !== getScopedWorkspaceId()) return;
           const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'folders' | 'timelines' | 'trashTasks' | 'trashLists' | 'trashFolders' | 'trashTimelines' | 'trashMilestones' | 'listsLoading'>> = {};
           update.listsLoading = false;
           if (tasksRes) update.dashTasks = tasksRes.tasks.map(t => ({ ...t, id: Number(t.id) }));
