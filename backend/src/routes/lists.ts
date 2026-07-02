@@ -5,7 +5,7 @@ import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
-import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
+import { resolveWorkspaceForUser, wlog, wwarn, werr } from '../workspaceUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors } from '../visibility';
 
 const router = Router();
@@ -140,6 +140,14 @@ function sanitizeList(
 // Helper: build full list objects (lists → sections → tasks)
 // ---------------------------------------------------------------------------
 
+function summarizeListRows(rows: ListRow[]): string {
+  if (rows.length === 0) return 'none';
+  return rows
+    .slice(0, 25)
+    .map((l) => `${l.id}{ws=${l.workspace_id ?? 'NULL'},folder=${l.folder_id ?? 'root'},owner=${l.user_id},public=${l.is_public}}`)
+    .join(', ') + (rows.length > 25 ? `, … +${rows.length - 25} more` : '');
+}
+
 async function buildListsForUser(userId: string, workspaceId?: string) {
   // When workspaceId is provided: return lists in that workspace the user can access,
   // plus the user's own lists with no workspace assigned (backward-compatible "personal" lists).
@@ -216,8 +224,9 @@ async function buildListsForUser(userId: string, workspaceId?: string) {
   }
 
   wlog(
-    `buildLists user=${userId} workspace=${workspaceId ?? 'ALL'} → ` +
-    `${listsResult.rows.length} list(s), ${sectionsResult.rows.length} section(s), ${tasksResult.rows.length} item(s)`
+    `lists BUILD user=${userId} requestedWorkspace=${workspaceId ?? 'ALL'} → ` +
+    `${listsResult.rows.length} list(s), ${sectionsResult.rows.length} section(s), ${tasksResult.rows.length} item(s); ` +
+    `lists=[${summarizeListRows(listsResult.rows)}]`
   );
 
   return listsResult.rows.map((list: ListRow) =>
@@ -233,7 +242,9 @@ async function buildListsForUser(userId: string, workspaceId?: string) {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
+    wlog(`lists GET ⇢ user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} rawQuery=${JSON.stringify(req.query)}`);
     const lists = await buildListsForUser(req.userId!, workspaceId);
+    wlog(`lists GET ⇠ user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} returned=${lists.length} ids=[${lists.slice(0, 25).map(l => `${l.id}{ws=${l.workspaceId ?? 'NULL'},folder=${l.folderId ?? 'root'}}`).join(', ')}${lists.length > 25 ? `, … +${lists.length - 25} more` : ''}]`);
     res.json({ lists });
   } catch (err) {
     werr('lists GET error:', err);
@@ -264,11 +275,17 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     const listId = id ?? `list_${uuidv4()}`;
+    wlog(
+      `list CREATE ⇢ user=${req.userId} id=${listId} name=${JSON.stringify(name)} ` +
+      `requestedWorkspace=${workspaceId ?? 'none'} folder=${folderId ?? 'root'} parentTask=${parentTaskId ?? 'none'} ` +
+      `isPublic=${isPublic ?? false}`
+    );
 
     // Resolve to a workspace the user can actually access. Guarantees the list
     // lands in a real, visible workspace (never NULL / never a dangling id), so
     // it reliably reappears on reload.
     const resolvedWs = await resolveWorkspaceForUser(req.userId!, workspaceId);
+    wlog(`list CREATE workspace resolved user=${req.userId} id=${listId} requested=${workspaceId ?? 'none'} resolved=${resolvedWs}`);
 
     const posResult = await query<{ max: string | null }>(
       'SELECT MAX(position) AS max FROM lists WHERE user_id = $1',
@@ -285,8 +302,21 @@ router.post('/', async (req: Request, res: Response) => {
       [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false, folderId ?? null, nextPos, parentTaskId ?? null, depth ?? 0, resolvedWs]
     );
 
-    wlog(`list CREATE ✓ id=${result.rows[0].id} name="${name}" workspace=${result.rows[0].workspace_id} owner=${req.userId} (requested=${workspaceId ?? 'none'})`);
-    res.status(201).json({ list: sanitizeList(result.rows[0], []) });
+    const persisted = result.rows[0];
+    const visibleCheck = await buildListsForUser(req.userId!, persisted.workspace_id ?? undefined);
+    const visibleInResolvedWorkspace = visibleCheck.some((l) => l.id === persisted.id);
+    wlog(
+      `list CREATE ✓ id=${persisted.id} name=${JSON.stringify(name)} owner=${req.userId} ` +
+      `requestedWorkspace=${workspaceId ?? 'none'} persistedWorkspace=${persisted.workspace_id ?? 'NULL'} ` +
+      `position=${persisted.position} visibleOnReload=${visibleInResolvedWorkspace}`
+    );
+    if (!visibleInResolvedWorkspace) {
+      wwarn(
+        `list CREATE visibility anomaly id=${persisted.id} user=${req.userId} ` +
+        `workspace=${persisted.workspace_id ?? 'NULL'} reloadIds=[${visibleCheck.map((l) => l.id).join(', ')}]`
+      );
+    }
+    res.status(201).json({ list: sanitizeList(persisted, []) });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     werr('lists POST error:', err);
