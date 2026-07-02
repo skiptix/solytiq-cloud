@@ -943,6 +943,16 @@ async function runMigrations() {
       );
     }
 
+    // Heal missing owner memberships for all owned workspaces. Without this,
+    // a workspace can become invisible to its owner while its lists/timelines
+    // remain in the database and never appear in trash.
+    await pool.query(`
+      INSERT INTO workspace_members (workspace_id, user_id, role)
+      SELECT w.id, w.owner_id, 'owner'
+      FROM workspaces w
+      ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = 'owner'
+    `);
+
     // Assign existing unassigned lists/folders/tasks to their owner's workspace
     await pool.query(`
       UPDATE lists l
@@ -1013,6 +1023,12 @@ async function runMigrations() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS milestones_timeline_idx ON milestones(timeline_id)`);
+
+  await pool.query(`
+    UPDATE timelines t
+    SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = t.user_id ORDER BY w.created_at ASC LIMIT 1)
+    WHERE t.workspace_id IS NULL
+  `);
 
   // Public link sharing for timelines — mirrors the lists sharing model.
   await pool.query(`ALTER TABLE timelines ADD COLUMN IF NOT EXISTS share_token VARCHAR(100) UNIQUE`);
