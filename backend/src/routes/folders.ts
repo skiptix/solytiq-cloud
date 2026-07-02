@@ -25,6 +25,14 @@ interface FolderRow {
   workspace_id: string | null;
 }
 
+function summarizeFolderRows(rows: FolderRow[]): string {
+  if (rows.length === 0) return 'none';
+  return rows
+    .slice(0, 25)
+    .map((f) => `${f.id}{ws=${f.workspace_id ?? 'NULL'},owner=${f.user_id},public=${f.is_public},collapsed=${f.collapsed}}`)
+    .join(', ') + (rows.length > 25 ? `, … +${rows.length - 25} more` : '');
+}
+
 function sanitizeFolder(f: FolderRow) {
   return {
     id:          f.id,
@@ -54,7 +62,10 @@ router.get('/', async (req: Request, res: Response) => {
        ORDER BY f.position ASC, f.created_at ASC`,
       params
     );
-    wlog(`folders GET user=${req.userId} workspace=${workspaceId ?? 'ALL'} → ${rows.rows.length} folder(s)`);
+    wlog(
+      `folders GET user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} rawQuery=${JSON.stringify(req.query)} → ` +
+      `${rows.rows.length} folder(s); folders=[${summarizeFolderRows(rows.rows)}]`
+    );
     res.json({ folders: rows.rows.map(sanitizeFolder) });
   } catch (err) {
     werr('folders GET error:', err);
