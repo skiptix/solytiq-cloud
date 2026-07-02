@@ -169,7 +169,7 @@ app.get('/.well-known/oauth-authorization-server', (req, res) => {
 });
 
 // Public share endpoints — no auth required
-interface ShareFileRow { id: string; original_name: string; title: string | null; note: string | null; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null; }
+interface ShareFileRow { id: string; original_name: string; title: string | null; note: string | null; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; share_token: string; bundle_id: string | null; bundle_name: string | null; shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null; }
 
 async function resolveShareFile(token: string): Promise<ShareFileRow | null> {
   const result = await dbQuery<ShareFileRow>(
@@ -188,12 +188,24 @@ app.get('/api/share/:token', async (req, res) => {
     if (!file) { res.status(404).json({ error: 'File not found' }); return; }
     if (!file.is_public) { res.status(403).json({ error: 'This file is private' }); return; }
     const expired = file.expires_at && new Date(file.expires_at) < new Date();
+    const bundleResult = await dbQuery<Pick<ShareFileRow, 'id' | 'original_name' | 'mime_type' | 'file_size' | 'created_at'>>(
+      'SELECT id, original_name, mime_type, file_size, created_at FROM shared_files WHERE share_token = $1 ORDER BY created_at ASC',
+      [req.params.token]
+    );
+    const files = bundleResult.rows.map(row => ({
+      id: row.id,
+      name: row.original_name,
+      mimeType: row.mime_type,
+      size: Number(row.file_size),
+      createdAt: row.created_at,
+    }));
     res.json({
-      name: file.original_name,
-      title: file.title ?? null,
+      name: file.bundle_name || file.title || (files.length > 1 ? `${files.length} shared files` : file.original_name),
+      title: file.title ?? file.bundle_name ?? null,
       note: file.note ?? null,
       mimeType: file.mime_type,
-      size: file.file_size,
+      size: files.reduce((sum, item) => sum + item.size, 0),
+      files,
       hasPassword: file.password_hash !== null,
       expiresAt: file.expires_at ?? null,
       isExpired: Boolean(expired),
@@ -203,6 +215,36 @@ app.get('/api/share/:token', async (req, res) => {
     });
   } catch (err) {
     console.error('share info error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/share/:token/download/:fileId — download one file from a shared bundle
+app.get('/api/share/:token/download/:fileId', async (req, res) => {
+  try {
+    const { token, fileId } = req.params;
+    const pw = (req.query.password ?? '') as string;
+    const file = await resolveShareFile(token);
+    if (!file) { res.status(404).json({ error: 'File not found' }); return; }
+    if (!file.is_public) { res.status(403).json({ error: 'This file is private' }); return; }
+    if (file.expires_at && new Date(file.expires_at) < new Date()) { res.status(410).json({ error: 'Share link has expired' }); return; }
+    if (file.password_hash) {
+      if (!pw) { res.status(401).json({ error: 'Password required', passwordRequired: true }); return; }
+      const valid = await comparePassword(pw, file.password_hash);
+      if (!valid) { res.status(401).json({ error: 'Invalid password' }); return; }
+    }
+    const result = await dbQuery<ShareFileRow>('SELECT * FROM shared_files WHERE share_token = $1 AND id = $2', [token, fileId]);
+    const target = result.rows[0];
+    if (!target) { res.status(404).json({ error: 'File not found' }); return; }
+    const filePath = path.join(path.resolve(UPLOAD_DIR), path.basename(target.file_path));
+    if (!require('fs').existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
+    const sanitizedName = target.original_name.replace(/[^\w\s\-_.]/g, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(sanitizedName)}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.sendFile(filePath);
+  } catch (err) {
+    console.error('share bundled download error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -627,7 +669,7 @@ async function runMigrations() {
       is_public     BOOLEAN      NOT NULL DEFAULT false,
       password_hash VARCHAR(255),
       expires_at    TIMESTAMPTZ,
-      share_token   VARCHAR(100) UNIQUE NOT NULL,
+      share_token   VARCHAR(100) NOT NULL,
       created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
   `);
@@ -637,6 +679,14 @@ async function runMigrations() {
   await pool.query(`ALTER TABLE shared_files ADD COLUMN IF NOT EXISTS title VARCHAR(500)`);
 
   await pool.query(`ALTER TABLE shared_files ADD COLUMN IF NOT EXISTS note TEXT`);
+
+  await pool.query(`ALTER TABLE shared_files ADD COLUMN IF NOT EXISTS bundle_id VARCHAR(100)`);
+
+  await pool.query(`ALTER TABLE shared_files ADD COLUMN IF NOT EXISTS bundle_name VARCHAR(500)`);
+
+  await pool.query(`ALTER TABLE shared_files DROP CONSTRAINT IF EXISTS shared_files_share_token_key`);
+
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_shared_files_share_token ON shared_files(share_token)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS task_attachments (

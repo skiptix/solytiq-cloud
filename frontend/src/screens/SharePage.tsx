@@ -69,6 +69,14 @@ function getPreviewKind(mime: string): PreviewKind {
   return 'none';
 }
 
+interface SharedBundleFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  createdAt: string;
+}
+
 interface FileInfo {
   name: string;
   title: string | null;
@@ -81,6 +89,7 @@ interface FileInfo {
   createdAt: string;
   sharedBy: string | null;
   sharedByImage: string | null;
+  files?: SharedBundleFile[];
 }
 
 type PageState = 'loading' | 'password' | 'ready' | 'expired' | 'private' | 'notfound' | 'error';
@@ -134,8 +143,8 @@ export default function SharePage() {
     };
   }, []);
 
-  const downloadUrl = (pw?: string) => {
-    const url = `${BASE_URL}/share/${token}/download`;
+  const downloadUrl = (pw?: string, fileId?: string) => {
+    const url = `${BASE_URL}/share/${token}/download${fileId ? `/${fileId}` : ''}`;
     return pw ? `${url}?password=${encodeURIComponent(pw)}` : url;
   };
 
@@ -193,12 +202,12 @@ export default function SharePage() {
     await triggerPreviewLoad(kind, info.hasPassword ? password : undefined);
   };
 
-  const handleDownload = async () => {
+  const handleDownload = async (file?: SharedBundleFile) => {
     if (!info) return;
     if (info.hasPassword && !password) { setPwError(true); return; }
     setDownloading(true);
     try {
-      const url = downloadUrl(info.hasPassword ? password : undefined);
+      const url = downloadUrl(info.hasPassword ? password : undefined, file?.id);
       const res = await fetch(url);
       if (res.status === 401) {
         setPwError(true);
@@ -209,7 +218,7 @@ export default function SharePage() {
       const blob = await res.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = info.name;
+      a.download = file?.name ?? info.name;
       a.click();
       URL.revokeObjectURL(a.href);
     } catch {
@@ -329,6 +338,30 @@ export default function SharePage() {
               <div style={{ width: '100%', marginBottom: 24, background: '#F5F3FF', border: '1.5px solid #e8e4f0', borderRadius: 14, padding: '14px 18px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                 <div style={{ marginTop: 1, flexShrink: 0 }}><Icon name="sticky_note_2" size={17} color="#5e4dbb" /></div>
                 <p style={{ margin: 0, fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{info.note}</p>
+              </div>
+            )}
+
+            {info.files && info.files.length > 1 && (
+              <div style={{ width: '100%', marginBottom: 24, border: '1.5px solid #E5E7EB', borderRadius: 14, overflow: 'hidden', background: '#F9FAFB' }}>
+                <div style={{ padding: '12px 16px', borderBottom: '1px solid #E5E7EB', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Icon name="folder_zip" size={17} color="#5e4dbb" />
+                  Shared bundle
+                </div>
+                {info.files.map((bundleFile, index) => (
+                  <div key={bundleFile.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderBottom: index < info.files!.length - 1 ? '1px solid #ece8f3' : 'none' }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, background: '#fff', border: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Icon name="description" size={18} color={mimeBadgeColor(bundleFile.mimeType)} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bundleFile.name}</div>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', marginTop: 1 }}>{fmtSize(bundleFile.size)}</div>
+                    </div>
+                    <button onClick={() => handleDownload(bundleFile)} disabled={downloading}
+                      style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '7px 10px', cursor: downloading ? 'not-allowed' : 'pointer' }}>
+                      Download
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -454,7 +487,7 @@ export default function SharePage() {
 
             {/* Download button */}
             <button
-              onClick={handleDownload}
+              onClick={() => handleDownload()}
               disabled={downloading}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#fff', background: downloading ? '#9d8dff' : '#5e4dbb', border: 'none', borderRadius: 12, padding: '14px', cursor: downloading ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}
               onMouseEnter={e => { if (!downloading) e.currentTarget.style.background = '#4f3fa8'; }}
@@ -462,7 +495,7 @@ export default function SharePage() {
             >
               {downloading
                 ? <><div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />Downloading…</>
-                : <><Icon name="download" size={18} color="#fff" />Download</>
+                : <><Icon name="download" size={18} color="#fff" />{info.files && info.files.length > 1 ? 'Download first file' : 'Download'}</>
               }
             </button>
           </>
