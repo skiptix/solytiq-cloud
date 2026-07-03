@@ -375,6 +375,25 @@ export const apiDeleteFolderFromTrash = (trashId: number) =>
   apiFetch<{ success: boolean }>(`/trash/folders/${trashId}`, { method: 'DELETE' });
 
 // Admin
+
+export interface AdminReadApiKey {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export const apiGetAdminReadApiKeys = () =>
+  apiFetch<{ keys: AdminReadApiKey[] }>('/admin/api-keys');
+
+export const apiCreateAdminReadApiKey = (name: string) =>
+  apiFetch<{ key: AdminReadApiKey; secret: string }>('/admin/api-keys', { method: 'POST', body: JSON.stringify({ name }) });
+
+export const apiRevokeAdminReadApiKey = (id: string) =>
+  apiFetch<{ success: boolean }>(`/admin/api-keys/${id}`, { method: 'DELETE' });
+
 export const apiGetUsers = () =>
   apiFetch<{ users: Array<{ id: string; username: string; email: string; fullName: string | null; profileImage: string | null; isAdmin: boolean; lastOnline: string | null; createdAt: string }> }>('/admin/users');
 
