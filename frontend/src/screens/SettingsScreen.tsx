@@ -110,6 +110,7 @@ export default function SettingsScreen() {
   const [fullNameFocus, setFullNameFocus] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [passwordCopied, setPasswordCopied] = useState(false);
+  const [copiedUserId, setCopiedUserId] = useState<string | null>(null);
 
   // Edit user state
   const [editUserOpen, setEditUserOpen] = useState(false);
@@ -361,6 +362,30 @@ export default function SettingsScreen() {
       setTimeout(() => setPasswordCopied(false), 2000);
     });
   };
+
+
+  const copyUserId = (id: string) => {
+    if (!isAdmin) return;
+    navigator.clipboard.writeText(id).then(() => {
+      setCopiedUserId(id);
+      setTimeout(() => setCopiedUserId(current => current === id ? null : current), 2000);
+    });
+  };
+
+
+  const renderUserIdCopy = (id: string) => !isAdmin ? null : (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, minWidth: 0 }}>
+      <code style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, color: '#787584', background: '#F5F3FF', borderRadius: 6, padding: '2px 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>ID: {id}</code>
+      <button
+        onClick={() => copyUserId(id)}
+        title="Copy user ID"
+        style={{ display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: copiedUserId === id ? '#10B981' : '#5e4dbb', background: copiedUserId === id ? 'rgba(16,185,129,0.10)' : '#F5F3FF', border: 'none', borderRadius: 6, padding: '3px 7px', cursor: 'pointer', flexShrink: 0 }}
+      >
+        <Icon name={copiedUserId === id ? 'check' : 'content_copy'} size={12} color={copiedUserId === id ? '#10B981' : '#5e4dbb'} />
+        {copiedUserId === id ? 'Copied' : 'Copy ID'}
+      </button>
+    </div>
+  );
 
   const openEditUser = (u: UserEntry) => {
     setEditTarget(u);
@@ -1128,6 +1153,7 @@ export default function SettingsScreen() {
                               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 @{u.username} · {u.email}
                               </div>
+                              {renderUserIdCopy(u.id)}
                             </div>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -1290,6 +1316,7 @@ export default function SettingsScreen() {
                         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           @{u.username} · {u.email}
                         </div>
+                        {renderUserIdCopy(u.id)}
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
