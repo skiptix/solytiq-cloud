@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Icon from '../components/Icon';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useAuthStore from '../store/useAuthStore';
+import useAppStore from '../store/useAppStore';
 import type { Workspace, WorkspaceMember, SharedFile } from '../types';
 import { EmojiGrid } from '../components/EmojiSelector';
 import { apiGetMembers, apiGetFiles, asVisibilityConflict, type VisibilityConflict } from '../api/client';
@@ -143,7 +144,7 @@ function WorkspaceImagePicker({ onSelect, onClose }: { onSelect: (dataUrl: strin
 
 interface Props { workspace: Workspace; onClose: () => void; }
 
-type Tab = 'general' | 'members' | 'danger';
+type Tab = 'general' | 'members' | 'admin' | 'danger';
 
 export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const [closing, setClosing] = useState(false);
@@ -184,8 +185,18 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const [showImagePicker, setShowImagePicker] = useState(false);
 
   const { updateWorkspace, deleteWorkspace, getMembers, addMember, removeMember, setDeletingWorkspaceId } = useWorkspaceStore();
-  const { userId } = useAuthStore();
+  const { userId, isAdmin } = useAuthStore();
+  const { lists, timelines } = useAppStore();
   const isOwner = workspace.ownerId === userId || workspace.role === 'owner';
+  const [copiedWorkspaceId, setCopiedWorkspaceId] = useState(false);
+  const workspaceLists = lists.filter(l => l.workspaceId === workspace.id);
+  const workspaceTimelines = timelines.filter(t => t.workspaceId === workspace.id);
+  const copyWorkspaceId = () => {
+    navigator.clipboard.writeText(workspace.id).then(() => {
+      setCopiedWorkspaceId(true);
+      setTimeout(() => setCopiedWorkspaceId(false), 1600);
+    });
+  };
 
   const handleClose = () => { setClosing(true); setTimeout(() => onClose(), 190); };
 
@@ -290,6 +301,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const TABS: { id: Tab; label: string; icon: string }[] = [
     { id: 'general', label: 'General',  icon: 'settings'     },
     { id: 'members', label: 'Members',  icon: 'group'        },
+    ...(isAdmin ? [{ id: 'admin' as const, label: 'Admin', icon: 'admin_panel_settings' }] : []),
     { id: 'danger',  label: 'Danger',   icon: 'warning'      },
   ];
 
@@ -519,6 +531,40 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                       </div>
                     )
                 }
+              </div>
+            </div>
+          )}
+
+
+          {/* ── Admin ── */}
+          {activeTab === 'admin' && isAdmin && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
+              <div>
+                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Workspace ID</div>
+                <div style={{ background: '#F5F3FF', border: '1px solid #e8e4f0', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <code style={{ flex: 1, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#484552', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{workspace.id}</code>
+                  <button onClick={copyWorkspaceId} style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: copiedWorkspaceId ? '#10B981' : '#5e4dbb', background: '#fff', border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', flexShrink: 0 }}>
+                    <Icon name={copiedWorkspaceId ? 'check' : 'content_copy'} size={13} color={copiedWorkspaceId ? '#10B981' : '#5e4dbb'} />
+                    {copiedWorkspaceId ? 'Copied' : 'Copy ID'}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stats</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[
+                    ['Lists', workspaceLists.length, 'format_list_bulleted'],
+                    ['Private lists', workspaceLists.filter(l => !l.isPublic).length, 'lock'],
+                    ['Timelines', workspaceTimelines.length, 'timeline'],
+                    ['Private timelines', workspaceTimelines.filter(t => !t.isPublic).length, 'lock_clock'],
+                  ].map(([label, value, icon]) => (
+                    <div key={String(label)} style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 14, padding: 14 }}>
+                      <Icon name={String(icon)} size={16} color="#5e4dbb" />
+                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 800, color: '#1c1b22', marginTop: 8 }}>{value}</div>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
