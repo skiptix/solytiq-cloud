@@ -6,6 +6,7 @@ import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
+import { snapshotTimelineToTrash } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors } from '../visibility';
 
 const router = Router();
@@ -505,24 +506,18 @@ router.delete('/:timelineId', async (req: Request, res: Response) => {
       return;
     }
 
-    const milestonesRes = await query<MilestoneRow>(
-      'SELECT * FROM milestones WHERE timeline_id = $1 ORDER BY position ASC',
-      [timelineId]
-    );
-    const timelineData = sanitizeTimeline(existing.rows[0], milestonesRes.rows.map(sanitizeMilestone));
-
-    // Snapshot-to-trash and delete must be atomic.
+    // Snapshot-to-trash and delete must be atomic (shared helper — the same
+    // snapshot shape is written by the workspace cascade and the AI tools).
     await withTransaction(async (client) => {
-      await client.query(
-        `INSERT INTO trash_timelines (timeline_id, user_id, timeline_data) VALUES ($1, $2, $3)`,
-        [timelineId, req.userId, JSON.stringify(timelineData)]
-      );
+      const exec = (text: string, params?: unknown[]) => client.query(text, params);
+      await snapshotTimelineToTrash(exec, timelineId);
       await client.query('DELETE FROM timelines WHERE id = $1', [timelineId]);
     });
 
-    wlog(`timeline DELETE ✓ id=${timelineId} (${milestonesRes.rows.length} milestone(s)) → trashed by user ${req.userId}`);
+    wlog(`timeline DELETE ✓ id=${timelineId} → trashed by user ${req.userId}`);
     res.json({ success: true });
     broadcastToUser(req.userId!, 'timelines');
+    broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     werr('timelines DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });

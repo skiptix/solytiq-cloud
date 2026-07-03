@@ -6,6 +6,7 @@ import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, wwarn, werr } from '../workspaceUtil';
+import { softDeleteListTree, collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors } from '../visibility';
 
 const router = Router();
@@ -353,22 +354,7 @@ router.put('/:listId/reorder', async (req: Request, res: Response) => {
 
 // Recursively collect the ids of every sublist nested under a list.
 async function collectDescendantListIds(rootId: string): Promise<string[]> {
-  const out = new Set<string>();
-  const visit = async (id: string) => {
-    const sub = await query<{ id: string }>(
-      `SELECT l.id FROM lists l
-       JOIN tasks t ON l.parent_task_id = t.id
-       WHERE t.list_id = $1 AND l.id <> $1`,
-      [id]
-    );
-    for (const row of sub.rows) {
-      if (out.has(row.id)) continue;
-      out.add(row.id);
-      await visit(row.id);
-    }
-  };
-  await visit(rootId);
-  return Array.from(out);
+  return collectDescendantListIdsShared(query, rootId);
 }
 
 // PUT /api/lists/:listId/share — manage the public read-only share link.
@@ -572,48 +558,15 @@ router.delete('/:listId', async (req: Request, res: Response) => {
       return;
     }
 
-    const listRow = existing.rows[0];
+    // Soft delete: the list AND every nested sublist are snapshotted to trash,
+    // then their tasks and list rows are removed atomically (shared helper —
+    // the AI delete_list tool uses the exact same path).
+    const sublistCount = await softDeleteListTree(listId);
 
-    // Snapshot sections and tasks before deletion for trash
-    const sectionsRes = await query<SectionRow>(
-      'SELECT * FROM sections WHERE list_id = $1 ORDER BY position ASC',
-      [listId]
-    );
-    let tasksRows: TaskRow[] = [];
-    if (sectionsRes.rows.length > 0) {
-      const sectionIds = sectionsRes.rows.map(s => s.id);
-      const tasksRes = await query<TaskRow>(
-        'SELECT * FROM tasks WHERE section_id = ANY($1::varchar[]) ORDER BY position ASC',
-        [sectionIds]
-      );
-      tasksRows = tasksRes.rows;
-    }
-
-    const tasksBySection: Record<string, ReturnType<typeof sanitizeTask>[]> = {};
-    for (const task of tasksRows) {
-      const key = task.section_id ?? '__none__';
-      if (!tasksBySection[key]) tasksBySection[key] = [];
-      tasksBySection[key].push(sanitizeTask(task));
-    }
-    const sections = sectionsRes.rows.map(s =>
-      sanitizeSection(s, tasksBySection[s.id] ?? [])
-    );
-    const listData = sanitizeList(listRow, sections);
-
-    // Snapshot-to-trash and delete must be atomic: we never want to delete the
-    // list without its trash snapshot, nor keep a snapshot of a list we failed
-    // to delete.
-    await withTransaction(async (client) => {
-      await client.query(
-        `INSERT INTO trash_lists (list_id, user_id, list_data) VALUES ($1, $2, $3)`,
-        [listId, req.userId, JSON.stringify(listData)]
-      );
-      await client.query('DELETE FROM lists WHERE id = $1', [listId]);
-    });
-
-    wlog(`list DELETE ✓ id=${listId} (${sections.length} section(s)) → trashed by user ${req.userId}`);
+    wlog(`list DELETE ✓ id=${listId} (+${sublistCount} sublist(s)) → trashed by user ${req.userId}`);
     res.json({ success: true });
     broadcastToUser(req.userId!, 'lists');
+    broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     werr('lists DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });

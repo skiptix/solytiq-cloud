@@ -2,7 +2,8 @@ import { Router, Request, Response } from 'express';
 import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
-import { ensureOwnedWorkspaceMemberships, ensurePersonalWorkspace, wlog, werr } from '../workspaceUtil';
+import { ensureOwnedWorkspaceMemberships, ensurePersonalWorkspace, rehomeUserContentToPersonal, wlog, werr } from '../workspaceUtil';
+import { snapshotListToTrash, snapshotTimelineToTrash, snapshotFolderToTrash } from '../trashUtil';
 import { getPublicDescendants, buildRestrictConflict, restrictDescendants } from '../visibility';
 
 const router = Router();
@@ -107,13 +108,35 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     // Going private: any public folders/lists/timelines inside must be hidden
     // too. Warn (409) with the affected items unless the client cascades.
+    const goingPrivate = visibility === 'private' && existing.rows[0].visibility !== 'private';
     let restrict: Awaited<ReturnType<typeof getPublicDescendants>> = [];
-    if (visibility === 'private' && existing.rows[0].visibility !== 'private') {
+    if (goingPrivate) {
       const descendants = await getPublicDescendants(query, { type: 'workspace', id });
       if (descendants.length > 0) {
         if (!cascade) { res.status(409).json(buildRestrictConflict('workspace', existing.rows[0].name, descendants)); return; }
         restrict = descendants;
       }
+    }
+
+    // Going private also cuts off non-member contributors (a public workspace
+    // accepts content from any user). Their own items must follow them home,
+    // or they'd be stranded in a workspace those users can no longer open.
+    let strandedUserIds: string[] = [];
+    if (goingPrivate) {
+      const stranded = await query<{ user_id: string }>(
+        `SELECT DISTINCT user_id FROM (
+           SELECT user_id FROM lists     WHERE workspace_id = $1
+           UNION SELECT user_id FROM timelines WHERE workspace_id = $1
+           UNION SELECT user_id FROM folders   WHERE workspace_id = $1
+           UNION SELECT user_id FROM tasks     WHERE workspace_id = $1
+         ) c
+         WHERE c.user_id <> $2
+           AND NOT EXISTS (
+             SELECT 1 FROM workspace_members wm WHERE wm.workspace_id = $1 AND wm.user_id = c.user_id
+           )`,
+        [id, existing.rows[0].owner_id]
+      );
+      strandedUserIds = stranded.rows.map((r) => r.user_id);
     }
 
     const updateSql =
@@ -134,10 +157,16 @@ router.put('/:id', async (req: Request, res: Response) => {
     ];
 
     let result;
-    if (restrict.length > 0) {
+    if (restrict.length > 0 || strandedUserIds.length > 0) {
       result = await withTransaction(async (client) => {
         const r = await client.query<WorkspaceRow>(updateSql, updateParams);
-        await restrictDescendants(client, { type: 'workspace', id });
+        if (restrict.length > 0) {
+          await restrictDescendants(client, { type: 'workspace', id });
+        }
+        const exec = (text: string, params?: unknown[]) => client.query(text, params);
+        for (const strandedId of strandedUserIds) {
+          await rehomeUserContentToPersonal(exec, strandedId, id);
+        }
         return r;
       });
     } else {
@@ -146,6 +175,21 @@ router.put('/:id', async (req: Request, res: Response) => {
     res.json({ workspace: sanitizeWorkspace(result.rows[0]) });
     broadcastToUser(req.userId!, 'workspaces');
     if (restrict.length > 0) { broadcastToUser(req.userId!, 'folders'); broadcastToUser(req.userId!, 'lists'); broadcastToUser(req.userId!, 'timelines'); }
+    if (strandedUserIds.length > 0) {
+      // The stranded users' content just left this workspace — they AND the
+      // remaining members all see a different workspace now.
+      const members = await query<{ user_id: string }>(
+        `SELECT user_id FROM workspace_members WHERE workspace_id = $1`, [id]
+      );
+      const notify = new Set<string>([...strandedUserIds, ...members.rows.map((m) => m.user_id)]);
+      for (const uid of notify) {
+        broadcastToUser(uid, 'workspaces');
+        broadcastToUser(uid, 'lists');
+        broadcastToUser(uid, 'timelines');
+        broadcastToUser(uid, 'folders');
+        broadcastToUser(uid, 'tasks');
+      }
+    }
   } catch (err) {
     console.error('workspaces PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -161,17 +205,79 @@ router.delete('/:id', async (req: Request, res: Response) => {
     if (existing.rows[0].owner_id !== req.userId && !req.user?.isAdmin) {
       res.status(403).json({ error: 'Only the owner can delete this workspace' }); return;
     }
+
+    // Everyone whose data/view is affected gets notified afterwards — members
+    // AND non-member contributors (a public workspace accepts content from any
+    // user; their items land in their own trash and they must hear about it).
+    const memberRows = await query<{ user_id: string }>(
+      `SELECT user_id FROM workspace_members WHERE workspace_id = $1
+       UNION
+       SELECT user_id FROM (
+         SELECT user_id FROM lists     WHERE workspace_id = $1
+         UNION SELECT user_id FROM timelines WHERE workspace_id = $1
+         UNION SELECT user_id FROM folders   WHERE workspace_id = $1
+         UNION SELECT user_id FROM tasks     WHERE workspace_id = $1
+       ) contributors`,
+      [id]
+    );
+
     // Cascade-delete workspace contents atomically: either everything goes or
-    // nothing does, so we never strand lists/tasks pointing at a dead workspace.
-    await withTransaction(async (client) => {
-      await client.query(`DELETE FROM tasks   WHERE workspace_id = $1`, [id]);
-      await client.query(`DELETE FROM lists   WHERE workspace_id = $1`, [id]);
-      await client.query(`DELETE FROM folders WHERE workspace_id = $1`, [id]);
+    // nothing does, so we never strand lists/tasks/timelines pointing at a dead
+    // workspace. Every list, timeline, and folder is snapshotted into its
+    // OWNER's trash first — deleting a workspace is a soft delete for its
+    // contents, same as deleting the items one by one. (Timelines used to be
+    // skipped entirely here: the FK set their workspace_id to NULL, leaking
+    // them into every workspace view until a restart healed them into an
+    // arbitrary one.)
+    const counts = await withTransaction(async (client) => {
+      const exec = (text: string, params?: unknown[]) => client.query(text, params);
+
+      const listIds = (await client.query<{ id: string }>(
+        `SELECT id FROM lists WHERE workspace_id = $1`, [id]
+      )).rows.map((r) => r.id);
+      const timelineIds = (await client.query<{ id: string }>(
+        `SELECT id FROM timelines WHERE workspace_id = $1`, [id]
+      )).rows.map((r) => r.id);
+      const folderIds = (await client.query<{ id: string }>(
+        `SELECT id FROM folders WHERE workspace_id = $1`, [id]
+      )).rows.map((r) => r.id);
+
+      for (const listId of listIds) await snapshotListToTrash(exec, listId);
+      for (const timelineId of timelineIds) await snapshotTimelineToTrash(exec, timelineId);
+      for (const folderId of folderIds) await snapshotFolderToTrash(exec, folderId);
+
+      await client.query(
+        `DELETE FROM milestones WHERE timeline_id IN (SELECT id FROM timelines WHERE workspace_id = $1)`,
+        [id]
+      );
+      await client.query(`DELETE FROM tasks WHERE workspace_id = $1`, [id]);
+      // Legacy rows whose workspace_id drifted from their list's must go too.
+      await client.query(
+        `DELETE FROM tasks WHERE list_id IN (SELECT id FROM lists WHERE workspace_id = $1)`,
+        [id]
+      );
+      await client.query(`DELETE FROM timelines WHERE workspace_id = $1`, [id]);
+      await client.query(`DELETE FROM lists     WHERE workspace_id = $1`, [id]);
+      await client.query(`DELETE FROM folders   WHERE workspace_id = $1`, [id]);
       await client.query(`DELETE FROM workspaces WHERE id = $1`, [id]);
+
+      return { lists: listIds.length, timelines: timelineIds.length, folders: folderIds.length };
     });
-    wlog(`workspace ${id} deleted (with all lists/tasks/folders) by user ${req.userId}`);
+
+    wlog(
+      `workspace ${id} deleted by user ${req.userId} — trashed ${counts.lists} list(s), ` +
+      `${counts.timelines} timeline(s), ${counts.folders} folder(s)`
+    );
     res.json({ ok: true });
-    broadcastToUser(req.userId!, 'workspaces');
+
+    const affected = new Set<string>([req.userId!, ...memberRows.rows.map((m) => m.user_id)]);
+    for (const uid of affected) {
+      broadcastToUser(uid, 'workspaces');
+      broadcastToUser(uid, 'lists');
+      broadcastToUser(uid, 'timelines');
+      broadcastToUser(uid, 'folders');
+      broadcastToUser(uid, 'trash');
+    }
   } catch (err) {
     werr('workspaces DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -256,7 +362,7 @@ router.post('/:id/members', async (req: Request, res: Response) => {
 router.delete('/:id/members/:userId', async (req: Request, res: Response) => {
   try {
     const { id, userId } = req.params;
-    const existing = await query<WorkspaceRow>('SELECT owner_id FROM workspaces WHERE id = $1', [id]);
+    const existing = await query<WorkspaceRow>('SELECT owner_id, visibility FROM workspaces WHERE id = $1', [id]);
     if (existing.rows.length === 0) { res.status(404).json({ error: 'Workspace not found' }); return; }
 
     const isOwner = existing.rows[0].owner_id === req.userId;
@@ -266,8 +372,34 @@ router.delete('/:id/members/:userId', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'Cannot remove the workspace owner' }); return;
     }
 
-    await query('DELETE FROM workspace_members WHERE workspace_id = $1 AND user_id = $2', [id, userId]);
+    // The removed member keeps their own content: move it to their Personal
+    // workspace atomically with the removal. Leaving it behind in a workspace
+    // they can no longer open would strand it (invisible everywhere, not in
+    // trash, yet still visible to the user-scoped AI tools).
+    const wsStillVisibleToUser = existing.rows[0].visibility === 'public';
+    const remainingMembers = await query<{ user_id: string }>(
+      `SELECT user_id FROM workspace_members WHERE workspace_id = $1 AND user_id <> $2`,
+      [id, userId]
+    );
+    await withTransaction(async (client) => {
+      const exec = (text: string, params?: unknown[]) => client.query(text, params);
+      if (!wsStillVisibleToUser) {
+        await rehomeUserContentToPersonal(exec, userId, id);
+      }
+      await client.query('DELETE FROM workspace_members WHERE workspace_id = $1 AND user_id = $2', [id, userId]);
+    });
     res.json({ ok: true });
+
+    // Notify the removed member AND the remaining members — the member's
+    // shared content just left this workspace, so everyone's view changed.
+    const notify = new Set<string>([userId, ...remainingMembers.rows.map((m) => m.user_id)]);
+    for (const uid of notify) {
+      broadcastToUser(uid, 'workspaces');
+      broadcastToUser(uid, 'lists');
+      broadcastToUser(uid, 'timelines');
+      broadcastToUser(uid, 'folders');
+      broadcastToUser(uid, 'tasks');
+    }
   } catch (err) {
     console.error('workspace members DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });

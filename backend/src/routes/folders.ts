@@ -4,6 +4,7 @@ import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
+import { snapshotFolderToTrash } from '../trashUtil';
 import {
   getPrivateAncestors, buildPromoteConflict, promoteAncestors,
   getPublicDescendants, buildRestrictConflict, restrictDescendants,
@@ -230,29 +231,20 @@ router.delete('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    const folderRow = existing.rows[0];
-
-    // Snapshot the list IDs that belong to this folder
-    const listsInFolder = await query<{ id: string }>(
-      'SELECT id FROM lists WHERE folder_id = $1',
-      [id]
-    );
-    const listIds = listsInFolder.rows.map(l => l.id);
-
-    const folderData = { ...sanitizeFolder(folderRow), listIds };
     // Atomic: snapshot to trash, detach lists, delete folder — all or nothing.
+    // (Shared helper — identical snapshot shape to the workspace cascade delete.)
     await withTransaction(async (client) => {
-      await client.query(
-        `INSERT INTO trash_folders (folder_id, user_id, folder_data) VALUES ($1, $2, $3)`,
-        [id, req.userId, JSON.stringify(folderData)]
-      );
+      const exec = (text: string, params?: unknown[]) => client.query(text, params);
+      await snapshotFolderToTrash(exec, id);
       await client.query('UPDATE lists SET folder_id = NULL WHERE folder_id = $1', [id]);
       await client.query('DELETE FROM folders WHERE id = $1', [id]);
     });
 
-    wlog(`folder DELETE ✓ id=${id} (${listIds.length} list(s) detached) → trashed by user ${req.userId}`);
+    wlog(`folder DELETE ✓ id=${id} → trashed by user ${req.userId}`);
     res.json({ ok: true });
     broadcastToUser(req.userId!, 'folders');
+    broadcastToUser(req.userId!, 'lists');
+    broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     werr('folders DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });

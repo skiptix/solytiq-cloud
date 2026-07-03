@@ -43,6 +43,14 @@ import {
 let trashCounter = Date.now();
 let currentLoadId = 0;
 
+export type LoadSlice = 'tasks' | 'lists' | 'folders' | 'timelines' | 'trash';
+const ALL_SLICES: LoadSlice[] = ['tasks', 'lists', 'folders', 'timelines', 'trash'];
+const MAX_LOAD_RETRIES = 3;
+// Core slices that failed their last (post-retry) load. loadError stays up
+// until every slice in here is successfully refetched — a partial reload of
+// OTHER slices must not clear the banner while a failed slice is still stale.
+const failedSlices = new Set<LoadSlice>();
+
 function getScopedWorkspaceId(workspaceId?: string): string | undefined {
   return workspaceId ?? useWorkspaceStore.getState().currentWorkspaceId ?? undefined;
 }
@@ -55,6 +63,7 @@ const useAppStore = create<AppState>()(
       folders: [],
       timelines: [],
       listsLoading: false,
+      loadError: false,
       trashTasks: [],
       trashLists: [],
       trashFolders: [],
@@ -521,28 +530,30 @@ const useAppStore = create<AppState>()(
         })();
       },
 
-      loadFromApi: async (workspaceId?: string) => {
+      loadFromApi: async (workspaceId?: string, opts?: { only?: LoadSlice[]; attempt?: number }) => {
         const scopedWorkspaceId = getScopedWorkspaceId(workspaceId);
+        const slices = new Set<LoadSlice>(opts?.only ?? ALL_SLICES);
+        const attempt = opts?.attempt ?? 0;
         const myLoadId = ++currentLoadId;
-        set({ listsLoading: true });
+        if (slices.has('lists')) set({ listsLoading: true });
         try {
+          const skip = Promise.resolve(null);
           const [tasksRes, listsRes, foldersRes, timelinesRes, trashRes, trashListsRes, trashFoldersRes, trashTimelinesRes, trashMilestonesRes] = await Promise.all([
-            apiGetTasks(scopedWorkspaceId).catch(() => null),
-            apiGetLists(scopedWorkspaceId).catch(() => null),
-            apiGetFolders(scopedWorkspaceId).catch(() => null),
-            apiGetTimelines(scopedWorkspaceId).catch(() => null),
-            apiGetTrash().catch(() => null),
-            apiGetTrashLists().catch(() => null),
-            apiGetTrashFolders().catch(() => null),
-            apiGetTrashTimelines().catch(() => null),
-            apiGetTrashMilestones().catch(() => null),
+            slices.has('tasks')     ? apiGetTasks(scopedWorkspaceId).catch(() => null)     : skip,
+            slices.has('lists')     ? apiGetLists(scopedWorkspaceId).catch(() => null)     : skip,
+            slices.has('folders')   ? apiGetFolders(scopedWorkspaceId).catch(() => null)   : skip,
+            slices.has('timelines') ? apiGetTimelines(scopedWorkspaceId).catch(() => null) : skip,
+            slices.has('trash')     ? apiGetTrash().catch(() => null)                      : skip,
+            slices.has('trash')     ? apiGetTrashLists().catch(() => null)                 : skip,
+            slices.has('trash')     ? apiGetTrashFolders().catch(() => null)               : skip,
+            slices.has('trash')     ? apiGetTrashTimelines().catch(() => null)             : skip,
+            slices.has('trash')     ? apiGetTrashMilestones().catch(() => null)            : skip,
           ]);
           // Discard results if a newer load has been requested (e.g. workspace switched mid-load)
           // or if this response was requested for a workspace that is no longer active.
           if (myLoadId !== currentLoadId) return;
           if (scopedWorkspaceId !== getScopedWorkspaceId()) return;
-          const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'folders' | 'timelines' | 'trashTasks' | 'trashLists' | 'trashFolders' | 'trashTimelines' | 'trashMilestones' | 'listsLoading'>> = {};
-          update.listsLoading = false;
+          const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'folders' | 'timelines' | 'trashTasks' | 'trashLists' | 'trashFolders' | 'trashTimelines' | 'trashMilestones' | 'listsLoading' | 'loadError'>> = {};
           if (tasksRes) update.dashTasks = tasksRes.tasks.map(t => ({ ...t, id: Number(t.id) }));
           if (foldersRes) update.folders = foldersRes.folders;
           if (timelinesRes) update.timelines = timelinesRes.timelines.map(t => ({ ...t, milestones: t.milestones ?? [] }));
@@ -589,9 +600,37 @@ const useAppStore = create<AppState>()(
             deletedAt: tr.deletedAt,
             expiresAt: tr.expiresAt,
           }));
+
+          // A failed core fetch (429 / network blip) must never look like data
+          // deletion: the previous slice is kept (its update key was skipped),
+          // and we retry with backoff before surfacing a visible error.
+          const sliceSucceeded: Record<Exclude<LoadSlice, 'trash'>, boolean> = {
+            tasks: !!tasksRes,
+            lists: !!listsRes,
+            folders: !!foldersRes,
+            timelines: !!timelinesRes,
+          };
+          const coreFailed = (Object.keys(sliceSucceeded) as Array<Exclude<LoadSlice, 'trash'>>)
+            .some((s) => slices.has(s) && !sliceSucceeded[s]);
+          if (coreFailed && attempt < MAX_LOAD_RETRIES) {
+            const delay = 1000 * 2 ** attempt;
+            setTimeout(() => {
+              if (myLoadId !== currentLoadId) return; // superseded by a newer load
+              get().loadFromApi(scopedWorkspaceId, { only: Array.from(slices), attempt: attempt + 1 });
+            }, delay);
+            update.listsLoading = slices.has('lists'); // keep the loading state while retrying
+          } else {
+            for (const s of Object.keys(sliceSucceeded) as Array<Exclude<LoadSlice, 'trash'>>) {
+              if (!slices.has(s)) continue; // not requested — its status is unchanged
+              if (sliceSucceeded[s]) failedSlices.delete(s);
+              else failedSlices.add(s);
+            }
+            update.listsLoading = false;
+            update.loadError = failedSlices.size > 0;
+          }
           set(update as AppState);
         } catch {
-          set({ listsLoading: false });
+          set({ listsLoading: false, loadError: true });
         }
       },
     }),
