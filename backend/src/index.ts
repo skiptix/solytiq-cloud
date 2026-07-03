@@ -965,20 +965,24 @@ async function runMigrations() {
       ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = 'owner'
     `);
 
-    // Assign existing unassigned lists/folders/tasks to their owner's workspace
+    // Assign existing unassigned lists/folders/tasks to their owner's workspace.
+    // ORDER BY makes the pick deterministic (first-created = Personal). A bare
+    // LIMIT 1 let PostgreSQL choose an ARBITRARY owned workspace, scattering
+    // healed items into workspaces the user wasn't looking at — one of the
+    // causes of "my list disappeared but the AI still sees it".
     await pool.query(`
       UPDATE lists l
-      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = l.user_id LIMIT 1)
+      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = l.user_id ORDER BY w.created_at ASC LIMIT 1)
       WHERE l.workspace_id IS NULL
     `);
     await pool.query(`
       UPDATE folders f
-      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = f.user_id LIMIT 1)
+      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = f.user_id ORDER BY w.created_at ASC LIMIT 1)
       WHERE f.workspace_id IS NULL
     `);
     await pool.query(`
       UPDATE tasks t
-      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = t.user_id LIMIT 1)
+      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = t.user_id ORDER BY w.created_at ASC LIMIT 1)
       WHERE t.workspace_id IS NULL
     `);
 
@@ -1041,6 +1045,82 @@ async function runMigrations() {
     SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = t.user_id ORDER BY w.created_at ASC LIMIT 1)
     WHERE t.workspace_id IS NULL
   `);
+
+  // ── Stranded-content self-heal ─────────────────────────────────────────────
+  // Content whose OWNER can no longer access its workspace (removed from a
+  // private workspace, workspace went private, historical drift) is invisible
+  // in every workspace view while still being returned by the user-scoped AI
+  // tools. Move it back to the owner's first (Personal) workspace. Idempotent:
+  // a second run matches zero rows. This also repairs data stranded before the
+  // re-homing fixes in routes/workspaces.ts existed.
+  {
+    const strandedCondition = (alias: string) => `
+      ${alias}.workspace_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM workspace_members wm
+        WHERE wm.workspace_id = ${alias}.workspace_id AND wm.user_id = ${alias}.user_id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM workspaces w
+        WHERE w.id = ${alias}.workspace_id
+          AND (w.owner_id = ${alias}.user_id OR w.visibility = 'public')
+      )`;
+    const personalFor = (alias: string) =>
+      `(SELECT w.id FROM workspaces w WHERE w.owner_id = ${alias}.user_id ORDER BY w.created_at ASC LIMIT 1)`;
+
+    const strandedLists = await pool.query(
+      `UPDATE lists l SET workspace_id = ${personalFor('l')} WHERE ${strandedCondition('l')}`
+    );
+    const strandedTimelines = await pool.query(
+      `UPDATE timelines t SET workspace_id = ${personalFor('t')} WHERE ${strandedCondition('t')}`
+    );
+    const strandedFolders = await pool.query(
+      `UPDATE folders f SET workspace_id = ${personalFor('f')} WHERE ${strandedCondition('f')}`
+    );
+    // Dash tasks follow their owner; list items are re-synced to their list below.
+    const strandedTasks = await pool.query(
+      `UPDATE tasks t SET workspace_id = ${personalFor('t')}
+       WHERE (t.source = 'dash' OR t.list_id IS NULL) AND ${strandedCondition('t')}`
+    );
+    const healed =
+      (strandedLists.rowCount ?? 0) + (strandedTimelines.rowCount ?? 0) +
+      (strandedFolders.rowCount ?? 0) + (strandedTasks.rowCount ?? 0);
+    if (healed > 0) {
+      console.log(
+        `📋 migration: re-homed stranded content to owners' Personal workspace — ` +
+        `${strandedLists.rowCount} list(s), ${strandedTimelines.rowCount} timeline(s), ` +
+        `${strandedFolders.rowCount} folder(s), ${strandedTasks.rowCount} dash task(s)`
+      );
+    }
+
+    // Re-sync list items to their (possibly just-moved) list's workspace.
+    await pool.query(`
+      UPDATE tasks t
+      SET workspace_id = l.workspace_id
+      FROM lists l
+      WHERE t.list_id = l.id
+        AND t.source = 'list'
+        AND t.workspace_id IS DISTINCT FROM l.workspace_id
+    `);
+
+    // Folder-consistency heal: an item can only sit in a folder of its OWN
+    // workspace — a cross-workspace folder_id makes the item unplaceable in
+    // the sidebar (it renders nowhere), so detach it.
+    const danglingLists = await pool.query(`
+      UPDATE lists l SET folder_id = NULL
+      FROM folders f
+      WHERE l.folder_id = f.id AND l.workspace_id IS DISTINCT FROM f.workspace_id
+    `);
+    const danglingTimelines = await pool.query(`
+      UPDATE timelines t SET folder_id = NULL
+      FROM folders f
+      WHERE t.folder_id = f.id AND t.workspace_id IS DISTINCT FROM f.workspace_id
+    `);
+    const detached = (danglingLists.rowCount ?? 0) + (danglingTimelines.rowCount ?? 0);
+    if (detached > 0) {
+      console.log(`📋 migration: detached ${detached} item(s) from cross-workspace folders`);
+    }
+  }
 
   // Public link sharing for timelines — mirrors the lists sharing model.
   await pool.query(`ALTER TABLE timelines ADD COLUMN IF NOT EXISTS share_token VARCHAR(100) UNIQUE`);

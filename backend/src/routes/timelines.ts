@@ -523,6 +523,7 @@ router.delete('/:timelineId', async (req: Request, res: Response) => {
     wlog(`timeline DELETE ✓ id=${timelineId} (${milestonesRes.rows.length} milestone(s)) → trashed by user ${req.userId}`);
     res.json({ success: true });
     broadcastToUser(req.userId!, 'timelines');
+    broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     werr('timelines DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });

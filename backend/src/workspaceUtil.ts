@@ -139,3 +139,97 @@ export async function resolveWorkspaceForUser(
   }
   return ensurePersonalWorkspace(query, userId);
 }
+
+// ---------------------------------------------------------------------------
+// Content re-homing
+// ---------------------------------------------------------------------------
+
+/**
+ * Move everything a user OWNS inside `fromWorkspaceId` into their Personal
+ * workspace. Used when the user loses access to a workspace (removed as a
+ * member, leaves, or the workspace goes private while they aren't a member).
+ *
+ * Without this their own lists/timelines stay pointed at a workspace that no
+ * longer appears in their picker — invisible in every view, not in trash, yet
+ * still returned by the user-scoped AI tools ("the AI sees lists I can't").
+ *
+ * Every UPDATE is doubly scoped (workspace + owning user) so no other user's
+ * rows can ever be moved. Runs inside the caller's transaction.
+ */
+export async function rehomeUserContentToPersonal(
+  exec: QueryExec,
+  userId: string,
+  fromWorkspaceId: string
+): Promise<{ lists: number; timelines: number; folders: number; tasks: number }> {
+  const personal = await ensurePersonalWorkspace(exec, userId);
+  if (personal === fromWorkspaceId) {
+    return { lists: 0, timelines: 0, folders: 0, tasks: 0 };
+  }
+
+  const folders = await exec(
+    `UPDATE folders SET workspace_id = $1 WHERE workspace_id = $2 AND user_id = $3`,
+    [personal, fromWorkspaceId, userId]
+  );
+  const lists = await exec(
+    `UPDATE lists SET workspace_id = $1 WHERE workspace_id = $2 AND user_id = $3`,
+    [personal, fromWorkspaceId, userId]
+  );
+  const timelines = await exec(
+    `UPDATE timelines SET workspace_id = $1 WHERE workspace_id = $2 AND user_id = $3`,
+    [personal, fromWorkspaceId, userId]
+  );
+
+  // Detach cross-workspace folder references in both directions (the user's
+  // list left its folder behind, or another member's list points at a folder
+  // that just moved) — a dangling folder_id makes an item unplaceable in the
+  // sidebar even though the API returns it.
+  await exec(
+    `UPDATE lists l SET folder_id = NULL
+     FROM folders f
+     WHERE l.folder_id = f.id
+       AND l.workspace_id IS DISTINCT FROM f.workspace_id
+       AND (f.user_id = $1 OR l.user_id = $1)`,
+    [userId]
+  );
+  await exec(
+    `UPDATE timelines t SET folder_id = NULL
+     FROM folders f
+     WHERE t.folder_id = f.id
+       AND t.workspace_id IS DISTINCT FROM f.workspace_id
+       AND (f.user_id = $1 OR t.user_id = $1)`,
+    [userId]
+  );
+
+  // Dashboard tasks the user owns in the lost workspace follow them home.
+  const dashTasks = await exec(
+    `UPDATE tasks SET workspace_id = $1
+     WHERE workspace_id = $2 AND user_id = $3 AND (source = 'dash' OR list_id IS NULL)`,
+    [personal, fromWorkspaceId, userId]
+  );
+
+  // List items ALWAYS live in their list's workspace: re-sync every item of
+  // the lists that just moved (regardless of who created the item).
+  const listTasks = await exec(
+    `UPDATE tasks t SET workspace_id = l.workspace_id
+     FROM lists l
+     WHERE t.list_id = l.id
+       AND l.user_id = $1
+       AND l.workspace_id = $2
+       AND t.workspace_id IS DISTINCT FROM l.workspace_id`,
+    [userId, personal]
+  );
+
+  const counts = {
+    lists: lists.rowCount ?? 0,
+    timelines: timelines.rowCount ?? 0,
+    folders: folders.rowCount ?? 0,
+    tasks: (dashTasks.rowCount ?? 0) + (listTasks.rowCount ?? 0),
+  };
+  if (counts.lists || counts.timelines || counts.folders || counts.tasks) {
+    wlog(
+      `re-homed user ${userId} content from workspace ${fromWorkspaceId} to ${personal}: ` +
+      `${counts.lists} list(s), ${counts.timelines} timeline(s), ${counts.folders} folder(s), ${counts.tasks} task(s)`
+    );
+  }
+  return counts;
+}

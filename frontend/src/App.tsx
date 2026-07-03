@@ -49,7 +49,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { lists, timelines, listsLoading, sidebarWidth, setSidebarWidth, loadFromApi, setLists, setFolders, setTimelines, updateList, moveTaskToList } = useAppStore();
+  const { lists, timelines, listsLoading, loadError, sidebarWidth, setSidebarWidth, loadFromApi, setLists, setFolders, setTimelines, updateList, moveTaskToList } = useAppStore();
   const prevWorkspaceRef = useRef<string | null | undefined>(undefined);
   const [modal, setModal] = useState<'add' | 'completed' | 'trash' | null>(null);
   const isMobile = useMobile();
@@ -65,11 +65,36 @@ function AppLayout() {
     };
     init();
 
+    // Slice-scoped SSE reloads: each event names the data that changed, so we
+    // only refetch the affected slices (a full 9-request reload on every event
+    // could exhaust the API rate limit and blank the UI).
+    const SSE_SLICES: Record<string, Array<'tasks' | 'lists' | 'folders' | 'timelines' | 'trash'>> = {
+      tasks:     ['tasks'],
+      lists:     ['lists', 'tasks'],
+      folders:   ['folders', 'lists'],
+      timelines: ['timelines'],
+      trash:     ['trash'],
+    };
     let debounce: ReturnType<typeof setTimeout> | null = null;
-    connectSSE(() => {
+    let pendingSlices = new Set<'tasks' | 'lists' | 'folders' | 'timelines' | 'trash'>();
+    connectSSE((type) => {
+      if (type === 'workspaces') {
+        // Membership/visibility changed — the workspace list AND the scoped
+        // content may both be different now.
+        useWorkspaceStore.getState().loadWorkspaces();
+        (['tasks', 'lists', 'folders', 'timelines', 'trash'] as const).forEach(s => pendingSlices.add(s));
+      } else if (SSE_SLICES[type]) {
+        SSE_SLICES[type].forEach(s => pendingSlices.add(s));
+      } else {
+        return; // 'files' / 'meetings' — handled by their own screens
+      }
       if (debounce) clearTimeout(debounce);
-      const wsId = useWorkspaceStore.getState().currentWorkspaceId;
-      debounce = setTimeout(() => { loadFromApi(wsId ?? undefined); }, 500);
+      debounce = setTimeout(() => {
+        const slices = Array.from(pendingSlices);
+        pendingSlices = new Set();
+        const wsId = useWorkspaceStore.getState().currentWorkspaceId;
+        loadFromApi(wsId ?? undefined, { only: slices });
+      }, 500);
     });
 
     const onVisible = () => {
@@ -262,6 +287,23 @@ function AppLayout() {
       {modal === 'completed' && <CompletedModal onClose={() => setModal(null)} />}
       {modal === 'trash' && <TrashModal onClose={() => setModal(null)} />}
       <AIAssistant />
+
+      {/* Data-load failure surface: retries are automatic, but a persistent
+          failure must be visible — a silently empty sidebar looks like data
+          loss. The previous slices stay rendered while this is shown. */}
+      {loadError && (
+        <div style={{ position: 'fixed', bottom: 20, left: '50%', marginLeft: -170, width: 340, maxWidth: 'calc(100vw - 32px)', zIndex: 500, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, background: '#fff', border: '1px solid #e8e4f0', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', animation: 'menuIn 200ms ease both' }}>
+          <span style={{ color: '#ba1a1a', fontWeight: 600 }}>Couldn't refresh your data.</span>
+          <button
+            onClick={() => loadFromApi(currentWorkspaceId ?? undefined)}
+            style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 8, border: 'none', background: '#5e4dbb', color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#4d3da8')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#5e4dbb')}
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {workspacesLoaded && workspaces.length === 0 && !location.pathname.startsWith('/settings') && (
         <>
