@@ -20,7 +20,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { query, withTransaction } from './db';
 import { broadcastToUser } from './sse';
 import { resolveWorkspaceForUser } from './workspaceUtil';
-import { snapshotListToTrash, snapshotTimelineToTrash, collectDescendantListIds } from './trashUtil';
+import { softDeleteListTree, snapshotTimelineToTrash } from './trashUtil';
 import { extractTextFromBuffer } from './fileText';
 import { UPLOAD_DIR } from './routes/files';
 
@@ -430,14 +430,7 @@ export const aiTools: AiTool[] = [
       if (!owned.rows.length) return fail('list not found');
       // Soft delete: snapshot the list (and nested sublists) to trash, exactly
       // like deleting from the UI, so the user can restore it for 30 days.
-      const descendants = await collectDescendantListIds(query, listId);
-      const allIds = [listId, ...descendants];
-      await withTransaction(async (client) => {
-        const exec = (text: string, params?: unknown[]) => client.query(text, params);
-        for (const id of allIds) await snapshotListToTrash(exec, id);
-        await client.query(`DELETE FROM tasks WHERE list_id = ANY($1::varchar[])`, [allIds]);
-        await client.query(`DELETE FROM lists WHERE id = ANY($1::varchar[])`, [allIds]);
-      });
+      await softDeleteListTree(listId);
       broadcastToUser(userId, 'lists');
       broadcastToUser(userId, 'trash');
       return ok(`Deleted list "${owned.rows[0].name}" (moved to trash)`, `Deleted list "${owned.rows[0].name}"`);

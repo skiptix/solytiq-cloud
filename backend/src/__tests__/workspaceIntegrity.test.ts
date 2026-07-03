@@ -116,6 +116,50 @@ describe('snapshotListToTrash', () => {
     expect(await snapshotListToTrash(exec, 'list_gone')).toBe(false);
     expect(calls).toHaveLength(1);
   });
+
+  it('captures tasks whose section was deleted (section_id NULL) instead of dropping them', async () => {
+    const listRow = {
+      id: 'list_1', user_id: 'owner-9', name: 'L', emoji: null, color: null,
+      color_bg: null, subtitle: null, is_public: false, folder_id: null,
+      position: 0, created_at: '2026-01-01', parent_task_id: null, depth: 0,
+      workspace_id: 'ws_1',
+    };
+    const sectionRow = { id: 'sec_1', list_id: 'list_1', label: 'Tasks', emoji: null, position: 0 };
+    const orphanTask = {
+      id: '7', user_id: 'owner-9', title: 'Orphan', note: null, checked: false,
+      deadline: null, time_val: null, priority: null, badge: null, source: 'list',
+      list_id: 'list_1', section_id: null, position: 0, created_at: '2026-01-02',
+      linked_list_id: null, linked_list_type: null,
+    };
+    const { exec, calls } = makeExec([[listRow], [sectionRow], [orphanTask], []]);
+
+    expect(await snapshotListToTrash(exec, 'list_1')).toBe(true);
+    const data = JSON.parse(calls[calls.length - 1].params?.[2] as string);
+    // The delete path hard-deletes every task of the list, so an unsectioned
+    // task missing from the snapshot would be permanently unrecoverable.
+    expect(data.sections[0].tasks.map((t: { id: string }) => t.id)).toContain('7');
+  });
+
+  it('synthesizes a section for unsectioned tasks when the list has none', async () => {
+    const listRow = {
+      id: 'list_2', user_id: 'owner-9', name: 'L2', emoji: null, color: null,
+      color_bg: null, subtitle: null, is_public: false, folder_id: null,
+      position: 0, created_at: '2026-01-01', parent_task_id: null, depth: 0,
+      workspace_id: 'ws_1',
+    };
+    const orphanTask = {
+      id: '8', user_id: 'owner-9', title: 'Orphan2', note: null, checked: false,
+      deadline: null, time_val: null, priority: null, badge: null, source: 'list',
+      list_id: 'list_2', section_id: null, position: 0, created_at: '2026-01-02',
+      linked_list_id: null, linked_list_type: null,
+    };
+    const { exec, calls } = makeExec([[listRow], [], [orphanTask], []]);
+
+    expect(await snapshotListToTrash(exec, 'list_2')).toBe(true);
+    const data = JSON.parse(calls[calls.length - 1].params?.[2] as string);
+    expect(data.sections).toHaveLength(1);
+    expect(data.sections[0].tasks.map((t: { id: string }) => t.id)).toContain('8');
+  });
 });
 
 describe('snapshotTimelineToTrash', () => {

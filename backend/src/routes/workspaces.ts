@@ -175,12 +175,20 @@ router.put('/:id', async (req: Request, res: Response) => {
     res.json({ workspace: sanitizeWorkspace(result.rows[0]) });
     broadcastToUser(req.userId!, 'workspaces');
     if (restrict.length > 0) { broadcastToUser(req.userId!, 'folders'); broadcastToUser(req.userId!, 'lists'); broadcastToUser(req.userId!, 'timelines'); }
-    for (const strandedId of strandedUserIds) {
-      broadcastToUser(strandedId, 'workspaces');
-      broadcastToUser(strandedId, 'lists');
-      broadcastToUser(strandedId, 'timelines');
-      broadcastToUser(strandedId, 'folders');
-      broadcastToUser(strandedId, 'tasks');
+    if (strandedUserIds.length > 0) {
+      // The stranded users' content just left this workspace — they AND the
+      // remaining members all see a different workspace now.
+      const members = await query<{ user_id: string }>(
+        `SELECT user_id FROM workspace_members WHERE workspace_id = $1`, [id]
+      );
+      const notify = new Set<string>([...strandedUserIds, ...members.rows.map((m) => m.user_id)]);
+      for (const uid of notify) {
+        broadcastToUser(uid, 'workspaces');
+        broadcastToUser(uid, 'lists');
+        broadcastToUser(uid, 'timelines');
+        broadcastToUser(uid, 'folders');
+        broadcastToUser(uid, 'tasks');
+      }
     }
   } catch (err) {
     console.error('workspaces PUT error:', err);
@@ -198,9 +206,18 @@ router.delete('/:id', async (req: Request, res: Response) => {
       res.status(403).json({ error: 'Only the owner can delete this workspace' }); return;
     }
 
-    // Everyone whose data/view is affected gets notified afterwards.
+    // Everyone whose data/view is affected gets notified afterwards — members
+    // AND non-member contributors (a public workspace accepts content from any
+    // user; their items land in their own trash and they must hear about it).
     const memberRows = await query<{ user_id: string }>(
-      `SELECT user_id FROM workspace_members WHERE workspace_id = $1`,
+      `SELECT user_id FROM workspace_members WHERE workspace_id = $1
+       UNION
+       SELECT user_id FROM (
+         SELECT user_id FROM lists     WHERE workspace_id = $1
+         UNION SELECT user_id FROM timelines WHERE workspace_id = $1
+         UNION SELECT user_id FROM folders   WHERE workspace_id = $1
+         UNION SELECT user_id FROM tasks     WHERE workspace_id = $1
+       ) contributors`,
       [id]
     );
 
@@ -360,6 +377,10 @@ router.delete('/:id/members/:userId', async (req: Request, res: Response) => {
     // they can no longer open would strand it (invisible everywhere, not in
     // trash, yet still visible to the user-scoped AI tools).
     const wsStillVisibleToUser = existing.rows[0].visibility === 'public';
+    const remainingMembers = await query<{ user_id: string }>(
+      `SELECT user_id FROM workspace_members WHERE workspace_id = $1 AND user_id <> $2`,
+      [id, userId]
+    );
     await withTransaction(async (client) => {
       const exec = (text: string, params?: unknown[]) => client.query(text, params);
       if (!wsStillVisibleToUser) {
@@ -369,11 +390,16 @@ router.delete('/:id/members/:userId', async (req: Request, res: Response) => {
     });
     res.json({ ok: true });
 
-    broadcastToUser(userId, 'workspaces');
-    broadcastToUser(userId, 'lists');
-    broadcastToUser(userId, 'timelines');
-    broadcastToUser(userId, 'folders');
-    broadcastToUser(userId, 'tasks');
+    // Notify the removed member AND the remaining members — the member's
+    // shared content just left this workspace, so everyone's view changed.
+    const notify = new Set<string>([userId, ...remainingMembers.rows.map((m) => m.user_id)]);
+    for (const uid of notify) {
+      broadcastToUser(uid, 'workspaces');
+      broadcastToUser(uid, 'lists');
+      broadcastToUser(uid, 'timelines');
+      broadcastToUser(uid, 'folders');
+      broadcastToUser(uid, 'tasks');
+    }
   } catch (err) {
     console.error('workspace members DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });

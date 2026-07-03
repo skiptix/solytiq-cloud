@@ -8,6 +8,7 @@
 // these camelCase fields.
 // ---------------------------------------------------------------------------
 
+import { query, withTransaction } from './db';
 import type { QueryExec } from './workspaceUtil';
 
 interface ListRowLike {
@@ -96,6 +97,28 @@ interface FolderRowLike {
   workspace_id: string | null;
 }
 
+/**
+ * Soft-delete a whole list tree: snapshot the root list and every nested
+ * sublist into trash, then hard-delete their tasks and list rows — all
+ * atomically. Hard-deleting the tasks (instead of relying on FK SET NULL)
+ * prevents orphaned ghost rows that only the AI tools could still see.
+ * Returns the number of descendant sublists removed alongside the root.
+ * Callers are responsible for the ownership check.
+ */
+export async function softDeleteListTree(rootListId: string): Promise<number> {
+  const descendantIds = await collectDescendantListIds(query, rootListId);
+  const allListIds = [rootListId, ...descendantIds];
+  await withTransaction(async (client) => {
+    const exec: QueryExec = (text, params) => client.query(text, params);
+    for (const id of allListIds) {
+      await snapshotListToTrash(exec, id);
+    }
+    await client.query('DELETE FROM tasks WHERE list_id = ANY($1::varchar[])', [allListIds]);
+    await client.query('DELETE FROM lists WHERE id = ANY($1::varchar[])', [allListIds]);
+  });
+  return descendantIds.length;
+}
+
 /** Recursively collect the ids of every sublist nested under a list. */
 export async function collectDescendantListIds(exec: QueryExec, rootId: string): Promise<string[]> {
   const out = new Set<string>();
@@ -165,6 +188,22 @@ export async function snapshotListToTrash(exec: QueryExec, listId: string): Prom
     tasksBySection[key].push(taskData(row));
   }
 
+  // Tasks without a section (their section was deleted → FK SET NULL) must
+  // still be captured: the delete path hard-deletes every task of the list,
+  // so anything missing from the snapshot would be unrecoverable. Fold them
+  // into the first section, synthesizing one if the list has none.
+  const sectionRows = [...(sectionsRes.rows as unknown as SectionRowLike[])];
+  const unsectioned = tasksBySection['__none__'] ?? [];
+  if (unsectioned.length > 0) {
+    if (sectionRows.length === 0) {
+      const fallbackId = `section_trash_${l.id}`;
+      sectionRows.push({ id: fallbackId, list_id: l.id, label: 'Tasks', emoji: null, position: 0 });
+      tasksBySection[fallbackId] = [];
+    }
+    const firstId = sectionRows[0].id;
+    tasksBySection[firstId] = [...(tasksBySection[firstId] ?? []), ...unsectioned];
+  }
+
   const data = {
     id:           l.id,
     userId:       l.user_id,
@@ -180,7 +219,7 @@ export async function snapshotListToTrash(exec: QueryExec, listId: string): Prom
     createdAt:    l.created_at,
     parentTaskId: l.parent_task_id ?? null,
     depth:        l.depth ?? 0,
-    sections: (sectionsRes.rows as unknown as SectionRowLike[]).map((s) => ({
+    sections: sectionRows.map((s) => ({
       id:       s.id,
       listId:   s.list_id,
       label:    s.label,

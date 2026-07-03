@@ -6,7 +6,7 @@ import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, wwarn, werr } from '../workspaceUtil';
-import { snapshotListToTrash, collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
+import { softDeleteListTree, collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors } from '../visibility';
 
 const router = Router();
@@ -558,27 +558,12 @@ router.delete('/:listId', async (req: Request, res: Response) => {
       return;
     }
 
-    // Snapshot the list AND every nested sublist — deleting the tree without
-    // snapshotting descendants would destroy them unrecoverably (their tasks
-    // used to be orphaned with a NULL list_id, leaving invisible ghost rows
-    // that only the AI assistant could still see).
-    const descendantIds = await collectDescendantListIds(listId);
-    const allListIds = [listId, ...descendantIds];
+    // Soft delete: the list AND every nested sublist are snapshotted to trash,
+    // then their tasks and list rows are removed atomically (shared helper —
+    // the AI delete_list tool uses the exact same path).
+    const sublistCount = await softDeleteListTree(listId);
 
-    // Snapshot-to-trash and delete must be atomic: we never want to delete the
-    // list without its trash snapshot, nor keep a snapshot of a list we failed
-    // to delete. Tasks are hard-deleted (they live on in the snapshots) so no
-    // orphaned rows with a NULL list_id are left behind.
-    await withTransaction(async (client) => {
-      const exec = (text: string, params?: unknown[]) => client.query(text, params);
-      for (const id of allListIds) {
-        await snapshotListToTrash(exec, id);
-      }
-      await client.query('DELETE FROM tasks WHERE list_id = ANY($1::varchar[])', [allListIds]);
-      await client.query('DELETE FROM lists WHERE id = ANY($1::varchar[])', [allListIds]);
-    });
-
-    wlog(`list DELETE ✓ id=${listId} (+${descendantIds.length} sublist(s)) → trashed by user ${req.userId}`);
+    wlog(`list DELETE ✓ id=${listId} (+${sublistCount} sublist(s)) → trashed by user ${req.userId}`);
     res.json({ success: true });
     broadcastToUser(req.userId!, 'lists');
     broadcastToUser(req.userId!, 'trash');

@@ -46,6 +46,10 @@ let currentLoadId = 0;
 export type LoadSlice = 'tasks' | 'lists' | 'folders' | 'timelines' | 'trash';
 const ALL_SLICES: LoadSlice[] = ['tasks', 'lists', 'folders', 'timelines', 'trash'];
 const MAX_LOAD_RETRIES = 3;
+// Core slices that failed their last (post-retry) load. loadError stays up
+// until every slice in here is successfully refetched — a partial reload of
+// OTHER slices must not clear the banner while a failed slice is still stale.
+const failedSlices = new Set<LoadSlice>();
 
 function getScopedWorkspaceId(workspaceId?: string): string | undefined {
   return workspaceId ?? useWorkspaceStore.getState().currentWorkspaceId ?? undefined;
@@ -600,11 +604,14 @@ const useAppStore = create<AppState>()(
           // A failed core fetch (429 / network blip) must never look like data
           // deletion: the previous slice is kept (its update key was skipped),
           // and we retry with backoff before surfacing a visible error.
-          const coreFailed =
-            (slices.has('tasks') && !tasksRes) ||
-            (slices.has('lists') && !listsRes) ||
-            (slices.has('folders') && !foldersRes) ||
-            (slices.has('timelines') && !timelinesRes);
+          const sliceSucceeded: Record<Exclude<LoadSlice, 'trash'>, boolean> = {
+            tasks: !!tasksRes,
+            lists: !!listsRes,
+            folders: !!foldersRes,
+            timelines: !!timelinesRes,
+          };
+          const coreFailed = (Object.keys(sliceSucceeded) as Array<Exclude<LoadSlice, 'trash'>>)
+            .some((s) => slices.has(s) && !sliceSucceeded[s]);
           if (coreFailed && attempt < MAX_LOAD_RETRIES) {
             const delay = 1000 * 2 ** attempt;
             setTimeout(() => {
@@ -612,10 +619,14 @@ const useAppStore = create<AppState>()(
               get().loadFromApi(scopedWorkspaceId, { only: Array.from(slices), attempt: attempt + 1 });
             }, delay);
             update.listsLoading = slices.has('lists'); // keep the loading state while retrying
-            update.loadError = false;
           } else {
+            for (const s of Object.keys(sliceSucceeded) as Array<Exclude<LoadSlice, 'trash'>>) {
+              if (!slices.has(s)) continue; // not requested — its status is unchanged
+              if (sliceSucceeded[s]) failedSlices.delete(s);
+              else failedSlices.add(s);
+            }
             update.listsLoading = false;
-            update.loadError = Boolean(coreFailed);
+            update.loadError = failedSlices.size > 0;
           }
           set(update as AppState);
         } catch {
