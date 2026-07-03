@@ -30,6 +30,7 @@ import milestoneAttachmentsRouter from './routes/milestoneAttachments';
 import tokensRouter from './routes/tokens';
 import oauthRouter from './routes/oauth';
 import mcpRouter from './routes/mcp';
+import adminReadApiRouter from './routes/adminReadApi';
 import { getPublicBaseUrl } from './publicUrl';
 import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
@@ -145,6 +146,7 @@ app.use('/api/meetings',   meetingsRouter);
 app.use('/api/caldav',     caldavManageRouter);
 app.use('/api/tokens',     tokensRouter);
 app.use('/api/oauth',      oauthRouter);
+app.use('/api/admin-read', adminReadApiRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
@@ -590,6 +592,25 @@ async function runMigrations() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_user_idx ON api_tokens(user_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_hash_idx ON api_tokens(token_hash)`);
+
+
+
+  // Instance-wide read-only API keys created by admins for external reporting tools.
+  // Only hashes are stored; generated secrets are shown once in the admin UI.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_api_keys (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name         VARCHAR(100) NOT NULL,
+      key_hash     VARCHAR(100) NOT NULL UNIQUE,
+      key_prefix   VARCHAR(40)  NOT NULL,
+      created_by   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      last_used_at TIMESTAMPTZ,
+      revoked_at   TIMESTAMPTZ,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS admin_api_keys_hash_idx ON admin_api_keys(key_hash)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS admin_api_keys_active_idx ON admin_api_keys(revoked_at) WHERE revoked_at IS NULL`);
 
   // OAuth 2.1 for the Claude MCP connector. Registered clients (Dynamic Client
   // Registration) and single-use, PKCE-bound authorization codes.
