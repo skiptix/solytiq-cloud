@@ -611,6 +611,9 @@ async function runMigrations() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS admin_api_keys_hash_idx ON admin_api_keys(key_hash)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS admin_api_keys_active_idx ON admin_api_keys(revoked_at) WHERE revoked_at IS NULL`);
+  // Per-key permission scopes (JSONB array). Existing keys were read-only, so
+  // they inherit ["read"] to preserve their exact prior capability.
+  await pool.query(`ALTER TABLE admin_api_keys ADD COLUMN IF NOT EXISTS scopes JSONB NOT NULL DEFAULT '["read"]'::jsonb`);
 
   // OAuth 2.1 for the Claude MCP connector. Registered clients (Dynamic Client
   // Registration) and single-use, PKCE-bound authorization codes.

@@ -43,7 +43,8 @@ solytiq-cloud/
 │   │       ├── files.ts           # /api/files — upload/download (multer), share settings
 │   │       ├── taskAttachments.ts # /api/tasks/:taskId/attachments — upload/link files to tasks
 │   │       ├── gps.ts             # /api/gps — GPX/FIT upload, edit, route planning, POIs
-│   │       ├── admin.ts           # /api/admin — users, roles, nuke, settings
+│   │       ├── admin.ts           # /api/admin — users, roles, nuke, settings, admin API keys (scoped)
+│   │       ├── adminReadApi.ts    # /api/admin-read — instance-wide Admin API (scoped read + write) via admin API keys
 │   │       └── ai.ts              # /api/ai — OpenRouter chat, sessions, file uploads, usage
 │   ├── init.sql              # (legacy) initial schema — migrations now in index.ts
 │   ├── tsconfig.json
@@ -451,3 +452,4 @@ These issues were identified and fixed (see `security_report.md`). Do not regres
 - **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
+- **Admin API is scoped** — `admin_api_keys` are instance-wide credentials (created by admins, hashed, revocable) that carry a `scopes` JSONB array. `routes/adminReadApi.ts` (mounted at `/api/admin-read`) gates each route behind a scope from `ADMIN_API_SCOPES` in `adminApiKey.ts` (`read`, `users`, `workspaces`, `folders`, `lists`, `timelines`, `meetings`); the creation wizard (`modals/AdminApiKeyWizard.tsx`) toggles them. Beyond `read` (the export), it supports full create/update/delete for those resources on behalf of any user — the target owner comes from an explicit, validated `ownerId` (defaulting to the key creator), never trusted blindly. Add new scopes to `ADMIN_API_SCOPES` and `ADMIN_API_FEATURES` together.

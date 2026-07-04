@@ -144,7 +144,7 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 
 ## 🏗️ Architecture & Core Concepts
 
-- **Version Number** — Bump `v1.25.1` in both places in `frontend/src/components/Sidebar.tsx` on every deploy. Use semantic versioning.
+- **Version Number** — Bump `v1.27.0` in both places in `frontend/src/components/Sidebar.tsx` on every deploy. Use semantic versioning.
 - **Migrations in code, not files** — `runMigrations()` in `index.ts` uses guards and idempotent data heals/seeds.
 - **No ORM** — Raw SQL keeps queries explicit and avoids N+1 pitfalls; use `JOIN` freely.
 - **Zustand over Redux** — Minimal boilerplate; each store is a standalone module. Stores call the API client directly; components call store actions.
@@ -167,6 +167,117 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **Security** — IDOR prevention using verified JWT `userId`, strict file path traversal checks, `bcryptjs` for password and share-link hashing, and transaction-based quota checks.
 - **Rate Limiting** — Configured in three tiers (`apiLimiter` for general API, `authLimiter` for logins/2FA, and `setupLimiter` for registration/nuke endpoints).
 - **Testing** — Vitest is the standard for both frontend and backend suites (`npm test`).
+
+---
+
+## 🔑 Admin API
+
+The **Admin API** is an instance-wide REST API for external tools and automations. It is authenticated with **admin API keys** (not user session tokens) and can both **read** all data across the instance and **write** — create, update and delete users, workspaces, folders, lists, items, timelines, milestones and meetings — on behalf of any user.
+
+Base URL: `https://<your-host>/api/admin-read`
+
+### Managing keys
+
+Admin API keys are managed from **Settings → API** (admins only):
+
+1. Click **New API key** to open the creation wizard.
+2. Give the key a name and toggle exactly which **permissions** it should have.
+3. Click **Generate key**. The secret (`solytiq_admin_…`) is shown **once** — copy it immediately. Only a SHA‑256 hash is stored, so it can never be recovered later.
+4. Revoke a key any time from the **Active keys** list; its permissions are shown as chips.
+
+Keys created before this feature existed keep working as **read‑only** (`read` permission only).
+
+### Permissions (scopes)
+
+Each key carries a set of scopes chosen in the wizard. A request to an endpoint returns **403** if the key lacks the required scope. Grant only what an integration needs.
+
+| Scope | Grants |
+|---|---|
+| `read` | Read everything via `GET /export` |
+| `users` | Create / update / delete user accounts |
+| `workspaces` | Create / update / delete workspaces |
+| `folders` | Create / update / delete folders |
+| `lists` | Create / manage lists, sections and items (tasks) |
+| `timelines` | Create / manage timelines and milestones |
+| `meetings` | Create / manage calendar meetings |
+
+### Authentication
+
+Send the key as a Bearer token (or an `x-api-key` header):
+
+```bash
+curl -H "Authorization: Bearer solytiq_admin_XXXXXXXX…" \
+  "https://<your-host>/api/admin-read/export"
+```
+
+### Targeting a user (`ownerId`)
+
+Because a key is an **instance‑level** admin credential (not a single user), every **write** that creates user‑owned content accepts an optional `ownerId` — the id of the user the content belongs to. When omitted, it defaults to the admin who created the key. `ownerId` is always validated against a real user, and new lists/folders/timelines land in that user's Personal workspace unless a `workspaceId` they can access is supplied.
+
+### Endpoints
+
+**Read** (scope `read`)
+- `GET /export?workspaceId=&userId=` — full instance snapshot (users, workspaces, folders, lists, sections, items, timelines, milestones, meetings, timings and attachment metadata). Both filters are optional. Secrets (password hashes, file paths) are never included.
+
+**Users** (scope `users`)
+- `POST /users` — `{ username, password, email?, fullName?, isAdmin? }`
+- `PUT /users/:id` — `{ username?, password?, fullName?, isAdmin? }` (changing the password invalidates that user's sessions)
+- `DELETE /users/:id`
+
+**Workspaces** (scope `workspaces`)
+- `POST /workspaces` — `{ ownerId?, name, description?, emoji?, visibility? }`
+- `PUT /workspaces/:id` — `{ name?, description?, emoji?, visibility? }`
+- `DELETE /workspaces/:id` — refused (409) while the workspace still holds lists, folders or timelines
+
+**Folders** (scope `folders`)
+- `POST /folders` — `{ ownerId?, workspaceId?, name, emoji?, isPublic? }`
+- `PUT /folders/:id` — `{ name?, emoji?, isPublic? }`
+- `DELETE /folders/:id`
+
+**Lists · sections · items** (scope `lists`)
+- `POST /lists` — `{ ownerId?, workspaceId?, folderId?, name, emoji?, isPublic? }` → returns the list plus a `defaultSectionId`
+- `PUT /lists/:id` — `{ name?, emoji?, isPublic? }`
+- `DELETE /lists/:id` — soft‑deletes to trash (30‑day restore)
+- `POST /lists/:id/sections` — `{ label, emoji? }`
+- `POST /items` — `{ ownerId?, title, listId?, sectionId?, note?, deadline?, priority?, workspaceId? }` — a dashboard task, or a list item when `listId` + `sectionId` are given
+- `PUT /items/:id` — `{ title?, note?, deadline?, priority?, checked? }`
+- `DELETE /items/:id`
+
+**Timelines · milestones** (scope `timelines`)
+- `POST /timelines` — `{ ownerId?, workspaceId?, folderId?, name, emoji?, subtitle?, color?, layout?, isPublic? }`
+- `PUT /timelines/:id` — `{ name?, emoji?, subtitle?, color?, layout?, isPublic? }`
+- `DELETE /timelines/:id` — soft‑deletes to trash
+- `POST /timelines/:id/milestones` — `{ title, date?, time?, status?, emoji?, color?, description? }`
+- `PUT /milestones/:id` — `{ title?, date?, time?, status?, emoji?, color?, description? }`
+- `DELETE /milestones/:id`
+
+**Meetings** (scope `meetings`)
+- `POST /meetings` — `{ ownerId?, title, date, startTime?, endTime?, allDay?, location?, description?, color? }`
+- `PUT /meetings/:id` — same fields as create
+- `DELETE /meetings/:id`
+
+Dates are `YYYY-MM-DD`, times are 24‑hour `HH:MM`, and task `priority` is one of `High` / `Medium` / `Low`.
+
+### Examples
+
+Create a list for a specific user, then add an item to its default section:
+
+```bash
+# Create the list
+curl -X POST "https://<your-host>/api/admin-read/lists" \
+  -H "Authorization: Bearer solytiq_admin_XXXXXXXX…" \
+  -H "Content-Type: application/json" \
+  -d '{"ownerId":"<user-id>","name":"Q3 Roadmap","emoji":"🗺️"}'
+# → { "list": { "id": "list_…" }, "defaultSectionId": "sec_…" }
+
+# Add an item to it
+curl -X POST "https://<your-host>/api/admin-read/items" \
+  -H "Authorization: Bearer solytiq_admin_XXXXXXXX…" \
+  -H "Content-Type: application/json" \
+  -d '{"ownerId":"<user-id>","listId":"list_…","sectionId":"sec_…","title":"Ship v2","priority":"High","deadline":"2026-09-01"}'
+```
+
+> **Security:** treat admin API keys like passwords. They can read and modify **all** users' data within the scopes granted. Store them in a secret manager, prefer the narrowest set of permissions, rotate periodically, and revoke unused keys.
 
 ---
 
