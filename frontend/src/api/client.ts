@@ -376,10 +376,14 @@ export const apiDeleteFolderFromTrash = (trashId: number) =>
 
 // Admin
 
+/** Admin API permission scopes — must match ADMIN_API_SCOPES on the backend. */
+export type AdminApiScope = 'read' | 'users' | 'workspaces' | 'folders' | 'lists' | 'timelines' | 'meetings';
+
 export interface AdminReadApiKey {
   id: string;
   name: string;
   keyPrefix: string;
+  scopes: AdminApiScope[];
   lastUsedAt: string | null;
   revokedAt: string | null;
   createdAt: string;
@@ -388,8 +392,8 @@ export interface AdminReadApiKey {
 export const apiGetAdminReadApiKeys = () =>
   apiFetch<{ keys: AdminReadApiKey[] }>('/admin/api-keys');
 
-export const apiCreateAdminReadApiKey = (name: string) =>
-  apiFetch<{ key: AdminReadApiKey; secret: string }>('/admin/api-keys', { method: 'POST', body: JSON.stringify({ name }) });
+export const apiCreateAdminReadApiKey = (name: string, scopes: AdminApiScope[]) =>
+  apiFetch<{ key: AdminReadApiKey; secret: string }>('/admin/api-keys', { method: 'POST', body: JSON.stringify({ name, scopes }) });
 
 export const apiRevokeAdminReadApiKey = (id: string) =>
   apiFetch<{ success: boolean }>(`/admin/api-keys/${id}`, { method: 'DELETE' });

@@ -4,8 +4,10 @@ import { useMobile } from '../hooks/useBreakpoint';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import useAIStore from '../store/useAIStore';
-import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiUpdateAppSettingsMcp, apiGetAIUsage, apiGetAdminReadApiKeys, apiCreateAdminReadApiKey, apiRevokeAdminReadApiKey, type AdminReadApiKey, type AIUsageDay, type AIUsageModel, type AIUsageTotals } from '../api/client';
+import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiUpdateAppSettingsMcp, apiGetAIUsage, apiGetAdminReadApiKeys, apiRevokeAdminReadApiKey, type AdminReadApiKey, type AIUsageDay, type AIUsageModel, type AIUsageTotals } from '../api/client';
 import Icon from '../components/Icon';
+import AdminApiKeyWizard from '../modals/AdminApiKeyWizard';
+import { featureForScope } from '../modals/adminApiFeatures';
 
 interface UserEntry {
   id: string;
@@ -86,13 +88,10 @@ export default function SettingsScreen() {
   const [nukePw, setNukePw] = useState('');
 
 
-  // Admin read API keys
+  // Admin API keys
   const [apiKeys, setApiKeys] = useState<AdminReadApiKey[]>([]);
   const [apiKeysLoading, setApiKeysLoading] = useState(false);
-  const [apiKeyName, setApiKeyName] = useState('Reporting integration');
-  const [apiKeySecret, setApiKeySecret] = useState<string | null>(null);
-  const [apiKeySaving, setApiKeySaving] = useState(false);
-  const [apiKeyCopied, setApiKeyCopied] = useState(false);
+  const [showApiKeyWizard, setShowApiKeyWizard] = useState(false);
 
   // Users state
   const [users, setUsers] = useState<UserEntry[]>([]);
@@ -231,31 +230,13 @@ export default function SettingsScreen() {
       .finally(() => setApiKeysLoading(false));
   }, [activeTab, isAdmin]);
 
-  const apiBaseUrl = `${window.location.origin}/api/admin-read/export`;
-  const curlExample = `curl -H "Authorization: Bearer ${apiKeySecret ?? '<ADMIN_READ_API_KEY>'}" "${apiBaseUrl}?workspaceId=<workspace-id>&userId=<user-id>"`;
-
-  const handleCreateApiKey = async () => {
-    setApiKeySaving(true);
-    setApiKeySecret(null);
-    try {
-      const res = await apiCreateAdminReadApiKey(apiKeyName.trim() || 'Admin read API key');
-      setApiKeys(prev => [res.key, ...prev]);
-      setApiKeySecret(res.secret);
-    } finally {
-      setApiKeySaving(false);
-    }
-  };
+  const apiOrigin = `${window.location.origin}/api/admin-read`;
+  const exportExample = `curl -H "Authorization: Bearer <ADMIN_API_KEY>" \\\n  "${apiOrigin}/export?workspaceId=<workspace-id>&userId=<user-id>"`;
+  const writeExample = `curl -X POST "${apiOrigin}/lists" \\\n  -H "Authorization: Bearer <ADMIN_API_KEY>" \\\n  -H "Content-Type: application/json" \\\n  -d '{"ownerId":"<user-id>","name":"Roadmap","emoji":"🗺️"}'`;
 
   const handleRevokeApiKey = async (id: string) => {
     await apiRevokeAdminReadApiKey(id);
     setApiKeys(prev => prev.filter(k => k.id !== id));
-  };
-
-  const copyApiSecret = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setApiKeyCopied(true);
-      setTimeout(() => setApiKeyCopied(false), 2000);
-    });
   };
 
   const handleSaveSystem = async () => {
@@ -1059,53 +1040,55 @@ export default function SettingsScreen() {
             {/* ── API Tab ── */}
             {activeTab === 'api' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                {sectionLabel('Admin Read API')}
+                {sectionLabel('Admin API',
+                  <button
+                    onClick={() => setShowApiKeyWizard(true)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'background 150ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#ede9ff'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                  >
+                    <Icon name="add" size={14} color="#5e4dbb" />
+                    New API key
+                  </button>
+                )}
                 <div style={card}>
-                  <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <div>
-                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22' }}>Instance-wide read access</div>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 3 }}>Admin keys can read all users, workspaces, folders, lists, items, timelines, milestones, timing fields, and attachment metadata. Secrets are shown once and stored only as hashes.</div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 10, flexDirection: isMobile ? 'column' : 'row' }}>
-                      <input
-                        value={apiKeyName}
-                        onChange={e => setApiKeyName(e.target.value)}
-                        placeholder="Integration name"
-                        style={{ ...fi, background: '#fff', border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '10px 12px' }}
-                      />
-                      <button onClick={handleCreateApiKey} disabled={apiKeySaving} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#fff', background: apiKeySaving ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 10, padding: '10px 16px', cursor: apiKeySaving ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
-                        <Icon name="add" size={16} color="#fff" /> {apiKeySaving ? 'Generating…' : 'Generate key'}
-                      </button>
-                    </div>
-                    {apiKeySecret && (
-                      <div style={{ background: '#F5F3FF', border: '1px solid #e8e4f0', borderRadius: 12, padding: 12 }}>
-                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: '#5e4dbb', marginBottom: 6 }}>Copy this secret now</div>
-                        <code style={{ display: 'block', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', overflowWrap: 'anywhere' }}>{apiKeySecret}</code>
-                        <button onClick={() => copyApiSecret(apiKeySecret)} style={{ marginTop: 10, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: '#5e4dbb', background: '#fff', border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>{apiKeyCopied ? 'Copied' : 'Copy secret'}</button>
-                      </div>
-                    )}
+                  <div style={{ padding: '16px 18px' }}>
+                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22' }}>Instance-wide API access</div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 3 }}>Each key carries its own set of permissions, chosen when you create it. Grant a key only the features an integration needs — read/export, or create &amp; manage users, workspaces, folders, lists, timelines and meetings. Secrets are shown once and stored only as hashes.</div>
                   </div>
                 </div>
 
-                {sectionLabel('Request domain & example')}
+                {sectionLabel('Endpoints & examples')}
                 <div style={card}>
                   <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>Endpoint</div>
-                    <code style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, overflowWrap: 'anywhere' }}>{apiBaseUrl}</code>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>Optional filters: <b>workspaceId</b> and <b>userId</b>.</div>
-                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, overflowX: 'auto' }}>{curlExample}</pre>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>Base URL</div>
+                    <code style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, overflowWrap: 'anywhere' }}>{apiOrigin}</code>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 4 }}>Read everything (needs the <b>read</b> permission):</div>
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, overflowX: 'auto' }}>{exportExample}</pre>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 4 }}>Create a list for a user (needs the <b>lists</b> permission). Write endpoints accept an optional <b>ownerId</b> — the target user; it defaults to the admin who owns the key:</div>
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, overflowX: 'auto' }}>{writeExample}</pre>
                   </div>
                 </div>
 
                 {sectionLabel('Active keys')}
                 <div style={card}>
                   {apiKeysLoading ? <div style={{ ...row, justifyContent: 'center', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading…</div> : apiKeys.length === 0 ? <div style={{ ...row, justifyContent: 'center', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>No API keys yet.</div> : apiKeys.map(k => (
-                    <div key={k.id} style={{ ...row, borderBottom: '1px solid #f1ecf6' }}>
-                      <div style={{ minWidth: 0 }}>
+                    <div key={k.id} style={{ ...row, borderBottom: '1px solid #f1ecf6', flexWrap: 'wrap', gap: 10 }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22' }}>{k.name}</div>
                         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{k.keyPrefix} · Created {new Date(k.createdAt).toLocaleDateString()} · Last used {k.lastUsedAt ? relativeTime(k.lastUsedAt) : 'never'}</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+                          {k.scopes.map(s => {
+                            const f = featureForScope(s);
+                            return (
+                              <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: '1px solid #e8e4f0', borderRadius: 9999, padding: '3px 9px' }}>
+                                <Icon name={f?.icon ?? 'key'} size={12} color="#5e4dbb" /> {f?.label ?? s}
+                              </span>
+                            );
+                          })}
+                        </div>
                       </div>
-                      <button onClick={() => handleRevokeApiKey(k.id)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: '#ba1a1a', background: '#fff5f5', border: '1px solid #ffdad6', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>Revoke</button>
+                      <button onClick={() => handleRevokeApiKey(k.id)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: '#ba1a1a', background: '#fff5f5', border: '1px solid #ffdad6', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', alignSelf: 'flex-start' }}>Revoke</button>
                     </div>
                   ))}
                 </div>
@@ -1569,6 +1552,14 @@ export default function SettingsScreen() {
             )}
           </div>
         </div>
+      )}
+
+      {/* ── Admin API key wizard ── */}
+      {showApiKeyWizard && (
+        <AdminApiKeyWizard
+          onClose={() => setShowApiKeyWizard(false)}
+          onCreated={key => setApiKeys(prev => [key, ...prev])}
+        />
       )}
     </div>
   );
