@@ -46,6 +46,10 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 *   **Fluid Motion:** Every interaction—from dragging lists to toggling tasks—is animated for immediate feedback.
 *   **Typography:** *Hanken Grotesk* for modern headings and *Inter* for maximum readability.
 *   **Styling Engine:** Tailwind CSS v4 provides base styles, combined with inline `style={{}}` objects and design tokens.
+*   **Icons:** Material Symbols via the `<Icon>` component (`src/components/Icon.tsx`) — pass the symbol name as a string.
+*   **Privacy/visibility toggles:** two-button (lock/public) pattern; selected gets `#5e4dbb` border + `#f0edff` background + a check icon.
+*   **Date pickers:** Always use the shared `<CalendarPicker>` component (`src/components/CalendarPicker.tsx`) for *every* calendar/date field — never a native `<input type="date">` (it renders the OS picker, which breaks the design language and is locale-dependent). The established pattern is a trigger button (`calendar_today` icon + the formatted date or a placeholder + an `×` clear affordance) that toggles a `showExpiryCal`-style boolean, with `<CalendarPicker value={…} onChange={…} onClear={…} />` in an absolutely-positioned popover. See the expiry fields in `FilesScreen` and `ItemSettingsModal`, and the due-date field in `TaskDialog`, for reference.
+*   **Time pickers:** Likewise, always use the shared `<TimePicker>` component (`src/components/TimePicker.tsx`) for *every* time-of-day field — never a native `<input type="time">` (same OS-picker problem). It takes/returns a 24-hour `"HH:MM"` string and mirrors `CalendarPicker`'s chrome (same card, hour/minute scroll wheels with the selected value highlighted in `#5e4dbb`, and a **Now** / **Clear** footer). Wire it with the identical trigger-button + `showTime`-boolean + absolutely-positioned popover pattern as the date picker (a `schedule` icon + the `HH:MM` value or a `--:--`/placeholder). See the **Time** field in the `TimelineScreen` milestone editor and in `AddTimelineWizard` for reference.
 
 ---
 
@@ -149,17 +153,18 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **No ORM** — Raw SQL keeps queries explicit and avoids N+1 pitfalls; use `JOIN` freely.
 - **Zustand over Redux** — Minimal boilerplate; each store is a standalone module. Stores call the API client directly; components call store actions.
 - **Soft delete** — Deleted tasks, lists, folders, and timelines go to their respective `trash*` tables (JSONB payload) with a 30-day `expires_at`. The live tables have no `deleted_at` column.
-- **Task IDs are BIGINT** — Generated client-side as `Date.now()` (milliseconds). Per-user FK scoping prevents cross-user collisions.
+- **Task IDs are BIGINT** — Generated client-side as `Date.now()` (milliseconds). Per-user FK scoping prevents cross-user collisions; avoid relying on global uniqueness.
 - **Workspaces scope everything** — Lists, folders, tasks, and timelines carry a `workspace_id`. Every user gets an auto-seeded private "Personal" workspace. Workspace `visibility` plus `workspace_members` govern who can see shared content in-app.
 - **Two distinct notions of "public":**
   1. `is_public` on lists/folders/timelines = **in-app visibility to workspace members**.
-  2. `share_enabled` + `share_token` = **anonymous read-only link** for anyone on the internet (no login), optionally password-protected and/or time-limited.
+  2. `share_enabled` + `share_token` = **anonymous read-only link** for anyone on the internet (no login), optionally password-protected and/or time-limited. These are independent — enabling one does not enable the other.
 - **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
 - **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
 - **MCP Server** — Model Context Protocol server over Streamable HTTP. It exposes the shared tool registry to external agents (e.g. the Claude MCP connector) with bearer tokens minted via an OAuth 2.1 connector flow.
 - **Shared AI Tool Registry** — `backend/src/aiTools.ts` uses JSON-Schema specs and secure, user-scoped SQL handlers to prevent prompt injection.
+- **Admin API is scoped** — `admin_api_keys` are instance-wide credentials (created by admins, hashed, revocable) that carry a `scopes` JSONB array. `routes/adminReadApi.ts` (mounted at `/api/admin-read`) gates each route behind a scope from `ADMIN_API_SCOPES` in `adminApiKey.ts` (`read`, `users`, `workspaces`, `folders`, `lists`, `timelines`, `meetings`); the creation wizard (`modals/AdminApiKeyWizard.tsx`) toggles them. Beyond `read` (the export), it supports full create/update/delete for those resources on behalf of any user — the target owner comes from an explicit, validated `ownerId` (defaulting to the key creator), never trusted blindly. Add new scopes to `ADMIN_API_SCOPES` and `ADMIN_API_FEATURES` together.
 - **Mobile Responsiveness** — Every new component must work correctly on mobile (≥ 390px, e.g. iPhone 15 Pro) with mobile as an adaptive layer on top of desktop.
 - **Task Source Duality** — Tasks have a source duality (`'dash'` or `'list'`) which dictates the appropriate frontend store actions to use (`updateDashTask` vs `updateListTask`).
 - **Sublists & Linked Lists** — Created by having a list task link to another list via `linkedListId` and `linkedListType` properties.
