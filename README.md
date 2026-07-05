@@ -167,6 +167,7 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **Security** — IDOR prevention using verified JWT `userId`, strict file path traversal checks, `bcryptjs` for password and share-link hashing, and transaction-based quota checks.
 - **Rate Limiting** — Configured in three tiers (`apiLimiter` for general API, `authLimiter` for logins/2FA, and `setupLimiter` for registration/nuke endpoints).
 - **Testing** — Vitest is the standard for both frontend and backend suites (`npm test`).
+- **Admin API is scoped** — `admin_api_keys` are instance-wide credentials (created by admins, hashed, revocable) that carry a `scopes` JSONB array. `routes/adminReadApi.ts` (mounted at `/api/admin-read`) gates each route behind a scope from `ADMIN_API_SCOPES` in `adminApiKey.ts` (`read`, `users`, `workspaces`, `folders`, `lists`, `timelines`, `meetings`); the creation wizard (`modals/AdminApiKeyWizard.tsx`) toggles them. Beyond `read` (the export), it supports full create/update/delete for those resources on behalf of any user — the target owner comes from an explicit, validated `ownerId` (defaulting to the key creator), never trusted blindly. Add new scopes to `ADMIN_API_SCOPES` and `ADMIN_API_FEATURES` together.
 
 ---
 
