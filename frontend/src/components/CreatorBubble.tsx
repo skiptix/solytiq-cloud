@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import useMembersStore from '../store/useMembersStore';
 
@@ -18,9 +18,16 @@ interface CreatorBubbleProps {
 
 export default function CreatorBubble({ creatorId, taskHovered }: CreatorBubbleProps) {
   const member = useMembersStore(s => s.members[creatorId]);
+  const avatar = useMembersStore(s => s.avatars[creatorId]);
+  const ensureAvatar = useMembersStore(s => s.ensureAvatar);
   const [cardVisible, setCardVisible] = useState(false);
   const [cardPos, setCardPos] = useState({ x: 0, top: 0, above: false });
   const ref = useRef<HTMLDivElement>(null);
+
+  // Lazily pull this member's avatar (cached in the store) only when they render.
+  useEffect(() => {
+    if (member?.hasImage) ensureAvatar(creatorId);
+  }, [creatorId, member?.hasImage, ensureAvatar]);
 
   if (!member) return null;
 
@@ -58,8 +65,8 @@ export default function CreatorBubble({ creatorId, taskHovered }: CreatorBubbleP
           cursor: 'default',
         }}
       >
-        {member.profileImage
-          ? <img src={member.profileImage} alt={member.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        {avatar
+          ? <img src={avatar} alt={member.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <span style={{ ...avatarStyle, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 8, fontWeight: 700, color: '#fff' }}>{ini}</span>
         }
       </div>
@@ -90,8 +97,8 @@ export default function CreatorBubble({ creatorId, taskHovered }: CreatorBubbleP
               background: 'linear-gradient(135deg, #9d8dff 0%, #5e4dbb 100%)',
               overflow: 'hidden', flexShrink: 0,
             }}>
-              {member.profileImage
-                ? <img src={member.profileImage} alt={member.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              {avatar
+                ? <img src={avatar} alt={member.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 19, fontWeight: 700, color: '#fff' }}>{ini}</span>
               }
             </div>

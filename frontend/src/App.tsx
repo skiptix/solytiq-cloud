@@ -49,7 +49,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { lists, timelines, listsLoading, loadError, sidebarWidth, setSidebarWidth, loadFromApi, setLists, setFolders, setTimelines, updateList, moveTaskToList } = useAppStore();
+  const { lists, timelines, listsLoading, loadError, sidebarWidth, setSidebarWidth, loadFromApi, setLists, updateList, moveTaskToList } = useAppStore();
   const prevWorkspaceRef = useRef<string | null | undefined>(undefined);
   const [modal, setModal] = useState<'add' | 'completed' | 'trash' | null>(null);
   const isMobile = useMobile();
@@ -137,12 +137,15 @@ function AppLayout() {
     // the background (stale-while-revalidate). Blanking them here caused folder
     // and list routes to momentarily see empty data and redirect to the
     // dashboard — the "folder disappears on refresh" bug.
+    //
+    // We no longer blank the store on a switch either: `loadFromApi` fully
+    // replaces each slice on success and its load-ID/workspace guards discard
+    // stale writes, so the previous workspace's data stays visible (under the
+    // `listsLoading` indicator) until the new data lands. If the reload fails
+    // (e.g. a 429), the old data therefore remains instead of a blank sidebar
+    // that reads as data loss. Navigating to /dashboard below avoids showing a
+    // stale list/folder route from the previous workspace during the swap.
     const isSwitch = prev !== undefined && prev !== currentWorkspaceId;
-    if (isSwitch) {
-      setLists([]);
-      setFolders([]);
-      setTimelines([]);
-    }
 
     loadFromApi(currentWorkspaceId);
 

@@ -341,6 +341,50 @@ router.get('/members', authenticate, async (req: Request, res: Response) => {
   }
 });
 
+// Lightweight members list — the same rows as /members but WITHOUT the base64
+// `profile_image` blobs, which made the full payload ~100 KB and got refetched
+// on every page load / SSE reload (a real driver of the rate-limit pressure).
+// The members store uses this; avatars are lazy-loaded per member via
+// /members/:id/avatar only for members actually rendered on screen.
+router.get('/members/basic', authenticate, async (req: Request, res: Response) => {
+  try {
+    const result = await query<{ id: string; username: string; email: string; full_name: string | null; has_image: boolean; is_admin: boolean }>(
+      `SELECT id, username, email, full_name, (profile_image IS NOT NULL) AS has_image, is_admin
+       FROM users ORDER BY created_at ASC`
+    );
+    res.json({
+      members: result.rows.map(u => ({
+        id:       u.id,
+        username: u.username,
+        email:    req.user?.isAdmin ? u.email : undefined,
+        fullName: u.full_name,
+        hasImage: u.has_image,
+        isAdmin:  u.is_admin,
+      })),
+    });
+  } catch (err) {
+    console.error('members basic GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Single member's avatar (base64 data URL). Fetched lazily and cached client-side
+// so the full members list can stay small. Exposure matches /members, which
+// already returns every user's profile image to any authenticated user.
+router.get('/members/:id/avatar', authenticate, async (req: Request, res: Response) => {
+  try {
+    const result = await query<{ profile_image: string | null }>(
+      'SELECT profile_image FROM users WHERE id = $1',
+      [req.params.id]
+    );
+    if (result.rows.length === 0) { res.status(404).json({ error: 'User not found' }); return; }
+    res.json({ profileImage: result.rows[0].profile_image ?? null });
+  } catch (err) {
+    console.error('member avatar GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // 2FA Routes
 // ---------------------------------------------------------------------------

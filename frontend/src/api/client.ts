@@ -115,6 +115,14 @@ export const apiGetMe = () =>
 export const apiGetMembers = () =>
   apiFetch<{ members: Array<{ id: string; username: string; email: string; fullName: string | null; profileImage: string | null; isAdmin: boolean }> }>('/auth/members');
 
+// Lightweight members list (no base64 avatars) for the members store. Avatars are
+// fetched on demand via apiGetMemberAvatar for members actually shown on screen.
+export const apiGetMembersBasic = () =>
+  apiFetch<{ members: Array<{ id: string; username: string; email: string; fullName: string | null; hasImage: boolean; isAdmin: boolean }> }>('/auth/members/basic');
+
+export const apiGetMemberAvatar = (id: string) =>
+  apiFetch<{ profileImage: string | null }>(`/auth/members/${id}/avatar`);
+
 export const apiChangePassword = (currentPassword: string, newPassword: string) =>
   apiFetch<{ success: boolean }>('/auth/password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) });
 
