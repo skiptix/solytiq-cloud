@@ -55,6 +55,18 @@ const failedSlices = new Set<LoadSlice>();
 // alongside the initial mount load — would just refetch the same data, so it is
 // suppressed. Retries (attempt > 0) intentionally bypass this.
 const inFlightLoads = new Set<string>();
+// Per-slice "who's newest" ownership, keyed by the monotonic load id that most
+// recently recorded an outcome for that slice. A load's result for a given
+// slice is only applied if no NEWER load that also requested that same slice
+// has already landed. This is deliberately per-slice rather than one global
+// "latest call wins" gate: a narrow reload (e.g. an SSE 'tasks'-only refresh)
+// finishing after a full reload started must not discard the full reload's
+// still-valid 'lists'/'folders'/'timelines' results — a global gate did
+// exactly that, which could orphan a stale `failedSlices` entry forever
+// (nothing else was ever going to re-test that specific slice again) and left
+// the "Couldn't refresh your data" banner stuck even though every subsequent
+// request was succeeding.
+const sliceEpoch: Record<LoadSlice, number> = { tasks: 0, lists: 0, folders: 0, timelines: 0, trash: 0 };
 
 function getScopedWorkspaceId(workspaceId?: string): string | undefined {
   return workspaceId ?? useWorkspaceStore.getState().currentWorkspaceId ?? undefined;
@@ -558,15 +570,28 @@ const useAppStore = create<AppState>()(
             slices.has('trash')     ? apiGetTrashTimelines().catch(() => null)             : skip,
             slices.has('trash')     ? apiGetTrashMilestones().catch(() => null)            : skip,
           ]);
-          // Discard results if a newer load has been requested (e.g. workspace switched mid-load)
-          // or if this response was requested for a workspace that is no longer active.
-          if (myLoadId !== currentLoadId) return;
+          // A response is only irrelevant if the workspace changed underneath
+          // it (e.g. the user switched workspaces mid-load).
           if (scopedWorkspaceId !== getScopedWorkspaceId()) return;
+          // Claim per-slice ownership up front, before applying anything, and
+          // bump the epoch immediately. This is the single point where "who's
+          // authoritative for this slice" is decided, so an older, still-in-flight
+          // duplicate call can never land afterward and clobber a newer call's
+          // result — whether that newer call's outcome was a success, an interim
+          // retry, or a terminal failure.
+          const owns: Record<LoadSlice, boolean> = {
+            tasks: slices.has('tasks') && myLoadId > sliceEpoch.tasks,
+            lists: slices.has('lists') && myLoadId > sliceEpoch.lists,
+            folders: slices.has('folders') && myLoadId > sliceEpoch.folders,
+            timelines: slices.has('timelines') && myLoadId > sliceEpoch.timelines,
+            trash: slices.has('trash') && myLoadId > sliceEpoch.trash,
+          };
+          (Object.keys(owns) as LoadSlice[]).forEach(s => { if (owns[s]) sliceEpoch[s] = myLoadId; });
           const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'folders' | 'timelines' | 'trashTasks' | 'trashLists' | 'trashFolders' | 'trashTimelines' | 'trashMilestones' | 'listsLoading' | 'loadError'>> = {};
-          if (tasksRes) update.dashTasks = tasksRes.tasks.map(t => ({ ...t, id: Number(t.id) }));
-          if (foldersRes) update.folders = foldersRes.folders;
-          if (timelinesRes) update.timelines = timelinesRes.timelines.map(t => ({ ...t, milestones: t.milestones ?? [] }));
-          if (listsRes) update.lists = listsRes.lists.map(l => ({
+          if (tasksRes && owns.tasks) update.dashTasks = tasksRes.tasks.map(t => ({ ...t, id: Number(t.id) }));
+          if (foldersRes && owns.folders) update.folders = foldersRes.folders;
+          if (timelinesRes && owns.timelines) update.timelines = timelinesRes.timelines.map(t => ({ ...t, milestones: t.milestones ?? [] }));
+          if (listsRes && owns.lists) update.lists = listsRes.lists.map(l => ({
             ...l,
             parentTaskId: l.parentTaskId != null ? Number(l.parentTaskId) : null,
             sections: l.sections.map(s => ({
@@ -574,34 +599,34 @@ const useAppStore = create<AppState>()(
               tasks: s.tasks.map(t => ({ ...t, id: Number(t.id) })),
             })),
           }));
-          if (trashRes) update.trashTasks = trashRes.trash.map(tr => ({
+          if (trashRes && owns.trash) update.trashTasks = trashRes.trash.map(tr => ({
             ...tr,
             id: Number(tr.id),
             taskId: Number(tr.taskId),
             task: { ...tr.task, id: Number(tr.task.id) },
           }));
-          if (trashListsRes) update.trashLists = trashListsRes.trash.map(tr => ({
+          if (trashListsRes && owns.trash) update.trashLists = trashListsRes.trash.map(tr => ({
             id: Number(tr.id),
             listId: tr.listId,
             list: tr.listData,
             deletedAt: tr.deletedAt,
             expiresAt: tr.expiresAt,
           }));
-          if (trashFoldersRes) update.trashFolders = trashFoldersRes.trash.map(tr => ({
+          if (trashFoldersRes && owns.trash) update.trashFolders = trashFoldersRes.trash.map(tr => ({
             id: Number(tr.id),
             folderId: tr.folderId,
             folder: tr.folderData,
             deletedAt: tr.deletedAt,
             expiresAt: tr.expiresAt,
           }));
-          if (trashTimelinesRes) update.trashTimelines = trashTimelinesRes.trash.map(tr => ({
+          if (trashTimelinesRes && owns.trash) update.trashTimelines = trashTimelinesRes.trash.map(tr => ({
             id: Number(tr.id),
             timelineId: tr.timelineId,
             timeline: { ...tr.timelineData, milestones: tr.timelineData.milestones ?? [] },
             deletedAt: tr.deletedAt,
             expiresAt: tr.expiresAt,
           }));
-          if (trashMilestonesRes) update.trashMilestones = trashMilestonesRes.trash.map(tr => ({
+          if (trashMilestonesRes && owns.trash) update.trashMilestones = trashMilestonesRes.trash.map(tr => ({
             id: Number(tr.id),
             milestoneId: tr.milestoneId,
             timelineId: tr.timelineId,
@@ -624,17 +649,17 @@ const useAppStore = create<AppState>()(
           if (coreFailed && attempt < MAX_LOAD_RETRIES) {
             const delay = 1000 * 2 ** attempt;
             setTimeout(() => {
-              if (myLoadId !== currentLoadId) return; // superseded by a newer load
+              if (scopedWorkspaceId !== getScopedWorkspaceId()) return; // workspace changed — stale retry
               get().loadFromApi(scopedWorkspaceId, { only: Array.from(slices), attempt: attempt + 1 });
             }, delay);
-            update.listsLoading = slices.has('lists'); // keep the loading state while retrying
+            if (owns.lists) update.listsLoading = true; // keep the loading state while retrying
           } else {
             for (const s of Object.keys(sliceSucceeded) as Array<Exclude<LoadSlice, 'trash'>>) {
-              if (!slices.has(s)) continue; // not requested — its status is unchanged
+              if (!owns[s]) continue; // not requested, or a newer load already claimed this slice
               if (sliceSucceeded[s]) failedSlices.delete(s);
               else failedSlices.add(s);
             }
-            update.listsLoading = false;
+            if (owns.lists) update.listsLoading = false;
             update.loadError = failedSlices.size > 0;
           }
           set(update as AppState);
