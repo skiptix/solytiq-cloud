@@ -50,6 +50,11 @@ const MAX_LOAD_RETRIES = 3;
 // until every slice in here is successfully refetched — a partial reload of
 // OTHER slices must not clear the banner while a failed slice is still stale.
 const failedSlices = new Set<LoadSlice>();
+// Signatures (workspace + requested slices) of loads currently in flight. A
+// second trigger for an identical load — e.g. the workspace-change effect firing
+// alongside the initial mount load — would just refetch the same data, so it is
+// suppressed. Retries (attempt > 0) intentionally bypass this.
+const inFlightLoads = new Set<string>();
 
 function getScopedWorkspaceId(workspaceId?: string): string | undefined {
   return workspaceId ?? useWorkspaceStore.getState().currentWorkspaceId ?? undefined;
@@ -534,6 +539,10 @@ const useAppStore = create<AppState>()(
         const scopedWorkspaceId = getScopedWorkspaceId(workspaceId);
         const slices = new Set<LoadSlice>(opts?.only ?? ALL_SLICES);
         const attempt = opts?.attempt ?? 0;
+        const sig = `${scopedWorkspaceId ?? ''}|${Array.from(slices).sort().join(',')}`;
+        // Collapse duplicate in-flight loads (a fresh attempt only — retries re-run on purpose).
+        if (attempt === 0 && inFlightLoads.has(sig)) return;
+        inFlightLoads.add(sig);
         const myLoadId = ++currentLoadId;
         if (slices.has('lists')) set({ listsLoading: true });
         try {
@@ -631,6 +640,8 @@ const useAppStore = create<AppState>()(
           set(update as AppState);
         } catch {
           set({ listsLoading: false, loadError: true });
+        } finally {
+          inFlightLoads.delete(sig);
         }
       },
     }),

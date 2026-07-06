@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import { rateLimit } from 'express-rate-limit';
+import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import path from 'path';
 import dns from 'dns';
 import { pool } from './db';
@@ -86,27 +86,50 @@ app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Rate limiting
+//
+// This deployment sits behind Cloudflare → an internal load balancer → nginx →
+// the backend. `trust proxy` is 1, so `req.ip` resolves to the internal load
+// balancer address, which is IDENTICAL for every visitor. Keying the limiters on
+// `req.ip` therefore collapses the whole instance into a SINGLE bucket, so one
+// busy tab can exhaust the global budget and every other request (including
+// `/api/lists`) starts returning 429 — surfacing in the UI as "Couldn't refresh
+// your data" with a blanked sidebar, even though the data is intact.
+//
+// Cloudflare sets `CF-Connecting-IP` to the real client address and OVERWRITES
+// any client-supplied value, so prefer it and fall back to `req.ip`. The origin
+// is only reachable through the internal proxy chain (not publicly), so a client
+// cannot forge this header to evade the auth/setup limiters.
+const clientKey = (req: express.Request): string => {
+  const cf = req.headers['cf-connecting-ip'];
+  const ip = (typeof cf === 'string' && cf.length > 0) ? cf : (req.ip ?? '');
+  // Normalise (IPv6 addresses are grouped into a subnet) via the library helper.
+  return ipKeyGenerator(ip);
+};
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // Limit each IP to 300 requests per window
+  max: 300, // Limit each client to 300 requests per window
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: clientKey,
   message: { error: 'Too many requests, please try again later.' },
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 attempts per 15 mins
+  max: 10, // Limit each client to 10 attempts per 15 mins
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: clientKey,
   message: { error: 'Too many attempts. Please try again later.' },
 });
 
 const setupLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // Limit each IP to 5 attempts per hour
+  max: 5, // Limit each client to 5 attempts per hour
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: clientKey,
   message: { error: 'Too many setup attempts. Please try again later.' },
 });
 
