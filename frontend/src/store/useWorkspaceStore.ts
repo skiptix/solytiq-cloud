@@ -102,4 +102,13 @@ const useWorkspaceStore = create<WorkspaceState>()(
   )
 );
 
+export const clearWorkspaceStore = () => {
+  useWorkspaceStore.setState({
+    workspaces: [],
+    currentWorkspaceId: null,
+    workspacesLoaded: false,
+    deletingWorkspaceId: null,
+  });
+};
+
 export default useWorkspaceStore;
