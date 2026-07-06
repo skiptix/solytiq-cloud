@@ -36,6 +36,10 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
       body && typeof body === 'object' && 'error' in body
         ? String((body as { error: unknown }).error)
         : (text || `HTTP ${res.status}`);
+        
+    if (res.status === 401) {
+      import('../store/useAuthStore').then(m => m.default.getState().signOut());
+    }
     throw new ApiError(res.status, body, message);
   }
   const ct = res.headers.get('content-type');

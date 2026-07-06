@@ -632,4 +632,19 @@ export {
   apiAddListTask,
 };
 
+export const clearAppStore = () => {
+  useAppStore.setState({
+    dashTasks: [],
+    lists: [],
+    folders: [],
+    timelines: [],
+    trashTasks: [],
+    trashLists: [],
+    trashFolders: [],
+    trashTimelines: [],
+    trashMilestones: [],
+    listsLoading: false,
+  });
+};
+
 export default useAppStore;
