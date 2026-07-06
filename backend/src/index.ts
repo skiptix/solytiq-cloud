@@ -108,7 +108,7 @@ const clientKey = (req: express.Request): string => {
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // Limit each client to 300 requests per window
+  max: 3000, // Limit each client to 3000 requests per window
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: clientKey,
