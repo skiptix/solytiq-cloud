@@ -5,7 +5,7 @@ import useAuthStore from './store/useAuthStore';
 import useAppStore from './store/useAppStore';
 import useMembersStore from './store/useMembersStore';
 import useWorkspaceStore from './store/useWorkspaceStore';
-import { apiCheckSetupRequired, connectSSE, disconnectSSE } from './api/client';
+import { apiCheckSetupRequired, connectSSE, disconnectSSE, setUnauthorizedHandler } from './api/client';
 import { useMobile } from './hooks/useBreakpoint';
 
 import Sidebar from './components/Sidebar';
@@ -32,6 +32,11 @@ import SharedListPage from './screens/SharedListPage';
 import SharedTimelinePage from './screens/SharedTimelinePage';
 import SettingsScreen from './screens/SettingsScreen';
 import FolderDashboardScreen from './screens/FolderDashboardScreen';
+import AdminPasswordResetScreen from './screens/AdminPasswordResetScreen';
+
+// Sign out on any 401 (expired / revoked JWT) so the user is redirected to
+// /login instead of seeing the "no workspace" forced-creation wizard.
+setUnauthorizedHandler(() => useAuthStore.getState().signOut());
 
 // ── Protected route wrapper ────────────────────────────────────
 function Protected({ children }: { children: React.ReactNode }) {
@@ -44,7 +49,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { lists, timelines, listsLoading, sidebarWidth, setSidebarWidth, loadFromApi, setLists, setFolders, setTimelines, updateList, moveTaskToList } = useAppStore();
+  const { lists, timelines, listsLoading, loadError, sidebarWidth, setSidebarWidth, loadFromApi, setLists, updateList, moveTaskToList } = useAppStore();
   const prevWorkspaceRef = useRef<string | null | undefined>(undefined);
   const [modal, setModal] = useState<'add' | 'completed' | 'trash' | null>(null);
   const isMobile = useMobile();
@@ -60,11 +65,36 @@ function AppLayout() {
     };
     init();
 
+    // Slice-scoped SSE reloads: each event names the data that changed, so we
+    // only refetch the affected slices (a full 9-request reload on every event
+    // could exhaust the API rate limit and blank the UI).
+    const SSE_SLICES: Record<string, Array<'tasks' | 'lists' | 'folders' | 'timelines' | 'trash'>> = {
+      tasks:     ['tasks'],
+      lists:     ['lists', 'tasks'],
+      folders:   ['folders', 'lists'],
+      timelines: ['timelines'],
+      trash:     ['trash'],
+    };
     let debounce: ReturnType<typeof setTimeout> | null = null;
-    connectSSE(() => {
+    let pendingSlices = new Set<'tasks' | 'lists' | 'folders' | 'timelines' | 'trash'>();
+    connectSSE((type) => {
+      if (type === 'workspaces') {
+        // Membership/visibility changed — the workspace list AND the scoped
+        // content may both be different now.
+        useWorkspaceStore.getState().loadWorkspaces();
+        (['tasks', 'lists', 'folders', 'timelines', 'trash'] as const).forEach(s => pendingSlices.add(s));
+      } else if (SSE_SLICES[type]) {
+        SSE_SLICES[type].forEach(s => pendingSlices.add(s));
+      } else {
+        return; // 'files' / 'meetings' — handled by their own screens
+      }
       if (debounce) clearTimeout(debounce);
-      const wsId = useWorkspaceStore.getState().currentWorkspaceId;
-      debounce = setTimeout(() => { loadFromApi(wsId ?? undefined); }, 500);
+      debounce = setTimeout(() => {
+        const slices = Array.from(pendingSlices);
+        pendingSlices = new Set();
+        const wsId = useWorkspaceStore.getState().currentWorkspaceId;
+        loadFromApi(wsId ?? undefined, { only: slices });
+      }, 500);
     });
 
     const onVisible = () => {
@@ -107,12 +137,15 @@ function AppLayout() {
     // the background (stale-while-revalidate). Blanking them here caused folder
     // and list routes to momentarily see empty data and redirect to the
     // dashboard — the "folder disappears on refresh" bug.
+    //
+    // We no longer blank the store on a switch either: `loadFromApi` fully
+    // replaces each slice on success and its load-ID/workspace guards discard
+    // stale writes, so the previous workspace's data stays visible (under the
+    // `listsLoading` indicator) until the new data lands. If the reload fails
+    // (e.g. a 429), the old data therefore remains instead of a blank sidebar
+    // that reads as data loss. Navigating to /dashboard below avoids showing a
+    // stale list/folder route from the previous workspace during the swap.
     const isSwitch = prev !== undefined && prev !== currentWorkspaceId;
-    if (isSwitch) {
-      setLists([]);
-      setFolders([]);
-      setTimelines([]);
-    }
 
     loadFromApi(currentWorkspaceId);
 
@@ -123,6 +156,23 @@ function AppLayout() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspaceId]);
+
+  // Self-heal after a load failure. The automatic recovery paths above
+  // (workspace switch, SSE, tab visibility, the browser 'online' event) only
+  // fire on their own triggers — none of them are guaranteed to happen again,
+  // so a transient failure could otherwise leave the "Couldn't refresh your
+  // data" banner up indefinitely even once the network/server is fine again.
+  // While the error is showing, keep quietly retrying in the background so
+  // the app recovers on its own instead of requiring the user to notice the
+  // banner and tap Retry.
+  useEffect(() => {
+    if (!loadError) return;
+    const id = setInterval(() => {
+      const wsId = useWorkspaceStore.getState().currentWorkspaceId;
+      loadFromApi(wsId ?? undefined);
+    }, 20000);
+    return () => clearInterval(id);
+  }, [loadError, loadFromApi]);
 
   // Close drawer on route change (mobile)
   useEffect(() => {
@@ -258,6 +308,23 @@ function AppLayout() {
       {modal === 'trash' && <TrashModal onClose={() => setModal(null)} />}
       <AIAssistant />
 
+      {/* Data-load failure surface: retries are automatic, but a persistent
+          failure must be visible — a silently empty sidebar looks like data
+          loss. The previous slices stay rendered while this is shown. */}
+      {loadError && (
+        <div style={{ position: 'fixed', bottom: 20, left: '50%', marginLeft: -170, width: 340, maxWidth: 'calc(100vw - 32px)', zIndex: 500, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, background: '#fff', border: '1px solid #e8e4f0', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', animation: 'menuIn 200ms ease both' }}>
+          <span style={{ color: '#ba1a1a', fontWeight: 600 }}>Couldn't refresh your data.</span>
+          <button
+            onClick={() => loadFromApi(currentWorkspaceId ?? undefined)}
+            style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 8, border: 'none', background: '#5e4dbb', color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#4d3da8')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#5e4dbb')}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       {workspacesLoaded && workspaces.length === 0 && !location.pathname.startsWith('/settings') && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 450, backdropFilter: 'blur(10px)', background: 'rgba(245,243,255,0.65)', pointerEvents: 'all' }} />
@@ -285,6 +352,7 @@ export default function App() {
       <Route path="/oauth/consent" element={loggedIn ? <OAuthConsentScreen /> : <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />} />
       <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : <LoginScreen />} />
       <Route path="/setup" element={loggedIn ? <Navigate to="/dashboard" replace /> : <SetupWizard />} />
+      <Route path="/admin-reset" element={loggedIn ? <Navigate to="/dashboard" replace /> : <AdminPasswordResetScreen />} />
       <Route path="/nuke" element={loggedIn ? <NukeScreen /> : <Navigate to="/login" replace />} />
       <Route path="/gps/:id/edit" element={loggedIn ? <GPSEditScreen /> : <Navigate to="/login" replace />} />
       <Route path="/*" element={

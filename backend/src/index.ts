@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import { rateLimit } from 'express-rate-limit';
+import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import path from 'path';
 import dns from 'dns';
 import { pool } from './db';
@@ -30,6 +30,7 @@ import milestoneAttachmentsRouter from './routes/milestoneAttachments';
 import tokensRouter from './routes/tokens';
 import oauthRouter from './routes/oauth';
 import mcpRouter from './routes/mcp';
+import adminReadApiRouter from './routes/adminReadApi';
 import { getPublicBaseUrl } from './publicUrl';
 import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
@@ -41,6 +42,11 @@ const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
 app.set('trust proxy', 1);
+// API payloads are user/workspace-scoped and must never be conditionally
+// revalidated as 304 responses. A 304 has no JSON body, which caused the
+// frontend loaders to treat successful sidebar refreshes as failed requests
+// and leave lists/folders/timelines empty after workspace switches.
+app.set('etag', false);
 
 // ---------------------------------------------------------------------------
 // CalDAV server (Apple Calendar / Thunderbird / …) — mounted FIRST, before the
@@ -80,35 +86,66 @@ app.use(express.json({ limit: '4mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Rate limiting
+//
+// This deployment sits behind Cloudflare → an internal load balancer → nginx →
+// the backend. `trust proxy` is 1, so `req.ip` resolves to the internal load
+// balancer address, which is IDENTICAL for every visitor. Keying the limiters on
+// `req.ip` therefore collapses the whole instance into a SINGLE bucket, so one
+// busy tab can exhaust the global budget and every other request (including
+// `/api/lists`) starts returning 429 — surfacing in the UI as "Couldn't refresh
+// your data" with a blanked sidebar, even though the data is intact.
+//
+// Cloudflare sets `CF-Connecting-IP` to the real client address and OVERWRITES
+// any client-supplied value, so prefer it and fall back to `req.ip`. The origin
+// is only reachable through the internal proxy chain (not publicly), so a client
+// cannot forge this header to evade the auth/setup limiters.
+const clientKey = (req: express.Request): string => {
+  const cf = req.headers['cf-connecting-ip'];
+  const ip = (typeof cf === 'string' && cf.length > 0) ? cf : (req.ip ?? '');
+  // Normalise (IPv6 addresses are grouped into a subnet) via the library helper.
+  return ipKeyGenerator(ip);
+};
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // Limit each IP to 300 requests per window
+  max: 300, // Limit each client to 300 requests per window
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: clientKey,
   message: { error: 'Too many requests, please try again later.' },
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 attempts per 15 mins
+  max: 10, // Limit each client to 10 attempts per 15 mins
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: clientKey,
   message: { error: 'Too many attempts. Please try again later.' },
 });
 
 const setupLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // Limit each IP to 5 attempts per hour
+  max: 5, // Limit each client to 5 attempts per hour
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: clientKey,
   message: { error: 'Too many setup attempts. Please try again later.' },
 });
 
+app.use('/api/', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  next();
+});
 app.use('/api/', apiLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/2fa/verify', authLimiter);
 app.use('/api/auth/register', setupLimiter);
 app.use('/api/auth/request-setup-token', setupLimiter);
+app.use('/api/auth/admin-password-reset', setupLimiter);
 app.use('/api/admin/nuke', setupLimiter);
 
 // ---------------------------------------------------------------------------
@@ -132,6 +169,7 @@ app.use('/api/meetings',   meetingsRouter);
 app.use('/api/caldav',     caldavManageRouter);
 app.use('/api/tokens',     tokensRouter);
 app.use('/api/oauth',      oauthRouter);
+app.use('/api/admin-read', adminReadApiRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
@@ -168,7 +206,7 @@ app.get('/.well-known/oauth-authorization-server', (req, res) => {
 });
 
 // Public share endpoints — no auth required
-interface ShareFileRow { id: string; original_name: string; title: string | null; note: string | null; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null; }
+interface ShareFileRow { id: string; original_name: string; title: string | null; note: string | null; mime_type: string; file_size: number; file_path: string; is_public: boolean; password_hash: string | null; expires_at: string | null; created_at: string; share_token: string; bundle_id: string | null; bundle_name: string | null; shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null; }
 
 async function resolveShareFile(token: string): Promise<ShareFileRow | null> {
   const result = await dbQuery<ShareFileRow>(
@@ -187,12 +225,24 @@ app.get('/api/share/:token', async (req, res) => {
     if (!file) { res.status(404).json({ error: 'File not found' }); return; }
     if (!file.is_public) { res.status(403).json({ error: 'This file is private' }); return; }
     const expired = file.expires_at && new Date(file.expires_at) < new Date();
+    const bundleResult = await dbQuery<Pick<ShareFileRow, 'id' | 'original_name' | 'mime_type' | 'file_size' | 'created_at'>>(
+      'SELECT id, original_name, mime_type, file_size, created_at FROM shared_files WHERE share_token = $1 ORDER BY created_at ASC',
+      [req.params.token]
+    );
+    const files = bundleResult.rows.map(row => ({
+      id: row.id,
+      name: row.original_name,
+      mimeType: row.mime_type,
+      size: Number(row.file_size),
+      createdAt: row.created_at,
+    }));
     res.json({
-      name: file.original_name,
-      title: file.title ?? null,
+      name: file.bundle_name || file.title || (files.length > 1 ? `${files.length} shared files` : file.original_name),
+      title: file.title ?? file.bundle_name ?? null,
       note: file.note ?? null,
       mimeType: file.mime_type,
-      size: file.file_size,
+      size: files.reduce((sum, item) => sum + item.size, 0),
+      files,
       hasPassword: file.password_hash !== null,
       expiresAt: file.expires_at ?? null,
       isExpired: Boolean(expired),
@@ -202,6 +252,36 @@ app.get('/api/share/:token', async (req, res) => {
     });
   } catch (err) {
     console.error('share info error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/share/:token/download/:fileId — download one file from a shared bundle
+app.get('/api/share/:token/download/:fileId', async (req, res) => {
+  try {
+    const { token, fileId } = req.params;
+    const pw = (req.query.password ?? '') as string;
+    const file = await resolveShareFile(token);
+    if (!file) { res.status(404).json({ error: 'File not found' }); return; }
+    if (!file.is_public) { res.status(403).json({ error: 'This file is private' }); return; }
+    if (file.expires_at && new Date(file.expires_at) < new Date()) { res.status(410).json({ error: 'Share link has expired' }); return; }
+    if (file.password_hash) {
+      if (!pw) { res.status(401).json({ error: 'Password required', passwordRequired: true }); return; }
+      const valid = await comparePassword(pw, file.password_hash);
+      if (!valid) { res.status(401).json({ error: 'Invalid password' }); return; }
+    }
+    const result = await dbQuery<ShareFileRow>('SELECT * FROM shared_files WHERE share_token = $1 AND id = $2', [token, fileId]);
+    const target = result.rows[0];
+    if (!target) { res.status(404).json({ error: 'File not found' }); return; }
+    const filePath = path.join(path.resolve(UPLOAD_DIR), path.basename(target.file_path));
+    if (!require('fs').existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
+    const sanitizedName = target.original_name.replace(/[^\w\s\-_.]/g, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(sanitizedName)}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.sendFile(filePath);
+  } catch (err) {
+    console.error('share bundled download error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -536,6 +616,28 @@ async function runMigrations() {
   await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_user_idx ON api_tokens(user_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS api_tokens_hash_idx ON api_tokens(token_hash)`);
 
+
+
+  // Instance-wide read-only API keys created by admins for external reporting tools.
+  // Only hashes are stored; generated secrets are shown once in the admin UI.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_api_keys (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name         VARCHAR(100) NOT NULL,
+      key_hash     VARCHAR(100) NOT NULL UNIQUE,
+      key_prefix   VARCHAR(40)  NOT NULL,
+      created_by   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      last_used_at TIMESTAMPTZ,
+      revoked_at   TIMESTAMPTZ,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS admin_api_keys_hash_idx ON admin_api_keys(key_hash)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS admin_api_keys_active_idx ON admin_api_keys(revoked_at) WHERE revoked_at IS NULL`);
+  // Per-key permission scopes (JSONB array). Existing keys were read-only, so
+  // they inherit ["read"] to preserve their exact prior capability.
+  await pool.query(`ALTER TABLE admin_api_keys ADD COLUMN IF NOT EXISTS scopes JSONB NOT NULL DEFAULT '["read"]'::jsonb`);
+
   // OAuth 2.1 for the Claude MCP connector. Registered clients (Dynamic Client
   // Registration) and single-use, PKCE-bound authorization codes.
   await pool.query(`
@@ -626,7 +728,7 @@ async function runMigrations() {
       is_public     BOOLEAN      NOT NULL DEFAULT false,
       password_hash VARCHAR(255),
       expires_at    TIMESTAMPTZ,
-      share_token   VARCHAR(100) UNIQUE NOT NULL,
+      share_token   VARCHAR(100) NOT NULL,
       created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
     )
   `);
@@ -636,6 +738,14 @@ async function runMigrations() {
   await pool.query(`ALTER TABLE shared_files ADD COLUMN IF NOT EXISTS title VARCHAR(500)`);
 
   await pool.query(`ALTER TABLE shared_files ADD COLUMN IF NOT EXISTS note TEXT`);
+
+  await pool.query(`ALTER TABLE shared_files ADD COLUMN IF NOT EXISTS bundle_id VARCHAR(100)`);
+
+  await pool.query(`ALTER TABLE shared_files ADD COLUMN IF NOT EXISTS bundle_name VARCHAR(500)`);
+
+  await pool.query(`ALTER TABLE shared_files DROP CONSTRAINT IF EXISTS shared_files_share_token_key`);
+
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_shared_files_share_token ON shared_files(share_token)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS task_attachments (
@@ -892,20 +1002,34 @@ async function runMigrations() {
       );
     }
 
-    // Assign existing unassigned lists/folders/tasks to their owner's workspace
+    // Heal missing owner memberships for all owned workspaces. Without this,
+    // a workspace can become invisible to its owner while its lists/timelines
+    // remain in the database and never appear in trash.
+    await pool.query(`
+      INSERT INTO workspace_members (workspace_id, user_id, role)
+      SELECT w.id, w.owner_id, 'owner'
+      FROM workspaces w
+      ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = 'owner'
+    `);
+
+    // Assign existing unassigned lists/folders/tasks to their owner's workspace.
+    // ORDER BY makes the pick deterministic (first-created = Personal). A bare
+    // LIMIT 1 let PostgreSQL choose an ARBITRARY owned workspace, scattering
+    // healed items into workspaces the user wasn't looking at — one of the
+    // causes of "my list disappeared but the AI still sees it".
     await pool.query(`
       UPDATE lists l
-      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = l.user_id LIMIT 1)
+      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = l.user_id ORDER BY w.created_at ASC LIMIT 1)
       WHERE l.workspace_id IS NULL
     `);
     await pool.query(`
       UPDATE folders f
-      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = f.user_id LIMIT 1)
+      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = f.user_id ORDER BY w.created_at ASC LIMIT 1)
       WHERE f.workspace_id IS NULL
     `);
     await pool.query(`
       UPDATE tasks t
-      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = t.user_id LIMIT 1)
+      SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = t.user_id ORDER BY w.created_at ASC LIMIT 1)
       WHERE t.workspace_id IS NULL
     `);
 
@@ -962,6 +1086,88 @@ async function runMigrations() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS milestones_timeline_idx ON milestones(timeline_id)`);
+
+  await pool.query(`
+    UPDATE timelines t
+    SET workspace_id = (SELECT w.id FROM workspaces w WHERE w.owner_id = t.user_id ORDER BY w.created_at ASC LIMIT 1)
+    WHERE t.workspace_id IS NULL
+  `);
+
+  // ── Stranded-content self-heal ─────────────────────────────────────────────
+  // Content whose OWNER can no longer access its workspace (removed from a
+  // private workspace, workspace went private, historical drift) is invisible
+  // in every workspace view while still being returned by the user-scoped AI
+  // tools. Move it back to the owner's first (Personal) workspace. Idempotent:
+  // a second run matches zero rows. This also repairs data stranded before the
+  // re-homing fixes in routes/workspaces.ts existed.
+  {
+    const strandedCondition = (alias: string) => `
+      ${alias}.workspace_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM workspace_members wm
+        WHERE wm.workspace_id = ${alias}.workspace_id AND wm.user_id = ${alias}.user_id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM workspaces w
+        WHERE w.id = ${alias}.workspace_id
+          AND (w.owner_id = ${alias}.user_id OR w.visibility = 'public')
+      )`;
+    const personalFor = (alias: string) =>
+      `(SELECT w.id FROM workspaces w WHERE w.owner_id = ${alias}.user_id ORDER BY w.created_at ASC LIMIT 1)`;
+
+    const strandedLists = await pool.query(
+      `UPDATE lists l SET workspace_id = ${personalFor('l')} WHERE ${strandedCondition('l')}`
+    );
+    const strandedTimelines = await pool.query(
+      `UPDATE timelines t SET workspace_id = ${personalFor('t')} WHERE ${strandedCondition('t')}`
+    );
+    const strandedFolders = await pool.query(
+      `UPDATE folders f SET workspace_id = ${personalFor('f')} WHERE ${strandedCondition('f')}`
+    );
+    // Dash tasks follow their owner; list items are re-synced to their list below.
+    const strandedTasks = await pool.query(
+      `UPDATE tasks t SET workspace_id = ${personalFor('t')}
+       WHERE (t.source = 'dash' OR t.list_id IS NULL) AND ${strandedCondition('t')}`
+    );
+    const healed =
+      (strandedLists.rowCount ?? 0) + (strandedTimelines.rowCount ?? 0) +
+      (strandedFolders.rowCount ?? 0) + (strandedTasks.rowCount ?? 0);
+    if (healed > 0) {
+      console.log(
+        `📋 migration: re-homed stranded content to owners' Personal workspace — ` +
+        `${strandedLists.rowCount} list(s), ${strandedTimelines.rowCount} timeline(s), ` +
+        `${strandedFolders.rowCount} folder(s), ${strandedTasks.rowCount} dash task(s)`
+      );
+    }
+
+    // Re-sync list items to their (possibly just-moved) list's workspace.
+    await pool.query(`
+      UPDATE tasks t
+      SET workspace_id = l.workspace_id
+      FROM lists l
+      WHERE t.list_id = l.id
+        AND t.source = 'list'
+        AND t.workspace_id IS DISTINCT FROM l.workspace_id
+    `);
+
+    // Folder-consistency heal: an item can only sit in a folder of its OWN
+    // workspace — a cross-workspace folder_id makes the item unplaceable in
+    // the sidebar (it renders nowhere), so detach it.
+    const danglingLists = await pool.query(`
+      UPDATE lists l SET folder_id = NULL
+      FROM folders f
+      WHERE l.folder_id = f.id AND l.workspace_id IS DISTINCT FROM f.workspace_id
+    `);
+    const danglingTimelines = await pool.query(`
+      UPDATE timelines t SET folder_id = NULL
+      FROM folders f
+      WHERE t.folder_id = f.id AND t.workspace_id IS DISTINCT FROM f.workspace_id
+    `);
+    const detached = (danglingLists.rowCount ?? 0) + (danglingTimelines.rowCount ?? 0);
+    if (detached > 0) {
+      console.log(`📋 migration: detached ${detached} item(s) from cross-workspace folders`);
+    }
+  }
 
   // Public link sharing for timelines — mirrors the lists sharing model.
   await pool.query(`ALTER TABLE timelines ADD COLUMN IF NOT EXISTS share_token VARCHAR(100) UNIQUE`);

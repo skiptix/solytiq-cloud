@@ -1,0 +1,44 @@
+name: Post Changelog Entry
+
+on:
+  push:
+    branches:
+      - main # Löst NUR bei direkten Commits auf main UND bei Merges in main aus
+
+jobs:
+  post_changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send commit to Changelog API
+        env:
+          HUB_API_KEY: ${{ secrets.HUB_API_KEY }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          # Extrahiert die erste Zeile der Commit-Nachricht als Titel
+          # (Bei einem Merge ist das oft "Merge pull request #... from ...")
+          TITLE=$(echo "$COMMIT_MSG" | head -n 1)
+          
+          # Nutzt die ersten 7 Zeichen des Commit-Hashes als Version
+          SHORT_SHA="${GITHUB_SHA::7}"
+
+          # Erstellt das JSON-Payload sicher via jq
+          JSON_PAYLOAD=$(jq -n \
+            --arg version "$SHORT_SHA" \
+            --arg title "$TITLE" \
+            --arg desc "$COMMIT_MSG" \
+            --arg cat "update" \
+            --arg repo "solytiq-cloud" \
+            '{
+              version: $version,
+              title: $title,
+              description: $desc,
+              category: $cat,
+              repository: $repo
+            }')
+
+          # Sendet den Request an die Solytiq-API MIT getarntem Browser-User-Agent
+          curl -X POST https://solytiq.com/api/changelogs \
+            -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+            -H "Content-Type: application/json" \
+            -H "X-Api-Key: $HUB_API_KEY" \
+            -d "$JSON_PAYLOAD"

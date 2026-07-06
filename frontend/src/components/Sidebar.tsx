@@ -1191,8 +1191,13 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
     setAddingFolder(false);
   };
 
-  const standaloneListItems = lists.filter(l => !l.folderId);
-  const standaloneTimelines = timelines.filter(t => !t.folderId);
+  // Defensive grouping: an item whose folderId doesn't match any loaded folder
+  // (cross-workspace folder, partial load, historical drift) must render as
+  // standalone — filtering it into a folder that isn't on screen would make it
+  // silently disappear from the sidebar even though the API returned it.
+  const loadedFolderIds = new Set(folders.map(f => f.id));
+  const standaloneListItems = lists.filter(l => !l.folderId || !loadedFolderIds.has(l.folderId));
+  const standaloneTimelines = timelines.filter(t => !t.folderId || !loadedFolderIds.has(t.folderId));
 
   // ── GPS sidebar mode ───────────────────────────────────────────────────────
   if (active === 'gps') {
@@ -1330,7 +1335,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.23.2
+              v1.28.0
             </div>
           )}
         </div>
@@ -1486,8 +1491,13 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           );
         })}
 
-        {/* Standalone lists (root level) */}
-        {standaloneListItems.filter(l => !l.parentTaskId).map((list) => {
+        {/* Standalone lists (root level). A sublist whose parent task is not in
+            any loaded list (orphaned by a partial delete or historical drift)
+            is promoted to root so it stays reachable instead of vanishing. */}
+        {(() => {
+          const allLoadedTaskIds = new Set(lists.flatMap(l => l.sections.flatMap(s => s.tasks.map(t => t.id))));
+          return standaloneListItems.filter(l => !l.parentTaskId || !allLoadedTaskIds.has(l.parentTaskId));
+        })().map((list) => {
           const taskIds = new Set(list.sections.flatMap(s => s.tasks.map(t => t.id)));
           const sublists = lists.filter(l2 => l2.parentTaskId != null && taskIds.has(l2.parentTaskId));
           return (
@@ -1544,7 +1554,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.23.2
+            v1.28.0
           </div>
         )}
       </div>

@@ -13,6 +13,8 @@ import {
 } from '../api/client';
 import VisibilityConflictModal from '../components/VisibilityConflictModal';
 import useWorkspaceStore from '../store/useWorkspaceStore';
+import useAuthStore from '../store/useAuthStore';
+import useAppStore from '../store/useAppStore';
 
 const FOLDER_COLORS = [
   '#5e4dbb', '#1D4ED8', '#15803d', '#ea580c',
@@ -321,21 +323,36 @@ function AccessibilitySection({ kind, itemId, initialPublic, onApplied }: {
 }
 
 // ── Tab type ──────────────────────────────────────────────────────────────────
-type ItemTab = 'appearance' | 'access' | 'organization' | 'share';
+type ItemTab = 'appearance' | 'access' | 'organization' | 'share' | 'admin';
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, folders, folderId, itemId, share, onShareUpdated, onVisibilityApplied, onChange, onClose }: ItemSettingsModalProps) {
   const isMobile = useMobile();
   const accent = color ?? '#5e4dbb';
+  const { isAdmin } = useAuthStore();
+  const { lists, timelines } = useAppStore();
+  const [copiedAdminId, setCopiedAdminId] = useState(false);
 
   const hasFolders = kind !== 'folder' && folders && folders.length > 0;
   const hasShare   = kind !== 'folder' && !!itemId;
+  const currentList = kind === 'list' && itemId ? lists.find(l => l.id === itemId) : undefined;
+  const currentTimeline = kind === 'timeline' && itemId ? timelines.find(t => t.id === itemId) : undefined;
+  const listItems = currentList?.sections.flatMap(s => s.tasks) ?? [];
+  const milestones = currentTimeline?.milestones ?? [];
+  const copyAdminId = () => {
+    if (!itemId) return;
+    navigator.clipboard.writeText(itemId).then(() => {
+      setCopiedAdminId(true);
+      setTimeout(() => setCopiedAdminId(false), 1600);
+    });
+  };
 
   const tabs: { id: ItemTab; label: string; icon: string }[] = [
     { id: 'appearance',   label: 'Appearance', icon: 'palette' },
     { id: 'access',       label: 'Access',     icon: 'shield_lock' },
     ...(hasFolders ? [{ id: 'organization' as const, label: 'Folder', icon: 'folder_open' }] : []),
     ...(hasShare   ? [{ id: 'share' as const,        label: 'Share',  icon: 'link' }]        : []),
+    ...(isAdmin && itemId && kind !== 'folder' ? [{ id: 'admin' as const, label: 'Admin', icon: 'admin_panel_settings' }] : []),
   ];
 
   const [activeTab, setActiveTab] = useState<ItemTab>('appearance');
@@ -500,6 +517,42 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+
+          {/* ── ADMIN ── */}
+          {activeTab === 'admin' && isAdmin && itemId && kind !== 'folder' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18, animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
+              {sectionLabel(`${kind === 'timeline' ? 'Timeline' : 'List'} ID`)}
+              <div style={{ background: '#F5F3FF', border: '1px solid #e8e4f0', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <code style={{ flex: 1, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#484552', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemId}</code>
+                <button onClick={copyAdminId} style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: copiedAdminId ? '#10B981' : '#5e4dbb', background: '#fff', border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', flexShrink: 0 }}>
+                  <Icon name={copiedAdminId ? 'check' : 'content_copy'} size={13} color={copiedAdminId ? '#10B981' : '#5e4dbb'} />
+                  {copiedAdminId ? 'Copied' : 'Copy ID'}
+                </button>
+              </div>
+
+              {sectionLabel('Stats')}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {(kind === 'list' ? [
+                  ['Sections', currentList?.sections.length ?? 0, 'view_list'],
+                  ['Items', listItems.length, 'checklist'],
+                  ['Completed', listItems.filter(t => t.checked).length, 'task_alt'],
+                  ['Private', currentList?.isPublic ? 'No' : 'Yes', currentList?.isPublic ? 'public' : 'lock'],
+                ] : [
+                  ['Milestones', milestones.length, 'flag'],
+                  ['Done', milestones.filter(m => m.status === 'done').length, 'task_alt'],
+                  ['Upcoming', milestones.filter(m => m.status === 'upcoming').length, 'event_upcoming'],
+                  ['Private', currentTimeline?.isPublic ? 'No' : 'Yes', currentTimeline?.isPublic ? 'public' : 'lock'],
+                ]).map(([label, value, icon]) => (
+                  <div key={String(label)} style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 14, padding: 14 }}>
+                    <Icon name={String(icon)} size={16} color="#5e4dbb" />
+                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 800, color: '#1c1b22', marginTop: 8 }}>{value}</div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{label}</div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

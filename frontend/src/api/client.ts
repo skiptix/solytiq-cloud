@@ -6,6 +6,10 @@ function getToken(): string | null {
   return localStorage.getItem('solytiq_token');
 }
 
+let _onUnauthorized: (() => void) | undefined;
+/** Register a callback invoked on any 401 response (expired/revoked JWT). */
+export function setUnauthorizedHandler(fn: () => void): void { _onUnauthorized = fn; }
+
 /** Error thrown for any non-2xx response. Carries the HTTP status and the
  *  parsed JSON body (when available) so callers can react to structured errors
  *  such as the visibility-hierarchy 409 conflict. */
@@ -24,17 +28,13 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache',
     ...(options.headers as Record<string, string> ?? {}),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  
-  const finalOptions: RequestInit = {
-    cache: 'no-store',
-    ...options,
-    headers,
-  };
-  const res = await fetch(`${BASE_URL}${path}`, finalOptions);
+  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers, cache: 'no-store' });
   if (!res.ok) {
+    if (res.status === 401) _onUnauthorized?.();
     const text = await res.text().catch(() => res.statusText);
     let body: unknown = text;
     try { body = text ? JSON.parse(text) : text; } catch { /* keep raw text */ }
@@ -119,11 +119,25 @@ export const apiGetMe = () =>
 export const apiGetMembers = () =>
   apiFetch<{ members: Array<{ id: string; username: string; email: string; fullName: string | null; profileImage: string | null; isAdmin: boolean }> }>('/auth/members');
 
+// Lightweight members list (no base64 avatars) for the members store. Avatars are
+// fetched on demand via apiGetMemberAvatar for members actually shown on screen.
+export const apiGetMembersBasic = () =>
+  apiFetch<{ members: Array<{ id: string; username: string; email: string; fullName: string | null; hasImage: boolean; isAdmin: boolean }> }>('/auth/members/basic');
+
+export const apiGetMemberAvatar = (id: string) =>
+  apiFetch<{ profileImage: string | null }>(`/auth/members/${id}/avatar`);
+
 export const apiChangePassword = (currentPassword: string, newPassword: string) =>
   apiFetch<{ success: boolean }>('/auth/password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) });
 
 export const apiGetFeatureFlags = () =>
   apiFetch<{ twoFAEnabled: boolean; mcpEnabled: boolean }>('/auth/feature-flags');
+
+export const apiAdminPasswordResetRequest = () =>
+  apiFetch<{ ok: boolean }>('/auth/admin-password-reset/request', { method: 'POST' });
+
+export const apiAdminPasswordResetConfirm = (code: string, newPassword: string) =>
+  apiFetch<{ ok: boolean }>('/auth/admin-password-reset/confirm', { method: 'POST', body: JSON.stringify({ code, newPassword }) });
 
 export const apiUpdateProfile = (data: { fullName?: string; email?: string }) =>
   apiFetch<{ user: { id: string; username: string; email: string; fullName: string } }>(
@@ -373,6 +387,29 @@ export const apiDeleteFolderFromTrash = (trashId: number) =>
   apiFetch<{ success: boolean }>(`/trash/folders/${trashId}`, { method: 'DELETE' });
 
 // Admin
+
+/** Admin API permission scopes — must match ADMIN_API_SCOPES on the backend. */
+export type AdminApiScope = 'read' | 'users' | 'workspaces' | 'folders' | 'lists' | 'timelines' | 'meetings';
+
+export interface AdminReadApiKey {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  scopes: AdminApiScope[];
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export const apiGetAdminReadApiKeys = () =>
+  apiFetch<{ keys: AdminReadApiKey[] }>('/admin/api-keys');
+
+export const apiCreateAdminReadApiKey = (name: string, scopes: AdminApiScope[]) =>
+  apiFetch<{ key: AdminReadApiKey; secret: string }>('/admin/api-keys', { method: 'POST', body: JSON.stringify({ name, scopes }) });
+
+export const apiRevokeAdminReadApiKey = (id: string) =>
+  apiFetch<{ success: boolean }>(`/admin/api-keys/${id}`, { method: 'DELETE' });
+
 export const apiGetUsers = () =>
   apiFetch<{ users: Array<{ id: string; username: string; email: string; fullName: string | null; profileImage: string | null; isAdmin: boolean; lastOnline: string | null; createdAt: string }> }>('/admin/users');
 
@@ -921,6 +958,36 @@ export async function apiRenameGpsFile(id: string, name: string): Promise<GpsFil
   if (!res.ok) throw new Error(`GPS rename failed: ${res.status}`);
   const data = await res.json() as { file: GpsFile };
   return data.file;
+}
+
+export function apiUploadFilesBundle(
+  files: File[],
+  opts: { isPublic?: boolean; password?: string; expiresAt?: string; title?: string },
+  onProgress: (pct: number) => void,
+): Promise<SharedFile> {
+  return new Promise((resolve, reject) => {
+    const token = localStorage.getItem('solytiq_token');
+    const form = new FormData();
+    files.forEach(file => form.append('files', file));
+    if (opts.isPublic !== undefined) form.append('isPublic', String(opts.isPublic));
+    if (opts.password) form.append('password', opts.password);
+    if (opts.expiresAt) form.append('expiresAt', opts.expiresAt);
+    if (opts.title) form.append('title', opts.title);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${(import.meta.env.VITE_API_URL as string | undefined) ?? '/api'}/files/bundle`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve((JSON.parse(xhr.responseText) as { file: SharedFile }).file);
+      } else {
+        reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(form);
+  });
 }
 
 export function apiUploadFile(

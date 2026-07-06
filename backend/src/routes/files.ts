@@ -43,7 +43,11 @@ interface FileRow {
   expires_at: string | null;
   share_token: string;
   created_at: string;
+  bundle_id: string | null;
+  bundle_name: string | null;
+  bundle_count?: number;
 }
+
 
 function getBaseUrl(req: Request): string {
   const proto = req.headers['x-forwarded-proto'] ?? req.protocol;
@@ -59,13 +63,16 @@ function sanitizeFile(f: FileRow, baseUrl: string) {
     title:       f.title ?? null,
     note:        f.note ?? null,
     mimeType:    f.mime_type,
-    size:        f.file_size,
+    size:        Number(f.file_size),
     isPublic:    f.is_public,
     hasPassword: f.password_hash !== null,
     expiresAt:   f.expires_at ?? null,
     shareToken:  f.share_token,
     shareUrl:    `${baseUrl}/share/${f.share_token}`,
     createdAt:   f.created_at,
+    bundleId:    f.bundle_id ?? null,
+    bundleName:  f.bundle_name ?? null,
+    bundleCount: Number(f.bundle_count ?? 1),
   };
 }
 
@@ -106,13 +113,80 @@ router.get('/storage', async (req: Request, res: Response) => {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const result = await query<FileRow>(
-      'SELECT * FROM shared_files WHERE user_id = $1 ORDER BY created_at DESC',
+      `WITH grouped AS (
+         SELECT sf.*,
+                COUNT(*) OVER (PARTITION BY COALESCE(bundle_id, id)) AS bundle_count,
+                SUM(file_size) OVER (PARTITION BY COALESCE(bundle_id, id)) AS bundle_size,
+                ROW_NUMBER() OVER (PARTITION BY COALESCE(bundle_id, id) ORDER BY created_at DESC) AS rn
+         FROM shared_files sf
+         WHERE user_id = $1
+       )
+       SELECT id, user_id, original_name, title, note, mime_type, bundle_size AS file_size, file_path, is_public, password_hash, expires_at, share_token, created_at, bundle_id, bundle_name, bundle_count
+       FROM grouped
+       WHERE rn = 1
+       ORDER BY created_at DESC`,
       [req.userId]
     );
     const base = getBaseUrl(req);
     res.json({ files: result.rows.map(f => sanitizeFile(f, base)) });
   } catch (err) {
     console.error('files GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+// POST /api/files/bundle  (multipart/form-data)
+router.post('/bundle', upload.array('files', 50), async (req: Request, res: Response) => {
+  const uploaded = (req.files as Express.Multer.File[] | undefined) ?? [];
+  try {
+    if (uploaded.length === 0) {
+      res.status(400).json({ error: 'No files provided' });
+      return;
+    }
+
+    const { isPublic, password, expiresAt, title } = req.body as { isPublic?: string; password?: string; expiresAt?: string; title?: string };
+    const totalSize = uploaded.reduce((sum, file) => sum + file.size, 0);
+    const isAdmin = (req as Request & { user?: { isAdmin: boolean } }).user?.isAdmin ?? false;
+    if (!isAdmin) {
+      const quota = await getUserQuota();
+      const usageRes = await query<{ used: string }>('SELECT COALESCE(SUM(file_size), 0) AS used FROM shared_files WHERE user_id = $1', [req.userId]);
+      const used = parseInt(usageRes.rows[0].used, 10);
+      if (used + totalSize > quota) {
+        uploaded.forEach(file => fs.unlinkSync(path.join(UPLOAD_DIR, file.filename)));
+        res.status(413).json({ error: 'Storage quota exceeded. Please delete some files to free up space.' });
+        return;
+      }
+    }
+
+    const shareToken = crypto.randomBytes(24).toString('hex');
+    const bundleId = crypto.randomUUID();
+    const bundleName = title || `${uploaded.length} shared files`;
+    const pwHash = password ? await hashPassword(password) : null;
+    const pub = isPublic === 'true';
+    const expiry = expiresAt || null;
+
+    const rows: FileRow[] = [];
+    for (const file of uploaded) {
+      const result = await query<FileRow>(
+        `INSERT INTO shared_files
+           (id, user_id, original_name, title, mime_type, file_size, file_path, is_public, password_hash, expires_at, share_token, bundle_id, bundle_name)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         RETURNING *`,
+        [crypto.randomUUID(), req.userId, file.originalname, title || null, file.mimetype, file.size, file.filename, pub, pwHash, expiry, shareToken, bundleId, bundleName]
+      );
+      rows.push({ ...result.rows[0], bundle_count: uploaded.length });
+    }
+
+    const base = getBaseUrl(req);
+    res.status(201).json({ file: sanitizeFile(rows[0], base), files: rows.map(row => sanitizeFile(row, base)) });
+    broadcastToUser(req.userId!, 'files');
+  } catch (err) {
+    uploaded.forEach(file => {
+      const p = path.join(UPLOAD_DIR, file.filename);
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    });
+    console.error('files bundle POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -207,16 +281,18 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
 
     const result = await query<FileRow>(
-      `UPDATE shared_files
-       SET original_name = COALESCE($2, original_name),
+      `UPDATE shared_files sf
+       SET original_name = CASE WHEN sf.id = $1 THEN COALESCE($2, original_name) ELSE original_name END,
            title         = CASE WHEN $8  THEN $9  ELSE title         END,
            note          = CASE WHEN $10 THEN $11 ELSE note          END,
+           bundle_name   = CASE WHEN $8  THEN $9  ELSE bundle_name   END,
            is_public     = COALESCE($3, is_public),
            password_hash = CASE WHEN $4 THEN $5 ELSE password_hash END,
            expires_at    = CASE WHEN $6 THEN $7 ELSE expires_at    END
-       WHERE id = $1
+       WHERE sf.user_id = $12
+         AND COALESCE(sf.bundle_id, sf.id) = COALESCE((SELECT bundle_id FROM shared_files WHERE id = $1), $1)
        RETURNING *`,
-      [id, name ?? null, isPublic ?? null, updatePw, pwHash, updateExp, expiresAt ?? null, updateTitle, title ?? null, updateNote, note ?? null]
+      [id, name ?? null, isPublic ?? null, updatePw, pwHash, updateExp, expiresAt ?? null, updateTitle, title ?? null, updateNote, note ?? null, req.userId]
     );
 
     const base = getBaseUrl(req);
@@ -241,10 +317,18 @@ router.delete('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    await query('DELETE FROM shared_files WHERE id = $1', [id]);
+    const deleteRows = await query<{ file_path: string }>(
+      `DELETE FROM shared_files sf
+       WHERE sf.user_id = $2
+         AND COALESCE(sf.bundle_id, sf.id) = COALESCE((SELECT bundle_id FROM shared_files WHERE id = $1), $1)
+       RETURNING file_path`,
+      [id, req.userId]
+    );
 
-    const filePath = path.join(UPLOAD_DIR, path.basename(existing.rows[0].file_path));
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    deleteRows.rows.forEach(row => {
+      const filePath = path.join(UPLOAD_DIR, path.basename(row.file_path));
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    });
 
     res.json({ success: true });
     broadcastToUser(req.userId!, 'files');

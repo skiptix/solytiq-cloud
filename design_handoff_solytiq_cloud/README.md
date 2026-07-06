@@ -1,7 +1,7 @@
 # Handoff: Solytiq Cloud — Full App Implementation
 
 > **Design reference files are in `design_files/`.**
-> Open `design_files/index.html` in a browser to see the complete, fully-interactive prototype.
+> Open `design_files/index.html` in a browser to see the complete, fully-interactive prototype. 
 > These HTML files are **design references only** — do not ship them. Recreate every screen in React + TypeScript using the specs below.
 
 ---

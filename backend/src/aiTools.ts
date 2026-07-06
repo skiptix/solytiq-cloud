@@ -17,9 +17,10 @@ import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import { query } from './db';
+import { query, withTransaction } from './db';
 import { broadcastToUser } from './sse';
 import { resolveWorkspaceForUser } from './workspaceUtil';
+import { softDeleteListTree, snapshotTimelineToTrash } from './trashUtil';
 import { extractTextFromBuffer } from './fileText';
 import { UPLOAD_DIR } from './routes/files';
 
@@ -425,10 +426,14 @@ export const aiTools: AiTool[] = [
     handler: async (userId, args) => {
       const listId = str(args.list_id);
       if (!listId) return fail('list_id is required');
-      const r = await query<{ name: string }>(`DELETE FROM lists WHERE id = $1 AND user_id = $2 RETURNING name`, [listId, userId]);
-      if (!r.rows.length) return fail('list not found');
+      const owned = await query<{ name: string }>(`SELECT name FROM lists WHERE id = $1 AND user_id = $2`, [listId, userId]);
+      if (!owned.rows.length) return fail('list not found');
+      // Soft delete: snapshot the list (and nested sublists) to trash, exactly
+      // like deleting from the UI, so the user can restore it for 30 days.
+      await softDeleteListTree(listId);
       broadcastToUser(userId, 'lists');
-      return ok(`Deleted list "${r.rows[0].name}"`, `Deleted list "${r.rows[0].name}"`);
+      broadcastToUser(userId, 'trash');
+      return ok(`Deleted list "${owned.rows[0].name}" (moved to trash)`, `Deleted list "${owned.rows[0].name}"`);
     },
   },
   {
@@ -624,10 +629,17 @@ export const aiTools: AiTool[] = [
     handler: async (userId, args) => {
       const tlId = str(args.timeline_id);
       if (!tlId) return fail('timeline_id is required');
-      const r = await query<{ name: string }>(`DELETE FROM timelines WHERE id = $1 AND user_id = $2 RETURNING name`, [tlId, userId]);
-      if (!r.rows.length) return fail('timeline not found');
+      const owned = await query<{ name: string }>(`SELECT name FROM timelines WHERE id = $1 AND user_id = $2`, [tlId, userId]);
+      if (!owned.rows.length) return fail('timeline not found');
+      // Soft delete: snapshot to trash first, same as deleting from the UI.
+      await withTransaction(async (client) => {
+        const exec = (text: string, params?: unknown[]) => client.query(text, params);
+        await snapshotTimelineToTrash(exec, tlId);
+        await client.query(`DELETE FROM timelines WHERE id = $1`, [tlId]);
+      });
       broadcastToUser(userId, 'timelines');
-      return ok(`Deleted timeline "${r.rows[0].name}"`, `Deleted timeline "${r.rows[0].name}"`);
+      broadcastToUser(userId, 'trash');
+      return ok(`Deleted timeline "${owned.rows[0].name}" (moved to trash)`, `Deleted timeline "${owned.rows[0].name}"`);
     },
   },
   {

@@ -6,6 +6,7 @@ import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
+import { snapshotTimelineToTrash } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors } from '../visibility';
 
 const router = Router();
@@ -98,6 +99,14 @@ function sanitizeTimeline(t: TimelineRow, milestones: ReturnType<typeof sanitize
 // Helper: build full timeline objects (timelines → milestones)
 // ---------------------------------------------------------------------------
 
+function summarizeTimelineRows(rows: TimelineRow[]): string {
+  if (rows.length === 0) return 'none';
+  return rows
+    .slice(0, 25)
+    .map((t) => `${t.id}{ws=${t.workspace_id ?? 'NULL'},folder=${t.folder_id ?? 'root'},owner=${t.user_id},public=${t.is_public}}`)
+    .join(', ') + (rows.length > 25 ? `, … +${rows.length - 25} more` : '');
+}
+
 async function buildTimelinesForUser(userId: string, workspaceId?: string) {
   const params: unknown[] = [userId];
   const wsFilter = workspaceId
@@ -144,8 +153,9 @@ async function buildTimelinesForUser(userId: string, workspaceId?: string) {
   }
 
   wlog(
-    `buildTimelines user=${userId} workspace=${workspaceId ?? 'ALL'} → ` +
-    `${timelinesResult.rows.length} timeline(s), ${milestonesResult.rows.length} milestone(s)`
+    `timelines BUILD user=${userId} requestedWorkspace=${workspaceId ?? 'ALL'} → ` +
+    `${timelinesResult.rows.length} timeline(s), ${milestonesResult.rows.length} milestone(s); ` +
+    `timelines=[${summarizeTimelineRows(timelinesResult.rows)}]`
   );
 
   return timelinesResult.rows.map((t) =>
@@ -161,7 +171,9 @@ async function buildTimelinesForUser(userId: string, workspaceId?: string) {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
+    wlog(`timelines GET ⇢ user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} rawQuery=${JSON.stringify(req.query)}`);
     const timelines = await buildTimelinesForUser(req.userId!, workspaceId);
+    wlog(`timelines GET ⇠ user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} returned=${timelines.length} ids=[${timelines.slice(0, 25).map(t => `${t.id}{ws=${t.workspaceId ?? 'NULL'},folder=${t.folderId ?? 'root'}}`).join(', ')}${timelines.length > 25 ? `, … +${timelines.length - 25} more` : ''}]`);
     res.json({ timelines });
   } catch (err) {
     werr('timelines GET error:', err);
@@ -494,24 +506,18 @@ router.delete('/:timelineId', async (req: Request, res: Response) => {
       return;
     }
 
-    const milestonesRes = await query<MilestoneRow>(
-      'SELECT * FROM milestones WHERE timeline_id = $1 ORDER BY position ASC',
-      [timelineId]
-    );
-    const timelineData = sanitizeTimeline(existing.rows[0], milestonesRes.rows.map(sanitizeMilestone));
-
-    // Snapshot-to-trash and delete must be atomic.
+    // Snapshot-to-trash and delete must be atomic (shared helper — the same
+    // snapshot shape is written by the workspace cascade and the AI tools).
     await withTransaction(async (client) => {
-      await client.query(
-        `INSERT INTO trash_timelines (timeline_id, user_id, timeline_data) VALUES ($1, $2, $3)`,
-        [timelineId, req.userId, JSON.stringify(timelineData)]
-      );
+      const exec = (text: string, params?: unknown[]) => client.query(text, params);
+      await snapshotTimelineToTrash(exec, timelineId);
       await client.query('DELETE FROM timelines WHERE id = $1', [timelineId]);
     });
 
-    wlog(`timeline DELETE ✓ id=${timelineId} (${milestonesRes.rows.length} milestone(s)) → trashed by user ${req.userId}`);
+    wlog(`timeline DELETE ✓ id=${timelineId} → trashed by user ${req.userId}`);
     res.json({ success: true });
     broadcastToUser(req.userId!, 'timelines');
+    broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     werr('timelines DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });

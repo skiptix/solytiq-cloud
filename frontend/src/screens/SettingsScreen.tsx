@@ -4,8 +4,10 @@ import { useMobile } from '../hooks/useBreakpoint';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import useAIStore from '../store/useAIStore';
-import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiUpdateAppSettingsMcp, apiGetAIUsage, type AIUsageDay, type AIUsageModel, type AIUsageTotals } from '../api/client';
+import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiUpdateAppSettingsMcp, apiGetAIUsage, apiGetAdminReadApiKeys, apiRevokeAdminReadApiKey, type AdminReadApiKey, type AIUsageDay, type AIUsageModel, type AIUsageTotals } from '../api/client';
 import Icon from '../components/Icon';
+import AdminApiKeyWizard from '../modals/AdminApiKeyWizard';
+import { featureForScope } from '../modals/adminApiFeatures';
 
 interface UserEntry {
   id: string;
@@ -18,7 +20,7 @@ interface UserEntry {
   createdAt: string;
 }
 
-type TabId = 'system' | 'ai' | 'security' | 'users' | 'danger';
+type TabId = 'system' | 'ai' | 'security' | 'api' | 'users' | 'danger';
 
 function relativeTime(iso: string | null): string {
   if (!iso) return 'Never';
@@ -85,6 +87,12 @@ export default function SettingsScreen() {
   const [nukeText, setNukeText] = useState('');
   const [nukePw, setNukePw] = useState('');
 
+
+  // Admin API keys
+  const [apiKeys, setApiKeys] = useState<AdminReadApiKey[]>([]);
+  const [apiKeysLoading, setApiKeysLoading] = useState(false);
+  const [showApiKeyWizard, setShowApiKeyWizard] = useState(false);
+
   // Users state
   const [users, setUsers] = useState<UserEntry[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
@@ -101,6 +109,7 @@ export default function SettingsScreen() {
   const [fullNameFocus, setFullNameFocus] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [passwordCopied, setPasswordCopied] = useState(false);
+  const [copiedUserId, setCopiedUserId] = useState<string | null>(null);
 
   // Edit user state
   const [editUserOpen, setEditUserOpen] = useState(false);
@@ -211,6 +220,25 @@ export default function SettingsScreen() {
       .finally(() => setUsageLoading(false));
   }, [activeTab, isAdmin]);
 
+
+  useEffect(() => {
+    if (activeTab !== 'api' || !isAdmin) return;
+    setApiKeysLoading(true);
+    apiGetAdminReadApiKeys()
+      .then(res => setApiKeys(res.keys))
+      .catch(() => setApiKeys([]))
+      .finally(() => setApiKeysLoading(false));
+  }, [activeTab, isAdmin]);
+
+  const apiOrigin = `${window.location.origin}/api/admin-read`;
+  const exportExample = `curl -H "Authorization: Bearer <ADMIN_API_KEY>" \\\n  "${apiOrigin}/export?workspaceId=<workspace-id>&userId=<user-id>"`;
+  const writeExample = `curl -X POST "${apiOrigin}/lists" \\\n  -H "Authorization: Bearer <ADMIN_API_KEY>" \\\n  -H "Content-Type: application/json" \\\n  -d '{"ownerId":"<user-id>","name":"Roadmap","emoji":"🗺️"}'`;
+
+  const handleRevokeApiKey = async (id: string) => {
+    await apiRevokeAdminReadApiKey(id);
+    setApiKeys(prev => prev.filter(k => k.id !== id));
+  };
+
   const handleSaveSystem = async () => {
     const gb = parseFloat(quotaGb);
     if (!gb || gb <= 0 || isNaN(gb)) return;
@@ -315,6 +343,30 @@ export default function SettingsScreen() {
       setTimeout(() => setPasswordCopied(false), 2000);
     });
   };
+
+
+  const copyUserId = (id: string) => {
+    if (!isAdmin) return;
+    navigator.clipboard.writeText(id).then(() => {
+      setCopiedUserId(id);
+      setTimeout(() => setCopiedUserId(current => current === id ? null : current), 2000);
+    });
+  };
+
+
+  const renderUserIdCopy = (id: string) => !isAdmin ? null : (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, minWidth: 0 }}>
+      <code style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, color: '#787584', background: '#F5F3FF', borderRadius: 6, padding: '2px 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>ID: {id}</code>
+      <button
+        onClick={() => copyUserId(id)}
+        title="Copy user ID"
+        style={{ display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: copiedUserId === id ? '#10B981' : '#5e4dbb', background: copiedUserId === id ? 'rgba(16,185,129,0.10)' : '#F5F3FF', border: 'none', borderRadius: 6, padding: '3px 7px', cursor: 'pointer', flexShrink: 0 }}
+      >
+        <Icon name={copiedUserId === id ? 'check' : 'content_copy'} size={12} color={copiedUserId === id ? '#10B981' : '#5e4dbb'} />
+        {copiedUserId === id ? 'Copied' : 'Copy ID'}
+      </button>
+    </div>
+  );
 
   const openEditUser = (u: UserEntry) => {
     setEditTarget(u);
@@ -478,6 +530,7 @@ export default function SettingsScreen() {
     { id: 'system',   label: 'System',      icon: 'storage' },
     { id: 'ai',       label: 'AI',          icon: 'smart_toy' },
     { id: 'security', label: 'Security',    icon: 'shield_lock' },
+    { id: 'api',      label: 'API',         icon: 'key' },
     { id: 'users',    label: 'Users',       icon: 'group' },
     { id: 'danger',   label: 'Danger Zone', icon: 'warning' },
   ];
@@ -983,6 +1036,65 @@ export default function SettingsScreen() {
               </div>
             )}
 
+
+            {/* ── API Tab ── */}
+            {activeTab === 'api' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {sectionLabel('Admin API',
+                  <button
+                    onClick={() => setShowApiKeyWizard(true)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'background 150ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#ede9ff'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                  >
+                    <Icon name="add" size={14} color="#5e4dbb" />
+                    New API key
+                  </button>
+                )}
+                <div style={card}>
+                  <div style={{ padding: '16px 18px' }}>
+                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22' }}>Instance-wide API access</div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 3 }}>Each key carries its own set of permissions, chosen when you create it. Grant a key only the features an integration needs — read/export, or create &amp; manage users, workspaces, folders, lists, timelines and meetings. Secrets are shown once and stored only as hashes.</div>
+                  </div>
+                </div>
+
+                {sectionLabel('Endpoints & examples')}
+                <div style={card}>
+                  <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>Base URL</div>
+                    <code style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, overflowWrap: 'anywhere' }}>{apiOrigin}</code>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 4 }}>Read everything (needs the <b>read</b> permission):</div>
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, overflowX: 'auto' }}>{exportExample}</pre>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 4 }}>Create a list for a user (needs the <b>lists</b> permission). Write endpoints accept an optional <b>ownerId</b> — the target user; it defaults to the admin who owns the key:</div>
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, overflowX: 'auto' }}>{writeExample}</pre>
+                  </div>
+                </div>
+
+                {sectionLabel('Active keys')}
+                <div style={card}>
+                  {apiKeysLoading ? <div style={{ ...row, justifyContent: 'center', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading…</div> : apiKeys.length === 0 ? <div style={{ ...row, justifyContent: 'center', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>No API keys yet.</div> : apiKeys.map(k => (
+                    <div key={k.id} style={{ ...row, borderBottom: '1px solid #f1ecf6', flexWrap: 'wrap', gap: 10 }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22' }}>{k.name}</div>
+                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{k.keyPrefix} · Created {new Date(k.createdAt).toLocaleDateString()} · Last used {k.lastUsedAt ? relativeTime(k.lastUsedAt) : 'never'}</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+                          {k.scopes.map(s => {
+                            const f = featureForScope(s);
+                            return (
+                              <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: '1px solid #e8e4f0', borderRadius: 9999, padding: '3px 9px' }}>
+                                <Icon name={f?.icon ?? 'key'} size={12} color="#5e4dbb" /> {f?.label ?? s}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <button onClick={() => handleRevokeApiKey(k.id)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: '#ba1a1a', background: '#fff5f5', border: '1px solid #ffdad6', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', alignSelf: 'flex-start' }}>Revoke</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* ── Users Tab ── */}
             {activeTab === 'users' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -1024,6 +1136,7 @@ export default function SettingsScreen() {
                               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 @{u.username} · {u.email}
                               </div>
+                              {renderUserIdCopy(u.id)}
                             </div>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -1186,6 +1299,7 @@ export default function SettingsScreen() {
                         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           @{u.username} · {u.email}
                         </div>
+                        {renderUserIdCopy(u.id)}
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -1438,6 +1552,14 @@ export default function SettingsScreen() {
             )}
           </div>
         </div>
+      )}
+
+      {/* ── Admin API key wizard ── */}
+      {showApiKeyWizard && (
+        <AdminApiKeyWizard
+          onClose={() => setShowApiKeyWizard(false)}
+          onCreated={key => setApiKeys(prev => [key, ...prev])}
+        />
       )}
     </div>
   );

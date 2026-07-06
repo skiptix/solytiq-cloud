@@ -6,6 +6,7 @@ import { authenticate, requireAdmin } from '../middleware';
 import { hashPassword, comparePassword } from '../auth';
 import { ensurePersonalWorkspace, wlog } from '../workspaceUtil';
 import { generateAndLogSetupToken } from '../setupToken';
+import { generateAdminApiKey, sanitizeScopes } from '../adminApiKey';
 
 const execFileAsync = promisify(execFile);
 
@@ -22,6 +23,29 @@ interface UserRow {
   created_at: string;
 }
 
+
+interface AdminKeyRow {
+  id: string;
+  name: string;
+  key_prefix: string;
+  scopes: unknown;
+  last_used_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+function sanitizeAdminKey(row: AdminKeyRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    keyPrefix: row.key_prefix,
+    scopes: sanitizeScopes(row.scopes),
+    lastUsedAt: row.last_used_at,
+    revokedAt: row.revoked_at,
+    createdAt: row.created_at,
+  };
+}
+
 function sanitize(u: UserRow) {
   return {
     id:           u.id,
@@ -34,6 +58,63 @@ function sanitize(u: UserRow) {
     createdAt:    u.created_at,
   };
 }
+
+
+// GET /api/admin/api-keys
+router.get('/api-keys', authenticate, requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const result = await query<AdminKeyRow>(
+      `SELECT id, name, key_prefix, scopes, last_used_at, revoked_at, created_at
+       FROM admin_api_keys
+       ORDER BY created_at DESC`
+    );
+    res.json({ keys: result.rows.map(sanitizeAdminKey) });
+  } catch (err) {
+    console.error('admin/api-keys GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/admin/api-keys
+router.post('/api-keys', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { name, scopes } = req.body as { name?: string; scopes?: unknown };
+    const cleanName = name?.trim() || 'Admin API key';
+    if (cleanName.length > 100) {
+      res.status(400).json({ error: 'Name must be 100 characters or fewer' });
+      return;
+    }
+    const cleanScopes = sanitizeScopes(scopes);
+
+    const generated = generateAdminApiKey();
+    const result = await query<AdminKeyRow>(
+      `INSERT INTO admin_api_keys (name, key_hash, key_prefix, created_by, scopes)
+       VALUES ($1, $2, $3, $4, $5::jsonb)
+       RETURNING id, name, key_prefix, scopes, last_used_at, revoked_at, created_at`,
+      [cleanName, generated.hash, generated.prefix, req.userId, JSON.stringify(cleanScopes)]
+    );
+
+    res.status(201).json({ key: sanitizeAdminKey(result.rows[0]), secret: generated.raw });
+  } catch (err) {
+    console.error('admin/api-keys POST error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/admin/api-keys/:id
+router.delete('/api-keys/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const result = await query(
+      `UPDATE admin_api_keys SET revoked_at = NOW() WHERE id = $1 AND revoked_at IS NULL RETURNING id`,
+      [req.params.id]
+    );
+    if (result.rows.length === 0) { res.status(404).json({ error: 'API key not found' }); return; }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('admin/api-keys DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // GET /api/admin/users
 router.get('/users', authenticate, requireAdmin, async (_req: Request, res: Response) => {

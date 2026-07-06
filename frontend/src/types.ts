@@ -211,6 +211,9 @@ export interface SharedFile {
   shareToken: string;
   shareUrl: string;
   createdAt: string;
+  bundleId?: string | null;
+  bundleName?: string | null;
+  bundleCount?: number;
 }
 
 export interface TaskAttachment {
@@ -422,6 +425,7 @@ export interface AppState {
   folders: Folder[];
   timelines: Timeline[];
   listsLoading: boolean;
+  loadError: boolean;
   trashTasks: TrashedTask[];
   trashLists: TrashedList[];
   trashFolders: TrashedFolder[];
@@ -455,7 +459,10 @@ export interface AppState {
   deleteFolderFromTrash: (trashId: number) => void;
   setSidebarWidth: (w: number) => void;
   moveTaskToList: (taskId: number, targetListId: string) => void;
-  loadFromApi: (workspaceId?: string) => Promise<void>;
+  loadFromApi: (
+    workspaceId?: string,
+    opts?: { only?: Array<'tasks' | 'lists' | 'folders' | 'timelines' | 'trash'>; attempt?: number }
+  ) => Promise<void>;
 }
 
 // ─── POI / Waypoint Types ─────────────────────────────────────────────────────
