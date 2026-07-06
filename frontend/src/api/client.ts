@@ -27,7 +27,13 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     ...(options.headers as Record<string, string> ?? {}),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  
+  const finalOptions: RequestInit = {
+    cache: 'no-store',
+    ...options,
+    headers,
+  };
+  const res = await fetch(`${BASE_URL}${path}`, finalOptions);
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText);
     let body: unknown = text;
