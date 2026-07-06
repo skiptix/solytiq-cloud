@@ -140,6 +140,25 @@ export const apiGetMemberAvatar = (id: string) =>
 export const apiChangePassword = (currentPassword: string, newPassword: string) =>
   apiFetch<{ success: boolean }>('/auth/password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) });
 
+// ---------------------------------------------------------------------------
+// Bootstrap API
+// ---------------------------------------------------------------------------
+
+export const apiGetBootstrap = (workspaceId?: string) => {
+  const query = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : '';
+  return apiFetch<{
+    tasks: any[];
+    lists: any[];
+    folders: any[];
+    timelines: any[];
+    trash: any[];
+    trashLists: any[];
+    trashFolders: any[];
+    trashTimelines: any[];
+    trashMilestones: any[];
+  }>(`/bootstrap${query}`);
+};
+
 export const apiGetFeatureFlags = () =>
   apiFetch<{ twoFAEnabled: boolean; mcpEnabled: boolean }>('/auth/feature-flags');
 

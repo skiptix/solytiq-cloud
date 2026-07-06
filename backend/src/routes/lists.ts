@@ -149,7 +149,7 @@ function summarizeListRows(rows: ListRow[]): string {
     .join(', ') + (rows.length > 25 ? `, … +${rows.length - 25} more` : '');
 }
 
-async function buildListsForUser(userId: string, workspaceId?: string) {
+export async function buildListsForUser(userId: string, workspaceId?: string) {
   // When workspaceId is provided: return lists in that workspace the user can access,
   // plus the user's own lists with no workspace assigned (backward-compatible "personal" lists).
   // When omitted: return all lists the user owns or has access to (global view).

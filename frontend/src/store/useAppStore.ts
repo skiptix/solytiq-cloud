@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { AppState, TrashedTask, TrashedList, TrashedFolder, TrashedTimeline } from '../types';
 import useWorkspaceStore from './useWorkspaceStore';
 import {
+  apiGetBootstrap,
   apiGetTasks,
   apiGetLists,
   apiGetFolders,
@@ -559,17 +560,35 @@ const useAppStore = create<AppState>()(
         if (slices.has('lists')) set({ listsLoading: true });
         try {
           const skip = Promise.resolve(null);
-          const [tasksRes, listsRes, foldersRes, timelinesRes, trashRes, trashListsRes, trashFoldersRes, trashTimelinesRes, trashMilestonesRes] = await Promise.all([
-            slices.has('tasks')     ? apiGetTasks(scopedWorkspaceId).catch(() => null)     : skip,
-            slices.has('lists')     ? apiGetLists(scopedWorkspaceId).catch(() => null)     : skip,
-            slices.has('folders')   ? apiGetFolders(scopedWorkspaceId).catch(() => null)   : skip,
-            slices.has('timelines') ? apiGetTimelines(scopedWorkspaceId).catch(() => null) : skip,
-            slices.has('trash')     ? apiGetTrash().catch(() => null)                      : skip,
-            slices.has('trash')     ? apiGetTrashLists().catch(() => null)                 : skip,
-            slices.has('trash')     ? apiGetTrashFolders().catch(() => null)               : skip,
-            slices.has('trash')     ? apiGetTrashTimelines().catch(() => null)             : skip,
-            slices.has('trash')     ? apiGetTrashMilestones().catch(() => null)            : skip,
-          ]);
+          const isFullLoad = slices.size === ALL_SLICES.length;
+          let tasksRes, listsRes, foldersRes, timelinesRes, trashRes, trashListsRes, trashFoldersRes, trashTimelinesRes, trashMilestonesRes;
+
+          if (isFullLoad) {
+            const bootstrapRes = await apiGetBootstrap(scopedWorkspaceId).catch(() => null);
+            if (bootstrapRes) {
+              tasksRes = { tasks: bootstrapRes.tasks };
+              listsRes = { lists: bootstrapRes.lists };
+              foldersRes = { folders: bootstrapRes.folders };
+              timelinesRes = { timelines: bootstrapRes.timelines };
+              trashRes = { trash: bootstrapRes.trash };
+              trashListsRes = { trash: bootstrapRes.trashLists };
+              trashFoldersRes = { trash: bootstrapRes.trashFolders };
+              trashTimelinesRes = { trash: bootstrapRes.trashTimelines };
+              trashMilestonesRes = { trash: bootstrapRes.trashMilestones };
+            }
+          } else {
+            [tasksRes, listsRes, foldersRes, timelinesRes, trashRes, trashListsRes, trashFoldersRes, trashTimelinesRes, trashMilestonesRes] = await Promise.all([
+              slices.has('tasks')     ? apiGetTasks(scopedWorkspaceId).catch(() => null)     : skip,
+              slices.has('lists')     ? apiGetLists(scopedWorkspaceId).catch(() => null)     : skip,
+              slices.has('folders')   ? apiGetFolders(scopedWorkspaceId).catch(() => null)   : skip,
+              slices.has('timelines') ? apiGetTimelines(scopedWorkspaceId).catch(() => null) : skip,
+              slices.has('trash')     ? apiGetTrash().catch(() => null)                      : skip,
+              slices.has('trash')     ? apiGetTrashLists().catch(() => null)                 : skip,
+              slices.has('trash')     ? apiGetTrashFolders().catch(() => null)               : skip,
+              slices.has('trash')     ? apiGetTrashTimelines().catch(() => null)             : skip,
+              slices.has('trash')     ? apiGetTrashMilestones().catch(() => null)            : skip,
+            ]);
+          }
           // A response is only irrelevant if the workspace changed underneath
           // it (e.g. the user switched workspaces mid-load).
           if (scopedWorkspaceId !== getScopedWorkspaceId()) return;
@@ -588,45 +607,45 @@ const useAppStore = create<AppState>()(
           };
           (Object.keys(owns) as LoadSlice[]).forEach(s => { if (owns[s]) sliceEpoch[s] = myLoadId; });
           const update: Partial<Pick<AppState, 'dashTasks' | 'lists' | 'folders' | 'timelines' | 'trashTasks' | 'trashLists' | 'trashFolders' | 'trashTimelines' | 'trashMilestones' | 'listsLoading' | 'loadError'>> = {};
-          if (tasksRes && owns.tasks) update.dashTasks = tasksRes.tasks.map(t => ({ ...t, id: Number(t.id) }));
+          if (tasksRes && owns.tasks) update.dashTasks = tasksRes.tasks.map((t: any) => ({ ...t, id: Number(t.id) }));
           if (foldersRes && owns.folders) update.folders = foldersRes.folders;
-          if (timelinesRes && owns.timelines) update.timelines = timelinesRes.timelines.map(t => ({ ...t, milestones: t.milestones ?? [] }));
-          if (listsRes && owns.lists) update.lists = listsRes.lists.map(l => ({
+          if (timelinesRes && owns.timelines) update.timelines = timelinesRes.timelines.map((t: any) => ({ ...t, milestones: t.milestones ?? [] }));
+          if (listsRes && owns.lists) update.lists = listsRes.lists.map((l: any) => ({
             ...l,
             parentTaskId: l.parentTaskId != null ? Number(l.parentTaskId) : null,
-            sections: l.sections.map(s => ({
+            sections: l.sections.map((s: any) => ({
               ...s,
-              tasks: s.tasks.map(t => ({ ...t, id: Number(t.id) })),
+              tasks: s.tasks.map((t: any) => ({ ...t, id: Number(t.id) })),
             })),
           }));
-          if (trashRes && owns.trash) update.trashTasks = trashRes.trash.map(tr => ({
+          if (trashRes && owns.trash) update.trashTasks = trashRes.trash.map((tr: any) => ({
             ...tr,
             id: Number(tr.id),
             taskId: Number(tr.taskId),
             task: { ...tr.task, id: Number(tr.task.id) },
           }));
-          if (trashListsRes && owns.trash) update.trashLists = trashListsRes.trash.map(tr => ({
+          if (trashListsRes && owns.trash) update.trashLists = trashListsRes.trash.map((tr: any) => ({
             id: Number(tr.id),
             listId: tr.listId,
             list: tr.listData,
             deletedAt: tr.deletedAt,
             expiresAt: tr.expiresAt,
           }));
-          if (trashFoldersRes && owns.trash) update.trashFolders = trashFoldersRes.trash.map(tr => ({
+          if (trashFoldersRes && owns.trash) update.trashFolders = trashFoldersRes.trash.map((tr: any) => ({
             id: Number(tr.id),
             folderId: tr.folderId,
             folder: tr.folderData,
             deletedAt: tr.deletedAt,
             expiresAt: tr.expiresAt,
           }));
-          if (trashTimelinesRes && owns.trash) update.trashTimelines = trashTimelinesRes.trash.map(tr => ({
+          if (trashTimelinesRes && owns.trash) update.trashTimelines = trashTimelinesRes.trash.map((tr: any) => ({
             id: Number(tr.id),
             timelineId: tr.timelineId,
             timeline: { ...tr.timelineData, milestones: tr.timelineData.milestones ?? [] },
             deletedAt: tr.deletedAt,
             expiresAt: tr.expiresAt,
           }));
-          if (trashMilestonesRes && owns.trash) update.trashMilestones = trashMilestonesRes.trash.map(tr => ({
+          if (trashMilestonesRes && owns.trash) update.trashMilestones = trashMilestonesRes.trash.map((tr: any) => ({
             id: Number(tr.id),
             milestoneId: tr.milestoneId,
             timelineId: tr.timelineId,

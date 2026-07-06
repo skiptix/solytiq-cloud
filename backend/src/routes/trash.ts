@@ -174,16 +174,21 @@ function sanitizeTrashMilestone(row: TrashMilestoneRow) {
 // Task trash routes
 // ---------------------------------------------------------------------------
 
+export async function buildTrashForUser(userId: string) {
+  const result = await query<TrashRow>(
+    `SELECT * FROM trash
+     WHERE user_id = $1 AND expires_at > NOW()
+     ORDER BY deleted_at DESC`,
+    [userId]
+  );
+  return result.rows.map(sanitizeTrash);
+}
+
 // GET /api/trash
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const result = await query<TrashRow>(
-      `SELECT * FROM trash
-       WHERE user_id = $1 AND expires_at > NOW()
-       ORDER BY deleted_at DESC`,
-      [req.userId]
-    );
-    res.json({ trash: result.rows.map(sanitizeTrash) });
+    const trash = await buildTrashForUser(req.userId!);
+    res.json({ trash });
   } catch (err) {
     console.error('trash GET error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -384,13 +389,18 @@ router.delete('/:trashId', async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 // GET /api/trash/lists
+export async function buildTrashListsForUser(userId: string) {
+  const result = await query<TrashListRow>(
+    `SELECT * FROM trash_lists WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`,
+    [userId]
+  );
+  return result.rows.map(sanitizeTrashList);
+}
+
 router.get('/lists', async (req: Request, res: Response) => {
   try {
-    const result = await query<TrashListRow>(
-      `SELECT * FROM trash_lists WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`,
-      [req.userId]
-    );
-    res.json({ trash: result.rows.map(sanitizeTrashList) });
+    const trash = await buildTrashListsForUser(req.userId!);
+    res.json({ trash });
   } catch (err) {
     console.error('trash lists GET error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -601,13 +611,18 @@ router.delete('/lists/:trashId', async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 // GET /api/trash/timelines
+export async function buildTrashTimelinesForUser(userId: string) {
+  const result = await query<TrashTimelineRow>(
+    `SELECT * FROM trash_timelines WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`,
+    [userId]
+  );
+  return result.rows.map(sanitizeTrashTimeline);
+}
+
 router.get('/timelines', async (req: Request, res: Response) => {
   try {
-    const result = await query<TrashTimelineRow>(
-      `SELECT * FROM trash_timelines WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`,
-      [req.userId]
-    );
-    res.json({ trash: result.rows.map(sanitizeTrashTimeline) });
+    const trash = await buildTrashTimelinesForUser(req.userId!);
+    res.json({ trash });
   } catch (err) {
     console.error('trash timelines GET error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -710,13 +725,18 @@ router.delete('/timelines/:trashId', async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 // GET /api/trash/folders
+export async function buildTrashFoldersForUser(userId: string) {
+  const result = await query<TrashFolderRow>(
+    `SELECT * FROM trash_folders WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`,
+    [userId]
+  );
+  return result.rows.map(sanitizeTrashFolder);
+}
+
 router.get('/folders', async (req: Request, res: Response) => {
   try {
-    const result = await query<TrashFolderRow>(
-      `SELECT * FROM trash_folders WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`,
-      [req.userId]
-    );
-    res.json({ trash: result.rows.map(sanitizeTrashFolder) });
+    const trash = await buildTrashFoldersForUser(req.userId!);
+    res.json({ trash });
   } catch (err) {
     console.error('trash folders GET error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -815,13 +835,18 @@ router.delete('/folders/:trashId', async (req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 
 // GET /api/trash/milestones
+export async function buildTrashMilestonesForUser(userId: string) {
+  const result = await query<TrashMilestoneRow>(
+    `SELECT * FROM trash_milestones WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`,
+    [userId]
+  );
+  return result.rows.map(sanitizeTrashMilestone);
+}
+
 router.get('/milestones', async (req: Request, res: Response) => {
   try {
-    const result = await query<TrashMilestoneRow>(
-      `SELECT * FROM trash_milestones WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`,
-      [req.userId]
-    );
-    res.json({ trash: result.rows.map(sanitizeTrashMilestone) });
+    const trash = await buildTrashMilestonesForUser(req.userId!);
+    res.json({ trash });
   } catch (err) {
     console.error('trash milestones GET error:', err);
     res.status(500).json({ error: 'Internal server error' });

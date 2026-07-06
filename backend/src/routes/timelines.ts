@@ -107,7 +107,7 @@ function summarizeTimelineRows(rows: TimelineRow[]): string {
     .join(', ') + (rows.length > 25 ? `, … +${rows.length - 25} more` : '');
 }
 
-async function buildTimelinesForUser(userId: string, workspaceId?: string) {
+export async function buildTimelinesForUser(userId: string, workspaceId?: string) {
   const params: unknown[] = [userId];
   const wsFilter = workspaceId
     ? `AND (t.workspace_id = $2 OR t.workspace_id IS NULL)`

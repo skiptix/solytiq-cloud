@@ -56,34 +56,40 @@ function sanitizeTask(task: TaskRow) {
   };
 }
 
+export async function buildTasksForUser(userId: string, workspaceId?: string) {
+  const params: unknown[] = [userId];
+
+  // Improved query to handle workspace context for both dashboard and list tasks.
+  // If workspaceId is provided, we filter tasks that are explicitly in that workspace,
+  // OR list tasks whose parent list belongs to that workspace.
+  // OR tasks that have no workspace assigned (backward-compatibility/legacy).
+  const wsClause = workspaceId
+    ? `AND (t.workspace_id = $2 OR t.workspace_id IS NULL OR (t.source = 'list' AND (l.workspace_id = $2 OR l.workspace_id IS NULL)))`
+    : '';
+  if (workspaceId) params.push(workspaceId);
+
+  const result = await query<TaskRow>(
+    `SELECT t.*,
+            (SELECT COUNT(*) FROM task_attachments ta WHERE ta.task_id = t.id) AS attachment_count
+     FROM tasks t
+     LEFT JOIN lists l ON t.list_id = l.id
+     WHERE ((t.user_id = $1 AND t.source = 'dash')
+        OR (t.source = 'list' AND (l.user_id = $1 OR l.is_public = true)))
+     ${wsClause}
+     ORDER BY t.position ASC, t.created_at ASC`,
+    params
+  );
+  
+  return result.rows.map(sanitizeTask);
+}
+
 // GET /api/tasks
 router.get('/', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
-    const params: unknown[] = [req.userId];
-
-    // Improved query to handle workspace context for both dashboard and list tasks.
-    // If workspaceId is provided, we filter tasks that are explicitly in that workspace,
-    // OR list tasks whose parent list belongs to that workspace.
-    // OR tasks that have no workspace assigned (backward-compatibility/legacy).
-    const wsClause = workspaceId
-      ? `AND (t.workspace_id = $2 OR t.workspace_id IS NULL OR (t.source = 'list' AND (l.workspace_id = $2 OR l.workspace_id IS NULL)))`
-      : '';
-    if (workspaceId) params.push(workspaceId);
-
-    const result = await query<TaskRow>(
-      `SELECT t.*,
-              (SELECT COUNT(*) FROM task_attachments ta WHERE ta.task_id = t.id) AS attachment_count
-       FROM tasks t
-       LEFT JOIN lists l ON t.list_id = l.id
-       WHERE ((t.user_id = $1 AND t.source = 'dash')
-          OR (t.source = 'list' AND (l.user_id = $1 OR l.is_public = true)))
-       ${wsClause}
-       ORDER BY t.position ASC, t.created_at ASC`,
-      params
-    );
-    wlog(`tasks GET user=${req.userId} workspace=${workspaceId ?? 'ALL'} → ${result.rows.length} task(s)`);
-    res.json({ tasks: result.rows.map(sanitizeTask) });
+    const tasks = await buildTasksForUser(req.userId!, workspaceId);
+    wlog(`tasks GET user=${req.userId} workspace=${workspaceId ?? 'ALL'} → ${tasks.length} task(s)`);
+    res.json({ tasks });
   } catch (err) {
     werr('tasks GET error:', err);
     res.status(500).json({ error: 'Internal server error' });
