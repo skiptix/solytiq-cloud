@@ -46,6 +46,8 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 *   **Fluid Motion:** Every interaction—from dragging lists to toggling tasks—is animated for immediate feedback.
 *   **Typography:** *Hanken Grotesk* for modern headings and *Inter* for maximum readability.
 *   **Styling Engine:** Tailwind CSS v4 provides base styles, combined with inline `style={{}}` objects and design tokens.
+*   **Icons:** Material Symbols via the `<Icon>` component (`src/components/Icon.tsx`). Pass the symbol name as a string.
+*   **Pickers:** Always use the shared `<CalendarPicker>` (`src/components/CalendarPicker.tsx`) and `<TimePicker>` (`src/components/TimePicker.tsx`) components for date and time fields. Never use native `<input type="date">` or `<input type="time">`.
 
 ---
 
@@ -99,7 +101,7 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 
 Frontend is served at `http://localhost` (port 80 via Nginx).
 
-**First run:** if no users exist yet, the backend logs a one-time **setup token**. Use it on the `/setup` wizard to create the first (admin) account.
+**First run:** if no users exist yet, the backend logs a one-time **setup token** (generated via `setupToken.ts`). Use it on the `/setup` wizard to securely create the first admin account, overriding old automatic registration flows.
 
 ### Running locally without Docker
 
@@ -130,7 +132,7 @@ When running the frontend separately, point it at the backend with `VITE_API_URL
 | `POSTGRES_USER` | Yes | Database username | `solytiq` |
 | `POSTGRES_PASSWORD` | Yes | Database password — must be changed in production | `change_me` |
 | `JWT_SECRET` | Yes | Key for session signing — **fails startup if default** | `change_me` |
-| `FRONTEND_URL` | Yes | Origin allowed by CORS (e.g., `http://localhost`). **Backend crashes on startup if missing.** Used for OAuth/MCP discovery when `PUBLIC_URL` is unset | `http://localhost` |
+| `FRONTEND_URL` | Yes | Origin allowed by CORS (e.g., `http://localhost`). Strictly required for secure CORS configuration; **backend crashes on startup if missing.** Used for OAuth/MCP discovery when `PUBLIC_URL` is unset | `http://localhost` |
 | `PUBLIC_URL` | No | Public origin (scheme + host) for OAuth issuer/endpoints and MCP | — |
 | `PORT` | No | Public host port / backend listen port | `3001` (backend) / `80` (Docker) |
 | `OPENROUTER_API_KEY` | No | Enables the AI assistant via OpenRouter | — |
@@ -144,12 +146,12 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 
 ## 🏗️ Architecture & Core Concepts
 
-- **Version Number** — Bump `v1.27.0` in both places in `frontend/src/components/Sidebar.tsx` on every deploy. Use semantic versioning.
+- **Version Number** — Bump `v1.28.0` in both places in `frontend/src/components/Sidebar.tsx` on every deploy. Use semantic versioning.
 - **Migrations in code, not files** — `runMigrations()` in `index.ts` uses guards and idempotent data heals/seeds.
-- **No ORM** — Raw SQL keeps queries explicit and avoids N+1 pitfalls; use `JOIN` freely.
+- **No ORM** — Raw SQL keeps queries explicit and avoids N+1 pitfalls; use `JOIN` freely. When doing bulk database inserts into PostgreSQL using a dynamic parameter array (e.g. `$1, $2...`), remember to chunk the parameters so you do not exceed PostgreSQL's maximum parameter limit (65535).
 - **Zustand over Redux** — Minimal boilerplate; each store is a standalone module. Stores call the API client directly; components call store actions.
 - **Soft delete** — Deleted tasks, lists, folders, and timelines go to their respective `trash*` tables (JSONB payload) with a 30-day `expires_at`. The live tables have no `deleted_at` column.
-- **Task IDs are BIGINT** — Generated client-side as `Date.now()` (milliseconds). Per-user FK scoping prevents cross-user collisions.
+- **Task IDs are BIGINT** — Generated client-side as `Date.now()` (milliseconds). Handled as numbers in TypeScript. Use secure integer generation like `crypto.randomInt()` instead of string-based UUIDs like `crypto.randomUUID()` when generating new IDs for these fields. Per-user FK scoping prevents cross-user collisions.
 - **Workspaces scope everything** — Lists, folders, tasks, and timelines carry a `workspace_id`. Every user gets an auto-seeded private "Personal" workspace. Workspace `visibility` plus `workspace_members` govern who can see shared content in-app.
 - **Two distinct notions of "public":**
   1. `is_public` on lists/folders/timelines = **in-app visibility to workspace members**.
@@ -164,9 +166,9 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **Task Source Duality** — Tasks have a source duality (`'dash'` or `'list'`) which dictates the appropriate frontend store actions to use (`updateDashTask` vs `updateListTask`).
 - **Sublists & Linked Lists** — Created by having a list task link to another list via `linkedListId` and `linkedListType` properties.
 - **File Uploads** — Handled by `multer`. Max upload size: 200 MB (multer config), Nginx proxy limit: 210 MB. Each user has a 15 GB storage quota.
-- **Security** — IDOR prevention using verified JWT `userId`, strict file path traversal checks, `bcryptjs` for password and share-link hashing, and transaction-based quota checks.
-- **Rate Limiting** — Configured in three tiers (`apiLimiter` for general API, `authLimiter` for logins/2FA, and `setupLimiter` for registration/nuke endpoints).
-- **Testing** — Vitest is the standard for both frontend and backend suites (`npm test`).
+- **Security** — IDOR prevention using verified JWT `userId`, strict file path traversal checks, `bcryptjs` for password and share-link hashing, and transaction-based quota checks. Avoid using synchronous I/O operations (like `fs.readFileSync`) in Express route handlers to prevent blocking the Node.js event loop.
+- **Rate Limiting** — Configured in three tiers (`apiLimiter` for general API, `authLimiter` for logins/2FA, and `setupLimiter` for registration/nuke endpoints). The `apiLimiter` is automatically applied to all routes mounted under `/api/` in `backend/src/index.ts`.
+- **Testing** — Vitest is the standard for both frontend and backend suites. To run tests, navigate to their respective directories and run `npm install && npm run test`.
 
 ---
 
