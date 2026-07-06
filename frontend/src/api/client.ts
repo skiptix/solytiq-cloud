@@ -32,7 +32,17 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     ...(options.headers as Record<string, string> ?? {}),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers, cache: 'no-store' });
+  let finalPath = path;
+  if (!options.method || options.method.toUpperCase() === 'GET') {
+    const joiner = finalPath.includes('?') ? '&' : '?';
+    finalPath = `${finalPath}${joiner}_t=${Date.now()}`;
+  }
+
+  const finalOptions: RequestInit = {
+    ...options,
+    headers,
+  };
+  const res = await fetch(`${BASE_URL}${finalPath}`, finalOptions);
   if (!res.ok) {
     if (res.status === 401) _onUnauthorized?.();
     const text = await res.text().catch(() => res.statusText);
