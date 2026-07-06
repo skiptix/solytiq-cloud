@@ -157,6 +157,23 @@ function AppLayout() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspaceId]);
 
+  // Self-heal after a load failure. The automatic recovery paths above
+  // (workspace switch, SSE, tab visibility, the browser 'online' event) only
+  // fire on their own triggers — none of them are guaranteed to happen again,
+  // so a transient failure could otherwise leave the "Couldn't refresh your
+  // data" banner up indefinitely even once the network/server is fine again.
+  // While the error is showing, keep quietly retrying in the background so
+  // the app recovers on its own instead of requiring the user to notice the
+  // banner and tap Retry.
+  useEffect(() => {
+    if (!loadError) return;
+    const id = setInterval(() => {
+      const wsId = useWorkspaceStore.getState().currentWorkspaceId;
+      loadFromApi(wsId ?? undefined);
+    }, 20000);
+    return () => clearInterval(id);
+  }, [loadError, loadFromApi]);
+
   // Close drawer on route change (mobile)
   useEffect(() => {
     if (isMobile) setDrawerOpen(false);
