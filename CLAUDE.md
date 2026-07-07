@@ -164,8 +164,9 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 | `gps_files` | `file_type` (`gpx｜fit`), `file_path`, `metadata JSONB`, `smoothed`, `route_state JSONB` (Route Planner State v1) |
 | `meetings` | Standalone calendar events (no list/timeline/workspace): `user_id`, `title`, `meeting_date`, `start_time`/`end_time`, `all_day`, `location`, `color`, `caldav_uid` (CalDAV resource mapping) |
 | `caldav_credentials` | Per-user CalDAV app password: `user_id` PK, `password_hash` (bcrypt), `last_used_at` |
+| `mobile_connections` | One row per signed-in mobile device (Solytiq Cloud iOS app): `user_id`, `device_name`/`device_model`/`os_version`/`app_version`, `created_at`, `last_seen_at`. The row id is embedded in the device's JWT (`connectionId`) so it can be listed and revoked |
 | `trash`, `trash_lists`, `trash_folders`, `trash_timelines` | Soft-delete payloads as JSONB with a 30-day `expires_at` |
-| `app_settings` | Key/value config (storage quota, `ai_assistant_enabled`, `ai_model`, `two_fa_feature_enabled`) |
+| `app_settings` | Key/value config (storage quota, `ai_assistant_enabled`, `ai_model`, `two_fa_feature_enabled`, `mcp_enabled`, `mobile_app_enabled`) |
 | `ai_chat_sessions`, `ai_chats`, `ai_chat_files`, `ai_usage` | AI conversations, messages, uploaded files (30-day TTL), and per-call token usage |
 
 ### Authentication
@@ -175,6 +176,7 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **TOTP 2FA** (`otplib` + `qrcode`): when enabled, login returns a pending token and the client must call `/api/auth/2fa/verify`. Gated by the `two_fa_feature_enabled` app setting.
 - Passwords are hashed with `bcryptjs`. Never store or log plaintext passwords.
 - All routes except `/api/auth/login`, `/api/auth/register`, `/api/auth/request-setup-token`, the public `/api/share/*` endpoints, and `/health` require auth. The SSE endpoint `/api/events` authenticates via `?token=` query param or `Authorization` header.
+- **Mobile app connections** — the iOS client sends `client: 'mobile'` + a `device` descriptor on `/api/auth/login` (and `/2fa/verify`); the server records a `mobile_connections` row and embeds its id in the JWT as `connectionId`. `middleware.ts` validates that connection on every request, so a user revoking a device (`DELETE /api/auth/mobile-connections/:id`, surfaced in Account Settings → Mobile) or an admin disabling the `mobile_app_enabled` setting (Settings → Mobile) signs the device out on its next call. `GET /api/auth/feature-flags` exposes `mobileEnabled`.
 
 ### Rate Limiting
 

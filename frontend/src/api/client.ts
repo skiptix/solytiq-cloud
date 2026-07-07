@@ -141,7 +141,24 @@ export const apiChangePassword = (currentPassword: string, newPassword: string) 
   apiFetch<{ success: boolean }>('/auth/password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) });
 
 export const apiGetFeatureFlags = () =>
-  apiFetch<{ twoFAEnabled: boolean; mcpEnabled: boolean }>('/auth/feature-flags');
+  apiFetch<{ twoFAEnabled: boolean; mcpEnabled: boolean; mobileEnabled: boolean }>('/auth/feature-flags');
+
+// ── Mobile app device connections ───────────────────────────────────────────
+export interface MobileConnection {
+  id: string;
+  deviceName: string;
+  deviceModel: string | null;
+  osVersion: string | null;
+  appVersion: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+}
+
+export const apiGetMobileConnections = () =>
+  apiFetch<{ connections: MobileConnection[] }>('/auth/mobile-connections');
+
+export const apiDeleteMobileConnection = (id: string) =>
+  apiFetch<{ success: boolean }>(`/auth/mobile-connections/${id}`, { method: 'DELETE' });
 
 export const apiAdminPasswordResetRequest = () =>
   apiFetch<{ ok: boolean }>('/auth/admin-password-reset/request', { method: 'POST' });
@@ -737,6 +754,12 @@ export const apiUpdateAppSettingsMcp = (mcpEnabled: boolean) =>
   apiFetch<{ settings: Record<string, string> }>('/admin/settings', {
     method: 'PUT',
     body: JSON.stringify({ mcpEnabled }),
+  });
+
+export const apiUpdateAppSettingsMobile = (mobileAppEnabled: boolean) =>
+  apiFetch<{ settings: Record<string, string> }>('/admin/settings', {
+    method: 'PUT',
+    body: JSON.stringify({ mobileAppEnabled }),
   });
 
 // Workspaces

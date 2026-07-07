@@ -13,10 +13,13 @@ import {
   api2FADisable,
   apiGetApiTokens,
   apiDeleteApiToken,
+  apiGetMobileConnections,
+  apiDeleteMobileConnection,
   apiGetCaldavStatus,
   apiGenerateCaldavPassword,
   apiRevokeCaldav,
   type ApiAccessToken,
+  type MobileConnection,
   type CaldavStatus,
 } from '../api/client';
 
@@ -63,7 +66,7 @@ const rowStyle: React.CSSProperties = {
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
-type SettingsTab = 'profile' | 'preferences' | 'security' | 'connections' | 'calendar';
+type SettingsTab = 'profile' | 'preferences' | 'security' | 'connections' | 'mobile' | 'calendar';
 
 export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   const isMobile = useMobile();
@@ -75,10 +78,12 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   // Feature flags
   const [twoFAFeatureEnabled, setTwoFAFeatureEnabled] = useState(true);
   const [mcpEnabled, setMcpEnabled] = useState(true);
+  const [mobileEnabled, setMobileEnabled] = useState(true);
   useEffect(() => {
     apiGetFeatureFlags().then(r => {
       setTwoFAFeatureEnabled(r.twoFAEnabled);
       setMcpEnabled(r.mcpEnabled);
+      setMobileEnabled(r.mobileEnabled);
     }).catch(() => {});
   }, []);
 
@@ -331,6 +336,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
     { id: 'preferences', label: 'Preferences', icon: 'tune' },
     { id: 'security',    label: 'Security',    icon: 'shield_lock' },
     ...(mcpEnabled ? [{ id: 'connections' as SettingsTab, label: 'Connections', icon: 'smart_toy' }] : []),
+    ...(mobileEnabled ? [{ id: 'mobile' as SettingsTab, label: 'Mobile', icon: 'smartphone' }] : []),
     { id: 'calendar',    label: 'Calendar Sync', icon: 'event_available' },
   ];
 
@@ -800,6 +806,14 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
             </div>
             )}
 
+            {/* ── MOBILE (device connections) ── */}
+            {activeTab === 'mobile' && mobileEnabled && (
+            <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
+              {sectionLabel('Mobile App')}
+              <MobileConnectionsSection />
+            </div>
+            )}
+
             {/* ── CALENDAR SYNC (CalDAV) ── */}
             {activeTab === 'calendar' && (
             <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
@@ -1084,6 +1098,100 @@ function ClaudeMcpSection() {
       {!loading && tokens.length === 0 && (
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', textAlign: 'center', padding: '2px 0' }}>
           No connected clients yet.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Mobile app (connected devices) ─────────────────────────────────────────────
+
+function MobileConnectionsSection() {
+  const [connections, setConnections] = useState<MobileConnection[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGetMobileConnections()
+      .then(r => setConnections(r.connections))
+      .catch(() => setConnections([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleRevoke = async (id: string) => {
+    setRevokingId(id);
+    try {
+      await apiDeleteMobileConnection(id);
+      setConnections(prev => prev.filter(c => c.id !== id));
+    } catch {
+      /* keep it in the list on failure */
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Intro / explainer */}
+      <div style={{ ...card, padding: '14px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="smartphone" size={19} color="#5e4dbb" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>
+              Solytiq Cloud for iOS
+            </div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#787584', lineHeight: 1.5, marginTop: 3 }}>
+              Devices signed in through the mobile app appear here. In the app, choose <strong>Connect to Server</strong> and enter this instance's address, then sign in with your account. Revoke a device to sign it out immediately.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {loading && (
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', textAlign: 'center', padding: '2px 0' }}>
+          Loading connected devices…
+        </div>
+      )}
+
+      {/* Connected devices */}
+      {!loading && connections.length > 0 && (
+        <div style={card}>
+          {connections.map((c, i) => (
+            <div key={c.id} style={{ ...rowStyle, borderTop: i === 0 ? 'none' : '1px solid #f1ecf6' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 9, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Icon name="smartphone" size={16} color="#5e4dbb" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {c.deviceName}{c.deviceModel && c.deviceModel !== c.deviceName ? ` · ${c.deviceModel}` : ''}
+                  </div>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#787584', marginTop: 1 }}>
+                    {c.osVersion ? `${c.osVersion}  ·  ` : ''}Connected {fmtTokenDate(c.createdAt)}
+                    {'  ·  '}{c.lastSeenAt ? `Last used ${fmtTokenDate(c.lastSeenAt)}` : 'Never used'}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => handleRevoke(c.id)}
+                disabled={revokingId === c.id}
+                title="Revoke"
+                style={{ flexShrink: 0, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#ba1a1a', background: '#fff5f5', border: '1px solid #ffdad6', borderRadius: 8, padding: '7px 12px', cursor: revokingId === c.id ? 'wait' : 'pointer', transition: 'background 150ms' }}
+                onMouseEnter={e => { if (revokingId !== c.id) e.currentTarget.style.background = '#ffe9e6'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#fff5f5'; }}
+              >
+                {revokingId === c.id ? 'Revoking…' : 'Revoke'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && connections.length === 0 && (
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', textAlign: 'center', padding: '2px 0' }}>
+          No mobile devices connected yet.
         </div>
       )}
     </div>

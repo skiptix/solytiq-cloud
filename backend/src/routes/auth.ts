@@ -60,6 +60,54 @@ function sanitizeUser(user: UserRow) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Mobile app connections
+//
+// The mobile client (github.com/skiptix/solytiq-cloud-mobile) sends
+// `client: 'mobile'` plus a `device` descriptor on login / 2FA verify. Each
+// signed-in device gets a `mobile_connections` row whose id is embedded in the
+// issued JWT (`connectionId`), letting the connection be listed and revoked.
+// ---------------------------------------------------------------------------
+interface DeviceInfo { name?: string; model?: string; osVersion?: string; appVersion?: string }
+
+function trunc(v: unknown): string | null {
+  if (typeof v !== 'string') return null;
+  const t = v.trim();
+  return t ? t.slice(0, 255) : null;
+}
+
+async function mobileAppEnabled(): Promise<boolean> {
+  const r = await query<{ value: string }>(
+    "SELECT value FROM app_settings WHERE key = 'mobile_app_enabled'"
+  );
+  return r.rows[0] ? r.rows[0].value !== 'false' : true;
+}
+
+async function createMobileConnection(userId: string, device?: DeviceInfo): Promise<string> {
+  const r = await query<{ id: string }>(
+    `INSERT INTO mobile_connections (user_id, device_name, device_model, os_version, app_version)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [userId, trunc(device?.name) ?? 'Mobile device', trunc(device?.model), trunc(device?.osVersion), trunc(device?.appVersion)]
+  );
+  return r.rows[0].id;
+}
+
+function sanitizeConnection(r: {
+  id: string; device_name: string; device_model: string | null;
+  os_version: string | null; app_version: string | null;
+  created_at: string; last_seen_at: string;
+}) {
+  return {
+    id:         r.id,
+    deviceName: r.device_name,
+    deviceModel: r.device_model,
+    osVersion:  r.os_version,
+    appVersion: r.app_version,
+    createdAt:  r.created_at,
+    lastSeenAt: r.last_seen_at,
+  };
+}
+
 // GET /api/auth/setup-required
 router.get('/setup-required', async (_req: Request, res: Response) => {
   try {
@@ -166,14 +214,22 @@ router.post('/register', async (req: Request, res: Response) => {
 // POST /api/auth/login
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { username, email, password } = req.body as {
+    const { username, email, password, client, device } = req.body as {
       username?: string;
       email?: string;
       password?: string;
+      client?: string;
+      device?: DeviceInfo;
     };
 
     if (!password || (!username && !email)) {
       res.status(400).json({ error: 'password and username or email are required' });
+      return;
+    }
+
+    const isMobile = client === 'mobile';
+    if (isMobile && !(await mobileAppEnabled())) {
+      res.status(403).json({ error: 'Mobile access has been disabled by the administrator.' });
       return;
     }
 
@@ -203,6 +259,13 @@ router.post('/login', async (req: Request, res: Response) => {
     if (user.totp_enabled && twoFAFeatureOn) {
       const pendingToken = generatePendingToken(user.id);
       res.json({ requires2FA: true, pendingToken });
+      return;
+    }
+
+    if (isMobile) {
+      const connectionId = await createMobileConnection(user.id, device);
+      const token = generateToken(user.id, user.token_version, connectionId);
+      res.json({ token, user: sanitizeUser(user), connectionId });
       return;
     }
 
@@ -463,9 +526,17 @@ router.post('/2fa/disable', authenticate, async (req: Request, res: Response) =>
 // POST /api/auth/2fa/verify  — complete a pending login (no auth middleware)
 router.post('/2fa/verify', async (req: Request, res: Response) => {
   try {
-    const { pendingToken, code } = req.body as { pendingToken?: string; code?: string };
+    const { pendingToken, code, client, device } = req.body as {
+      pendingToken?: string; code?: string; client?: string; device?: DeviceInfo;
+    };
     if (!pendingToken || !code) {
       res.status(400).json({ error: 'pendingToken and code are required' }); return;
+    }
+
+    const isMobile = client === 'mobile';
+    if (isMobile && !(await mobileAppEnabled())) {
+      res.status(403).json({ error: 'Mobile access has been disabled by the administrator.' });
+      return;
     }
 
     let userId: string;
@@ -483,6 +554,13 @@ router.post('/2fa/verify', async (req: Request, res: Response) => {
 
     if (!authenticator.verify({ token: code, secret: user.totp_secret })) {
       res.status(401).json({ error: 'Invalid code — please try again' }); return;
+    }
+
+    if (isMobile) {
+      const connectionId = await createMobileConnection(user.id, device);
+      const token = generateToken(user.id, user.token_version, connectionId);
+      res.json({ token, user: sanitizeUser(user), connectionId });
+      return;
     }
 
     const token = generateToken(user.id, user.token_version);
@@ -623,16 +701,54 @@ router.post('/admin-password-reset/confirm', async (req: Request, res: Response)
   }
 });
 
+// GET /api/auth/mobile-connections — list this user's signed-in mobile devices
+router.get('/mobile-connections', authenticate, async (req: Request, res: Response) => {
+  try {
+    const result = await query<{
+      id: string; device_name: string; device_model: string | null;
+      os_version: string | null; app_version: string | null;
+      created_at: string; last_seen_at: string;
+    }>(
+      `SELECT id, device_name, device_model, os_version, app_version, created_at, last_seen_at
+       FROM mobile_connections WHERE user_id = $1 ORDER BY last_seen_at DESC`,
+      [req.userId]
+    );
+    res.json({ connections: result.rows.map(sanitizeConnection) });
+  } catch (err) {
+    console.error('mobile-connections GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/auth/mobile-connections/:id — revoke (sign out) a mobile device
+router.delete('/mobile-connections/:id', authenticate, async (req: Request, res: Response) => {
+  try {
+    const result = await query(
+      `DELETE FROM mobile_connections WHERE id = $1 AND user_id = $2`,
+      [req.params.id, req.userId]
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Connection not found' });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('mobile-connections DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/auth/feature-flags — accessible to any authenticated user
 router.get('/feature-flags', authenticate, async (_req: Request, res: Response) => {
   try {
     const result = await query<{ key: string; value: string }>(
-      "SELECT key, value FROM app_settings WHERE key IN ('two_fa_feature_enabled', 'mcp_enabled')"
+      "SELECT key, value FROM app_settings WHERE key IN ('two_fa_feature_enabled', 'mcp_enabled', 'mobile_app_enabled')"
     );
     const map = Object.fromEntries(result.rows.map(r => [r.key, r.value]));
     res.json({
-      twoFAEnabled: map['two_fa_feature_enabled'] !== 'false',
-      mcpEnabled:   map['mcp_enabled'] !== 'false',
+      twoFAEnabled:  map['two_fa_feature_enabled'] !== 'false',
+      mcpEnabled:    map['mcp_enabled'] !== 'false',
+      mobileEnabled: map['mobile_app_enabled'] !== 'false',
     });
   } catch (err) {
     console.error('feature-flags error:', err);
