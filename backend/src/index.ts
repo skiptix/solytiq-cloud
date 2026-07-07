@@ -1027,12 +1027,17 @@ async function runMigrations() {
 
     // Heal missing owner memberships for all owned workspaces. Without this,
     // a workspace can become invisible to its owner while its lists/timelines
-    // remain in the database and never appear in trash.
+    // remain in the database and never appear in trash. Guarded (see
+    // ensureOwnedWorkspaceMemberships in workspaceUtil.ts) so this startup
+    // pass doesn't fire the workspace_members sync_log trigger for every
+    // already-correct row on every restart.
     await pool.query(`
       INSERT INTO workspace_members (workspace_id, user_id, role)
       SELECT w.id, w.owner_id, 'owner'
       FROM workspaces w
-      ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = 'owner'
+      ON CONFLICT (workspace_id, user_id) DO UPDATE
+        SET role = 'owner'
+        WHERE workspace_members.role IS DISTINCT FROM 'owner'
     `);
 
     // Assign existing unassigned lists/folders/tasks to their owner's workspace.

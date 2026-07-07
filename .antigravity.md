@@ -129,6 +129,7 @@ Copy `.env.example` to `.env` at the repository root. Docker Compose reads this 
 | `PORT` | No | Backend listen port (default: `3001`); also the host port for the frontend container |
 | `OPENROUTER_API_KEY` | No | Enables the AI assistant via OpenRouter |
 | `OPENROUTER_MODEL` | No | Model name (default: `openai/gpt-4o-mini`) |
+| `NUKE_SKIP_RESTART` | No | Set to `true` to stop the admin Nuke action from calling `process.exit(0)` at the end — only needed when running the backend without a process supervisor (e.g. plain `node dist/index.js`, no Docker restart policy) that would otherwise bring it back up |
 
 The backend refuses to start in `NODE_ENV=production` if `JWT_SECRET` is the default placeholder.
 
@@ -181,9 +182,9 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 ### Rate Limiting
 
 Three tiers defined in `index.ts`:
-- `apiLimiter` — 300 req / 15 min (all `/api/*`)
-- `authLimiter` — 10 req / 15 min (login, `/api/auth/2fa/verify`)
-- `setupLimiter` — 5 req / 1 hour (register, `request-setup-token`, admin nuke)
+- `apiLimiter` — 600 req / user / min for authenticated `/api/*` traffic, keyed on the verified `userId` (decoded from the JWT for the key only — pre-auth requests fall back to IP). One busy tab can only exhaust its own budget, not the whole instance. `/api/events` (the SSE stream) and `/api/sync/*` (the delta-sync polls it drives) are exempt — they must never count like mutations.
+- `authLimiter` — 10 req / 15 min (login, `/api/auth/2fa/verify`), keyed on IP
+- `setupLimiter` — 5 req / 1 hour (register, `request-setup-token`, admin nuke), keyed on IP
 
 ### Route Patterns
 
@@ -322,7 +323,7 @@ Authenticated routes:
 - `/files` → `FilesScreen`
 - `/gps` → `GPSScreen`, `/gps/:id/edit` → `GPSEditScreen`
 - `/settings` → `SettingsScreen`
-- `/nuke` → `NukeScreen` (account/data deletion)
+- `/nuke` → `NukeScreen` (admin-only total instance reset; route-guarded on `isAdmin`, not just `loggedIn`)
 
 Public / unauthenticated routes:
 - `/login` → `LoginScreen`, `/setup` → `SetupWizard` (first-run)
@@ -451,7 +452,8 @@ These issues were identified and fixed (see `security_report.md`). Do not regres
 - **Two distinct notions of "public":**
   1. `is_public` on lists/folders/timelines = **in-app visibility to workspace members**.
   2. `share_enabled` + `share_token` = **anonymous read-only link** for anyone on the internet (no login), optionally password-protected and/or time-limited. These are independent — enabling one does not enable the other.
-- **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
+- **Real-time via a cursor-based delta-sync engine over SSE** — `sync_log` (`BIGSERIAL seq`) is a transactional outbox: `AFTER INSERT/UPDATE/DELETE` triggers on every synced table (see `runMigrations()`) append a row and `pg_notify` a compact descriptor. `backend/src/syncLog.ts` LISTENs, resolves the audience (workspace members + owner + public contributors), and pushes a cursor-tagged frame over `/api/events` via `broadcastToUsers` (`sse.ts`) — this is what makes a collaborator's edit appear live on every device that can see it, not just the author's. The frame is a nudge only; `GET /api/sync/bootstrap` (full state + cursor) and `GET /api/sync/delta?since=` (changes after the cursor, re-serialized fresh and scoped to the requesting user — the real access boundary) are authoritative. `frontend/src/store/useSyncStore.ts` owns the cursor and applies deltas into `useAppStore` (`applyDeltas`/`hydrateFromSnapshot`) without a full reload. Live by default; `VITE_SYNC_ENGINE=0` reverts to the legacy full/slice-reload loader (`useAppStore.loadFromApi`) as an instant rollback. No WebSocket server, no Redis — a single in-process dispatcher, deliberately isolated so a Redis backplane could replace it later without touching call sites.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
 - **Admin API is scoped** — `admin_api_keys` are instance-wide credentials (created by admins, hashed, revocable) that carry a `scopes` JSONB array. `routes/adminReadApi.ts` (mounted at `/api/admin-read`) gates each route behind a scope from `ADMIN_API_SCOPES` in `adminApiKey.ts` (`read`, `users`, `workspaces`, `folders`, `lists`, `timelines`, `meetings`); the creation wizard (`modals/AdminApiKeyWizard.tsx`) toggles them. Beyond `read` (the export), it supports full create/update/delete for those resources on behalf of any user — the target owner comes from an explicit, validated `ownerId` (defaulting to the key creator), never trusted blindly. Add new scopes to `ADMIN_API_SCOPES` and `ADMIN_API_FEATURES` together.
+- **Admin Nuke is a total, self-restarting instance reset** — `DELETE /api/admin/nuke` (`routes/admin.ts`, admin-only + password re-check) discovers every table in the `public` schema via `pg_tables` (never a hardcoded list — a fixed list silently stops covering new tables as the schema grows) and `TRUNCATE`s all of them in one statement, deletes every file under `UPLOAD_DIR` (shared files, task/milestone attachments, GPS/FIT tracks all live flatly there), regenerates the setup token, then broadcasts a dedicated `event: nuke` SSE frame to **every** connected client of **every** user (`broadcastToUsers`'s sibling `broadcastNukeToAll` in `sse.ts` — a `TRUNCATE` doesn't fire row-level triggers, so this bypasses the normal sync_log pipeline entirely) telling each tab to clear its storage and land on `/setup` immediately, rather than waiting for its next API call to 401. It then calls `process.exit(0)` after a short delay so Docker Compose's `restart: unless-stopped` policy relaunches a fully clean process — the only way to guarantee no in-memory state (the SSE registry, rate-limiter counters, the sync dispatcher's LISTEN connection) survives. Set `NUKE_SKIP_RESTART=true` to opt out when running without a process supervisor that will bring the process back up.

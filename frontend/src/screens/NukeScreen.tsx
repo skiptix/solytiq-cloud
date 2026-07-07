@@ -1,16 +1,21 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import useAuthStore from '../store/useAuthStore';
 import { apiNuke } from '../api/client';
 
 const STEPS = [
-  { at: 0, label: 'Preparing wipe…' },
-  { at: 18, label: 'Deleting tasks and lists…' },
-  { at: 42, label: 'Removing all users…' },
-  { at: 68, label: 'Finalizing database reset…' },
+  { at: 0,  label: 'Preparing wipe…' },
+  { at: 15, label: 'Erasing all data — every table, every workspace…' },
+  { at: 35, label: 'Deleting uploaded files and attachments…' },
+  { at: 55, label: 'Removing all users and admin settings…' },
+  { at: 75, label: 'Restarting the application…' },
   { at: 92, label: 'Almost done…' },
 ];
+// Extra grace period after the progress ring reaches 100% before redirecting.
+// The backend deliberately restarts itself as the last step of a nuke (so no
+// in-memory state survives) — this gives that restart a head start so /setup
+// doesn't load into a brief connection-refused window mid-restart.
+const POST_COMPLETE_GRACE_MS = 2500;
 
 const R = 68;
 const CIRC = 2 * Math.PI * R;
@@ -19,7 +24,6 @@ export default function NukeScreen() {
   usePageTitle("Wipe System");
   const navigate = useNavigate();
   const location = useLocation();
-  const { signOut } = useAuthStore();
   const password = (location.state as { password?: string } | null)?.password ?? '';
 
   const [progress, setProgress] = useState(0);
@@ -75,22 +79,25 @@ export default function NukeScreen() {
     return () => window.clearInterval(id);
   }, [error]);
 
-  // Watch for 100% then sign out and hard-redirect to setup
+  // Watch for 100% then fully clear local state and hard-redirect to setup.
   useEffect(() => {
     if (progress >= 100 && !doneHandled.current) {
       doneHandled.current = true;
 
       const timeoutId = window.setTimeout(() => {
-        signOut();
-
-        // Force a full app reload so App.tsx reruns the setup-required check.
-        // Without this, the old setupRequired state can redirect to /login.
+        // A full clear (not just signOut()) so every persisted store — auth,
+        // app data, workspace, prefs — resets to its defaults on the next
+        // load. This matters here specifically: signOut() alone leaves
+        // `adminRegistered` at its old `true` value, which would make
+        // App.tsx's setup-required fallback pick /login instead of /setup if
+        // this reload races the backend's own post-nuke restart.
+        try { localStorage.clear(); sessionStorage.clear(); } catch { /* ignore */ }
         window.location.replace('/setup');
-      }, 600);
+      }, POST_COMPLETE_GRACE_MS);
 
       return () => window.clearTimeout(timeoutId);
     }
-  }, [progress, signOut]);
+  }, [progress]);
 
   // Derive message from current progress
   const currentStep = [...STEPS].reverse().find(s => progress >= s.at) ?? STEPS[0];

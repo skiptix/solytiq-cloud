@@ -880,6 +880,14 @@ export function connectSSE(onFrame: (frame: SseFrame) => void, onOpen?: () => vo
       onFrame(JSON.parse(e.data) as SseFrame);
     } catch { /* ignore malformed */ }
   });
+  // Emergency admin "Nuke Everything" signal — every connected tab of every
+  // user drops its cache and bails out to /setup immediately, rather than
+  // waiting for its next API call to 401. Handled here (not via `onFrame`) so
+  // it fires identically regardless of which loader mode the caller is in.
+  sseSource.addEventListener('nuke', () => {
+    try { localStorage.clear(); sessionStorage.clear(); } catch { /* ignore */ }
+    window.location.replace('/setup');
+  });
   sseSource.onerror = () => {
     sseSource?.close();
     sseSource = null;

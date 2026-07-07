@@ -28,6 +28,25 @@ let pulling = false;
 // after a newer one and clobber it.
 let bootstrapId = 0;
 
+// Defense in depth: a `workspace` signal is supposed to mean "membership or
+// visibility actually changed", but a backend defect that makes some write
+// path unconditionally re-touch a row (an `ON CONFLICT DO UPDATE` missing a
+// change-guard) can make it fire on every read, and reloading the workspace
+// list on every one of those creates a self-sustaining request loop — a
+// concrete instance of this already happened and is fixed server-side (see
+// ensureOwnedWorkspaceMemberships in workspaceUtil.ts), but a signal this
+// class of bug can produce should never be able to drive an unthrottled loop
+// from the client either. A genuine membership change reflecting a few
+// seconds late is imperceptible; a tight loop is not.
+const WORKSPACE_RELOAD_MIN_INTERVAL_MS = 5000;
+let lastWorkspaceReload = 0;
+function reloadWorkspacesThrottled(): void {
+  const now = Date.now();
+  if (now - lastWorkspaceReload < WORKSPACE_RELOAD_MIN_INTERVAL_MS) return;
+  lastWorkspaceReload = now;
+  void useWorkspaceStore.getState().loadWorkspaces();
+}
+
 const useSyncStore = create<SyncState>((set, get) => ({
   cursor: 0,
   status: 'idle',
@@ -84,7 +103,7 @@ const useSyncStore = create<SyncState>((set, get) => ({
         });
         // Membership/visibility changed → the workspace list and its scoped
         // content may both differ; reload the workspace list (which re-bootstraps).
-        if (signals.has('workspace')) void useWorkspaceStore.getState().loadWorkspaces();
+        if (signals.has('workspace')) reloadWorkspacesThrottled();
         // Trash changed → refresh the trash buckets (cheap; only visible in the modal).
         if (signals.has('trash')) void useAppStore.getState().loadFromApi(wsId, { only: ['trash'] });
       }
@@ -93,7 +112,7 @@ const useSyncStore = create<SyncState>((set, get) => ({
       // 403 → we lost access to the current workspace; reload the workspace list
       // so the UI drops it and switches away.
       if (err instanceof ApiError && err.status === 403) {
-        void useWorkspaceStore.getState().loadWorkspaces();
+        reloadWorkspacesThrottled();
       }
       // Other errors are transient — the next nudge / focus / poll retries.
     } finally {

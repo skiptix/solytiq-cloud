@@ -1,12 +1,15 @@
 import { Router, Request, Response } from 'express';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import fsPromises from 'fs/promises';
 import { query } from '../db';
 import { authenticate, requireAdmin } from '../middleware';
 import { hashPassword, comparePassword } from '../auth';
 import { ensurePersonalWorkspace, wlog } from '../workspaceUtil';
 import { generateAndLogSetupToken } from '../setupToken';
 import { generateAdminApiKey, sanitizeScopes } from '../adminApiKey';
+import { broadcastNukeToAll } from '../sse';
+import { UPLOAD_DIR } from './files';
 
 const execFileAsync = promisify(execFile);
 
@@ -232,7 +235,10 @@ router.delete('/users/:id', authenticate, requireAdmin, async (req: Request, res
   }
 });
 
-// DELETE /api/admin/nuke
+// DELETE /api/admin/nuke — total instance reset. Only an authenticated admin
+// who re-enters their password can trigger it (route-gated by `requireAdmin`
+// above, password re-checked below). See CLAUDE.md "Admin Nuke" for the full
+// design rationale.
 router.delete('/nuke', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { password } = req.body as { password?: string };
@@ -256,12 +262,55 @@ router.delete('/nuke', authenticate, requireAdmin, async (req: Request, res: Res
       return;
     }
 
-    await query('TRUNCATE TABLE trash, tasks, sections, lists, users RESTART IDENTITY CASCADE');
+    // 1. Truncate EVERY table in the schema, discovered dynamically rather than
+    //    hardcoded — a fixed list silently stops covering new tables as the
+    //    schema grows (the old version only ever cleared 5 of 31 tables, leaving
+    //    orphaned admin settings, tokens, workspaces, GPS files, AI history,
+    //    etc. behind). TRUNCATE...CASCADE on the full table set is atomic and
+    //    order-independent regardless of FK relationships between them.
+    const tablesRes = await query<{ tablename: string }>(
+      `SELECT tablename FROM pg_tables WHERE schemaname = 'public'`
+    );
+    if (tablesRes.rows.length > 0) {
+      const tableList = tablesRes.rows.map((r) => `"${r.tablename}"`).join(', ');
+      await query(`TRUNCATE TABLE ${tableList} RESTART IDENTITY CASCADE`);
+    }
 
-    // Generate and display a fresh setup token so the system can be re-initialised.
+    // 2. Wipe every uploaded file on disk (shared files, task/milestone
+    //    attachments, GPS/FIT tracks all live flatly under UPLOAD_DIR). A
+    //    failure here must not undo step 1 or block the reset — the
+    //    privacy-critical part (the data) is already gone; leftover orphan
+    //    files are a lesser, logged issue.
+    try {
+      await fsPromises.rm(UPLOAD_DIR, { recursive: true, force: true });
+      await fsPromises.mkdir(UPLOAD_DIR, { recursive: true });
+    } catch (fileErr) {
+      console.error('admin/nuke: failed to clear upload directory:', fileErr);
+    }
+
+    // 3. Fresh setup token so the wizard can re-provision immediately (the
+    //    truncate above already cleared the old one out of app_settings).
     await generateAndLogSetupToken();
 
+    // 4. Force every currently connected device — any user, any tab, any
+    //    workspace — to drop its local cache and land back on /setup. This
+    //    reaches everyone immediately rather than waiting for their next API
+    //    call to 401 (which is what still happens for anyone who isn't
+    //    connected at this exact moment, e.g. a mobile client between polls).
+    broadcastNukeToAll();
+
     res.json({ success: true });
+
+    // 5. Exit so Docker Compose's `restart: unless-stopped` policy relaunches
+    //    a completely clean process — the only way to guarantee no in-memory
+    //    state survives (the SSE registry, the rate limiter's counters, the
+    //    sync dispatcher's LISTEN connection). Delayed so the HTTP response
+    //    above and the SSE broadcast both finish flushing to clients first.
+    //    Opt out with NUKE_SKIP_RESTART=true if running without a process
+    //    supervisor that will bring the process back up.
+    if (process.env.NUKE_SKIP_RESTART !== 'true') {
+      setTimeout(() => process.exit(0), 1500);
+    }
   } catch (err) {
     console.error('admin/nuke DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });

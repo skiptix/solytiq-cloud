@@ -387,7 +387,7 @@ function AppLayout() {
 
 // ── Root App ───────────────────────────────────────────────────
 export default function App() {
-  const { loggedIn, adminRegistered } = useAuthStore();
+  const { loggedIn, adminRegistered, isAdmin } = useAuthStore();
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -403,7 +403,7 @@ export default function App() {
       <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : <LoginScreen />} />
       <Route path="/setup" element={loggedIn ? <Navigate to="/dashboard" replace /> : <SetupWizard />} />
       <Route path="/admin-reset" element={loggedIn ? <Navigate to="/dashboard" replace /> : <AdminPasswordResetScreen />} />
-      <Route path="/nuke" element={loggedIn ? <NukeScreen /> : <Navigate to="/login" replace />} />
+      <Route path="/nuke" element={loggedIn && isAdmin ? <NukeScreen /> : <Navigate to={loggedIn ? '/dashboard' : '/login'} replace />} />
       <Route path="/gps/:id/edit" element={loggedIn ? <GPSEditScreen /> : <Navigate to="/login" replace />} />
       <Route path="/*" element={
         <Protected>
