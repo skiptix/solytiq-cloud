@@ -80,7 +80,18 @@ export async function ensurePersonalWorkspace(
   return wsId;
 }
 
-/** Ensure every workspace owned by the user also has an owner membership row. */
+/**
+ * Ensure every workspace owned by the user also has an owner membership row.
+ * Called on every `GET /api/workspaces` (twice — once directly, once via
+ * `ensurePersonalWorkspace`), so the `WHERE` guard on the `DO UPDATE` is load
+ * bearing, not cosmetic: without it, Postgres performs an actual UPDATE on
+ * every call even when the role is already 'owner' (an `ON CONFLICT DO
+ * UPDATE` always writes unless its own WHERE excludes the row), which fires
+ * the `workspace_members` sync_log trigger on every page load/focus/delta
+ * pull — an infinite self-nudging loop that floods the client with alternating
+ * `/api/workspaces` + `/api/sync/delta` requests until it hits the rate
+ * limiter. The guard makes a call with nothing to heal a true no-op.
+ */
 export async function ensureOwnedWorkspaceMemberships(
   exec: QueryExec,
   userId: string
@@ -90,7 +101,9 @@ export async function ensureOwnedWorkspaceMemberships(
      SELECT w.id, w.owner_id, 'owner'
      FROM workspaces w
      WHERE w.owner_id = $1
-     ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = 'owner'`,
+     ON CONFLICT (workspace_id, user_id) DO UPDATE
+       SET role = 'owner'
+       WHERE workspace_members.role IS DISTINCT FROM 'owner'`,
     [userId]
   );
 }

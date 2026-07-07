@@ -61,3 +61,23 @@ export function broadcastToUser(userId: string, event: string): void {
   const payload = `event: sync\ndata: ${JSON.stringify({ type: event })}\n\n`;
   writeFrame([userId], payload);
 }
+
+/**
+ * Emergency broadcast to EVERY currently connected device of EVERY user,
+ * regardless of who they are — used only by the admin "Nuke Everything"
+ * action. A TRUNCATE does not fire row-level triggers, so the normal
+ * sync_log/dispatch pipeline never sees a nuke; this is the dedicated,
+ * out-of-band signal that every live tab must drop its cache and bail out to
+ * /setup. The connections are then closed (there is nothing left to sync to).
+ */
+export function broadcastNukeToAll(): void {
+  const data = `event: nuke\ndata: {}\n\n`;
+  for (const userId of [...clients.keys()]) {
+    const conns = clients.get(userId);
+    if (!conns) continue;
+    for (const res of conns) {
+      try { res.write(data); res.end(); } catch { /* already gone */ }
+    }
+    clients.delete(userId);
+  }
+}
