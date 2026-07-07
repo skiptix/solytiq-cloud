@@ -157,7 +157,15 @@ const useAppStore = create<AppState>()(
         const payload = !('position' in updates) && prev?.version != null
           ? { ...updates, expectedVersion: prev.version }
           : updates;
-        apiUpdateTimeline(timelineId, payload).catch((err) => {
+        apiUpdateTimeline(timelineId, payload).then((res) => {
+          // Same reasoning as updateList: pull the bumped version into local
+          // state so the next edit's expectedVersion isn't stale.
+          if (res.timeline?.version != null) {
+            set((state) => ({
+              timelines: state.timelines.map((t) => (t.id === timelineId ? { ...t, version: res.timeline.version } : t)),
+            }));
+          }
+        }).catch((err) => {
           const body = err instanceof ApiError && err.status === 409 ? (err.body as { error?: string; timeline?: Timeline }) : null;
           if (body?.error === 'version_conflict' && body.timeline) {
             get().applyDeltas([{ entity: 'timeline', entityId: timelineId, op: 'upsert', payload: body.timeline }]);
@@ -321,7 +329,18 @@ const useAppStore = create<AppState>()(
         const payload = !('position' in updates) && prev?.version != null
           ? { ...updates, expectedVersion: prev.version }
           : updates;
-        apiUpdateList(listId, payload).catch((err) => {
+        apiUpdateList(listId, payload).then((res) => {
+          // Pull the server's bumped version into local state (a targeted patch,
+          // not a full overwrite, so it can't clobber a newer edit made while
+          // this request was in flight). Without this, the next edit's
+          // `expectedVersion` would be stale and spuriously 409 against the
+          // user's OWN prior write.
+          if (res.list?.version != null) {
+            set((state) => ({
+              lists: state.lists.map((l) => (l.id === listId ? { ...l, version: res.list.version } : l)),
+            }));
+          }
+        }).catch((err) => {
           const body = err instanceof ApiError && err.status === 409 ? (err.body as { error?: string; list?: List }) : null;
           if (body?.error === 'version_conflict' && body.list) {
             // Reconcile to the winner rather than reverting to our stale base.

@@ -131,9 +131,9 @@ const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: userKey,
-  // The long-lived SSE stream must never count against the request budget: it is
-  // one open connection, and a reconnect loop should not be able to trip the limiter.
-  skip: (req) => req.originalUrl.startsWith('/api/events'),
+  // The long-lived SSE stream, and the small/frequent delta-sync polls it drives
+  // (focus/online/30s-sweep), must never count against the mutation budget.
+  skip: (req) => req.originalUrl.startsWith('/api/events') || req.originalUrl.startsWith('/api/sync'),
   message: { error: 'Too many requests, please slow down.' },
 });
 
