@@ -106,13 +106,33 @@ const clientKey = (req: express.Request): string => {
   return ipKeyGenerator(ip);
 };
 
+// Authenticated traffic is keyed on the VERIFIED userId, not the IP. IP keying is
+// the wrong primitive here: behind Cloudflare → LB → nginx the origin sees the
+// shared LB address whenever `CF-Connecting-IP` is absent, collapsing everyone
+// into one bucket (the 429 storm). A JWT is forgery-proof and per-user-fair, so
+// one busy tab can only exhaust its own budget. We decode the token CHEAPLY here
+// just to derive the key — full verification still happens in the auth middleware.
+// Pre-auth requests (no/invalid token) fall back to the IP key.
+const userKey = (req: express.Request): string => {
+  const h = req.headers.authorization;
+  const t = h?.startsWith('Bearer ') ? h.slice(7)
+          : (typeof req.query.token === 'string' ? req.query.token : '');
+  if (t) {
+    try { return `u:${verifyToken(t).userId}`; } catch { /* fall through to IP */ }
+  }
+  return `ip:${clientKey(req)}`;
+};
+
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 3000, // Limit each client to 3000 requests per window
+  windowMs: 60 * 1000, // 1 minute window
+  max: 600, // 600 req / user / min — generous for a delta client, cheap to police
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientKey,
-  message: { error: 'Too many requests, please try again later.' },
+  keyGenerator: userKey,
+  // The long-lived SSE stream must never count against the request budget: it is
+  // one open connection, and a reconnect loop should not be able to trip the limiter.
+  skip: (req) => req.originalUrl.startsWith('/api/events'),
+  message: { error: 'Too many requests, please slow down.' },
 });
 
 const authLimiter = rateLimit({
