@@ -24,7 +24,14 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+// In-flight GET coalescing: identical concurrent GETs share one network call, so
+// a store loader and a screen mount that both request the same path only hit the
+// backend once. Keyed on `path` (no cache-buster is appended, so the key is stable).
+const inflight = new Map<string, Promise<unknown>>();
+
+/** The raw request. Handles auth headers, a single 429 backoff+retry, and error
+ *  normalisation. `apiFetch` wraps this to coalesce duplicate GETs. */
+async function rawFetch<T>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -32,17 +39,26 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     ...(options.headers as Record<string, string> ?? {}),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  let finalPath = path;
-  if (!options.method || options.method.toUpperCase() === 'GET') {
-    const joiner = finalPath.includes('?') ? '&' : '?';
-    finalPath = `${finalPath}${joiner}_t=${Date.now()}`;
-  }
 
   const finalOptions: RequestInit = {
     ...options,
     headers,
   };
-  const res = await fetch(`${BASE_URL}${finalPath}`, finalOptions);
+  const res = await fetch(`${BASE_URL}${path}`, finalOptions);
+
+  // Transient rate-limit: a 429 is raised by the limiter middleware BEFORE the
+  // route handler runs, so no side effect occurred — retrying once (even a
+  // mutation) is safe. Back off by `Retry-After` (seconds) with jitter so a
+  // burst of clients doesn't retry in lockstep, then surface latency instead of
+  // a broken "Couldn't refresh your data" banner.
+  if (res.status === 429 && !retried) {
+    const ra = Number(res.headers.get('Retry-After'));
+    const baseMs = Number.isFinite(ra) && ra > 0 ? ra * 1000 : 1000;
+    const waitMs = Math.min(baseMs * (0.5 + Math.random() * 0.5), 8000);
+    await new Promise(r => setTimeout(r, waitMs));
+    return rawFetch<T>(path, options, true);
+  }
+
   if (!res.ok) {
     if (res.status === 401) _onUnauthorized?.();
     const text = await res.text().catch(() => res.statusText);
@@ -52,7 +68,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
       body && typeof body === 'object' && 'error' in body
         ? String((body as { error: unknown }).error)
         : (text || `HTTP ${res.status}`);
-        
+
     if (res.status === 401) {
       import('../store/useAuthStore').then(m => m.default.getState().signOut());
     }
@@ -61,6 +77,20 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   const ct = res.headers.get('content-type');
   if (ct?.includes('application/json')) return res.json() as Promise<T>;
   return null as unknown as T;
+}
+
+export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = (options.method ?? 'GET').toUpperCase();
+  // Only dedup idempotent GETs. Mutations always execute.
+  if (method === 'GET') {
+    const key = path;
+    const existing = inflight.get(key) as Promise<T> | undefined;
+    if (existing) return existing;
+    const p = rawFetch<T>(path, options).finally(() => inflight.delete(key));
+    inflight.set(key, p);
+    return p;
+  }
+  return rawFetch<T>(path, options);
 }
 
 // ── Visibility hierarchy conflict (Workspace → Folder → List/Timeline) ────────

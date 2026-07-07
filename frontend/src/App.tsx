@@ -38,6 +38,19 @@ import AdminPasswordResetScreen from './screens/AdminPasswordResetScreen';
 // /login instead of seeing the "no workspace" forced-creation wizard.
 setUnauthorizedHandler(() => useAuthStore.getState().signOut());
 
+// Which data slices a given route actually renders. Focus/online revalidation
+// only refetches these — never a full 9-request reload — so alt-tabbing between
+// windows can't fan out into a request storm that trips the rate limiter. Trash
+// is deliberately excluded: it's only needed when the Trash modal opens.
+function slicesForRoute(pathname: string): Array<'tasks' | 'lists' | 'folders' | 'timelines'> {
+  if (pathname.startsWith('/list/')) return ['lists', 'tasks'];
+  if (pathname.startsWith('/timeline/')) return ['timelines'];
+  if (pathname.startsWith('/folder/')) return ['folders', 'lists', 'timelines'];
+  if (pathname.startsWith('/calendar')) return ['tasks', 'lists', 'timelines'];
+  if (pathname.startsWith('/dashboard')) return ['tasks', 'lists', 'timelines'];
+  return ['lists'];
+}
+
 // ── Protected route wrapper ────────────────────────────────────
 function Protected({ children }: { children: React.ReactNode }) {
   const { loggedIn } = useAuthStore();
@@ -97,16 +110,21 @@ function AppLayout() {
       }, 500);
     });
 
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        const wsId = useWorkspaceStore.getState().currentWorkspaceId;
-        loadFromApi(wsId ?? undefined);
-      }
-    };
-    const onOnline = () => {
+    // Regaining tab focus (or coming back online) must NOT trigger a full
+    // multi-request reload — that was the single biggest driver of the reported
+    // "navigating between tabs" 429 storm (alt-tab 20× = 180 GETs). Instead do a
+    // lightweight revalidate that is (a) throttled to at most once / 10s and
+    // (b) scoped to only the slice(s) the current route renders.
+    let lastRevalidate = 0;
+    const revalidate = () => {
+      const now = Date.now();
+      if (now - lastRevalidate < 10_000) return; // throttle
+      lastRevalidate = now;
       const wsId = useWorkspaceStore.getState().currentWorkspaceId;
-      loadFromApi(wsId ?? undefined);
+      loadFromApi(wsId ?? undefined, { only: slicesForRoute(window.location.pathname) });
     };
+    const onVisible = () => { if (document.visibilityState === 'visible') revalidate(); };
+    const onOnline = () => revalidate();
 
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('online', onOnline);
