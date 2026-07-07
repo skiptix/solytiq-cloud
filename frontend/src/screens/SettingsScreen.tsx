@@ -4,7 +4,7 @@ import { useMobile } from '../hooks/useBreakpoint';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import useAIStore from '../store/useAIStore';
-import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiUpdateAppSettingsMcp, apiGetAIUsage, apiGetAdminReadApiKeys, apiRevokeAdminReadApiKey, type AdminReadApiKey, type AIUsageDay, type AIUsageModel, type AIUsageTotals } from '../api/client';
+import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiUpdateAppSettingsMcp, apiUpdateAppSettingsMobile, apiGetAIUsage, apiGetAdminReadApiKeys, apiRevokeAdminReadApiKey, type AdminReadApiKey, type AIUsageDay, type AIUsageModel, type AIUsageTotals } from '../api/client';
 import Icon from '../components/Icon';
 import AdminApiKeyWizard from '../modals/AdminApiKeyWizard';
 import { featureForScope } from '../modals/adminApiFeatures';
@@ -20,7 +20,7 @@ interface UserEntry {
   createdAt: string;
 }
 
-type TabId = 'system' | 'ai' | 'security' | 'api' | 'users' | 'danger';
+type TabId = 'system' | 'ai' | 'security' | 'api' | 'mobile' | 'users' | 'danger';
 
 function relativeTime(iso: string | null): string {
   if (!iso) return 'Never';
@@ -166,6 +166,11 @@ export default function SettingsScreen() {
   const [mcpSaving, setMcpSaving] = useState(false);
   const [showMcpDisableConfirm, setShowMcpDisableConfirm] = useState(false);
 
+  // Mobile app enable/disable
+  const [mobileEnabled, setMobileEnabled] = useState(true);
+  const [mobileSaving, setMobileSaving] = useState(false);
+  const [showMobileDisableConfirm, setShowMobileDisableConfirm] = useState(false);
+
   const loadUsers = useCallback(async () => {
     if (!isAdmin) return;
     setUsersLoading(true);
@@ -196,6 +201,7 @@ export default function SettingsScreen() {
         setQuotaGb(bytes > 0 ? (bytes / (1024 ** 3)).toFixed(0) : '15');
         setTwoFAFeatureEnabled(res.settings['two_fa_feature_enabled'] !== 'false');
         setMcpEnabled(res.settings['mcp_enabled'] !== 'false');
+        setMobileEnabled(res.settings['mobile_app_enabled'] !== 'false');
       })
       .catch(() => setQuotaGb('15'));
   }, [isAdmin]);
@@ -312,6 +318,33 @@ export default function SettingsScreen() {
       setMcpEnabled(true);
     } finally {
       setMcpSaving(false);
+    }
+  };
+
+  const handleToggleMobile = (newValue: boolean) => {
+    if (!newValue) {
+      // Disabling: show confirmation dialog first
+      setShowMobileDisableConfirm(true);
+    } else {
+      setMobileSaving(true);
+      setMobileEnabled(true);
+      apiUpdateAppSettingsMobile(true)
+        .catch(() => setMobileEnabled(false))
+        .finally(() => setMobileSaving(false));
+    }
+  };
+
+  const handleConfirmDisableMobile = async () => {
+    setMobileSaving(true);
+    setShowMobileDisableConfirm(false);
+    try {
+      await apiUpdateAppSettingsMobile(false);
+      setMobileEnabled(false);
+    } catch {
+      // Revert on error
+      setMobileEnabled(true);
+    } finally {
+      setMobileSaving(false);
     }
   };
 
@@ -531,6 +564,7 @@ export default function SettingsScreen() {
     { id: 'ai',       label: 'AI',          icon: 'smart_toy' },
     { id: 'security', label: 'Security',    icon: 'shield_lock' },
     { id: 'api',      label: 'API',         icon: 'key' },
+    { id: 'mobile',   label: 'Mobile',      icon: 'smartphone' },
     { id: 'users',    label: 'Users',       icon: 'group' },
     { id: 'danger',   label: 'Danger Zone', icon: 'warning' },
   ];
@@ -1091,6 +1125,76 @@ export default function SettingsScreen() {
                       <button onClick={() => handleRevokeApiKey(k.id)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: '#ba1a1a', background: '#fff5f5', border: '1px solid #ffdad6', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', alignSelf: 'flex-start' }}>Revoke</button>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Mobile Tab ── */}
+            {activeTab === 'mobile' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {sectionLabel('Mobile App')}
+                <div style={{ ...card }}>
+                  <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {/* Toggle row */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div>
+                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Allow mobile app connections</div>
+                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Let users connect the Solytiq Cloud iOS app to this instance and sign in. Disabling immediately signs out every connected device and blocks new mobile logins.</div>
+                      </div>
+                      <button
+                        onClick={() => !mobileSaving && handleToggleMobile(!mobileEnabled)}
+                        disabled={mobileSaving}
+                        style={{
+                          width: 44, height: 24, borderRadius: 12,
+                          background: mobileSaving ? '#c9c4d5' : mobileEnabled ? '#5e4dbb' : '#e8e4f0',
+                          border: 'none', cursor: mobileSaving ? 'wait' : 'pointer',
+                          position: 'relative', flexShrink: 0,
+                          transition: 'background 200ms',
+                        }}
+                      >
+                        <span style={{
+                          position: 'absolute', top: 2,
+                          left: mobileEnabled ? 22 : 2,
+                          width: 20, height: 20, borderRadius: '50%',
+                          background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                          transition: 'left 200ms',
+                        }} />
+                      </button>
+                    </div>
+
+                    {/* Confirmation dialog — shown inline when admin clicks to disable */}
+                    {showMobileDisableConfirm && (
+                      <div style={{ background: '#fff8f5', border: '1.5px solid #ffdad6', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12, animation: 'menuIn 160ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                          <Icon name="warning" size={18} color="#ba1a1a" />
+                          <div>
+                            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#ba1a1a', marginBottom: 4 }}>Disable the mobile app for all users?</div>
+                            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#484552', lineHeight: 1.55 }}>
+                              This will <strong>immediately sign out every connected mobile device</strong> across the entire instance. Users can still use the app in on-device (local) mode, but will need to reconnect once mobile access is re-enabled.
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                          <button
+                            onClick={() => setShowMobileDisableConfirm(false)}
+                            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#484552', background: '#f5f5f5', border: '1px solid #e8e4f0', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleConfirmDisableMobile}
+                            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
+                          >
+                            Disable &amp; sign out all devices
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', lineHeight: 1.6 }}>
+                  Each user can review and revoke their own connected devices from <strong>Account Settings → Mobile</strong>. The app also works fully offline in on-device mode without connecting to a server.
                 </div>
               </div>
             )}

@@ -9,13 +9,17 @@ if (process.env.NODE_ENV === 'production') {
 }
 const JWT_SECRET = JWT_SECRET_ENV || 'changeme-secret';
 
-export function generateToken(userId: string, tokenVersion: number = 0): string {
-  return jwt.sign({ userId, tokenVersion }, JWT_SECRET, { expiresIn: '7d' });
+export function generateToken(userId: string, tokenVersion: number = 0, connectionId?: string): string {
+  const payload: Record<string, unknown> = { userId, tokenVersion };
+  // Mobile-app sessions carry the id of their `mobile_connections` row so the
+  // connection can be listed and individually revoked (see middleware.ts).
+  if (connectionId) payload.connectionId = connectionId;
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
 
-export function verifyToken(token: string): { userId: string; tokenVersion: number } {
-  const payload = jwt.verify(token, JWT_SECRET) as { userId: string; tokenVersion?: number };
-  return { userId: payload.userId, tokenVersion: payload.tokenVersion ?? 0 };
+export function verifyToken(token: string): { userId: string; tokenVersion: number; connectionId?: string } {
+  const payload = jwt.verify(token, JWT_SECRET) as { userId: string; tokenVersion?: number; connectionId?: string };
+  return { userId: payload.userId, tokenVersion: payload.tokenVersion ?? 0, connectionId: payload.connectionId };
 }
 
 export function generatePendingToken(userId: string): string {

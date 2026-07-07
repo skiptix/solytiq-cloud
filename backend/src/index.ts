@@ -1270,6 +1270,27 @@ async function runMigrations() {
     )
   `);
 
+  // Mobile-app device connections. Each row is one signed-in mobile device;
+  // its id is embedded in the device's JWT (`connectionId`) so the connection
+  // can be listed in Account Settings and revoked individually (or wiped
+  // instance-wide when an admin disables mobile access).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS mobile_connections (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      device_name  VARCHAR(255) NOT NULL DEFAULT 'Mobile device',
+      device_model VARCHAR(255),
+      os_version   VARCHAR(255),
+      app_version  VARCHAR(255),
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS mobile_connections_user_idx ON mobile_connections(user_id)`);
+  // Instance-wide switch for the mobile app (default on). Admins toggle it from
+  // Settings → Mobile; disabling wipes all connections and blocks new logins.
+  await pool.query(`INSERT INTO app_settings (key, value) VALUES ('mobile_app_enabled', 'true') ON CONFLICT (key) DO NOTHING`);
+
   console.log('Database migrations applied.');
 }
 
