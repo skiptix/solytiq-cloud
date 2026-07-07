@@ -5,6 +5,7 @@ import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
+import { checkVersionConflict } from '../concurrency';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
 import { snapshotTimelineToTrash } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors } from '../visibility';
@@ -34,6 +35,7 @@ interface TimelineRow {
   share_enabled: boolean;
   share_password_hash: string | null;
   share_expires_at: string | null;
+  version?: number;
 }
 
 interface MilestoneRow {
@@ -91,6 +93,7 @@ function sanitizeTimeline(t: TimelineRow, milestones: ReturnType<typeof sanitize
     shareToken:       t.share_token ?? null,
     shareHasPassword: t.share_password_hash != null,
     shareExpiresAt:   t.share_expires_at ?? null,
+    version:     t.version ?? 1,
     milestones,
   };
 }
@@ -107,7 +110,7 @@ function summarizeTimelineRows(rows: TimelineRow[]): string {
     .join(', ') + (rows.length > 25 ? `, … +${rows.length - 25} more` : '');
 }
 
-async function buildTimelinesForUser(userId: string, workspaceId?: string) {
+export async function buildTimelinesForUser(userId: string, workspaceId?: string) {
   const params: unknown[] = [userId];
   const wsFilter = workspaceId
     ? `AND (t.workspace_id = $2 OR t.workspace_id IS NULL)`
@@ -161,6 +164,36 @@ async function buildTimelinesForUser(userId: string, workspaceId?: string) {
   return timelinesResult.rows.map((t) =>
     sanitizeTimeline(t, milestonesByTimeline[t.id] ?? [])
   );
+}
+
+/**
+ * A single fully-hydrated timeline (with milestones) if the user can see it,
+ * else null. Same shape as one element of `buildTimelinesForUser`. For delta
+ * re-serialization, scoped to the requesting user (IDOR-safe).
+ */
+export async function getTimelineForUser(userId: string, timelineId: string) {
+  const accessCondition = `(
+    t.user_id = $1
+    OR (t.is_public = true AND (
+      wm.user_id = $1
+      OR t.workspace_id IS NULL
+      OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = t.workspace_id AND w.visibility = 'public')
+    ))
+  )`;
+  const tRes = await query<TimelineRow>(
+    `SELECT t.* FROM timelines t
+     LEFT JOIN workspace_members wm ON wm.workspace_id = t.workspace_id AND wm.user_id = $1
+     WHERE t.id = $2 AND ${accessCondition}`,
+    [userId, timelineId]
+  );
+  if (tRes.rows.length === 0) return null;
+  const mRes = await query<MilestoneRow>(
+    `SELECT m.*, (SELECT COUNT(*) FROM milestone_attachments ma WHERE ma.milestone_id = m.id) AS attachment_count
+     FROM milestones m WHERE m.timeline_id = $1
+     ORDER BY m.position ASC, m.milestone_date ASC NULLS LAST, m.created_at ASC`,
+    [timelineId]
+  );
+  return sanitizeTimeline(tRes.rows[0], mRes.rows.map(sanitizeMilestone));
 }
 
 // ---------------------------------------------------------------------------
@@ -426,6 +459,14 @@ router.put('/:timelineId', async (req: Request, res: Response) => {
     const isAdmin = req.user?.isAdmin === true;
     if (!isOwner && !isAdmin) {
       res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    // Optimistic concurrency (see lists.ts): reject a stale-based write with 409
+    // + the current timeline so the loser reconciles instead of clobbering.
+    const conflict = await checkVersionConflict('timelines', timelineId, (req.body as { expectedVersion?: number }).expectedVersion);
+    if (conflict !== null) {
+      res.status(409).json({ error: 'version_conflict', timeline: await getTimelineForUser(req.userId!, timelineId) });
       return;
     }
 

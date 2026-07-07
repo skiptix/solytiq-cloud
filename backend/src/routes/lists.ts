@@ -5,6 +5,7 @@ import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
+import { checkVersionConflict } from '../concurrency';
 import { resolveWorkspaceForUser, wlog, wwarn, werr } from '../workspaceUtil';
 import { softDeleteListTree, collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors } from '../visibility';
@@ -36,6 +37,7 @@ interface ListRow {
   share_password_hash: string | null;
   share_expires_at: string | null;
   share_subpages: boolean;
+  version?: number;
 }
 
 interface SectionRow {
@@ -132,6 +134,7 @@ function sanitizeList(
     shareHasPassword: list.share_password_hash != null,
     shareExpiresAt:   list.share_expires_at ?? null,
     shareSubpages:    list.share_subpages ?? false,
+    version:      list.version ?? 1,
     sections,
     ...(linkedProgress !== undefined ? { linkedProgress } : {}),
   };
@@ -149,7 +152,7 @@ function summarizeListRows(rows: ListRow[]): string {
     .join(', ') + (rows.length > 25 ? `, … +${rows.length - 25} more` : '');
 }
 
-async function buildListsForUser(userId: string, workspaceId?: string) {
+export async function buildListsForUser(userId: string, workspaceId?: string) {
   // When workspaceId is provided: return lists in that workspace the user can access,
   // plus the user's own lists with no workspace assigned (backward-compatible "personal" lists).
   // When omitted: return all lists the user owns or has access to (global view).
@@ -233,6 +236,55 @@ async function buildListsForUser(userId: string, workspaceId?: string) {
   return listsResult.rows.map((list: ListRow) =>
     sanitizeList(list, sectionsByList[list.id] ?? [], taskCountByList[list.id] ?? { total: 0, completed: 0 })
   );
+}
+
+/**
+ * Build a single fully-hydrated list (sections → tasks → progress) if the user
+ * can see it, else null. Same shape as one element of `buildListsForUser`, so
+ * the delta engine can re-serialize exactly what the app renders — scoped to the
+ * requesting user, which is the real access boundary (IDOR-safe). Returns null
+ * when the list is gone or no longer visible → the client removes it.
+ */
+export async function getListForUser(userId: string, listId: string) {
+  const accessCondition = `(
+    l.user_id = $1
+    OR (l.is_public = true AND (
+      wm.user_id = $1
+      OR l.workspace_id IS NULL
+      OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public')
+    ))
+  )`;
+  const listRes = await query<ListRow>(
+    `SELECT l.* FROM lists l
+     LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
+     WHERE l.id = $2 AND ${accessCondition}`,
+    [userId, listId]
+  );
+  if (listRes.rows.length === 0) return null;
+  const list = listRes.rows[0];
+
+  const [sectionsRes, tasksRes] = await Promise.all([
+    query<SectionRow>(`SELECT * FROM sections WHERE list_id = $1 ORDER BY position ASC`, [listId]),
+    query<TaskRow>(
+      `SELECT t.*, (SELECT COUNT(*) FROM task_attachments ta WHERE ta.task_id = t.id) AS attachment_count
+       FROM tasks t WHERE t.list_id = $1 AND t.source = 'list'
+       ORDER BY t.position ASC, t.created_at ASC`,
+      [listId]
+    ),
+  ]);
+
+  const tasksBySection: Record<string, ReturnType<typeof sanitizeTask>[]> = {};
+  for (const task of tasksRes.rows) {
+    const key = task.section_id ?? '__none__';
+    if (!tasksBySection[key]) tasksBySection[key] = [];
+    tasksBySection[key].push(sanitizeTask(task));
+  }
+  const sections = sectionsRes.rows.map((s) => sanitizeSection(s, tasksBySection[s.id] ?? []));
+  const progress = {
+    total: tasksRes.rows.length,
+    completed: tasksRes.rows.filter((t) => t.checked).length,
+  };
+  return sanitizeList(list, sections, progress);
 }
 
 // ---------------------------------------------------------------------------
@@ -483,6 +535,15 @@ router.put('/:listId', async (req: Request, res: Response) => {
 
     if (!isOwner && !isAdmin) {
       res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    // Optimistic concurrency: if the client sent the version it edited and the
+    // row has since moved on, reject with 409 + the current list so the loser
+    // reconciles to the winner instead of silently clobbering it.
+    const conflict = await checkVersionConflict('lists', listId, (req.body as { expectedVersion?: number }).expectedVersion);
+    if (conflict !== null) {
+      res.status(409).json({ error: 'version_conflict', list: await getListForUser(req.userId!, listId) });
       return;
     }
 

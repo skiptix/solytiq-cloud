@@ -31,6 +31,8 @@ import tokensRouter from './routes/tokens';
 import oauthRouter from './routes/oauth';
 import mcpRouter from './routes/mcp';
 import adminReadApiRouter from './routes/adminReadApi';
+import syncRouter from './routes/sync';
+import { startSyncDispatcher, SYNC_CHANNEL } from './syncLog';
 import { getPublicBaseUrl } from './publicUrl';
 import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
@@ -190,6 +192,7 @@ app.use('/api/caldav',     caldavManageRouter);
 app.use('/api/tokens',     tokensRouter);
 app.use('/api/oauth',      oauthRouter);
 app.use('/api/admin-read', adminReadApiRouter);
+app.use('/api/sync',       syncRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
@@ -1311,7 +1314,192 @@ async function runMigrations() {
   // Settings → Mobile; disabling wipes all connections and blocks new logins.
   await pool.query(`INSERT INTO app_settings (key, value) VALUES ('mobile_app_enabled', 'true') ON CONFLICT (key) DO NOTHING`);
 
+  // ── Optimistic concurrency ──────────────────────────────────────────────────
+  // A `version` that auto-increments on every UPDATE (BEFORE trigger). Clients
+  // echo the version they edited; a conditional PUT then 409s instead of
+  // silently clobbering a concurrent edit. Applied to the entities with buffered
+  // multi-field editors (lists, timelines) where blind overwrite is the risk.
+  await pool.query(`ALTER TABLE lists     ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 1`);
+  await pool.query(`ALTER TABLE timelines ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 1`);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION bump_version() RETURNS trigger AS $$
+    BEGIN NEW.version = OLD.version + 1; RETURN NEW; END;
+    $$ LANGUAGE plpgsql
+  `);
+  for (const table of ['lists', 'timelines']) {
+    await pool.query(`DROP TRIGGER IF EXISTS bump_version_${table} ON ${table}`);
+    await pool.query(
+      `CREATE TRIGGER bump_version_${table} BEFORE UPDATE ON ${table}
+       FOR EACH ROW EXECUTE FUNCTION bump_version()`
+    );
+  }
+
+  // ── Delta-sync outbox (sync_log) ────────────────────────────────────────────
+  // A single monotonic BIGSERIAL `seq` is the global cursor. DB triggers append
+  // one row per committed mutation (transactional + impossible to forget), and
+  // pg_notify a compact descriptor so the in-process dispatcher can fan out a
+  // realtime nudge. Payloads are NOT stored — the delta endpoint re-serializes
+  // each changed entity fresh (scoped to the reader), so data can never drift
+  // and access is always re-checked. Rows are pruned after 7 days.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sync_log (
+      seq          BIGSERIAL PRIMARY KEY,
+      entity       VARCHAR(24)  NOT NULL,
+      entity_id    VARCHAR(100) NOT NULL,
+      op           VARCHAR(8)   NOT NULL,
+      workspace_id VARCHAR(100),
+      owner_id     UUID         NOT NULL,
+      created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_sync_log_ws_seq      ON sync_log (workspace_id, seq)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_sync_log_owner_seq   ON sync_log (owner_id, seq)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_sync_log_created_at  ON sync_log (created_at)`);
+
+  // Emit helper: append to the outbox and notify the dispatcher in one place.
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION sync_emit(p_entity text, p_entity_id text, p_op text, p_ws text, p_owner uuid)
+    RETURNS void AS $$
+    DECLARE v_seq bigint;
+    BEGIN
+      INSERT INTO sync_log (entity, entity_id, op, workspace_id, owner_id)
+      VALUES (p_entity, p_entity_id, p_op, p_ws, p_owner)
+      RETURNING seq INTO v_seq;
+      PERFORM pg_notify('${SYNC_CHANNEL}', json_build_object(
+        'seq', v_seq, 'entity', p_entity, 'entityId', p_entity_id,
+        'op', p_op, 'workspaceId', p_ws, 'ownerId', p_owner
+      )::text);
+    END;
+    $$ LANGUAGE plpgsql
+  `);
+
+  // Per-table trigger functions. Sections/list-tasks surface as a change to their
+  // parent LIST, milestones as a change to their parent TIMELINE — matching how
+  // the frontend nests them — so the delta re-serializes the whole aggregate.
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_lists() RETURNS trigger AS $$
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN PERFORM sync_emit('list', OLD.id, 'delete', OLD.workspace_id, OLD.user_id); RETURN OLD; END IF;
+      PERFORM sync_emit('list', NEW.id, 'upsert', NEW.workspace_id, NEW.user_id); RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_folders() RETURNS trigger AS $$
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN PERFORM sync_emit('folder', OLD.id, 'delete', OLD.workspace_id, OLD.user_id); RETURN OLD; END IF;
+      PERFORM sync_emit('folder', NEW.id, 'upsert', NEW.workspace_id, NEW.user_id); RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_timelines() RETURNS trigger AS $$
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN PERFORM sync_emit('timeline', OLD.id, 'delete', OLD.workspace_id, OLD.user_id); RETURN OLD; END IF;
+      PERFORM sync_emit('timeline', NEW.id, 'upsert', NEW.workspace_id, NEW.user_id); RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_tasks() RETURNS trigger AS $$
+    DECLARE r RECORD; v_op text;
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN r := OLD; v_op := 'delete'; ELSE r := NEW; v_op := 'upsert'; END IF;
+      IF (r.source = 'list' AND r.list_id IS NOT NULL) THEN
+        PERFORM sync_emit('list', r.list_id, 'upsert', r.workspace_id, r.user_id);
+      ELSE
+        PERFORM sync_emit('task', r.id::text, v_op, r.workspace_id, r.user_id);
+      END IF;
+      RETURN r;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_sections() RETURNS trigger AS $$
+    DECLARE v_list text; v_ws text; v_owner uuid;
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN v_list := OLD.list_id; ELSE v_list := NEW.list_id; END IF;
+      SELECT workspace_id, user_id INTO v_ws, v_owner FROM lists WHERE id = v_list;
+      IF v_owner IS NOT NULL THEN PERFORM sync_emit('list', v_list, 'upsert', v_ws, v_owner); END IF;
+      IF (TG_OP = 'DELETE') THEN RETURN OLD; ELSE RETURN NEW; END IF;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_milestones() RETURNS trigger AS $$
+    DECLARE v_tl text; v_ws text; v_owner uuid;
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN v_tl := OLD.timeline_id; ELSE v_tl := NEW.timeline_id; END IF;
+      SELECT workspace_id, user_id INTO v_ws, v_owner FROM timelines WHERE id = v_tl;
+      IF v_owner IS NOT NULL THEN PERFORM sync_emit('timeline', v_tl, 'upsert', v_ws, v_owner); END IF;
+      IF (TG_OP = 'DELETE') THEN RETURN OLD; ELSE RETURN NEW; END IF;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_workspaces() RETURNS trigger AS $$
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN PERFORM sync_emit('workspace', OLD.id, 'delete', OLD.id, OLD.owner_id); RETURN OLD; END IF;
+      PERFORM sync_emit('workspace', NEW.id, 'upsert', NEW.id, NEW.owner_id); RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_members() RETURNS trigger AS $$
+    DECLARE v_ws text; v_owner uuid;
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN v_ws := OLD.workspace_id; v_owner := OLD.user_id;
+      ELSE v_ws := NEW.workspace_id; v_owner := NEW.user_id; END IF;
+      PERFORM sync_emit('workspace', v_ws, 'upsert', v_ws, v_owner);
+      IF (TG_OP = 'DELETE') THEN RETURN OLD; ELSE RETURN NEW; END IF;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_meetings() RETURNS trigger AS $$
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN PERFORM sync_emit('meeting', OLD.id, 'delete', NULL, OLD.user_id); RETURN OLD; END IF;
+      PERFORM sync_emit('meeting', NEW.id, 'upsert', NULL, NEW.user_id); RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_files() RETURNS trigger AS $$
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN PERFORM sync_emit('file', OLD.id, 'delete', NULL, OLD.user_id); RETURN OLD; END IF;
+      PERFORM sync_emit('file', NEW.id, 'upsert', NULL, NEW.user_id); RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_trash() RETURNS trigger AS $$
+    DECLARE v_owner uuid;
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN v_owner := OLD.user_id; ELSE v_owner := NEW.user_id; END IF;
+      PERFORM sync_emit('trash', '', 'upsert', NULL, v_owner);
+      IF (TG_OP = 'DELETE') THEN RETURN OLD; ELSE RETURN NEW; END IF;
+    END; $$ LANGUAGE plpgsql
+  `);
+
+  // Attach every trigger idempotently (DROP + CREATE so re-runs are safe).
+  const syncTriggers: Array<[string, string]> = [
+    ['lists', 'lists'], ['folders', 'folders'], ['timelines', 'timelines'],
+    ['tasks', 'tasks'], ['sections', 'sections'], ['milestones', 'milestones'],
+    ['workspaces', 'workspaces'], ['workspace_members', 'members'],
+    ['meetings', 'meetings'], ['shared_files', 'files'],
+    ['trash', 'trash'], ['trash_lists', 'trash'], ['trash_folders', 'trash'],
+    ['trash_timelines', 'trash'], ['trash_milestones', 'trash'],
+  ];
+  for (const [table, fn] of syncTriggers) {
+    await pool.query(`DROP TRIGGER IF EXISTS synclog_${table} ON ${table}`);
+    await pool.query(
+      `CREATE TRIGGER synclog_${table} AFTER INSERT OR UPDATE OR DELETE ON ${table}
+       FOR EACH ROW EXECUTE FUNCTION trg_synclog_${fn}()`
+    );
+  }
+
   console.log('Database migrations applied.');
+}
+
+/** Prune sync_log rows past the 7-day retention window (clients older than that
+ *  re-bootstrap instead of applying deltas — see /api/sync/delta `reset`). */
+async function pruneSyncLog(): Promise<void> {
+  try {
+    const r = await pool.query(`DELETE FROM sync_log WHERE created_at < NOW() - INTERVAL '7 days'`);
+    if (r.rowCount) console.log(`🧹 pruned ${r.rowCount} sync_log row(s) older than 7 days`);
+  } catch (err) {
+    console.error('sync_log prune failed:', err);
+  }
 }
 
 async function start() {
@@ -1353,6 +1541,12 @@ async function start() {
   };
   cleanupAiFiles();
   setInterval(cleanupAiFiles, 6 * 60 * 60 * 1000);
+
+  // Delta-sync: prune the outbox daily, and start the realtime dispatcher that
+  // fans committed changes out to every affected user's devices.
+  pruneSyncLog();
+  setInterval(pruneSyncLog, 24 * 60 * 60 * 1000);
+  await startSyncDispatcher();
 
   app.listen(PORT, () => {
     console.log(`Solytiq Cloud API listening on port ${PORT}`);

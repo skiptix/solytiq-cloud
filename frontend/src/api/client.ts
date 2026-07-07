@@ -226,7 +226,7 @@ export const apiGetLists = (workspaceId?: string) =>
 export const apiCreateList = (data: Omit<List, 'sections'> & { sections?: List['sections']; workspaceId?: string }) =>
   apiFetch<{ list: List }>('/lists', { method: 'POST', body: JSON.stringify(data) });
 
-export const apiUpdateList = (id: string, data: Partial<List> & { cascade?: boolean }) =>
+export const apiUpdateList = (id: string, data: Partial<List> & { cascade?: boolean; expectedVersion?: number }) =>
   apiFetch<{ list: List }>(`/lists/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiDeleteList = (id: string) =>
@@ -325,7 +325,7 @@ export const apiCreateTimeline = (data: Omit<Timeline, 'milestones'> & { milesto
 export const apiReorderTimelines = (ids: string[]) =>
   apiFetch<{ success: boolean }>('/timelines/reorder', { method: 'PUT', body: JSON.stringify({ ids }) });
 
-export const apiUpdateTimeline = (id: string, data: Partial<Timeline> & { cascade?: boolean }) =>
+export const apiUpdateTimeline = (id: string, data: Partial<Timeline> & { cascade?: boolean; expectedVersion?: number }) =>
   apiFetch<{ timeline: Timeline }>(`/timelines/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiDeleteTimeline = (id: string) =>
@@ -814,12 +814,49 @@ export const apiAddWorkspaceMember = (id: string, username: string) =>
 export const apiRemoveWorkspaceMember = (id: string, userId: string) =>
   apiFetch<{ ok: boolean }>(`/workspaces/${id}/members/${userId}`, { method: 'DELETE' });
 
+// ─── Delta-sync engine ────────────────────────────────────────────────────────
+export interface BootstrapResponse {
+  cursor: number;
+  workspaceId: string | null;
+  tasks: Task[];
+  lists: List[];
+  folders: Folder[];
+  timelines: Timeline[];
+}
+export interface DeltaChange { entity: string; entityId: string; op: 'upsert' | 'delete'; payload?: unknown; }
+export interface DeltaResponse { cursor: number; changes: DeltaChange[]; reset: boolean; }
+
+export const apiSyncBootstrap = (workspaceId?: string) =>
+  apiFetch<BootstrapResponse>(`/sync/bootstrap${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`);
+
+export const apiSyncDelta = (since: number, workspaceId?: string) => {
+  const p = new URLSearchParams({ since: String(since) });
+  if (workspaceId) p.set('workspaceId', workspaceId);
+  return apiFetch<DeltaResponse>(`/sync/delta?${p.toString()}`);
+};
+
+// A realtime frame is EITHER a cursor-tagged sync frame from the dispatcher, or
+// a legacy `{ type }` channel nudge (still emitted by existing handlers). Both
+// are just nudges — the receiver pulls the authoritative delta.
+export interface SseFrame {
+  cursor?: number;
+  entities?: Array<{ entity: string; entityId: string; op: 'upsert' | 'delete' }>;
+  workspaceId?: string | null;
+  type?: string;
+}
+
 // SSE — real-time sync
 let sseSource: EventSource | null = null;
 let sseReconnectDelay = 2000;
 const SSE_RECONNECT_MAX = 30000;
 
-export function connectSSE(onSync: (type: string) => void): void {
+/**
+ * Open the SSE stream. `onFrame` fires for every realtime frame; `onOpen` fires
+ * on each successful (re)connection so the caller can pull deltas and catch up
+ * on anything missed while disconnected. Reconnect uses exponential backoff with
+ * jitter to avoid a thundering herd after a deploy.
+ */
+export function connectSSE(onFrame: (frame: SseFrame) => void, onOpen?: () => void): void {
   if (sseSource) return;
   const token = getToken();
   if (!token) return;
@@ -827,19 +864,21 @@ export function connectSSE(onSync: (type: string) => void): void {
   sseSource = new EventSource(url);
   sseSource.onopen = () => {
     sseReconnectDelay = 2000; // reset backoff on successful connection
+    onOpen?.();
   };
   sseSource.addEventListener('sync', (e: MessageEvent) => {
     try {
-      const { type } = JSON.parse(e.data) as { type: string };
-      onSync(type);
+      onFrame(JSON.parse(e.data) as SseFrame);
     } catch { /* ignore malformed */ }
   });
   sseSource.onerror = () => {
     sseSource?.close();
     sseSource = null;
-    const delay = sseReconnectDelay;
+    // Exponential backoff with jitter (avoids a thundering herd of reconnects
+    // all firing at once after a deploy/restart).
+    const delay = sseReconnectDelay * (0.5 + Math.random() * 0.5);
     sseReconnectDelay = Math.min(sseReconnectDelay * 2, SSE_RECONNECT_MAX);
-    setTimeout(() => connectSSE(onSync), delay);
+    setTimeout(() => connectSSE(onFrame, onOpen), delay);
   };
 }
 

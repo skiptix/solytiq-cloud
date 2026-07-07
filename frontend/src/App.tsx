@@ -3,9 +3,14 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-
 import type { List, Timeline } from './types';
 import useAuthStore from './store/useAuthStore';
 import useAppStore from './store/useAppStore';
+import useSyncStore from './store/useSyncStore';
 import useMembersStore from './store/useMembersStore';
 import useWorkspaceStore from './store/useWorkspaceStore';
 import { apiCheckSetupRequired, connectSSE, disconnectSSE, setUnauthorizedHandler } from './api/client';
+
+// Delta-sync engine is on by default; set VITE_SYNC_ENGINE=0 to fall back to the
+// classic full/slice-reload loader (instant rollback without a redeploy).
+const SYNC_ENGINE = import.meta.env.VITE_SYNC_ENGINE !== '0';
 import { useMobile } from './hooks/useBreakpoint';
 
 import Sidebar from './components/Sidebar';
@@ -78,48 +83,58 @@ function AppLayout() {
     };
     init();
 
-    // Slice-scoped SSE reloads: each event names the data that changed, so we
-    // only refetch the affected slices (a full 9-request reload on every event
-    // could exhaust the API rate limit and blank the UI).
-    const SSE_SLICES: Record<string, Array<'tasks' | 'lists' | 'folders' | 'timelines' | 'trash'>> = {
-      tasks:     ['tasks'],
-      lists:     ['lists', 'tasks'],
-      folders:   ['folders', 'lists'],
-      timelines: ['timelines'],
-      trash:     ['trash'],
-    };
     let debounce: ReturnType<typeof setTimeout> | null = null;
-    let pendingSlices = new Set<'tasks' | 'lists' | 'folders' | 'timelines' | 'trash'>();
-    connectSSE((type) => {
-      if (type === 'workspaces') {
-        // Membership/visibility changed — the workspace list AND the scoped
-        // content may both be different now.
-        useWorkspaceStore.getState().loadWorkspaces();
-        (['tasks', 'lists', 'folders', 'timelines', 'trash'] as const).forEach(s => pendingSlices.add(s));
-      } else if (SSE_SLICES[type]) {
-        SSE_SLICES[type].forEach(s => pendingSlices.add(s));
-      } else {
-        return; // 'files' / 'meetings' — handled by their own screens
-      }
-      if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(() => {
-        const slices = Array.from(pendingSlices);
-        pendingSlices = new Set();
-        const wsId = useWorkspaceStore.getState().currentWorkspaceId;
-        loadFromApi(wsId ?? undefined, { only: slices });
-      }, 500);
-    });
+
+    if (SYNC_ENGINE) {
+      // Delta engine: every realtime frame is a nudge → pull the authoritative
+      // delta (coalesced). On each (re)connect, pull once to catch up on anything
+      // missed while disconnected — this is what makes reconnects bulletproof.
+      connectSSE(
+        (frame) => useSyncStore.getState().applyFrame(frame),
+        () => { if (useSyncStore.getState().status === 'live') void useSyncStore.getState().pullDelta(); },
+      );
+    } else {
+      // Legacy: coarse slice-refetch on channel nudges. Each `{type}` names the
+      // data that changed, so we only refetch the affected slices.
+      const SSE_SLICES: Record<string, Array<'tasks' | 'lists' | 'folders' | 'timelines' | 'trash'>> = {
+        tasks:     ['tasks'],
+        lists:     ['lists', 'tasks'],
+        folders:   ['folders', 'lists'],
+        timelines: ['timelines'],
+        trash:     ['trash'],
+      };
+      let pendingSlices = new Set<'tasks' | 'lists' | 'folders' | 'timelines' | 'trash'>();
+      connectSSE((frame) => {
+        const type = frame.type;
+        if (!type) return; // cursor frames are engine-only
+        if (type === 'workspaces') {
+          useWorkspaceStore.getState().loadWorkspaces();
+          (['tasks', 'lists', 'folders', 'timelines', 'trash'] as const).forEach(s => pendingSlices.add(s));
+        } else if (SSE_SLICES[type]) {
+          SSE_SLICES[type].forEach(s => pendingSlices.add(s));
+        } else {
+          return; // 'files' / 'meetings' — handled by their own screens
+        }
+        if (debounce) clearTimeout(debounce);
+        debounce = setTimeout(() => {
+          const slices = Array.from(pendingSlices);
+          pendingSlices = new Set();
+          const wsId = useWorkspaceStore.getState().currentWorkspaceId;
+          loadFromApi(wsId ?? undefined, { only: slices });
+        }, 500);
+      });
+    }
 
     // Regaining tab focus (or coming back online) must NOT trigger a full
     // multi-request reload — that was the single biggest driver of the reported
-    // "navigating between tabs" 429 storm (alt-tab 20× = 180 GETs). Instead do a
-    // lightweight revalidate that is (a) throttled to at most once / 10s and
-    // (b) scoped to only the slice(s) the current route renders.
+    // "navigating between tabs" 429 storm. With the engine on it's a single
+    // coalesced delta pull; otherwise a throttled, route-scoped slice reload.
     let lastRevalidate = 0;
     const revalidate = () => {
       const now = Date.now();
-      if (now - lastRevalidate < 10_000) return; // throttle
+      if (now - lastRevalidate < 10_000) return; // throttle: at most once / 10s
       lastRevalidate = now;
+      if (SYNC_ENGINE) { void useSyncStore.getState().pullDelta(); return; }
       const wsId = useWorkspaceStore.getState().currentWorkspaceId;
       loadFromApi(wsId ?? undefined, { only: slicesForRoute(window.location.pathname) });
     };
@@ -129,8 +144,19 @@ function AppLayout() {
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('online', onOnline);
 
+    // Belt-and-suspenders steady-state reconcile (engine only), paused while the
+    // tab is hidden so a background tab is silent.
+    const sweep = SYNC_ENGINE
+      ? setInterval(() => {
+          if (document.visibilityState === 'visible' && useSyncStore.getState().status === 'live') {
+            void useSyncStore.getState().pullDelta();
+          }
+        }, 30000)
+      : null;
+
     return () => {
       if (debounce) clearTimeout(debounce);
+      if (sweep) clearInterval(sweep);
       disconnectSSE();
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('online', onOnline);
@@ -165,7 +191,12 @@ function AppLayout() {
     // stale list/folder route from the previous workspace during the swap.
     const isSwitch = prev !== undefined && prev !== currentWorkspaceId;
 
-    loadFromApi(currentWorkspaceId);
+    if (SYNC_ENGINE) {
+      // Bootstrap loads the full scoped state + resets the cursor for this view.
+      void useSyncStore.getState().bootstrap(currentWorkspaceId);
+    } else {
+      loadFromApi(currentWorkspaceId);
+    }
 
     // Navigate to dashboard only when the user explicitly switches between two
     // real workspaces (not on initial load, and not on null → first workspace).
@@ -187,7 +218,8 @@ function AppLayout() {
     if (!loadError) return;
     const id = setInterval(() => {
       const wsId = useWorkspaceStore.getState().currentWorkspaceId;
-      loadFromApi(wsId ?? undefined);
+      if (SYNC_ENGINE) void useSyncStore.getState().bootstrap(wsId ?? undefined);
+      else loadFromApi(wsId ?? undefined);
     }, 20000);
     return () => clearInterval(id);
   }, [loadError, loadFromApi]);
@@ -333,7 +365,7 @@ function AppLayout() {
         <div style={{ position: 'fixed', bottom: 20, left: '50%', marginLeft: -170, width: 340, maxWidth: 'calc(100vw - 32px)', zIndex: 500, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, background: '#fff', border: '1px solid #e8e4f0', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', animation: 'menuIn 200ms ease both' }}>
           <span style={{ color: '#ba1a1a', fontWeight: 600 }}>Couldn't refresh your data.</span>
           <button
-            onClick={() => loadFromApi(currentWorkspaceId ?? undefined)}
+            onClick={() => (SYNC_ENGINE ? useSyncStore.getState().bootstrap(currentWorkspaceId ?? undefined) : loadFromApi(currentWorkspaceId ?? undefined))}
             style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 8, border: 'none', background: '#5e4dbb', color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
             onMouseEnter={e => (e.currentTarget.style.background = '#4d3da8')}
             onMouseLeave={e => (e.currentTarget.style.background = '#5e4dbb')}

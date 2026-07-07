@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SharedFile } from '../types';
 import { apiGetFiles, apiUpdateFile, apiDeleteFile, apiUploadFile, apiUploadFilesBundle, apiGetStorageUsage, apiPreviewFile } from '../api/client';
 import useAuthStore from '../store/useAuthStore';
+import useSyncStore from '../store/useSyncStore';
 import Icon from '../components/Icon';
 import CalendarPicker from '../components/CalendarPicker';
 
@@ -592,6 +593,16 @@ export default function FilesScreen() {
   }, []);
 
   useEffect(() => { load(); loadStorage(); }, [load, loadStorage]);
+
+  // Live cross-device file sync: the delta engine bumps this counter when a
+  // shared file changes anywhere, and we refetch the file list + storage usage.
+  // Fetch without toggling the full-screen loader (this is a background refresh).
+  const fileRev = useSyncStore(s => s.entityRevisions.file ?? 0);
+  useEffect(() => {
+    if (fileRev === 0) return;
+    apiGetFiles().then(r => setFiles(r.files)).catch(() => {});
+    apiGetStorageUsage().then(setStorageInfo).catch(() => {});
+  }, [fileRev]);
 
   const handleUploaded = (f: SharedFile) => {
     setFiles(prev => [f, ...prev]);
