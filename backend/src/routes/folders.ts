@@ -48,26 +48,46 @@ function sanitizeFolder(f: FolderRow) {
   };
 }
 
+const FOLDER_ACCESS = `(f.user_id = $1 OR (f.is_public = true AND (wm.user_id = $1 OR f.workspace_id IS NULL OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = f.workspace_id AND w.visibility = 'public'))))`;
+
+// Build the folders the user can see, exactly as GET /api/folders returns them.
+// Reused by the sync bootstrap.
+export async function buildFoldersForUser(userId: string, workspaceId?: string) {
+  const params: unknown[] = [userId];
+  const wsClause = workspaceId ? `AND (f.workspace_id = $2 OR f.workspace_id IS NULL)` : '';
+  if (workspaceId) params.push(workspaceId);
+  const rows = await query<FolderRow>(
+    `SELECT f.* FROM folders f
+     LEFT JOIN workspace_members wm ON wm.workspace_id = f.workspace_id AND wm.user_id = $1
+     WHERE ${FOLDER_ACCESS}
+     ${wsClause}
+     ORDER BY f.position ASC, f.created_at ASC`,
+    params
+  );
+  wlog(
+    `folders BUILD user=${userId} requestedWorkspace=${workspaceId ?? 'ALL'} → ` +
+    `${rows.rows.length} folder(s); folders=[${summarizeFolderRows(rows.rows)}]`
+  );
+  return rows.rows.map(sanitizeFolder);
+}
+
+/** A single folder the user can see, sanitized, or null. For delta re-serialization. */
+export async function getFolderForUser(userId: string, folderId: string) {
+  const r = await query<FolderRow>(
+    `SELECT f.* FROM folders f
+     LEFT JOIN workspace_members wm ON wm.workspace_id = f.workspace_id AND wm.user_id = $1
+     WHERE f.id = $2 AND ${FOLDER_ACCESS}`,
+    [userId, folderId]
+  );
+  return r.rows[0] ? sanitizeFolder(r.rows[0]) : null;
+}
+
 // GET /api/folders
 router.get('/', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
-    const params: unknown[] = [req.userId];
-    const wsClause = workspaceId ? `AND (f.workspace_id = $2 OR f.workspace_id IS NULL)` : '';
-    if (workspaceId) params.push(workspaceId);
-    const rows = await query<FolderRow>(
-      `SELECT f.* FROM folders f
-       LEFT JOIN workspace_members wm ON wm.workspace_id = f.workspace_id AND wm.user_id = $1
-       WHERE (f.user_id = $1 OR (f.is_public = true AND (wm.user_id = $1 OR f.workspace_id IS NULL OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = f.workspace_id AND w.visibility = 'public'))))
-       ${wsClause}
-       ORDER BY f.position ASC, f.created_at ASC`,
-      params
-    );
-    wlog(
-      `folders GET user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} rawQuery=${JSON.stringify(req.query)} → ` +
-      `${rows.rows.length} folder(s); folders=[${summarizeFolderRows(rows.rows)}]`
-    );
-    res.json({ folders: rows.rows.map(sanitizeFolder) });
+    const folders = await buildFoldersForUser(req.userId!, workspaceId);
+    res.json({ folders });
   } catch (err) {
     werr('folders GET error:', err);
     res.status(500).json({ error: 'Internal server error' });

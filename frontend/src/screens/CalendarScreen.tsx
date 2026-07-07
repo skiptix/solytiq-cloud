@@ -10,6 +10,7 @@ import {
 } from '../api/client';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
+import useSyncStore from '../store/useSyncStore';
 import TaskDialog from '../components/TaskDialog';
 import CalendarPicker from '../components/CalendarPicker';
 import TimePicker from '../components/TimePicker';
@@ -580,6 +581,14 @@ export default function CalendarScreen() {
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [loadData]);
+
+  // Live cross-device meeting sync: the delta engine bumps this counter when a
+  // meeting changes anywhere (incl. via CalDAV), and we refetch just the meetings.
+  const meetingRev = useSyncStore(s => s.entityRevisions.meeting ?? 0);
+  useEffect(() => {
+    if (meetingRev === 0) return;
+    apiGetMeetings().then(m => setMeetings(m.meetings)).catch(() => {});
+  }, [meetingRev]);
 
   // Close filter on outside click.
   useEffect(() => {

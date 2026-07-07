@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AppState, TrashedTask, TrashedList, TrashedFolder, TrashedTimeline } from '../types';
+import type { AppState, Task, List, Folder, Timeline, TrashedTask, TrashedList, TrashedFolder, TrashedTimeline } from '../types';
 import useWorkspaceStore from './useWorkspaceStore';
 import {
+  ApiError,
   apiGetTasks,
   apiGetLists,
   apiGetFolders,
@@ -72,6 +73,34 @@ function getScopedWorkspaceId(workspaceId?: string): string | undefined {
   return workspaceId ?? useWorkspaceStore.getState().currentWorkspaceId ?? undefined;
 }
 
+// ── Slice normalizers ────────────────────────────────────────────────────────
+// The delta engine (hydrateFromSnapshot / applyDeltas) MUST apply the exact same
+// coercions the classic loadFromApi loader does, so the two data paths agree
+// (task ids → number, list.parentTaskId → number, timelines carry a milestones
+// array). Kept as shared helpers so they can never drift.
+const normTask = (t: Task): Task => ({ ...t, id: Number(t.id) });
+const normList = (l: List): List => ({
+  ...l,
+  parentTaskId: l.parentTaskId != null ? Number(l.parentTaskId) : null,
+  sections: l.sections.map((s) => ({ ...s, tasks: s.tasks.map(normTask) })),
+});
+const normTimeline = (t: Timeline): Timeline => ({ ...t, milestones: t.milestones ?? [] });
+
+function upsertById<T extends { id: string | number }>(arr: T[], item: T): T[] {
+  const i = arr.findIndex((x) => String(x.id) === String(item.id));
+  if (i === -1) return [...arr, item];
+  const copy = arr.slice();
+  copy[i] = item;
+  return copy;
+}
+
+// A list's nested (source='list') tasks, as they appear in the flat dashTasks
+// slice. The dashboard reads list tasks out of dashTasks (see DashboardScreen),
+// so a `list` delta must keep that flat copy in sync with the list payload.
+function listTasksAsDash(list: List): Task[] {
+  return list.sections.flatMap((s) => s.tasks).map((t) => ({ ...t, workspaceId: list.workspaceId }));
+}
+
 const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
@@ -125,7 +154,15 @@ const useAppStore = create<AppState>()(
         set((state) => ({
           timelines: state.timelines.map((t) => (t.id === timelineId ? { ...t, ...updates } : t)),
         }));
-        apiUpdateTimeline(timelineId, updates).catch(() => {
+        const payload = !('position' in updates) && prev?.version != null
+          ? { ...updates, expectedVersion: prev.version }
+          : updates;
+        apiUpdateTimeline(timelineId, payload).catch((err) => {
+          const body = err instanceof ApiError && err.status === 409 ? (err.body as { error?: string; timeline?: Timeline }) : null;
+          if (body?.error === 'version_conflict' && body.timeline) {
+            get().applyDeltas([{ entity: 'timeline', entityId: timelineId, op: 'upsert', payload: body.timeline }]);
+            return;
+          }
           if (prev) {
             set((state) => ({
               timelines: state.timelines.map((t) => (t.id === timelineId ? prev : t)),
@@ -278,7 +315,19 @@ const useAppStore = create<AppState>()(
         set((state) => ({
           lists: state.lists.map((l) => (l.id === listId ? { ...l, ...updates } : l)),
         }));
-        apiUpdateList(listId, updates).catch(() => {
+        // Content edits carry the version they were based on so a concurrent
+        // edit is detected (409) instead of silently clobbered. Position-only
+        // reorders opt out (last-write-wins; avoids false conflicts on the hot path).
+        const payload = !('position' in updates) && prev?.version != null
+          ? { ...updates, expectedVersion: prev.version }
+          : updates;
+        apiUpdateList(listId, payload).catch((err) => {
+          const body = err instanceof ApiError && err.status === 409 ? (err.body as { error?: string; list?: List }) : null;
+          if (body?.error === 'version_conflict' && body.list) {
+            // Reconcile to the winner rather than reverting to our stale base.
+            get().applyDeltas([{ entity: 'list', entityId: listId, op: 'upsert', payload: body.list }]);
+            return;
+          }
           if (prev) {
             set((state) => ({
               lists: state.lists.map((l) => (l.id === listId ? prev : l)),
@@ -545,6 +594,64 @@ const useAppStore = create<AppState>()(
             }));
           }
         })();
+      },
+
+      hydrateFromSnapshot: (snap) => {
+        set({
+          dashTasks: snap.tasks.map(normTask),
+          lists: snap.lists.map(normList),
+          folders: snap.folders,
+          timelines: snap.timelines.map(normTimeline),
+          listsLoading: false,
+          loadError: false,
+        });
+      },
+
+      applyDeltas: (changes) => {
+        if (changes.length === 0) return;
+        set((state) => {
+          let dashTasks = state.dashTasks;
+          let lists = state.lists;
+          let folders = state.folders;
+          let timelines = state.timelines;
+          for (const c of changes) {
+            switch (c.entity) {
+              case 'task': {
+                const id = Number(c.entityId);
+                if (c.op === 'delete') dashTasks = dashTasks.filter((t) => t.id !== id);
+                else if (c.payload) dashTasks = upsertById(dashTasks, normTask(c.payload as Task));
+                break;
+              }
+              case 'list': {
+                if (c.op === 'delete') {
+                  lists = lists.filter((l) => l.id !== c.entityId);
+                  dashTasks = dashTasks.filter((t) => !(t._source === 'list' && t._listId === c.entityId));
+                } else if (c.payload) {
+                  const l = normList(c.payload as List);
+                  lists = upsertById(lists, l);
+                  dashTasks = [
+                    ...dashTasks.filter((t) => !(t._source === 'list' && t._listId === l.id)),
+                    ...listTasksAsDash(l),
+                  ];
+                }
+                break;
+              }
+              case 'folder': {
+                if (c.op === 'delete') folders = folders.filter((f) => f.id !== c.entityId);
+                else if (c.payload) folders = upsertById(folders, c.payload as Folder);
+                break;
+              }
+              case 'timeline': {
+                if (c.op === 'delete') timelines = timelines.filter((t) => t.id !== c.entityId);
+                else if (c.payload) timelines = upsertById(timelines, normTimeline(c.payload as Timeline));
+                break;
+              }
+              // meeting / file / workspace / trash are signal-only and handled by
+              // useSyncStore (screens/stores refetch) — ignored here.
+            }
+          }
+          return { dashTasks, lists, folders, timelines };
+        });
       },
 
       loadFromApi: async (workspaceId?: string, opts?: { only?: LoadSlice[]; attempt?: number }) => {

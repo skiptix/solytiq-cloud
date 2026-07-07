@@ -61,6 +61,7 @@ export interface List {
   shareHasPassword?: boolean;
   shareExpiresAt?: string | null;
   shareSubpages?: boolean;
+  version?: number;   // optimistic-concurrency token (bumps on every server-side update)
   linkedProgress?: {
     total: number;
     completed: number;
@@ -115,6 +116,7 @@ export interface Timeline {
   shareToken?: string | null;
   shareHasPassword?: boolean;
   shareExpiresAt?: string | null;
+  version?: number;   // optimistic-concurrency token (bumps on every server-side update)
   milestones: Milestone[];
 }
 
@@ -463,6 +465,12 @@ export interface AppState {
     workspaceId?: string,
     opts?: { only?: Array<'tasks' | 'lists' | 'folders' | 'timelines' | 'trash'>; attempt?: number }
   ) => Promise<void>;
+  // ── Delta-sync engine reducers ──────────────────────────────────────────────
+  // Replace the four core slices wholesale from a bootstrap payload.
+  hydrateFromSnapshot: (snap: { tasks: Task[]; lists: List[]; folders: Folder[]; timelines: Timeline[] }) => void;
+  // Apply a batch of per-entity deltas in place (no refetch): upsert/remove the
+  // single entity in the right slice by id.
+  applyDeltas: (changes: Array<{ entity: string; entityId: string; op: 'upsert' | 'delete'; payload?: unknown }>) => void;
 }
 
 // ─── POI / Waypoint Types ─────────────────────────────────────────────────────
