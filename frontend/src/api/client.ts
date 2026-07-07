@@ -10,6 +10,13 @@ let _onUnauthorized: (() => void) | undefined;
 /** Register a callback invoked on any 401 response (expired/revoked JWT). */
 export function setUnauthorizedHandler(fn: () => void): void { _onUnauthorized = fn; }
 
+let _onMutationSettled: (() => void) | undefined;
+/** Register a callback invoked after any successful (non-GET) write. Used to
+ *  schedule a short-delay delta-sync reconcile so optimistic local state (e.g.
+ *  a version bump) is corrected shortly after every write, not just when a
+ *  realtime frame happens to arrive. */
+export function setMutationSettledHandler(fn: () => void): void { _onMutationSettled = fn; }
+
 /** Error thrown for any non-2xx response. Carries the HTTP status and the
  *  parsed JSON body (when available) so callers can react to structured errors
  *  such as the visibility-hierarchy 409 conflict. */
@@ -90,7 +97,9 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     inflight.set(key, p);
     return p;
   }
-  return rawFetch<T>(path, options);
+  const result = await rawFetch<T>(path, options);
+  _onMutationSettled?.();
+  return result;
 }
 
 // ── Visibility hierarchy conflict (Workspace → Folder → List/Timeline) ────────

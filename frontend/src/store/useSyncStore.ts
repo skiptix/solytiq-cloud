@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { apiSyncBootstrap, apiSyncDelta, ApiError } from '../api/client';
+import { apiSyncBootstrap, apiSyncDelta, setMutationSettledHandler, ApiError } from '../api/client';
 import type { SseFrame, DeltaChange } from '../api/client';
 import useAppStore from './useAppStore';
 import useWorkspaceStore from './useWorkspaceStore';
@@ -114,5 +114,20 @@ const useSyncStore = create<SyncState>((set, get) => ({
     void get().pullDelta();
   },
 }));
+
+// ~300ms after any successful write, reconcile optimistic local state via a
+// delta pull (matches the NeetoPlanner cadence) — this is what corrects things
+// like a stale post-edit `version` without waiting on a realtime frame or the
+// 30s sweep. pullDelta is single-flight + a no-op before bootstrap, so this is
+// always safe to fire. Debounced so a burst of writes (e.g. a drag-reorder)
+// schedules one reconcile, not one per row.
+let reconcileTimer: ReturnType<typeof setTimeout> | null = null;
+setMutationSettledHandler(() => {
+  if (reconcileTimer) clearTimeout(reconcileTimer);
+  reconcileTimer = setTimeout(() => {
+    reconcileTimer = null;
+    void useSyncStore.getState().pullDelta();
+  }, 300);
+});
 
 export default useSyncStore;
