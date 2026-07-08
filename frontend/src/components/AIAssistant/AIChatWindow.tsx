@@ -419,12 +419,16 @@ export default function AIChatWindow({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 16,
             flexShrink: 0,
             boxShadow: '0 0 0 1px rgba(255,255,255,0.15)',
+            overflow: 'hidden',
           }}
         >
-          ✦
+          <img
+            src="/cloud_avatar.png"
+            alt="Sol"
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
