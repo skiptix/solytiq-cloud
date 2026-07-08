@@ -527,10 +527,15 @@ export default function AIChatWindow({
                 width: 56, height: 56, borderRadius: '50%',
                 background: 'linear-gradient(135deg, #ede9ff 0%, #f5f3ff 100%)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 26, boxShadow: '0 4px 16px rgba(107,91,204,0.15)',
+                boxShadow: '0 4px 16px rgba(107,91,204,0.15)',
+                overflow: 'hidden',
               }}
             >
-              ✦
+              <img
+                src="/cloud_avatar.png"
+                alt="Sol"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
             </div>
             <div
               style={{
