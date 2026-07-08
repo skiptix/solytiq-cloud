@@ -33,6 +33,7 @@ import mcpRouter from './routes/mcp';
 import adminReadApiRouter from './routes/adminReadApi';
 import syncRouter from './routes/sync';
 import searchRouter from './routes/search';
+import templatesRouter from './routes/templates';
 import { startSyncDispatcher, SYNC_CHANNEL } from './syncLog';
 import { getPublicBaseUrl } from './publicUrl';
 import { comparePassword } from './auth';
@@ -195,6 +196,7 @@ app.use('/api/oauth',      oauthRouter);
 app.use('/api/admin-read', adminReadApiRouter);
 app.use('/api/sync',       syncRouter);
 app.use('/api/search',     searchRouter);
+app.use('/api/templates',  templatesRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
@@ -772,22 +774,6 @@ async function runMigrations() {
 
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_shared_files_share_token ON shared_files(share_token)`);
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS task_attachments (
-      id              VARCHAR(100) PRIMARY KEY,
-      task_id         BIGINT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-      user_id         UUID   NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
-      attachment_type VARCHAR(20) NOT NULL DEFAULT 'upload'
-                        CHECK (attachment_type IN ('upload','linked')),
-      original_name   VARCHAR(500),
-      mime_type       VARCHAR(100) NOT NULL DEFAULT 'application/octet-stream',
-      file_size       BIGINT NOT NULL DEFAULT 0,
-      file_path       VARCHAR(500),
-      shared_file_id  VARCHAR(100) REFERENCES shared_files(id) ON DELETE CASCADE,
-      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_online TIMESTAMPTZ`);
 
   await pool.query(`
@@ -901,6 +887,23 @@ async function runMigrations() {
       position   INTEGER NOT NULL DEFAULT 0,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // Must come after `tasks` — it has a FK to tasks(id).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS task_attachments (
+      id              VARCHAR(100) PRIMARY KEY,
+      task_id         BIGINT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      user_id         UUID   NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
+      attachment_type VARCHAR(20) NOT NULL DEFAULT 'upload'
+                        CHECK (attachment_type IN ('upload','linked')),
+      original_name   VARCHAR(500),
+      mime_type       VARCHAR(100) NOT NULL DEFAULT 'application/octet-stream',
+      file_size       BIGINT NOT NULL DEFAULT 0,
+      file_path       VARCHAR(500),
+      shared_file_id  VARCHAR(100) REFERENCES shared_files(id) ON DELETE CASCADE,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
@@ -1321,6 +1324,32 @@ async function runMigrations() {
   // Settings → Mobile; disabling wipes all connections and blocks new logins.
   await pool.query(`INSERT INTO app_settings (key, value) VALUES ('mobile_app_enabled', 'true') ON CONFLICT (key) DO NOTHING`);
 
+  // ── Templates ────────────────────────────────────────────────────────────
+  // User-owned, workspace-agnostic snapshots of a list's or timeline's full
+  // structure (sections/tasks incl. nested sublists, or milestones), reusable
+  // to create new lists/timelines. `is_shared` makes a template visible
+  // (read-only for non-owners) to every other user of this instance — a
+  // simple public toggle, not a share link. `structure` is a versioned JSONB
+  // tree built/consumed by templateUtil.ts.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS templates (
+      id          VARCHAR(100) PRIMARY KEY,
+      user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type        VARCHAR(20) NOT NULL CHECK (type IN ('list', 'timeline')),
+      name        VARCHAR(255) NOT NULL,
+      description TEXT,
+      emoji       VARCHAR(20),
+      color       VARCHAR(20),
+      color_bg    VARCHAR(20),
+      is_shared   BOOLEAN NOT NULL DEFAULT FALSE,
+      structure   JSONB NOT NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS templates_user_idx ON templates(user_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS templates_shared_idx ON templates(is_shared) WHERE is_shared = true`);
+
   // ── Optimistic concurrency ──────────────────────────────────────────────────
   // A `version` that auto-increments on every UPDATE (BEFORE trigger). Clients
   // echo the version they edited; a conditional PUT then 409s instead of
@@ -1477,6 +1506,15 @@ async function runMigrations() {
       IF (TG_OP = 'DELETE') THEN RETURN OLD; ELSE RETURN NEW; END IF;
     END; $$ LANGUAGE plpgsql
   `);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_templates() RETURNS trigger AS $$
+    DECLARE v_owner uuid;
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN v_owner := OLD.user_id; ELSE v_owner := NEW.user_id; END IF;
+      PERFORM sync_emit('template', '', 'upsert', NULL, v_owner);
+      IF (TG_OP = 'DELETE') THEN RETURN OLD; ELSE RETURN NEW; END IF;
+    END; $$ LANGUAGE plpgsql
+  `);
 
   // Attach every trigger idempotently (DROP + CREATE so re-runs are safe).
   const syncTriggers: Array<[string, string]> = [
@@ -1486,6 +1524,7 @@ async function runMigrations() {
     ['meetings', 'meetings'], ['shared_files', 'files'],
     ['trash', 'trash'], ['trash_lists', 'trash'], ['trash_folders', 'trash'],
     ['trash_timelines', 'trash'], ['trash_milestones', 'trash'],
+    ['templates', 'templates'],
   ];
   for (const [table, fn] of syncTriggers) {
     await pool.query(`DROP TRIGGER IF EXISTS synclog_${table} ON ${table}`);

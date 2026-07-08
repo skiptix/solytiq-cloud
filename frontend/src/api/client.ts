@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, Meeting, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, Meeting, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -1157,3 +1157,20 @@ export interface GlobalSearchResult {
 
 export const apiGlobalSearch = (q: string, signal?: AbortSignal) =>
   apiFetch<{ results: GlobalSearchResult[] }>(`/search?q=${encodeURIComponent(q)}`, { signal });
+
+// ── Templates ──────────────────────────────────────────────────────────────
+
+export const apiGetTemplates = (type?: 'list' | 'timeline') =>
+  apiFetch<{ templates: Template[] }>(`/templates${type ? `?type=${type}` : ''}`);
+
+export const apiCreateTemplate = (data: { type: 'list' | 'timeline'; sourceId: string; name?: string; description?: string; isShared?: boolean }) =>
+  apiFetch<{ template: Template }>('/templates', { method: 'POST', body: JSON.stringify(data) });
+
+export const apiUpdateTemplate = (id: string, data: Partial<Pick<Template, 'name' | 'description' | 'emoji' | 'color' | 'colorBg' | 'isShared'>>) =>
+  apiFetch<{ template: Template }>(`/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const apiDeleteTemplate = (id: string) =>
+  apiFetch<{ success: boolean }>(`/templates/${id}`, { method: 'DELETE' });
+
+export const apiUseTemplate = (id: string, data: { name?: string; isPublic?: boolean; workspaceId?: string; folderId?: string }) =>
+  apiFetch<{ list?: List; timeline?: Timeline }>(`/templates/${id}/use`, { method: 'POST', body: JSON.stringify(data) });

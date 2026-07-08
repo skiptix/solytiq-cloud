@@ -30,6 +30,7 @@ solytiq-cloud/
 │   │   ├── sse.ts            # Server-Sent Events client registry + broadcastToUser()
 │   │   ├── gpx.ts            # GPX/FIT parsing & serialization (fast-xml-parser, fit-file-parser)
 │   │   ├── workspaceUtil.ts  # Workspace access-control helpers
+│   │   ├── templateUtil.ts   # Template structure capture/instantiate (recursive sublists, date-offset math)
 │   │   ├── setupToken.ts     # First-run setup token generation/logging
 │   │   ├── __tests__/        # Vitest tests (currently gpx.test.ts + GPX fixtures)
 │   │   └── routes/           # One file per resource
@@ -45,6 +46,7 @@ solytiq-cloud/
 │   │       ├── gps.ts             # /api/gps — GPX/FIT upload, edit, route planning, POIs
 │   │       ├── admin.ts           # /api/admin — users, roles, nuke, settings, admin API keys (scoped)
 │   │       ├── adminReadApi.ts    # /api/admin-read — instance-wide Admin API (scoped read + write) via admin API keys
+│   │       ├── templates.ts       # /api/templates — CRUD + instantiate (create list/timeline from a saved template)
 │   │       └── ai.ts              # /api/ai — OpenRouter chat, sessions, file uploads, usage
 │   ├── init.sql              # (legacy) initial schema — migrations now in index.ts
 │   ├── tsconfig.json
@@ -172,6 +174,7 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 | `caldav_credentials` | Per-user CalDAV app password: `user_id` PK, `password_hash` (bcrypt), `last_used_at` |
 | `mobile_connections` | One row per signed-in mobile device (Solytiq Cloud iOS app): `user_id`, `device_name`/`device_model`/`os_version`/`app_version`, `created_at`, `last_seen_at`. The row id is embedded in the device's JWT (`connectionId`) so it can be listed and revoked |
 | `trash`, `trash_lists`, `trash_folders`, `trash_timelines` | Soft-delete payloads as JSONB with a 30-day `expires_at` |
+| `templates` | User-owned, workspace-agnostic snapshot of a list's or timeline's full structure: `type` (`list｜timeline`), `is_shared` (visible read-only to every other instance user), `structure JSONB` (versioned tree built/consumed by `templateUtil.ts`) |
 | `app_settings` | Key/value config (storage quota, `ai_assistant_enabled`, `ai_model`, `two_fa_feature_enabled`, `mcp_enabled`, `mobile_app_enabled`) |
 | `ai_chat_sessions`, `ai_chats`, `ai_chat_files`, `ai_usage` | AI conversations, messages, uploaded files (30-day TTL), and per-call token usage |
 
@@ -244,6 +247,17 @@ Sharing model for lists/timelines (distinct from the workspace `is_public` flag 
 - Endpoints under `/api/gps`: list, `upload`, `:id/data`, `:id/smooth(+-save)`, `:id/rename`, `new`, `combine`, `:id/download`, `:id/points`, `:id/route-state`, delete, plus `route` (Valhalla snapping/routing) and `pois` (Overpass POI search).
 - **Route Planner State v1** (`route_state JSONB`) stores rich editing state — control points, routed/offgrid spans, POI markers, course points — alongside the canonical track. See `GpsRouteStateV1` and related types in `types.ts`.
 
+### Templates
+
+- **`templates` table** stores a user-owned, workspace-agnostic snapshot of a list's or timeline's full structure (`type`, `name`, `description`, `emoji`/`color`/`color_bg`, `is_shared`, `structure JSONB`). `is_shared` is a simple public toggle — not a share link — that makes the template visible (read-only for non-owners) to every other user of this instance.
+- **`backend/src/templateUtil.ts`** builds/consumes the `structure` tree: `captureListStructure`/`captureTimelineStructure` read an existing list/timeline (recursively for owned sublists) into a template node; `instantiateListStructure`/`instantiateTimelineStructure` materialize a brand-new list/timeline (recursively for sublists) inside one transaction.
+  - **Dates are relative:** every captured deadline/milestone date becomes a whole-day offset from "today" at capture time (`daysBetween`/`addDaysISO`), resolved back against "today" on instantiation — a template stays meaningful however long it sits before reuse.
+  - **Sublists are fully supported:** a task linking to an owned child list (`linked_list_type = 'sublist'`) recursively captures/recreates that list's own sections/tasks. A `'link'` reference to an unrelated standalone list is dropped (kept as a plain task) rather than pulling in a whole separate list. `lists.parent_task_id` has an FK to `tasks(id)`, so a recreated sublist is always inserted with `parent_task_id = NULL` and only backfilled via `UPDATE` once its linking task exists.
+  - **Attachments carry over owner-only:** only `'linked'`-type attachments (which reference a durable, independently-owned `shared_files` row — safe to reference from more than one attachment row) are captured; `'upload'`-type attachments are skipped (they're 1:1 with their physical file, so a second reference would risk a dangling file on delete). Captured attachments are only re-linked when the instantiating user is the template's owner; a shared/public template used by someone else never carries attachments. The referenced file is re-verified to still exist and be owned by that user at instantiation time.
+  - Generated task ids use a per-request BigInt-based counter (`makeTaskIdGenerator`) rather than `Date.now()`-based jitter, so bulk-creating many tasks in one transaction can't collide.
+- **`routes/templates.ts`** (`/api/templates`): `GET /` (own + every shared template, optional `?type=list|timeline`), `POST /` (capture from a list/timeline you own), `PUT /:id`/`DELETE /:id` (metadata only — owner or admin), `POST /:id/use` (instantiate; body: `name`, `isPublic`, `workspaceId`, `folderId`). A private template you don't own 404s rather than 403s (existence isn't leaked).
+- Frontend: the **Templates** sidebar nav item (below the workspace switcher, workspace-agnostic) opens `/templates` (`TemplatesScreen.tsx`) to create/browse/share/delete templates. `AddWizard` inserts a template-select step (`TemplateSelectStep.tsx` → `UseTemplateModal.tsx`) between choosing List/Timeline and the classic blank-creation wizard.
+
 ### AI Assistant
 
 - Thin proxy to OpenRouter (`/api/ai/chat`). Requires `OPENROUTER_API_KEY`.
@@ -301,6 +315,7 @@ All shared state lives in **Zustand stores** under `src/store/`. Do not use Reac
 | `useMembersStore` | Members list for shared spaces |
 | `useGpsStore` | GPS screen UI state |
 | `useUserPrefsStore` | Per-user UI preferences |
+| `useTemplatesStore` | Templates gallery (own + shared), create/update/delete/use actions — workspace-agnostic |
 
 `useAppStore.loadFromApi()` is called on mount in `App.tsx`. It fetches tasks, lists, folders, and timelines (scoped to the active workspace) in parallel.
 
@@ -333,6 +348,7 @@ Authenticated routes:
 - `/calendar` → `CalendarScreen`
 - `/files` → `FilesScreen`
 - `/gps` → `GPSScreen`, `/gps/:id/edit` → `GPSEditScreen`
+- `/templates` → `TemplatesScreen` (workspace-agnostic — create/browse/share/delete templates, use one to create a list/timeline)
 - `/settings` → `SettingsScreen`
 - `/nuke` → `NukeScreen` (admin-only total instance reset; route-guarded on `isAdmin`, not just `loggedIn`)
 
