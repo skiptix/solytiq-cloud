@@ -606,6 +606,8 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
     <>
       {/* Folder header */}
       <div
+        draggable={!collapsed && !editingName}
+        onDragStart={e => onFolderDragStart(folder.id, e)}
         onDragOver={e => {
           onFolderDragOver(folder.id, e);
           onFolderReorderDragOver(folder.id, e);
@@ -679,10 +681,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
             >
               <Icon name="more_vert" size={15} color="#9d8dff" />
             </button>
-            <div
-              draggable
-              onDragStart={e => onFolderDragStart(folder.id, e)}
-              style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
+            <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
               <Icon name="drag_indicator" size={15} color="#c9c4d5" />
             </div>
           </div>
