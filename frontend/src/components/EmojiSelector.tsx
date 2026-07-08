@@ -9,10 +9,11 @@ const EMOJI_GROUPS = [
   { label: 'Other', emojis: ['🔧','💰','🎮','🌍','🤝','🧠','💪','🎵','🛒','🌱'] },
 ];
 
-const POPUP_WIDTH = 278;
+export const POPUP_WIDTH = 278;
 
 // The grid of curated emoji groups. Rendered inside the EmojiSelector popup,
-// or inline (e.g. in the workspace modals where the avatar tile is the trigger).
+// or inside a caller's own floating popup (e.g. WorkspaceSettingsModal, where
+// a custom avatar tile is the trigger instead of EmojiSelector's own button).
 export function EmojiGrid({ value, onSelect, onRemove }: { value?: string; onSelect: (emoji: string) => void; onRemove?: () => void }) {
   return (
     <div style={{ width: POPUP_WIDTH - 20 }}>
