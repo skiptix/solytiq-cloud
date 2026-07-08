@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from '../components/Icon';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import type { WorkspaceMember } from '../types';
@@ -104,7 +105,7 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
     ? 'backdropOut 190ms ease both'
     : 'backdropIn 220ms ease both';
 
-  return (
+  return createPortal(
     <div
       onClick={e => { if (e.target === e.currentTarget && !forced) handleClose(); }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: backdropAnim }}>
@@ -308,6 +309,7 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
