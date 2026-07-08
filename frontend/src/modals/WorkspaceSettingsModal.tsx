@@ -5,7 +5,7 @@ import useWorkspaceStore from '../store/useWorkspaceStore';
 import useAuthStore from '../store/useAuthStore';
 import useAppStore from '../store/useAppStore';
 import type { Workspace, WorkspaceMember, SharedFile } from '../types';
-import { EmojiGrid } from '../components/EmojiSelector';
+import { EmojiGrid, POPUP_WIDTH } from '../components/EmojiSelector';
 import { apiGetMembers, apiGetFiles, asVisibilityConflict, type VisibilityConflict } from '../api/client';
 import VisibilityConflictModal from '../components/VisibilityConflictModal';
 import CreatorBubble from '../components/CreatorBubble';
@@ -160,12 +160,45 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const [image, setImage]             = useState<string | null>(workspace.image ?? null);
   const [visibility, setVisibility]   = useState<'private' | 'public'>(workspace.visibility);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [emojiPopPos, setEmojiPopPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
   const [imgError, setImgError]       = useState<string | null>(null);
   const [dragOver, setDragOver]       = useState(false);
   const [saving, setSaving]           = useState(false);
   const [saved, setSaved]             = useState(false);
   const [conflict, setConflict]       = useState<VisibilityConflict | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const iconTileRef = useRef<HTMLDivElement>(null);
+  const emojiPopRef = useRef<HTMLDivElement>(null);
+
+  // Open the emoji grid as a floating popup anchored to the icon tile —
+  // matching EmojiSelector's own popup everywhere else — instead of pushing
+  // the rest of the panel down inline.
+  const toggleEmojiPicker = () => {
+    if (!showEmojiPicker) {
+      const rect = iconTileRef.current?.getBoundingClientRect();
+      if (rect) {
+        const left = Math.max(8, Math.min(rect.left, window.innerWidth - POPUP_WIDTH - 8));
+        const spaceBelow = window.innerHeight - rect.bottom - 12;
+        const spaceAbove = rect.top - 12;
+        setEmojiPopPos(spaceBelow < 380 && spaceAbove > spaceBelow
+          ? { left, bottom: window.innerHeight - rect.top + 6 }
+          : { left, top: rect.bottom + 6 });
+      }
+    }
+    setShowEmojiPicker(p => !p);
+  };
+
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        emojiPopRef.current && !emojiPopRef.current.contains(e.target as Node) &&
+        iconTileRef.current && !iconTileRef.current.contains(e.target as Node)
+      ) setShowEmojiPicker(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showEmojiPicker]);
 
   // Members
   const [members, setMembers]         = useState<WorkspaceMember[]>([]);
@@ -362,8 +395,8 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
               <div>
                 <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Icon</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{ width: 64, height: 64, borderRadius: 16, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', border: '2px solid #e8e4f0', flexShrink: 0 }}
-                    onClick={() => useImage ? fileInputRef.current?.click() : setShowEmojiPicker(p => !p)}>
+                  <div ref={iconTileRef} style={{ width: 64, height: 64, borderRadius: 16, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', border: '2px solid #e8e4f0', flexShrink: 0 }}
+                    onClick={() => useImage ? fileInputRef.current?.click() : toggleEmojiPicker()}>
                     {useImage && image
                       ? <img src={image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       : <span style={{ fontSize: 30 }}>{emoji}</span>
@@ -397,10 +430,15 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                     {imgError && <div style={{ color: '#ba1a1a', fontSize: 11, marginTop: 4 }}>{imgError}</div>}
                   </div>
                 )}
-                {!useImage && showEmojiPicker && (
-                  <div style={{ marginTop: 10, border: '1px solid #e8e4f0', borderRadius: 12, padding: 10, background: '#fff', width: 'fit-content', animation: 'menuIn 160ms ease both', transformOrigin: 'top left' }}>
+                {!useImage && showEmojiPicker && emojiPopPos && createPortal(
+                  <div
+                    ref={emojiPopRef}
+                    onMouseDown={e => e.preventDefault()}
+                    style={{ position: 'fixed', left: emojiPopPos.left, top: emojiPopPos.top, bottom: emojiPopPos.bottom, zIndex: 1600, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', padding: '10px', width: POPUP_WIDTH, boxSizing: 'border-box', maxHeight: 'calc(100vh - 24px)', overflowY: 'auto', animation: 'modalIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+                  >
                     <EmojiGrid value={emoji} onSelect={em => { setEmoji(em); setShowEmojiPicker(false); }} />
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
               <input ref={fileInputRef} type="file" accept={ACCEPTED_TYPES.join(',')} style={{ display: 'none' }}
