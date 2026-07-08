@@ -1,6 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useMobile } from '../hooks/useBreakpoint';
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Milestone, MilestoneStatus, TimelineLayout, MilestoneAttachment, SharedFile } from '../types';
@@ -197,7 +198,10 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
     });
   };
 
-  return (
+  // Portaled to <body>: opened from deep inside the routed timeline screen,
+  // whose ancestors establish their own stacking context — without this, the
+  // dialog could never render above the sidebar/topbar regardless of z-index.
+  return createPortal(
     <>
     <div onClick={onClose}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : '24px 20px', animation: 'backdropIn 200ms ease both' }}>
@@ -428,7 +432,8 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
         onCancel={() => setShowDelete(false)}
       />
     )}
-    </>
+    </>,
+    document.body
   );
 }
 

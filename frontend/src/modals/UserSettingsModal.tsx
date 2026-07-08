@@ -378,8 +378,8 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                       fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600,
                       color: active ? '#fff' : '#5e4dbb',
                       background: active ? '#5e4dbb' : 'transparent',
-                      border: 'none', borderRadius: 10, padding: '8px 14px', cursor: 'pointer',
-                      transition: 'all 150ms', flex: '1 1 0', flexBasis: 0, justifyContent: 'center', minWidth: 0,
+                      border: 'none', borderRadius: 10, padding: '9px 16px', cursor: 'pointer',
+                      transition: 'all 150ms', flex: isMobile ? '0 0 auto' : '1 1 auto', justifyContent: 'center',
                     }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#ede9ff'; }}
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}

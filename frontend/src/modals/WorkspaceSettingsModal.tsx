@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from '../components/Icon';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useAuthStore from '../store/useAuthStore';
@@ -7,6 +8,7 @@ import type { Workspace, WorkspaceMember, SharedFile } from '../types';
 import { EmojiGrid } from '../components/EmojiSelector';
 import { apiGetMembers, apiGetFiles, asVisibilityConflict, type VisibilityConflict } from '../api/client';
 import VisibilityConflictModal from '../components/VisibilityConflictModal';
+import CreatorBubble from '../components/CreatorBubble';
 
 interface UserSuggestion { id: string; username: string; fullName: string | null; profileImage: string | null; }
 
@@ -305,7 +307,10 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
     { id: 'danger',  label: 'Danger',   icon: 'warning'      },
   ];
 
-  return (
+  // Portaled to <body>: this modal is opened from inside the fixed-position
+  // Sidebar (its own stacking context), which would otherwise cap it below
+  // the topbar no matter how high its z-index is set.
+  return createPortal(
     <>
     <div
       onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
@@ -327,9 +332,12 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
               <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>{workspace.name}</div>
               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584' }}>Workspace settings</div>
             </div>
-            <button onClick={handleClose} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Icon name="close" size={18} color="#787584" />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+              <CreatorBubble creatorId={workspace.ownerId} taskHovered />
+              <button onClick={handleClose} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="close" size={18} color="#787584" />
+              </button>
+            </div>
           </div>
 
           {/* Tab bar */}
@@ -627,6 +635,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
         onConfirm={() => handleSave(true)}
       />
     )}
-    </>
+    </>,
+    document.body
   );
 }
