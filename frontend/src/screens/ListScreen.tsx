@@ -1,5 +1,5 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useMobile } from '../hooks/useBreakpoint';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Task } from '../types';
@@ -37,6 +37,15 @@ export default function ListScreen() {
   const [newSectionLabel, setNewSectionLabel] = useState('');
   const [newSectionEmoji, setNewSectionEmoji] = useState('');
   const newSectionInputRef = useRef<HTMLInputElement>(null);
+
+  // "New item" shortcut — focuses the first section's quick-add field.
+  useEffect(() => {
+    const onCreateItem = () => {
+      document.querySelector<HTMLInputElement>('[data-quickadd-root] input')?.focus();
+    };
+    window.addEventListener('shortcut:create-item', onCreateItem);
+    return () => window.removeEventListener('shortcut:create-item', onCreateItem);
+  }, []);
 
   const isOwner = list?.userId === currentUserId;
   const allTasks = list ? list.sections.flatMap(s => s.tasks) : [];
@@ -503,7 +512,7 @@ export default function ListScreen() {
                   })}
                 </div>
               )}
-              <div style={{ borderTop: section.tasks.length > 0 ? '1px solid #f1ecf6' : 'none' }}>
+              <div data-quickadd-root style={{ borderTop: section.tasks.length > 0 ? '1px solid #f1ecf6' : 'none' }}>
                 <QuickAdd placeholder="Add new item… (type / for commands)" onAdd={data => handleAddTask(section.id, data)} availableLists={lists} currentListId={listId} />
               </div>
             </div>

@@ -939,6 +939,13 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
     setDropdownOpen(o => !o);
   };
 
+  // "New workspace" shortcut — same as the dropdown's "New workspace" item.
+  useEffect(() => {
+    const onCreateWorkspace = () => { setShowWizard(true); setDropdownOpen(false); };
+    window.addEventListener('shortcut:create-workspace', onCreateWorkspace);
+    return () => window.removeEventListener('shortcut:create-workspace', onCreateWorkspace);
+  }, []);
+
   return (
     <>
       <button ref={btnRef} onClick={openDropdown} title={collapsed ? (current?.name ?? 'Workspaces') : undefined}
@@ -1074,6 +1081,13 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
     const clearTaskDrag = () => { setDragOverTaskListId(null); setDragOverTimelineId(null); };
     document.addEventListener('dragend', clearTaskDrag);
     return () => document.removeEventListener('dragend', clearTaskDrag);
+  }, []);
+
+  // "New folder" shortcut — same as clicking the Add Folder button.
+  useEffect(() => {
+    const onCreateFolder = () => { setAddingFolder(true); setTimeout(() => folderInputRef.current?.focus(), 50); };
+    window.addEventListener('shortcut:create-folder', onCreateFolder);
+    return () => window.removeEventListener('shortcut:create-folder', onCreateFolder);
   }, []);
 
   useEffect(() => {
@@ -1338,7 +1352,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.30.0
+              v1.31.0
             </div>
           )}
         </div>
@@ -1557,7 +1571,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.30.0
+            v1.31.0
           </div>
         )}
       </div>

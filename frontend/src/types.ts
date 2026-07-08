@@ -257,6 +257,7 @@ export interface AuthUser {
   isAdmin?: boolean;
   profileImage?: string | null;
   totpEnabled?: boolean;
+  keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>;
 }
 
 export interface AuthState {

@@ -1,10 +1,14 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import useAuthStore from '../store/useAuthStore';
+import useShortcutsStore from '../store/useShortcutsStore';
 import { apiUpdateProfile, apiUploadProfileImage, apiUploadFile } from '../api/client';
 import UserSettingsModal from '../modals/UserSettingsModal';
 import CommandPalette from './CommandPalette';
+import { SHORTCUT_DEFS, bindingFor, formatCombo } from '../shortcuts/registry';
+
+const focusSearchDef = SHORTCUT_DEFS.find(d => d.id === 'focus-search')!;
 
 interface TopBarProps {
   onNavigate: (path: string) => void;
@@ -105,14 +109,21 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
     return () => document.removeEventListener('mousedown', handler);
   }, [profileOpen]);
 
-  // ⌘K / Ctrl+K opens the command palette from anywhere.
+  // Global shortcuts (dispatched by <KeyboardShortcuts/>, customizable in
+  // Account Settings → Controls) — open search / account settings from anywhere.
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setPaletteOpen(true); }
+    const onSearch = () => setPaletteOpen(true);
+    const onSettings = () => setSettingsOpen(true);
+    window.addEventListener('shortcut:focus-search', onSearch);
+    window.addEventListener('shortcut:open-settings', onSettings);
+    return () => {
+      window.removeEventListener('shortcut:focus-search', onSearch);
+      window.removeEventListener('shortcut:open-settings', onSettings);
     };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
   }, []);
+
+  const searchShortcutOverrides = useShortcutsStore(s => s.overrides);
+  const searchShortcutHint = useMemo(() => formatCombo(bindingFor(searchShortcutOverrides, focusSearchDef).key), [searchShortcutOverrides]);
 
   // Inline edit handlers
   const startEdit = (field: 'name' | 'email') => {
@@ -293,7 +304,7 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
           >
             <Icon name="search" size={16} color="#787584" />
             <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#9d96aa' }}>Search tasks, lists…</span>
-            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', background: '#fff', border: '1px solid #e8e4f0', borderRadius: 6, padding: '2px 6px', flexShrink: 0 }}>⌘K</span>
+            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', background: '#fff', border: '1px solid #e8e4f0', borderRadius: 6, padding: '2px 6px', flexShrink: 0 }}>{searchShortcutHint}</span>
           </button>
         )}
 

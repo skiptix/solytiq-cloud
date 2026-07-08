@@ -136,14 +136,14 @@ export const apiRequestSetupToken = () =>
   apiFetch<{ ok: boolean }>('/auth/request-setup-token', { method: 'POST' });
 
 export const apiRegister = (username: string, email: string, password: string, setupToken?: string) =>
-  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; token_version?: number } }>(
+  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; token_version?: number; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }> } }>(
     '/auth/register', { method: 'POST', body: JSON.stringify({ username, email, password, setupToken }) }
   );
 
 export const apiLogin = (username: string, password: string) =>
   apiFetch<{
     token?: string;
-    user?: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean };
+    user?: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }> };
     requires2FA?: boolean;
     pendingToken?: string;
   }>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
@@ -158,7 +158,7 @@ export const api2FADisable = (code: string) =>
   apiFetch<{ success: boolean }>('/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ code }) });
 
 export const api2FAVerify = (pendingToken: string, code: string) =>
-  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean } }>(
+  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }> } }>(
     '/auth/2fa/verify', { method: 'POST', body: JSON.stringify({ pendingToken, code }) }
   );
 
@@ -208,6 +208,11 @@ export const apiAdminPasswordResetConfirm = (code: string, newPassword: string) 
 export const apiUpdateProfile = (data: { fullName?: string; email?: string }) =>
   apiFetch<{ user: { id: string; username: string; email: string; fullName: string } }>(
     '/auth/profile', { method: 'PUT', body: JSON.stringify(data) }
+  );
+
+export const apiUpdateShortcuts = (shortcuts: Record<string, { key?: string; enabled?: boolean }>) =>
+  apiFetch<{ user: { id: string; username: string; email: string; fullName: string; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }> } }>(
+    '/auth/shortcuts', { method: 'PUT', body: JSON.stringify({ shortcuts }) }
   );
 
 export const apiUploadProfileImage = (imageData: string | null) =>

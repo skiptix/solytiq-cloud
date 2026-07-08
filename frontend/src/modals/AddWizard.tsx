@@ -8,6 +8,8 @@ interface AddWizardProps {
   onClose: () => void;
   onCreatedList: (list: List) => void;
   onCreatedTimeline: (timeline: Timeline) => void;
+  /** Skip the chooser and open a specific creation wizard directly (e.g. the "New list" shortcut). */
+  initialMode?: 'list' | 'timeline';
 }
 
 const OPTIONS = [
@@ -29,8 +31,8 @@ const OPTIONS = [
   },
 ];
 
-export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline }: AddWizardProps) {
-  const [mode, setMode] = useState<'choose' | 'list' | 'timeline'>('choose');
+export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, initialMode }: AddWizardProps) {
+  const [mode, setMode] = useState<'choose' | 'list' | 'timeline'>(initialMode ?? 'choose');
 
   if (mode === 'list') {
     return <AddListWizard onClose={() => setMode('choose')} onCreated={onCreatedList} />;

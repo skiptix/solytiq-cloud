@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiLogin, apiRegister } from '../api/client';
 import useUserPrefsStore from './useUserPrefsStore';
+import useShortcutsStore from './useShortcutsStore';
 import { clearAppStore } from './useAppStore';
 import { clearWorkspaceStore } from './useWorkspaceStore';
 import type { AuthState, AuthUser } from '../types';
@@ -35,6 +36,7 @@ const useAuthStore = create<AuthState>()(
           totpEnabled: false,
           token: data.token,
         });
+        useShortcutsStore.getState().hydrate(data.user.keyboardShortcuts);
       },
 
       signIn: async (username, password) => {
@@ -54,6 +56,7 @@ const useAuthStore = create<AuthState>()(
             totpEnabled: data.user.totpEnabled ?? false,
             token: data.token,
           });
+          useShortcutsStore.getState().hydrate(data.user.keyboardShortcuts);
           return true;
         } catch {
           return false;
@@ -74,6 +77,7 @@ const useAuthStore = create<AuthState>()(
           totpEnabled: user.totpEnabled ?? false,
           token,
         });
+        useShortcutsStore.getState().hydrate(user.keyboardShortcuts);
       },
 
       setTotpEnabled: (enabled: boolean) => {
@@ -84,6 +88,7 @@ const useAuthStore = create<AuthState>()(
         localStorage.removeItem('solytiq_token');
         // Forget session-scoped UI preferences (calendar view + filter).
         useUserPrefsStore.getState().resetCalendarPrefs();
+        useShortcutsStore.getState().reset();
         clearAppStore();
         clearWorkspaceStore();
         set({
