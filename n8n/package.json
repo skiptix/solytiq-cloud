@@ -1,0 +1,54 @@
+{
+	"name": "n8n-nodes-solytiq-cloud",
+	"version": "0.2.0",
+	"description": "Interact with the Solytiq Cloud Admin API in n8n — users, workspaces, folders, lists, items, timelines, milestones and meetings",
+	"license": "MIT",
+	"homepage": "https://www.npmjs.com/package/n8n-nodes-solytiq-cloud",
+	"keywords": [
+		"n8n-community-node-package",
+		"solytiq",
+		"solytiq-cloud",
+		"tasks",
+		"productivity"
+	],
+	"author": {
+		"name": "Skiptix",
+		"email": "info@skiptix.com"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/skiptix/solytiq-cloud.git",
+		"directory": "n8n"
+	},
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"build": "tsc -p tsconfig.json && node build-assets.mjs",
+		"dev": "tsc -p tsconfig.json --watch",
+		"pretest": "npm run build",
+		"test": "node smoke-test.mjs",
+		"prepublishOnly": "npm run build"
+	},
+	"files": [
+		"dist"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"strict": true,
+		"credentials": [
+			"dist/credentials/SolytiqCloudApi.credentials.js"
+		],
+		"nodes": [
+			"dist/nodes/SolytiqCloud/SolytiqCloud.node.js",
+			"dist/nodes/SolytiqCloudTrigger/SolytiqCloudTrigger.node.js"
+		]
+	},
+	"devDependencies": {
+		"n8n-workflow": "^1.82.0",
+		"typescript": "^5.9.3"
+	},
+	"peerDependencies": {
+		"n8n-workflow": "*"
+	}
+}

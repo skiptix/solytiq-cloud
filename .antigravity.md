@@ -67,6 +67,11 @@ solytiq-cloud/
 │   └── package.json
 ├── nginx/
 │   └── nginx.conf            # Reverse proxy, SPA fallback, gzip, headers
+├── n8n/                      # Source of the published `n8n-nodes-solytiq-cloud` npm package
+│   ├── nodes/SolytiqCloud/          # Action node — wraps /api/admin-read
+│   ├── nodes/SolytiqCloudTrigger/   # Polling trigger node
+│   ├── credentials/                 # solytiqCloudApi credential type
+│   └── README.md                    # Node docs + release process
 ├── docker-compose.yml        # Three services: postgres, backend, frontend
 ├── .env.example              # Required environment variable template
 └── security_report.md        # Prior security audit findings and fixes
@@ -272,6 +277,12 @@ Sharing model for lists/timelines (distinct from the workspace `is_public` flag 
   - **Consent:** `POST /api/oauth/approve` (session-JWT authenticated) mints a single-use, 5-minute authorization code bound to `user_id` + `client_id` + `redirect_uri` + `code_challenge` (`oauth_codes`).
   - **Token:** `POST /api/oauth/token` (`grant_type=authorization_code`) consumes the code atomically, verifies the PKCE `code_verifier` (S256, constant-time), and returns a `api_tokens` PAT scoped to the consenting user — so the connector can only ever do what that user can do in-app.
 - **Token management:** `GET`/`DELETE /api/tokens` (`routes/tokens.ts`) list and revoke (disconnect) connected clients; there is no manual token-creation endpoint — tokens are minted only by the OAuth flow.
+
+### n8n Community Node (`n8n/`)
+
+- **`n8n/`** at the repo root is the source of the published `n8n-nodes-solytiq-cloud` npm package — an n8n community node that wraps the instance-wide Admin API (`backend/src/routes/adminReadApi.ts`). It covers every resource the route exposes (Export, User, Workspace, Folder, List, Section, Item, Timeline, Milestone, Meeting) with dropdowns dynamically loaded from the instance, plus a polling trigger node. See `n8n/README.md` for its own architecture and release notes.
+- **Keep it in sync with the API — mandatory:** whenever a change touches `backend/src/routes/adminReadApi.ts` (a new resource, operation, scope, required/optional field, or response shape), update `n8n/` in the same change: the node's resources/operations/fields in `n8n/nodes/SolytiqCloud/SolytiqCloud.node.ts`, the dropdown loaders in `n8n/nodes/SolytiqCloud/GenericFunctions.ts`, the trigger's watched resources in `n8n/nodes/SolytiqCloudTrigger/SolytiqCloudTrigger.node.ts` if applicable, and `n8n/README.md` (the resource/operation/scope table and version history). Do not let the node drift out of date with the API it wraps.
+- **Publish a new version whenever the node itself changes** (not only on API drift — also for node-side fixes, new dropdowns, etc.): bump `version` in `n8n/package.json` (semver), run `npm run build && npm test` inside `n8n/` (the smoke test in `n8n/smoke-test.mjs` exercises `execute()`/`poll()`/`loadOptions` against a mock Admin API), update the README's version history, then `npm publish` from `n8n/`. Publishing needs an npm token with rights on `n8n-nodes-solytiq-cloud`: use `NPM_TOKEN` from the environment or the repo's `.env` if present; if it isn't set, ask the user for one rather than skipping the publish.
 
 ---
 
