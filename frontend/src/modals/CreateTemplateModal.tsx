@@ -75,13 +75,13 @@ export default function CreateTemplateModal({ onClose, onCreated, initialType }:
 
         <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           {!type && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, animation: 'wizardStepIn 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>What kind of template do you want to create?</div>
-              {(['list', 'timeline'] as const).map((k) => (
+              {(['list', 'timeline'] as const).map((k, i) => (
                 <button key={k} onClick={() => setType(k)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 12, border: '1.5px solid #ece8f4', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#5e4dbb'; e.currentTarget.style.background = '#F5F3FF'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#ece8f4'; e.currentTarget.style.background = '#fff'; }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 12, border: '1.5px solid #ece8f4', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 150ms, background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)', animation: `menuItemIn 200ms ease ${i * 40}ms both` }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#5e4dbb'; e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#ece8f4'; e.currentTarget.style.background = '#fff'; e.currentTarget.style.transform = 'translateY(0)'; }}>
                   <Icon name={k === 'list' ? 'format_list_bulleted' : 'timeline'} size={22} color="#5e4dbb" />
                   <div>
                     <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14.5, fontWeight: 700, color: '#1c1b22' }}>{k === 'list' ? 'List' : 'Timeline'}</div>
@@ -93,7 +93,7 @@ export default function CreateTemplateModal({ onClose, onCreated, initialType }:
           )}
 
           {type && (
-            <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18, animation: 'wizardStepIn 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
               <div>
                 <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 6 }}>
                   Source {type === 'list' ? 'List' : 'Timeline'} *
@@ -116,7 +116,7 @@ export default function CreateTemplateModal({ onClose, onCreated, initialType }:
               </div>
 
               {sourceId && (
-                <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 18, animation: 'wizardStepIn 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
                   <div>
                     <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 6 }}>Template Name *</label>
                     <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
@@ -149,9 +149,9 @@ export default function CreateTemplateModal({ onClose, onCreated, initialType }:
                       {isShared ? 'Every user on this instance can see and use this template (read-only).' : 'Only you can see and use this template.'}
                     </div>
                   </div>
-                </>
+                </div>
               )}
-            </>
+            </div>
           )}
 
           {error && (
@@ -167,7 +167,9 @@ export default function CreateTemplateModal({ onClose, onCreated, initialType }:
           ) : <div />}
           {type && (
             <button onClick={handleCreate} disabled={loading || !sourceId || !name.trim()}
-              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: (loading || !sourceId || !name.trim()) ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: (loading || !sourceId || !name.trim()) ? 'not-allowed' : 'pointer' }}>
+              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: (loading || !sourceId || !name.trim()) ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: (loading || !sourceId || !name.trim()) ? 'not-allowed' : 'pointer', transition: 'background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)' }}
+              onMouseEnter={(e) => { if (!loading && sourceId && name.trim()) e.currentTarget.style.transform = 'scale(1.04)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}>
               {loading ? 'Saving…' : 'Save Template'}
             </button>
           )}
