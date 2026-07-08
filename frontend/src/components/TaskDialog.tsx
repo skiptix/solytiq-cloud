@@ -359,7 +359,11 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
     }
   };
 
-  return (
+  // Portaled to <body>: this dialog is opened from deep inside routed screens
+  // whose ancestors (e.g. the page-transition wrapper) establish their own
+  // stacking context, which would otherwise cap it below the sidebar/topbar
+  // no matter how high its z-index is set.
+  return createPortal(
     <>
       <div
         ref={backdropRef}
@@ -773,7 +777,8 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
           onCancel={() => setShowDelete(false)}
         />
       )}
-    </>
+    </>,
+    document.body
   );
 }
 

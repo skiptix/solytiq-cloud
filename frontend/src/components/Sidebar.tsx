@@ -268,6 +268,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
           folders={folders}
           folderId={list.folderId}
           itemId={list.id}
+          creatorId={list.userId}
           share={{ enabled: list.shareEnabled, token: list.shareToken, hasPassword: list.shareHasPassword, expiresAt: list.shareExpiresAt, subpages: list.shareSubpages }}
           onShareUpdated={(s: ShareInfo) => setLists(prev => prev.map(l => l.id === list.id ? { ...l, shareEnabled: s.enabled, shareToken: s.token, shareHasPassword: s.hasPassword, shareExpiresAt: s.expiresAt, shareSubpages: s.subpages ?? l.shareSubpages } : l))}
           onVisibilityApplied={(p: boolean) => setLists(prev => prev.map(l => l.id === list.id ? { ...l, isPublic: p } : l))}
@@ -469,6 +470,7 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
           folders={folders}
           folderId={timeline.folderId}
           itemId={timeline.id}
+          creatorId={timeline.userId}
           share={{ enabled: timeline.shareEnabled, token: timeline.shareToken, hasPassword: timeline.shareHasPassword, expiresAt: timeline.shareExpiresAt }}
           onShareUpdated={(s: ShareInfo) => setTimelines(prev => prev.map(t => t.id === timeline.id ? { ...t, shareEnabled: s.enabled, shareToken: s.token, shareHasPassword: s.hasPassword, shareExpiresAt: s.expiresAt } : t))}
           onVisibilityApplied={(p: boolean) => setTimelines(prev => prev.map(t => t.id === timeline.id ? { ...t, isPublic: p } : t))}
@@ -786,6 +788,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
           color={folder.color}
           isPublic={folder.isPublic ?? false}
           itemId={folder.id}
+          creatorId={folder.userId}
           onVisibilityApplied={(p: boolean) => setFolders(prev => prev.map(f => f.id === folder.id ? { ...f, isPublic: p } : f))}
           onChange={updates => updateFolder(folder.id, updates as Partial<Folder>)}
           onClose={() => setShowSettings(false)}

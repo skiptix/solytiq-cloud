@@ -2,9 +2,9 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import useAuthStore from '../store/useAuthStore';
-import useWorkspaceStore from '../store/useWorkspaceStore';
-import { apiUpdateProfile, apiUploadProfileImage, apiUploadFile, apiGlobalSearch, type GlobalSearchResult } from '../api/client';
+import { apiUpdateProfile, apiUploadProfileImage, apiUploadFile } from '../api/client';
 import UserSettingsModal from '../modals/UserSettingsModal';
+import CommandPalette from './CommandPalette';
 
 interface TopBarProps {
   onNavigate: (path: string) => void;
@@ -15,34 +15,12 @@ interface TopBarProps {
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
-const SETTINGS_RESULTS = [
-  { label: 'Profile Settings', sub: 'Edit your name and email', path: '/settings', icon: 'manage_accounts' },
-  { label: 'Sign Out', sub: 'End your session', path: '/settings', icon: 'logout' },
-];
-
-function highlight(text: string, query: string): React.ReactNode {
-  if (!query) return text;
-  const idx = text.toLowerCase().indexOf(query.toLowerCase());
-  if (idx === -1) return text;
-  return (
-    <>
-      {text.slice(0, idx)}
-      <mark style={{ background: '#ede9ff', color: '#5e4dbb', fontWeight: 700, borderRadius: 2 }}>{text.slice(idx, idx + query.length)}</mark>
-      {text.slice(idx + query.length)}
-    </>
-  );
-}
-
 export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarProps) {
   const navigate = useNavigate();
 
-  // Search state
-  const [query, setQuery] = useState('');
-  const [focused, setFocused] = useState(false);
-  const [searchExpanded, setSearchExpanded] = useState(false);
-  const [activeIdx, setActiveIdx] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dropRef = useRef<HTMLDivElement>(null);
+  // Command palette (search) state — the palette itself owns the query/results
+  // logic; the topbar just owns whether it's open.
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Profile state
   const { username, email, fullName, profileImage, isAdmin, setProfile, signOut } = useAuthStore();
@@ -127,65 +105,14 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
     return () => document.removeEventListener('mousedown', handler);
   }, [profileOpen]);
 
-  // Search logic
-  const q = query.trim().toLowerCase();
-  const showDrop = focused && q.length > 0;
-  
-  const [serverResults, setServerResults] = useState<GlobalSearchResult[]>([]);
-  // searchLoading is kept for future spinner support if needed
-
-  useEffect(() => {
-    if (!q || q.length < 2) {
-      setServerResults([]);
-      return;
-    }
-    // setSearchLoading(true);
-    const ac = new AbortController();
-    const timer = setTimeout(() => {
-      apiGlobalSearch(q, ac.signal)
-        .then(res => setServerResults(res.results))
-        .catch(err => { if (err.name !== 'AbortError') console.error(err); })
-        // .finally(() => setSearchLoading(false));
-    }, 250);
-    return () => { clearTimeout(timer); ac.abort(); };
-  }, [q]);
-
-  const settingsResults = q ? SETTINGS_RESULTS.filter(s => s.label.toLowerCase().includes(q)).slice(0, 3) : [];
-  
-  const allResults: Array<GlobalSearchResult | { type: 'setting'; label: string; sub: string; path: string; icon: string }> = [
-    ...serverResults,
-    ...settingsResults.map(s => ({ type: 'setting' as const, label: s.label, sub: s.sub, path: s.path, icon: s.icon })),
-  ];
-
-  useEffect(() => { setActiveIdx(0); }, [query, serverResults]);
-
+  // ⌘K / Ctrl+K opens the command palette from anywhere.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); inputRef.current?.focus(); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setPaletteOpen(true); }
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, []);
-
-  const { setCurrentWorkspace } = useWorkspaceStore();
-
-  const goTo = useCallback((result: typeof allResults[0]) => {
-    setQuery(''); setFocused(false);
-    if (result.type === 'workspace') {
-      const match = result.path.match(/workspace=([^&]+)/);
-      if (match) setCurrentWorkspace(match[1]);
-    }
-    const targetPath = result.type === 'workspace' ? '/dashboard' : result.path;
-    navigate(targetPath);
-    onNavigate(targetPath);
-  }, [navigate, onNavigate, setCurrentWorkspace]);
-
-  const handleKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') { setFocused(false); setQuery(''); }
-    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, allResults.length - 1)); }
-    if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)); }
-    if (e.key === 'Enter' && allResults[activeIdx]) goTo(allResults[activeIdx]);
-  };
 
   // Inline edit handlers
   const startEdit = (field: 'name' | 'email') => {
@@ -277,10 +204,6 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
     navigate('/login');
   };
 
-  const GROUP_COLORS: Record<string, string> = { task: '#5e4dbb', list: '#1D4ED8', setting: '#10B981', timeline: '#D946EF', milestone: '#F59E0B', meeting: '#EF4444', workspace: '#8B5CF6' };
-  const GROUP_LABELS: Record<string, string> = { task: 'Tasks', list: 'Lists', setting: 'Settings', timeline: 'Timelines', milestone: 'Milestones', meeting: 'Meetings', workspace: 'Workspaces' };
-  let renderedGroups: string[] = [];
-
   const iconBtn = {
     width: 26, height: 26, borderRadius: 6,
     background: 'transparent', border: 'none', cursor: 'pointer',
@@ -349,63 +272,30 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
           </button>
         )}
 
-        {/* Search — full on desktop, icon-or-expanded on mobile */}
-        {isMobile && !searchExpanded ? (
+        {/* Search trigger — opens the CommandPalette overlay. Absolutely
+            centered on the header itself (not just within the leftover flex
+            space next to the right-hand controls), so it stays visually
+            centered regardless of how wide the profile/icon cluster is. */}
+        {isMobile ? (
           <button
             data-touch
-            onClick={() => { setSearchExpanded(true); setTimeout(() => inputRef.current?.focus(), 50); }}
+            onClick={() => setPaletteOpen(true)}
             style={{ width: 40, height: 40, borderRadius: 10, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
           >
             <Icon name="search" size={20} color="#787584" />
           </button>
         ) : (
-        <div style={{ flex: 1, maxWidth: isMobile ? undefined : 440, margin: isMobile ? undefined : '0 auto', position: 'relative' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: focused ? '#fff' : '#f7f4fc', borderRadius: focused ? 10 : 9999, border: `1.5px solid ${focused ? '#5e4dbb' : 'transparent'}`, padding: '7px 14px', transition: 'all 200ms', boxShadow: focused ? '0 0 0 4px rgba(94,77,187,0.12)' : 'none' }}>
+          <button
+            onClick={() => setPaletteOpen(true)}
+            style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', width: 'min(440px, 40vw)', display: 'flex', alignItems: 'center', gap: 10, background: '#f7f4fc', borderRadius: 9999, border: '1.5px solid transparent', padding: '8px 14px', cursor: 'pointer', transition: 'all 200ms', textAlign: 'left' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#e0d9ff'; e.currentTarget.style.background = '#fff'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = '#f7f4fc'; }}
+          >
             <Icon name="search" size={16} color="#787584" />
-            <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
-              onFocus={() => setFocused(true)} onBlur={() => setTimeout(() => setFocused(false), 150)}
-              onKeyDown={handleKey}
-              placeholder="Search tasks, lists… ⌘K"
-              style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#1c1b22' }} />
-            {query && <button onClick={() => setQuery('')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}><Icon name="close" size={14} color="#787584" /></button>}
-          </div>
-
-          {showDrop && allResults.length > 0 && (
-            <div ref={dropRef} style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0, background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', overflow: 'hidden', zIndex: 300, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-              {allResults.map((r, i) => {
-                const isNewGroup = !renderedGroups.includes(r.type);
-                if (isNewGroup) renderedGroups = [...renderedGroups, r.type];
-                return (
-                  <div key={i}>
-                    {isNewGroup && (
-                      <div style={{ padding: '8px 14px 4px', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: GROUP_COLORS[r.type] }}>
-                        {GROUP_LABELS[r.type]}
-                      </div>
-                    )}
-                    <div onMouseDown={() => goTo(r)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: i === activeIdx ? '#F5F3FF' : 'transparent', cursor: 'pointer', transition: 'background 120ms' }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 8, background: `${GROUP_COLORS[r.type]}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        {r.type === 'task' && <Icon name="check_circle" size={14} color={GROUP_COLORS.task} />}
-                        {r.type === 'list' && <Icon name="format_list_bulleted" size={14} color={GROUP_COLORS.list} />}
-                        {r.type === 'setting' && <Icon name={r.icon ?? 'settings'} size={14} color={GROUP_COLORS.setting} />}
-                        {r.type === 'timeline' && <Icon name="timeline" size={14} color={GROUP_COLORS.timeline} />}
-                        {r.type === 'milestone' && <Icon name="flag" size={14} color={GROUP_COLORS.milestone} />}
-                        {r.type === 'meeting' && <Icon name="event" size={14} color={GROUP_COLORS.meeting} />}
-                        {r.type === 'workspace' && <Icon name="workspaces" size={14} color={GROUP_COLORS.workspace} />}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22' }}>{highlight(r.label, query)}</div>
-                        {r.sub && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584', marginTop: 1 }}>{r.sub}</div>}
-                      </div>
-                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 9.5, fontWeight: 600, color: GROUP_COLORS[r.type], background: `${GROUP_COLORS[r.type]}12`, borderRadius: 9999, padding: '2px 7px', textTransform: 'uppercase' }}>{r.type}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        )} {/* end mobile search conditional */}
+            <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#9d96aa' }}>Search tasks, lists…</span>
+            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', background: '#fff', border: '1px solid #e8e4f0', borderRadius: 6, padding: '2px 6px', flexShrink: 0 }}>⌘K</span>
+          </button>
+        )}
 
         {/* Right controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, marginLeft: 'auto' }}>
@@ -602,6 +492,9 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
           </div>
         </div>
       </header>
+
+      {/* Command palette (search) */}
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onNavigate={onNavigate} />}
 
       {/* User Settings Modal */}
       {settingsOpen && <UserSettingsModal onClose={() => setSettingsOpen(false)} />}

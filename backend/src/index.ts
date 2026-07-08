@@ -32,6 +32,7 @@ import oauthRouter from './routes/oauth';
 import mcpRouter from './routes/mcp';
 import adminReadApiRouter from './routes/adminReadApi';
 import syncRouter from './routes/sync';
+import searchRouter from './routes/search';
 import { startSyncDispatcher, SYNC_CHANNEL } from './syncLog';
 import { getPublicBaseUrl } from './publicUrl';
 import { comparePassword } from './auth';
@@ -193,6 +194,7 @@ app.use('/api/tokens',     tokensRouter);
 app.use('/api/oauth',      oauthRouter);
 app.use('/api/admin-read', adminReadApiRouter);
 app.use('/api/sync',       syncRouter);
+app.use('/api/search',     searchRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool

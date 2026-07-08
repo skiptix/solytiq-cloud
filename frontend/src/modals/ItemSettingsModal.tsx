@@ -4,6 +4,7 @@ import type { Folder } from '../types';
 import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
 import CalendarPicker from '../components/CalendarPicker';
+import CreatorBubble from '../components/CreatorBubble';
 import { useMobile } from '../hooks/useBreakpoint';
 import {
   apiUpdateListShare, apiUpdateTimelineShare,
@@ -47,6 +48,8 @@ interface ItemSettingsModalProps {
   folders?: Folder[];
   folderId?: string;
   itemId?: string;
+  /** The user who created this list/folder/timeline — shown as a badge in the header. */
+  creatorId?: string;
   share?: {
     enabled?: boolean;
     token?: string | null;
@@ -326,7 +329,7 @@ function AccessibilitySection({ kind, itemId, initialPublic, onApplied }: {
 type ItemTab = 'appearance' | 'access' | 'organization' | 'share' | 'admin';
 
 // ── Main modal ────────────────────────────────────────────────────────────────
-export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, folders, folderId, itemId, share, onShareUpdated, onVisibilityApplied, onChange, onClose }: ItemSettingsModalProps) {
+export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, folders, folderId, itemId, creatorId, share, onShareUpdated, onVisibilityApplied, onChange, onClose }: ItemSettingsModalProps) {
   const isMobile = useMobile();
   const accent = color ?? '#5e4dbb';
   const { isAdmin } = useAuthStore();
@@ -381,14 +384,17 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
               </div>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 150ms' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#e8e4f0')}
-            onMouseLeave={e => (e.currentTarget.style.background = '#f1ecf6')}
-          >
-            <Icon name="close" size={15} color="#484552" />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {creatorId && <CreatorBubble creatorId={creatorId} taskHovered />}
+            <button
+              onClick={onClose}
+              style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 150ms' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#e8e4f0')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#f1ecf6')}
+            >
+              <Icon name="close" size={15} color="#484552" />
+            </button>
+          </div>
         </div>
 
         {/* Tab bar */}

@@ -24,43 +24,85 @@ router.get('/', async (req: Request, res: Response) => {
     const term = `%${q}%`;
     const userId = req.userId!;
 
-    const [tasksRes, listsRes, timelinesRes, milestonesRes, meetingsRes, workspacesRes] = await Promise.all([
-      // 1. Tasks
-      query<{ id: string; title: string; source: string; list_id: string | null }>(
-        `SELECT id, title, source, list_id FROM tasks WHERE user_id = $1 AND (title ILIKE $2 OR note ILIKE $2) LIMIT 10`,
+    // Mirrors the access model used by buildListsForUser/buildTimelinesForUser:
+    // owner always sees it; otherwise it's visible if it's public AND the user
+    // is a workspace member (or the item/workspace has no membership barrier).
+    // A plain `user_id = $1` filter (the old behavior) hid every shared/public
+    // item a workspace member didn't happen to own — this is what "search
+    // doesn't find everything I have access to" was reporting.
+    const listAccess = `(
+      l.user_id = $1
+      OR (l.is_public = true AND (
+        wm.user_id = $1
+        OR l.workspace_id IS NULL
+        OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public')
+      ))
+    )`;
+    const timelineAccess = `(
+      t.user_id = $1
+      OR (t.is_public = true AND (
+        wm.user_id = $1
+        OR t.workspace_id IS NULL
+        OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = t.workspace_id AND w.visibility = 'public')
+      ))
+    )`;
+
+    const [dashTasksRes, listTasksRes, listsRes, timelinesRes, milestonesRes, meetingsRes, workspacesRes] = await Promise.all([
+      // 1a. Dashboard tasks — owner-only; there's no list/timeline to inherit
+      // sharing from.
+      query<{ id: string; title: string }>(
+        `SELECT id, title FROM tasks
+         WHERE user_id = $1 AND source = 'dash' AND (title ILIKE $2 OR note ILIKE $2) LIMIT 10`,
+        [userId, term]
+      ),
+      // 1b. List tasks — visible whenever their containing list is.
+      query<{ id: string; title: string; list_id: string }>(
+        `SELECT t.id, t.title, t.list_id
+         FROM tasks t
+         JOIN lists l ON t.list_id = l.id
+         LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
+         WHERE ${listAccess} AND t.source = 'list' AND (t.title ILIKE $2 OR t.note ILIKE $2)
+         LIMIT 10`,
         [userId, term]
       ),
       // 2. Lists
       query<{ id: string; name: string }>(
-        `SELECT id, name FROM lists WHERE user_id = $1 AND name ILIKE $2 LIMIT 5`,
+        `SELECT l.id, l.name FROM lists l
+         LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
+         WHERE ${listAccess} AND l.name ILIKE $2 LIMIT 5`,
         [userId, term]
       ),
       // 3. Timelines
       query<{ id: string; name: string }>(
-        `SELECT id, name FROM timelines WHERE user_id = $1 AND name ILIKE $2 LIMIT 5`,
+        `SELECT t.id, t.name FROM timelines t
+         LEFT JOIN workspace_members wm ON wm.workspace_id = t.workspace_id AND wm.user_id = $1
+         WHERE ${timelineAccess} AND t.name ILIKE $2 LIMIT 5`,
         [userId, term]
       ),
-      // 4. Milestones
+      // 4. Milestones — visible whenever their containing timeline is.
       query<{ id: string; title: string; timeline_id: string; t_name: string }>(
-        `SELECT m.id, m.title, m.timeline_id, t.name as t_name 
-         FROM milestones m 
-         JOIN timelines t ON m.timeline_id = t.id 
-         WHERE t.user_id = $1 AND m.title ILIKE $2 LIMIT 10`,
+        `SELECT m.id, m.title, m.timeline_id, t.name as t_name
+         FROM milestones m
+         JOIN timelines t ON m.timeline_id = t.id
+         LEFT JOIN workspace_members wm ON wm.workspace_id = t.workspace_id AND wm.user_id = $1
+         WHERE ${timelineAccess} AND m.title ILIKE $2 LIMIT 10`,
         [userId, term]
       ),
-      // 5. Meetings
+      // 5. Meetings — standalone, always owner-only (no list/timeline/workspace).
       query<{ id: string; title: string; meeting_date: string }>(
         `SELECT id, title, meeting_date FROM meetings WHERE user_id = $1 AND (title ILIKE $2 OR location ILIKE $2) LIMIT 5`,
         [userId, term]
       ),
-      // 6. Workspaces
+      // 6. Workspaces — member, owner, or publicly visible.
       query<{ id: string; name: string }>(
-        `SELECT w.id, w.name FROM workspaces w
-         JOIN workspace_members wm ON w.id = wm.workspace_id
-         WHERE wm.user_id = $1 AND w.name ILIKE $2 LIMIT 5`,
+        `SELECT DISTINCT w.id, w.name FROM workspaces w
+         LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.user_id = $1
+         WHERE (wm.user_id = $1 OR w.owner_id = $1 OR w.visibility = 'public') AND w.name ILIKE $2
+         LIMIT 5`,
         [userId, term]
       )
     ]);
+    const tasksRes = { rows: [...dashTasksRes.rows.map(t => ({ ...t, source: 'dash', list_id: null as string | null })), ...listTasksRes.rows.map(t => ({ ...t, source: 'list' }))] };
 
     const results: SearchResult[] = [];
 
