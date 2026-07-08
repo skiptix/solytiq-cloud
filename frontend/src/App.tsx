@@ -38,6 +38,7 @@ import SharedListPage from './screens/SharedListPage';
 import SharedTimelinePage from './screens/SharedTimelinePage';
 import SettingsScreen from './screens/SettingsScreen';
 import FolderDashboardScreen from './screens/FolderDashboardScreen';
+import TemplatesScreen from './screens/TemplatesScreen';
 import AdminPasswordResetScreen from './screens/AdminPasswordResetScreen';
 
 // Sign out on any 401 (expired / revoked JWT) so the user is redirected to
@@ -265,7 +266,7 @@ function AppLayout() {
     arr.filter(l => l.folderId === folderId).forEach((l, i) => updateList(l.id, { position: i }));
   }, [lists, setLists, updateList]);
 
-  const getActive = (): 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' => {
+  const getActive = (): 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' => {
     if (location.pathname.startsWith('/folder/')) return 'folder';
     if (location.pathname.startsWith('/list/')) return 'list';
     if (location.pathname.startsWith('/timeline/')) return 'timeline';
@@ -273,6 +274,7 @@ function AppLayout() {
     if (location.pathname.startsWith('/files')) return 'files';
     if (location.pathname.startsWith('/settings')) return 'settings';
     if (location.pathname.startsWith('/gps')) return 'gps';
+    if (location.pathname.startsWith('/templates')) return 'templates';
     return 'dashboard';
   };
 
@@ -329,6 +331,7 @@ function AppLayout() {
               <Route path="/list/:listId" element={<ListScreen />} />
               <Route path="/timeline/:timelineId" element={<TimelineScreen />} />
               <Route path="/settings" element={<SettingsScreen />} />
+              <Route path="/templates" element={<TemplatesScreen />} />
               <Route path="/gps" element={<GPSScreen />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>

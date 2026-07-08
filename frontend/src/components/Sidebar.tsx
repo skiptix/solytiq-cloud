@@ -521,7 +521,7 @@ interface FolderRowProps {
   folder: Folder;
   lists: List[];
   timelines: Timeline[];
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates';
   activeListId?: string;
   activeTimelineId?: string;
   activeFolderId?: string;
@@ -825,7 +825,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
 interface StandaloneListWithSublistsProps {
   list: List;
   sublists: List[];
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates';
   activeListId?: string;
   collapsed: boolean;
   dragOverId: string | null;
@@ -1027,7 +1027,7 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates';
   activeListId?: string;
   activeTimelineId?: string;
   activeFolderId?: string;
@@ -1052,6 +1052,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   const collapsed = isMobile ? false : width <= 72;
   const [addHov, setAddHov] = useState(false);
   const [folderHov, setFolderHov] = useState(false);
+  const [templatesHov, setTemplatesHov] = useState(false);
   const [handleHov, setHandleHov] = useState(false);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dragOverTimelineId, setDragOverTimelineId] = useState<string | null>(null);
@@ -1405,6 +1406,25 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <WorkspaceSwitcher collapsed={collapsed} />
+
+        {/* Templates — global gallery, not scoped to the current workspace */}
+        <button
+          onClick={() => onNavigate('/templates')}
+          title={collapsed ? 'Templates' : undefined}
+          onMouseEnter={() => setTemplatesHov(true)}
+          onMouseLeave={() => setTemplatesHov(false)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8,
+            padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start',
+            borderRadius: 8, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5,
+            fontWeight: active === 'templates' ? 700 : 500,
+            color: active === 'templates' ? '#5e4dbb' : '#484552',
+            background: active === 'templates' ? '#F5F3FF' : (templatesHov ? '#faf9ff' : 'transparent'),
+            border: 'none', transition: 'background 150ms', width: '100%',
+          }}>
+          <Icon name="dashboard_customize" size={17} color={active === 'templates' ? '#5e4dbb' : '#787584'} />
+          {!collapsed && <span>Templates</span>}
+        </button>
 
         <div style={{ height: 1, background: '#e8e4f0', margin: '6px 8px' }} />
 

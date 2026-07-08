@@ -240,6 +240,28 @@ export interface MilestoneAttachment {
   createdAt: string;
 }
 
+// ─── Templates ─────────────────────────────────────────────────────────────
+// User-owned, workspace-agnostic snapshots of a list's or timeline's full
+// structure, reusable to create new lists/timelines. `isShared` makes a
+// template visible (read-only for non-owners) to every other user of this
+// instance. The captured structure itself isn't sent to the client except
+// when instantiating server-side — the gallery only needs `summary` counts.
+export interface Template {
+  id: string;
+  type: 'list' | 'timeline';
+  name: string;
+  description?: string | null;
+  emoji?: string | null;
+  color?: string | null;
+  colorBg?: string | null;
+  isShared: boolean;
+  isOwner: boolean;
+  ownerName?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  summary: { sectionCount?: number; taskCount?: number; milestoneCount?: number };
+}
+
 export interface AIFile {
   id: string;
   filename: string;

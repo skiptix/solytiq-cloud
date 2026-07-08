@@ -3,6 +3,7 @@ import type { List, Timeline } from '../types';
 import Icon from '../components/Icon';
 import AddListWizard from './AddListWizard';
 import AddTimelineWizard from './AddTimelineWizard';
+import TemplateSelectStep from './TemplateSelectStep';
 
 interface AddWizardProps {
   onClose: () => void;
@@ -31,14 +32,33 @@ const OPTIONS = [
   },
 ];
 
-export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, initialMode }: AddWizardProps) {
-  const [mode, setMode] = useState<'choose' | 'list' | 'timeline'>(initialMode ?? 'choose');
+type Mode = 'choose' | 'list-templates' | 'timeline-templates' | 'list' | 'timeline';
 
+export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, initialMode }: AddWizardProps) {
+  const [mode, setMode] = useState<Mode>(
+    initialMode === 'list' ? 'list-templates' : initialMode === 'timeline' ? 'timeline-templates' : 'choose'
+  );
+
+  // The template-select step comes first for both types: "Start blank" drops
+  // into the classic step-by-step wizard below, or pick a template to skip
+  // straight to a hydrated list/timeline.
+  if (mode === 'list-templates') {
+    return (
+      <TemplateSelectStep type="list" onBack={() => setMode('choose')} onBlank={() => setMode('list')}
+        onCreatedList={onCreatedList} />
+    );
+  }
+  if (mode === 'timeline-templates') {
+    return (
+      <TemplateSelectStep type="timeline" onBack={() => setMode('choose')} onBlank={() => setMode('timeline')}
+        onCreatedTimeline={onCreatedTimeline} />
+    );
+  }
   if (mode === 'list') {
-    return <AddListWizard onClose={() => setMode('choose')} onCreated={onCreatedList} />;
+    return <AddListWizard onClose={() => setMode('list-templates')} onCreated={onCreatedList} />;
   }
   if (mode === 'timeline') {
-    return <AddTimelineWizard onClose={() => setMode('choose')} onCreated={onCreatedTimeline} />;
+    return <AddTimelineWizard onClose={() => setMode('timeline-templates')} onCreated={onCreatedTimeline} />;
   }
 
   return (
@@ -59,7 +79,7 @@ export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, i
         <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {OPTIONS.map(opt => (
             <button key={opt.key}
-              onClick={() => setMode(opt.key)}
+              onClick={() => setMode(`${opt.key}-templates`)}
               style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 18px', borderRadius: 14, border: '1.5px solid #ece8f4', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all 160ms', width: '100%' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = opt.color; e.currentTarget.style.background = opt.bg; e.currentTarget.style.transform = 'translateY(-1px)'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = '#ece8f4'; e.currentTarget.style.background = '#fff'; e.currentTarget.style.transform = 'translateY(0)'; }}>
