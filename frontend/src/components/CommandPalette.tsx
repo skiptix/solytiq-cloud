@@ -2,15 +2,19 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
+import useAuthStore from '../store/useAuthStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import { apiGlobalSearch, type GlobalSearchResult } from '../api/client';
 
+// These two open in-app affordances rather than a route — Profile Settings is
+// the account modal (not the admin /settings screen), and Sign Out ends the
+// session — so they carry an `action` instead of a `path`.
 const SETTINGS_RESULTS = [
-  { label: 'Profile Settings', sub: 'Edit your name and email', path: '/settings', icon: 'manage_accounts' },
-  { label: 'Sign Out', sub: 'End your session', path: '/settings', icon: 'logout' },
+  { label: 'Profile Settings', sub: 'Edit your name and email', icon: 'manage_accounts', action: 'account-settings' as const },
+  { label: 'Sign Out', sub: 'End your session', icon: 'logout', action: 'sign-out' as const },
 ];
 
-type Result = GlobalSearchResult | { type: 'setting'; label: string; sub: string; path: string; icon: string };
+type Result = GlobalSearchResult | { type: 'setting'; label: string; sub: string; icon: string; action: 'account-settings' | 'sign-out' };
 
 const GROUP_COLORS: Record<string, string> = { task: '#5e4dbb', list: '#1D4ED8', setting: '#10B981', timeline: '#D946EF', milestone: '#F59E0B', meeting: '#EF4444', workspace: '#8B5CF6' };
 const GROUP_LABELS: Record<string, string> = { task: 'Tasks', list: 'Lists', setting: 'Settings', timeline: 'Timelines', milestone: 'Milestones', meeting: 'Meetings', workspace: 'Workspaces' };
@@ -32,6 +36,7 @@ function highlight(text: string, query: string): React.ReactNode {
 interface CommandPaletteProps {
   onClose: () => void;
   onNavigate: (path: string) => void;
+  onOpenAccountSettings: () => void;
 }
 
 // A Cmd+K-style command palette: opened from the topbar's search trigger or the
@@ -40,8 +45,9 @@ interface CommandPaletteProps {
 // every other overlay in the app. The parent only mounts this component while
 // open, so each open starts with fresh state — no reset-on-prop-change effect
 // needed.
-export default function CommandPalette({ onClose, onNavigate }: CommandPaletteProps) {
+export default function CommandPalette({ onClose, onNavigate, onOpenAccountSettings }: CommandPaletteProps) {
   const navigate = useNavigate();
+  const { signOut } = useAuthStore();
   const { setCurrentWorkspace } = useWorkspaceStore();
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
@@ -77,7 +83,7 @@ export default function CommandPalette({ onClose, onNavigate }: CommandPalettePr
     const settingsResults = q ? SETTINGS_RESULTS.filter(s => s.label.toLowerCase().includes(q)).slice(0, 3) : [];
     return [
       ...serverResults,
-      ...settingsResults.map(s => ({ type: 'setting' as const, label: s.label, sub: s.sub, path: s.path, icon: s.icon })),
+      ...settingsResults.map(s => ({ type: 'setting' as const, label: s.label, sub: s.sub, icon: s.icon, action: s.action })),
     ];
   }, [q, serverResults]);
 
@@ -85,6 +91,11 @@ export default function CommandPalette({ onClose, onNavigate }: CommandPalettePr
 
   const goTo = useCallback((result: Result) => {
     onClose();
+    if (result.type === 'setting') {
+      if (result.action === 'account-settings') onOpenAccountSettings();
+      else { signOut(); navigate('/login'); }
+      return;
+    }
     if (result.type === 'workspace') {
       const match = result.path.match(/workspace=([^&]+)/);
       if (match) setCurrentWorkspace(match[1]);
@@ -92,7 +103,7 @@ export default function CommandPalette({ onClose, onNavigate }: CommandPalettePr
     const targetPath = result.type === 'workspace' ? '/dashboard' : result.path;
     navigate(targetPath);
     onNavigate(targetPath);
-  }, [navigate, onNavigate, onClose, setCurrentWorkspace]);
+  }, [navigate, onNavigate, onClose, onOpenAccountSettings, signOut, setCurrentWorkspace]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

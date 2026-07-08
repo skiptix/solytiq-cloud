@@ -494,7 +494,7 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
       </header>
 
       {/* Command palette (search) */}
-      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onNavigate={onNavigate} />}
+      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onNavigate={onNavigate} onOpenAccountSettings={() => setSettingsOpen(true)} />}
 
       {/* User Settings Modal */}
       {settingsOpen && <UserSettingsModal onClose={() => setSettingsOpen(false)} />}
