@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useMobile } from '../hooks/useBreakpoint';
@@ -229,7 +230,7 @@ export default function TemplatesScreen() {
         />
       )}
 
-      {confirmDelete && (
+      {confirmDelete && createPortal(
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
           onClick={(e) => { if (e.target === e.currentTarget) setConfirmDelete(null); }}>
           <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', padding: 24, animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
@@ -243,7 +244,8 @@ export default function TemplatesScreen() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
