@@ -29,7 +29,6 @@ import {
   apiUpdateList,
   apiDeleteList,
   apiUpdateListTask,
-  apiDeleteListTask,
   apiAddListTask,
   apiAddToTrash,
   apiRestoreFromTrash,
@@ -447,6 +446,11 @@ const useAppStore = create<AppState>()(
         });
       },
 
+      // Local-only removal: every caller already deletes the task server-side
+      // via addToTrash (POST /api/trash/add), which both snapshots it into
+      // `trash` and removes the `tasks` row. A second DELETE here would race
+      // that row and always 404 — which used to trip the full-reload fallback
+      // below and could leave the "Couldn't refresh your data" banner up.
       deleteListTask: (listId, taskId) => {
         set((state) => ({
           lists: state.lists.map((list) =>
@@ -461,7 +465,6 @@ const useAppStore = create<AppState>()(
                 }
           ),
         }));
-        apiDeleteListTask(listId, taskId).catch(() => { get().loadFromApi(); });
       },
 
       addToTrash: (task, meta) => {
