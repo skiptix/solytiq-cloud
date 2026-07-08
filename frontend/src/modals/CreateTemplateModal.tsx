@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { List, Timeline, Template } from '../types';
 import { apiGetLists, apiGetTimelines } from '../api/client';
 import useAuthStore from '../store/useAuthStore';
@@ -59,7 +60,7 @@ export default function CreateTemplateModal({ onClose, onCreated, initialType }:
     }
   };
 
-  return (
+  return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 480, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
@@ -172,6 +173,7 @@ export default function CreateTemplateModal({ onClose, onCreated, initialType }:
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
