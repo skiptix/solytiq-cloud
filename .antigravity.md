@@ -394,6 +394,13 @@ A list task can link to another list via `linkedListId` + `linkedListType`:
 
 Create them via `apiCreateSublistTask` / `apiLinkListAsTask`. Sublists always share the parent's `workspace_id`.
 
+### Keyboard Shortcuts
+
+- **`frontend/src/shortcuts/registry.ts`** is the single source of truth for every global keyboard shortcut: `SHORTCUT_DEFS` lists each action's id, label, description, default key combo, and scope. Adding a new shortcut means adding one entry here — nothing else needs a hardcoded key check.
+- **`frontend/src/store/useShortcutsStore.ts`** holds the signed-in user's per-shortcut overrides (custom key and/or enabled/disabled), persisted to `users.keyboard_shortcuts` (JSONB) via `PUT /api/auth/shortcuts` and hydrated on login/register/2FA-verify (`sanitizeUser` in `routes/auth.ts` includes `keyboardShortcuts`). Only overrides are stored — an action absent from the map falls back to the registry's default, so new shortcuts need no migration or backfill. A local zustand `persist` cache (localStorage) makes the bindings available instantly on reload, ahead of any network round trip.
+- **`frontend/src/components/KeyboardShortcuts.tsx`** is mounted once in `AppLayout` and owns the one `document.addEventListener('keydown', …)` for the whole feature. It ignores keydowns while an input/textarea/select/contenteditable is focused, matches the combo against the merged bindings, and either performs the action directly (e.g. the sidebar-collapse store toggle) or dispatches a `window` `CustomEvent` named `shortcut:<id>` — the same cross-component signal pattern already used for `gps-upload-trigger`/`gps-files-changed`. Whichever screen/component is mounted (or not) picks it up; e.g. `ListScreen` listens for `shortcut:create-item`, `TimelineScreen`'s `MilestoneEditor` listens for `shortcut:delete-current` only while `onDelete` is available (edit mode).
+- Users manage their bindings in **Account Settings → Controls** (`ShortcutsSection` in `UserSettingsModal.tsx`): each shortcut can be rebound (click the combo, press a new one — rejects browser-reserved combos and combos already used by another enabled shortcut), turned off, or reset to default individually or all at once.
+
 ---
 
 ## Build & Scripts

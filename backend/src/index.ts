@@ -1495,6 +1495,10 @@ async function runMigrations() {
     );
   }
 
+  // Per-user keyboard shortcut customizations (overrides only; any action not
+  // present here falls back to the frontend registry's default binding).
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS keyboard_shortcuts JSONB NOT NULL DEFAULT '{}'::jsonb`);
+
   console.log('Database migrations applied.');
 }
 

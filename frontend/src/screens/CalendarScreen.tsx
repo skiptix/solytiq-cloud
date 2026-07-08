@@ -552,6 +552,13 @@ export default function CalendarScreen() {
   const [showUnscheduled, setShowUnscheduled] = useState(false);
   const [mobileScheduleTask, setMobileScheduleTask] = useState<Task | null>(null);
 
+  // "New meeting" shortcut — same as the "New Meeting" button.
+  useEffect(() => {
+    const onCreateMeeting = () => setCreatingMeeting({ date: view === 'year' ? todayIso : toIso(anchor) });
+    window.addEventListener('shortcut:create-meeting', onCreateMeeting);
+    return () => window.removeEventListener('shortcut:create-meeting', onCreateMeeting);
+  }, [view, anchor, todayIso]);
+
   const filterRef = useRef<HTMLDivElement>(null);
   const unschedRef = useRef<HTMLDivElement>(null);
   const weekScrollRef = useRef<HTMLDivElement>(null);

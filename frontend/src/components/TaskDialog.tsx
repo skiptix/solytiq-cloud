@@ -241,6 +241,13 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
     return () => document.removeEventListener('keydown', handler);
   }, [onClose, showCal]);
 
+  // "Delete open item / milestone" shortcut — same as the delete icon button.
+  useEffect(() => {
+    const onDeleteShortcut = () => setShowDelete(true);
+    window.addEventListener('shortcut:delete-current', onDeleteShortcut);
+    return () => window.removeEventListener('shortcut:delete-current', onDeleteShortcut);
+  }, []);
+
   // Buffered editing: field edits live in local state and are only persisted
   // when Save is clicked. Cancel/close discards them. (Attachments & sub-items
   // remain immediate — they're separate actions that can't be cleanly rolled back.)

@@ -20,6 +20,7 @@ import CompletedModal from './modals/CompletedModal';
 import TrashModal from './modals/TrashModal';
 import WorkspaceWizard from './modals/WorkspaceWizard';
 import AIAssistant from './components/AIAssistant';
+import KeyboardShortcuts from './components/KeyboardShortcuts';
 
 import LoginScreen from './screens/LoginScreen';
 import SetupWizard from './screens/SetupWizard';
@@ -70,8 +71,17 @@ function AppLayout() {
   const { lists, timelines, listsLoading, loadError, sidebarWidth, setSidebarWidth, loadFromApi, setLists, updateList, moveTaskToList } = useAppStore();
   const prevWorkspaceRef = useRef<string | null | undefined>(undefined);
   const [modal, setModal] = useState<'add' | 'completed' | 'trash' | null>(null);
+  const [addWizardMode, setAddWizardMode] = useState<'list' | 'timeline' | undefined>(undefined);
   const isMobile = useMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // "New list" shortcut — jumps straight into list creation instead of the
+  // chooser the sidebar's "Add" button opens.
+  useEffect(() => {
+    const onCreateList = () => { setAddWizardMode('list'); setModal('add'); };
+    window.addEventListener('shortcut:create-list', onCreateList);
+    return () => window.removeEventListener('shortcut:create-list', onCreateList);
+  }, []);
 
   const loadMembers = useMembersStore(s => s.load);
   const { currentWorkspaceId, workspaces, workspacesLoaded, loadWorkspaces } = useWorkspaceStore();
@@ -294,7 +304,7 @@ function AppLayout() {
         lists={lists}
         width={sidebarWidth}
         onNavigate={navigate}
-        onOpenModal={setModal}
+        onOpenModal={(m) => { setAddWizardMode(undefined); setModal(m); }}
         onReorderLists={handleReorderLists}
         onResizeStart={handleResizeStart}
         onTaskDropToList={moveTaskToList}
@@ -349,6 +359,7 @@ function AppLayout() {
 
       {modal === 'add' && (
         <AddWizard
+          initialMode={addWizardMode}
           onClose={() => setModal(null)}
           onCreatedList={(_list: List) => { setModal(null); navigate(`/list/${_list.id}`); }}
           onCreatedTimeline={(_t: Timeline) => { setModal(null); navigate(`/timeline/${_t.id}`); }}
@@ -357,6 +368,7 @@ function AppLayout() {
       {modal === 'completed' && <CompletedModal onClose={() => setModal(null)} />}
       {modal === 'trash' && <TrashModal onClose={() => setModal(null)} />}
       <AIAssistant />
+      <KeyboardShortcuts />
 
       {/* Data-load failure surface: retries are automatic, but a persistent
           failure must be visible — a silently empty sidebar looks like data

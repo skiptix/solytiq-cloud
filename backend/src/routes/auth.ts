@@ -45,18 +45,20 @@ interface UserRow {
   totp_secret: string | null;
   totp_enabled: boolean;
   token_version: number;
+  keyboard_shortcuts: Record<string, { key?: string; enabled?: boolean }>;
 }
 
 function sanitizeUser(user: UserRow) {
   return {
-    id:           user.id,
-    username:     user.username,
-    email:        user.email,
-    fullName:     user.full_name,
-    profileImage: user.profile_image ?? null,
-    isAdmin:      user.is_admin,
-    createdAt:    user.created_at,
-    totpEnabled:  user.totp_enabled,
+    id:                user.id,
+    username:          user.username,
+    email:             user.email,
+    fullName:          user.full_name,
+    profileImage:      user.profile_image ?? null,
+    isAdmin:           user.is_admin,
+    createdAt:         user.created_at,
+    totpEnabled:       user.totp_enabled,
+    keyboardShortcuts: user.keyboard_shortcuts ?? {},
   };
 }
 
@@ -378,6 +380,57 @@ router.put('/profile-image', authenticate, async (req: Request, res: Response) =
     res.json({ user: sanitizeUser(result.rows[0]) });
   } catch (err) {
     console.error('profile-image update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/auth/shortcuts — save this user's keyboard shortcut customizations.
+// Body is a sparse map of actionId -> { key?, enabled? }; only overrides from the
+// frontend's default registry are stored, so new shortcuts added later need no migration.
+router.put('/shortcuts', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { shortcuts } = req.body as { shortcuts?: unknown };
+    if (!shortcuts || typeof shortcuts !== 'object' || Array.isArray(shortcuts)) {
+      res.status(400).json({ error: 'shortcuts must be an object' });
+      return;
+    }
+
+    const entries = Object.entries(shortcuts as Record<string, unknown>);
+    if (entries.length > 50) {
+      res.status(400).json({ error: 'Too many shortcut entries' });
+      return;
+    }
+    for (const [id, v] of entries) {
+      if (typeof id !== 'string' || id.length > 64) {
+        res.status(400).json({ error: 'Invalid shortcut id' });
+        return;
+      }
+      if (!v || typeof v !== 'object' || Array.isArray(v)) {
+        res.status(400).json({ error: 'Invalid shortcut entry' });
+        return;
+      }
+      const { key, enabled } = v as { key?: unknown; enabled?: unknown };
+      if (key !== undefined && (typeof key !== 'string' || key.length === 0 || key.length > 32)) {
+        res.status(400).json({ error: 'Invalid shortcut key' });
+        return;
+      }
+      if (enabled !== undefined && typeof enabled !== 'boolean') {
+        res.status(400).json({ error: 'Invalid shortcut enabled flag' });
+        return;
+      }
+    }
+
+    const result = await query<UserRow>(
+      `UPDATE users SET keyboard_shortcuts = $1 WHERE id = $2 RETURNING *`,
+      [JSON.stringify(shortcuts), req.userId]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    res.json({ user: sanitizeUser(result.rows[0]) });
+  } catch (err) {
+    console.error('shortcuts update error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -3,6 +3,8 @@ import Icon from '../components/Icon';
 import { useMobile } from '../hooks/useBreakpoint';
 import useAuthStore from '../store/useAuthStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
+import useShortcutsStore from '../store/useShortcutsStore';
+import { SHORTCUT_DEFS, bindingFor, comboFromEvent, formatCombo, isReservedCombo } from '../shortcuts/registry';
 import {
   apiUpdateProfile,
   apiUploadProfileImage,
@@ -66,7 +68,7 @@ const rowStyle: React.CSSProperties = {
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
-type SettingsTab = 'profile' | 'preferences' | 'security' | 'connections' | 'mobile' | 'calendar';
+type SettingsTab = 'profile' | 'preferences' | 'controls' | 'security' | 'connections' | 'mobile' | 'calendar';
 
 export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   const isMobile = useMobile();
@@ -334,6 +336,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   const TABS: { id: SettingsTab; label: string; icon: string }[] = [
     { id: 'profile',     label: 'Profile',     icon: 'person' },
     { id: 'preferences', label: 'Preferences', icon: 'tune' },
+    { id: 'controls',    label: 'Controls',    icon: 'keyboard' },
     { id: 'security',    label: 'Security',    icon: 'shield_lock' },
     ...(mcpEnabled ? [{ id: 'connections' as SettingsTab, label: 'Connections', icon: 'smart_toy' }] : []),
     ...(mobileEnabled ? [{ id: 'mobile' as SettingsTab, label: 'Mobile', icon: 'smartphone' }] : []),
@@ -539,6 +542,14 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                   </div>
                 </div>
               </div>
+            </div>
+            )}
+
+            {/* ── CONTROLS (keyboard shortcuts) ── */}
+            {activeTab === 'controls' && (
+            <div style={{ animation: 'sectionFadeUp 340ms 60ms cubic-bezier(0.22,1,0.36,1) both' }}>
+              {sectionLabel('Keyboard Shortcuts')}
+              <ShortcutsSection />
             </div>
             )}
 
@@ -1105,6 +1116,123 @@ function ClaudeMcpSection() {
 }
 
 // ── Mobile app (connected devices) ─────────────────────────────────────────────
+
+// ── Controls (keyboard shortcuts) ───────────────────────────────────────────
+
+function ShortcutsSection() {
+  const overrides = useShortcutsStore(s => s.overrides);
+  const setKey = useShortcutsStore(s => s.setKey);
+  const setEnabled = useShortcutsStore(s => s.setEnabled);
+  const resetOne = useShortcutsStore(s => s.resetOne);
+  const resetAll = useShortcutsStore(s => s.resetAll);
+
+  const [recordingId, setRecordingId] = useState<string | null>(null);
+  const [recordError, setRecordError] = useState('');
+
+  useEffect(() => {
+    if (!recordingId) return;
+    const handler = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'Escape') { setRecordingId(null); setRecordError(''); return; }
+      if (['Control', 'Meta', 'Shift', 'Alt'].includes(e.key)) return; // wait for a real key
+      const combo = comboFromEvent(e);
+      if (isReservedCombo(combo)) { setRecordError(`${formatCombo(combo)} is reserved by the browser.`); return; }
+      const conflict = SHORTCUT_DEFS.find(d => d.id !== recordingId && bindingFor(overrides, d).enabled && bindingFor(overrides, d).key === combo);
+      if (conflict) { setRecordError(`Already used by "${conflict.label}".`); return; }
+      setKey(recordingId, combo);
+      setRecordingId(null);
+      setRecordError('');
+    };
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
+  }, [recordingId, overrides, setKey]);
+
+  const hasAnyOverride = Object.keys(overrides).length > 0;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Intro / explainer */}
+      <div style={{ ...card, padding: '14px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="keyboard" size={19} color="#5e4dbb" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>
+              Shortcuts
+            </div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#787584', lineHeight: 1.5, marginTop: 3 }}>
+              Click a key combo to change it, use the switch to turn a shortcut off, or reset it back to default. Shortcuts never fire while typing in a text field, and your choices are saved to your account.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={card}>
+        {SHORTCUT_DEFS.map((def, i) => {
+          const binding = bindingFor(overrides, def);
+          const isOverridden = Boolean(overrides[def.id]?.key !== undefined || overrides[def.id]?.enabled !== undefined);
+          const isRecording = recordingId === def.id;
+          return (
+            <div key={def.id} style={{ ...rowStyle, flexWrap: 'wrap', borderTop: i === 0 ? 'none' : '1px solid #f1ecf6', opacity: binding.enabled ? 1 : 0.55, transition: 'opacity 150ms' }}>
+              <div style={{ minWidth: 0, flex: '1 1 200px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#1c1b22' }}>{def.label}</span>
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 9999, padding: '1px 8px', whiteSpace: 'nowrap' }}>{def.scopeLabel}</span>
+                </div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{def.description}</div>
+                {isRecording && (
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: recordError ? '#ba1a1a' : '#5e4dbb', marginTop: 4 }}>
+                    {recordError || 'Press a key combo… (Esc to cancel)'}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                <button
+                  onClick={() => { setRecordingId(def.id); setRecordError(''); }}
+                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: isRecording ? '#fff' : '#5e4dbb', background: isRecording ? '#5e4dbb' : '#F5F3FF', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer', minWidth: 60, textAlign: 'center', transition: 'background 150ms' }}
+                  onMouseEnter={e => { if (!isRecording) e.currentTarget.style.background = '#ede9ff'; }}
+                  onMouseLeave={e => { if (!isRecording) e.currentTarget.style.background = '#F5F3FF'; }}
+                >
+                  {isRecording ? 'Press key…' : formatCombo(binding.key)}
+                </button>
+                {isOverridden && (
+                  <button
+                    onClick={() => resetOne(def.id)}
+                    title="Reset to default"
+                    style={{ width: 30, height: 30, borderRadius: 7, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#f1ecf6')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <Icon name="restart_alt" size={16} color="#9d96aa" />
+                  </button>
+                )}
+                <button
+                  onClick={() => setEnabled(def.id, !binding.enabled)}
+                  title={binding.enabled ? 'Turn off' : 'Turn on'}
+                  style={{ width: 38, height: 22, borderRadius: 9999, border: 'none', background: binding.enabled ? '#5e4dbb' : '#E5E7EB', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 150ms' }}
+                >
+                  <div style={{ position: 'absolute', top: 2, left: binding.enabled ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 150ms', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <button
+        onClick={resetAll}
+        disabled={!hasAnyOverride}
+        style={{ alignSelf: 'flex-start', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: hasAnyOverride ? '#787584' : '#c9c4d5', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '7px 14px', cursor: hasAnyOverride ? 'pointer' : 'default', transition: 'all 150ms' }}
+        onMouseEnter={e => { if (hasAnyOverride) { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.color = '#5e4dbb'; } }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = hasAnyOverride ? '#787584' : '#c9c4d5'; }}
+      >
+        Reset all to defaults
+      </button>
+    </div>
+  );
+}
 
 function MobileConnectionsSection() {
   const [connections, setConnections] = useState<MobileConnection[]>([]);

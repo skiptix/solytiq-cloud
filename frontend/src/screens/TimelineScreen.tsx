@@ -140,6 +140,15 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
     return () => document.removeEventListener('mousedown', handler);
   }, [showTime]);
 
+  // "Delete open item / milestone" shortcut — only applies in edit mode (a new,
+  // unsaved milestone has nothing to delete yet).
+  useEffect(() => {
+    if (!initial || !onDelete) return;
+    const onDeleteShortcut = () => setShowDelete(true);
+    window.addEventListener('shortcut:delete-current', onDeleteShortcut);
+    return () => window.removeEventListener('shortcut:delete-current', onDeleteShortcut);
+  }, [initial, onDelete]);
+
   useEffect(() => {
     if (!milestoneId) return;
     let active = true;
@@ -451,6 +460,16 @@ export default function TimelineScreen() {
   const [editing, setEditing] = useState<Milestone | null>(null);
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<Milestone | null>(null);
+
+  // "New milestone" shortcut — same as the "Add Milestone" buttons (owner only,
+  // and only when no milestone editor is already open).
+  useEffect(() => {
+    const onCreateMilestone = () => {
+      if (timeline?.userId === currentUserId && !adding && !editing) setAdding(true);
+    };
+    window.addEventListener('shortcut:create-milestone', onCreateMilestone);
+    return () => window.removeEventListener('shortcut:create-milestone', onCreateMilestone);
+  }, [timeline, currentUserId, adding, editing]);
 
   // Re-render every minute so intra-day ("hourly") progress keeps advancing
   // without a page reload.
