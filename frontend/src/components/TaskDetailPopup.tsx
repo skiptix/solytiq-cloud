@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Task } from '../types';
 import Icon from './Icon';
 import CreatorBubble from './CreatorBubble';
+import MarkdownView from './MarkdownView';
 import useMembersStore from '../store/useMembersStore';
 
 const PRIORITY_COLORS: Record<string, string> = { High: '#ea580c', Medium: '#f59e0b', Low: '#787584' };
@@ -101,7 +102,7 @@ export default function TaskDetailPopup({ task, anchor, onEdit, onGoToList, onCl
             )}
             {task.note && (
               <div style={{ marginTop: 4, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', lineHeight: 1.5, background: '#faf9ff', borderRadius: 8, padding: '8px 10px' }}>
-                {task.note}
+                {task.noteMarkdown ? <MarkdownView source={task.note} fontSize={12} /> : task.note}
               </div>
             )}
           </div>

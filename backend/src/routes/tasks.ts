@@ -13,6 +13,7 @@ interface TaskRow {
   user_id: string;
   title: string;
   note: string | null;
+  note_markdown: boolean;
   checked: boolean;
   deadline: string | null;
   time_val: string | null;
@@ -36,6 +37,7 @@ function sanitizeTask(task: TaskRow) {
     creatorId:      task.user_id,
     title:          task.title,
     note:           task.note,
+    noteMarkdown:   task.note_markdown ?? false,
     checked:        task.checked,
     deadline:       task.deadline,
     time:           task.time_val,
@@ -205,6 +207,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const {
       title,
       note,
+      noteMarkdown,
       checked,
       deadline,
       time_val,
@@ -218,6 +221,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     } = req.body as {
       title?: string;
       note?: string;
+      noteMarkdown?: boolean;
       checked?: boolean;
       deadline?: string;
       time_val?: string;
@@ -242,6 +246,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       `UPDATE tasks
        SET title          = COALESCE($1, title),
            note           = COALESCE($2, note),
+           note_markdown  = COALESCE($14, note_markdown),
            checked        = COALESCE($3, checked),
            deadline       = COALESCE($4, deadline),
            time_val       = COALESCE($5, time_val),
@@ -266,6 +271,7 @@ router.put('/:id', async (req: Request, res: Response) => {
         updateLinkedList,
         linked_list_id ?? null,
         linked_list_type ?? null,
+        typeof noteMarkdown === 'boolean' ? noteMarkdown : null,
       ]
     );
 

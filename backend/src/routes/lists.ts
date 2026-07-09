@@ -53,6 +53,7 @@ interface TaskRow {
   user_id: string;
   title: string;
   note: string | null;
+  note_markdown: boolean;
   checked: boolean;
   deadline: string | null;
   time_val: string | null;
@@ -79,6 +80,7 @@ function sanitizeTask(task: TaskRow) {
     creatorId:      task.user_id,
     title:          task.title,
     note:           task.note,
+    noteMarkdown:   task.note_markdown ?? false,
     checked:        task.checked,
     deadline:       task.deadline,
     time:           task.time_val,
@@ -921,7 +923,7 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
   try {
     const { listId, taskId } = req.params;
     const {
-      title, note, checked, deadline, time_val, priority, badge, position, sectionId,
+      title, note, noteMarkdown, checked, deadline, time_val, priority, badge, position, sectionId,
       linked_list_id: _ll_snake,
       linkedListId: _ll_camel,
       linked_list_type: _llt_snake,
@@ -929,6 +931,7 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
     } = req.body as {
       title?: string;
       note?: string;
+      noteMarkdown?: boolean;
       checked?: boolean;
       deadline?: string;
       time_val?: string;
@@ -969,6 +972,7 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
       `UPDATE tasks
        SET title          = COALESCE($1, title),
            note           = COALESCE($2, note),
+           note_markdown  = COALESCE($14, note_markdown),
            checked        = COALESCE($3, checked),
            deadline       = COALESCE($4, deadline),
            time_val       = COALESCE($5, time_val),
@@ -994,6 +998,7 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
         updateLinkedList,
         linked_list_id ?? null,
         linked_list_type ?? null,
+        typeof noteMarkdown === 'boolean' ? noteMarkdown : null,
       ]
     );
 

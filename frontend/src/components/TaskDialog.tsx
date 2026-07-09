@@ -4,8 +4,8 @@ import type { Task, TaskAttachment, SharedFile } from '../types';
 import Icon from './Icon';
 import { useMobile } from '../hooks/useBreakpoint';
 import CalendarPicker from './CalendarPicker';
-import CopyButton from './CopyButton';
 import CreatorBubble from './CreatorBubble';
+import NotesEditor from './NotesEditor';
 import { DeleteConfirmModal } from './TaskItem';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
@@ -44,6 +44,61 @@ export function AttachBadge({ mime }: { mime: string }) {
     <div style={{ width: 34, height: 34, borderRadius: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
       <Icon name="description" size={17} color="#d1d5db" />
       <div style={{ position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)', background: attMimeColor(mime), color: '#fff', fontFamily: 'Inter, sans-serif', fontSize: 6, fontWeight: 800, padding: '1px 3px', borderRadius: 2 }}>{attMimeLabel(mime)}</div>
+    </div>
+  );
+}
+
+// ── Drag & drop attachment support ────────────────────────────────
+// Shared by the item (TaskDialog) and milestone (TimelineScreen) editors:
+// spread `dropHandlers` on the dialog card (which must be position:relative)
+// and render <AttachDropOverlay visible={dragging} /> inside it.
+export function useAttachmentDrop(onFiles: (files: File[]) => void, enabled = true) {
+  const [dragging, setDragging] = useState(false);
+  const depth = useRef(0);
+
+  // Only react to real file drags — not text selections or in-app element drags.
+  const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer.types).includes('Files');
+
+  const onDragEnter = (e: React.DragEvent) => {
+    if (!enabled || !hasFiles(e)) return;
+    e.preventDefault();
+    depth.current += 1;
+    setDragging(true);
+  };
+  const onDragOver = (e: React.DragEvent) => {
+    if (!enabled || !hasFiles(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    if (!enabled || !hasFiles(e)) return;
+    e.preventDefault();
+    depth.current = Math.max(0, depth.current - 1);
+    if (depth.current === 0) setDragging(false);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    if (!enabled || !hasFiles(e)) return;
+    e.preventDefault();
+    depth.current = 0;
+    setDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) onFiles(files);
+  };
+
+  return { dragging, dropHandlers: { onDragEnter, onDragOver, onDragLeave, onDrop } };
+}
+
+export function AttachDropOverlay({ visible, subtitle }: { visible: boolean; subtitle: string }) {
+  if (!visible) return null;
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(250,249,255,0.94)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', animation: 'backdropIn 160ms ease both', padding: 24 }}>
+      <div style={{ border: '2px dashed #5e4dbb', borderRadius: 16, background: '#F5F3FF', padding: '30px 46px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, boxShadow: '0 8px 40px rgba(94,77,187,0.10)', maxWidth: '100%' }}>
+        <div style={{ width: 50, height: 50, borderRadius: 14, background: '#5e4dbb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Icon name="upload_file" size={26} color="#fff" />
+        </div>
+        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22', textAlign: 'center' }}>Drop files to attach</div>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', textAlign: 'center' }}>{subtitle}</div>
+      </div>
     </div>
   );
 }
@@ -184,6 +239,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
   const showOwner = Boolean(isPublic && task.creatorId);
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.note ?? '');
+  const [notesMarkdown, setNotesMarkdown] = useState(task.noteMarkdown ?? false);
   const [deadline, setDeadline] = useState(task.deadline ?? '');
   const [priority, setPriority] = useState<string>(task.priority ?? '');
   const [tag, setTag] = useState(task.badge ?? '');
@@ -206,7 +262,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const titleRef = useRef<HTMLTextAreaElement>(null);
-  const notesRef = useRef<HTMLTextAreaElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const calBtnRef = useRef<HTMLButtonElement>(null);
 
@@ -230,7 +285,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
 
   useEffect(() => {
     if (titleRef.current) resizeTA(titleRef.current);
-    if (notesRef.current) resizeTA(notesRef.current);
   }, []);
 
   useEffect(() => { loadAttachments(); }, [loadAttachments]);
@@ -260,6 +314,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
     if ((priority || '') !== (task.priority ?? '')) updates.priority = (priority as Task['priority']) || undefined;
     if ((tag || '') !== (task.badge ?? '')) updates.badge = tag || undefined;
     if ((notes || '') !== (task.note ?? '')) updates.note = notes || undefined;
+    if (notesMarkdown !== (task.noteMarkdown ?? false)) updates.noteMarkdown = notesMarkdown;
     if (Object.keys(updates).length > 0) onUpdate(task.id, updates);
     onClose();
   };
@@ -271,6 +326,12 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
       setAttachments(prev => [...prev, att]);
     } catch { /* silent */ } finally { setUploadProgress(null); }
   };
+
+  const handleFilesUpload = async (files: File[]) => {
+    for (const f of files) await handleFileUpload(f);
+  };
+
+  const { dragging, dropHandlers } = useAttachmentDrop(handleFilesUpload, uploadProgress === null);
 
   const handleLinkFile = async (sf: SharedFile) => {
     try {
@@ -386,6 +447,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
 
         <div
           onClick={e => e.stopPropagation()}
+          {...dropHandlers}
           style={{
             background: '#fff',
             borderRadius: isMobile ? '16px 16px 0 0' : 18,
@@ -395,9 +457,12 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
+            position: 'relative',
             boxShadow: '0 32px 80px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.08)',
             animation: isMobile ? 'slideUp 280ms cubic-bezier(0.22,1,0.36,1) both' : 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both',
           }}>
+
+          <AttachDropOverlay visible={dragging} subtitle="Files will be uploaded and attached to this item" />
 
           {/* Priority accent stripe */}
           <div style={{ height: 3, background: priority ? PRIORITY_COLORS[priority] : '#F0EEF8', flexShrink: 0, transition: 'background 200ms' }} />
@@ -549,21 +614,12 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
 
             {/* Notes */}
             <div style={{ marginBottom: 28 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <SectionLabel>Notes</SectionLabel>
-                {notes.trim() && <CopyButton text={notes} title="Copy notes to clipboard" />}
-              </div>
-              <textarea
-                ref={notesRef}
+              <NotesEditor
                 value={notes}
-                onChange={e => { setNotes(e.target.value); resizeTA(e.target); }}
-                placeholder="Add notes, context, or any details…"
-                style={{
-                  width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552',
-                  background: 'transparent', border: 'none', outline: 'none', resize: 'none',
-                  lineHeight: 1.75, padding: 0, overflowY: 'hidden', minHeight: 160,
-                }}
-                rows={6}
+                onChange={setNotes}
+                markdown={notesMarkdown}
+                onMarkdownChange={setNotesMarkdown}
+                minHeight={160}
               />
             </div>
 

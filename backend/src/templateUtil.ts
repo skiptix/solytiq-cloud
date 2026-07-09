@@ -35,6 +35,8 @@ export interface TemplateAttachmentRef {
 export interface TemplateTaskNode {
   title: string;
   note: string | null;
+  /** Optional for templates captured before markdown notes existed. */
+  noteMarkdown?: boolean;
   priority: string | null;
   badge: string | null;
   position: number;
@@ -64,6 +66,8 @@ export interface TemplateListNode {
 export interface TemplateMilestoneNode {
   title: string;
   description: string | null;
+  /** Optional for templates captured before markdown notes existed. */
+  descriptionMarkdown?: boolean;
   status: string;
   emoji: string | null;
   color: string | null;
@@ -156,6 +160,7 @@ interface TaskRowForCapture {
   id: string;
   title: string;
   note: string | null;
+  note_markdown: boolean;
   priority: string | null;
   badge: string | null;
   position: number;
@@ -200,7 +205,7 @@ export async function captureListStructure(
     [listId]
   );
   const tasksRes = await query<TaskRowForCapture>(
-    `SELECT id, title, note, priority, badge, position, deadline, time_val, section_id, linked_list_id, linked_list_type
+    `SELECT id, title, note, note_markdown, priority, badge, position, deadline, time_val, section_id, linked_list_id, linked_list_type
      FROM tasks WHERE list_id = $1 AND source = 'list' ORDER BY position ASC`,
     [listId]
   );
@@ -223,6 +228,7 @@ export async function captureListStructure(
       tasks.push({
         title: t.title,
         note: t.note,
+        noteMarkdown: t.note_markdown ?? false,
         priority: t.priority,
         badge: t.badge,
         position: t.position,
@@ -250,6 +256,7 @@ interface MilestoneRowForCapture {
   id: string;
   title: string;
   description: string | null;
+  description_markdown: boolean;
   milestone_date: string | null;
   time_val: string | null;
   status: string;
@@ -272,7 +279,7 @@ export async function captureTimelineStructure(
   const t = tRes.rows[0];
 
   const mRes = await query<MilestoneRowForCapture>(
-    `SELECT id, title, description, milestone_date, time_val, status, emoji, color, position
+    `SELECT id, title, description, description_markdown, milestone_date, time_val, status, emoji, color, position
      FROM milestones WHERE timeline_id = $1 ORDER BY position ASC`,
     [timelineId]
   );
@@ -283,6 +290,7 @@ export async function captureTimelineStructure(
     milestones.push({
       title: m.title,
       description: m.description,
+      descriptionMarkdown: m.description_markdown ?? false,
       status: m.status,
       emoji: m.emoji,
       color: m.color,
@@ -389,11 +397,12 @@ export async function instantiateListStructure(
 
       await client.query(
         `INSERT INTO tasks
-           (id, user_id, title, note, priority, badge, deadline, time_val, source, list_id, section_id, position, linked_list_id, linked_list_type, workspace_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'list',$9,$10,$11,$12,$13,$14)`,
+           (id, user_id, title, note, note_markdown, priority, badge, deadline, time_val, source, list_id, section_id, position, linked_list_id, linked_list_type, workspace_id)
+         VALUES ($1,$2,$3,$4,$15,$5,$6,$7,$8,'list',$9,$10,$11,$12,$13,$14)`,
         [
           taskId, ctx.userId, task.title, task.note, task.priority, task.badge, deadline, task.timeVal,
           listId, sectionId, task.position, childListId, childListId ? 'sublist' : null, ctx.workspaceId,
+          task.noteMarkdown === true,
         ]
       );
 
@@ -438,9 +447,9 @@ export async function instantiateTimelineStructure(
     const milestoneId = `milestone_${uuidv4()}`;
     const date = m.dateOffsetDays != null ? addDaysISO(today, m.dateOffsetDays) : null;
     await client.query(
-      `INSERT INTO milestones (id, timeline_id, title, description, milestone_date, time_val, status, emoji, color, position)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [milestoneId, timelineId, m.title, m.description, date, m.timeVal, m.status, m.emoji, m.color, m.position]
+      `INSERT INTO milestones (id, timeline_id, title, description, description_markdown, milestone_date, time_val, status, emoji, color, position)
+       VALUES ($1,$2,$3,$4,$11,$5,$6,$7,$8,$9,$10)`,
+      [milestoneId, timelineId, m.title, m.description, date, m.timeVal, m.status, m.emoji, m.color, m.position, m.descriptionMarkdown === true]
     );
     if (ctx.allowAttachments) {
       for (const ref of m.attachments) {
