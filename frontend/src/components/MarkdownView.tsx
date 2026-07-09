@@ -49,6 +49,27 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   return out;
 }
 
+// Strips Markdown syntax down to plain text — for single-line, truncated
+// snippets (task/list row previews) where rendering block/inline elements
+// doesn't apply, but showing raw `**`/`#`/`~~` markers would look broken.
+export function markdownToPlainText(source: string): string {
+  return source
+    .replace(/\r\n/g, '\n')
+    .replace(/```([\s\S]*?)```/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/_([^_\n]+)_/g, '$1')
+    .replace(/\[([^\]\n]+)\]\(https?:\/\/[^\s)]+\)/g, '$1')
+    .replace(/\n+/g, ' ')
+    .trim();
+}
+
 type Block =
   | { kind: 'heading'; level: 1 | 2 | 3; text: string }
   | { kind: 'ul'; items: string[] }

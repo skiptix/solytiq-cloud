@@ -2,7 +2,7 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Icon from '../components/Icon';
-import MarkdownView from '../components/MarkdownView';
+import MarkdownView, { markdownToPlainText } from '../components/MarkdownView';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -276,7 +276,14 @@ export default function SharedListPage() {
                                   <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: isLinked ? accent : '#1c1b22', lineHeight: 1.4, opacity: done ? 0.45 : 1, textDecoration: done ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</span>
                                   {task.badge && <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', padding: '2px 7px', borderRadius: 9999, flexShrink: 0 }}>{task.badge}</span>}
                                 </div>
-                                {task.note && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.note.length > 40 ? `${task.note.slice(0, 40).trimEnd()}…` : task.note}</div>}
+                                {task.note && (() => {
+                                  const plain = markdownToPlainText(task.note);
+                                  return (
+                                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {plain.length > 40 ? `${plain.slice(0, 40).trimEnd()}…` : plain}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                               {task.deadline && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', flexShrink: 0 }}>{fmtDate(task.deadline)}</span>}
                               {navigable && <Icon name="chevron_right" size={18} color="#b0acbe" />}
