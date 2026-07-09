@@ -9,9 +9,9 @@ import MarkdownView from './MarkdownView';
 //   • ⌘/Ctrl+B → **bold**, ⌘/Ctrl+I → *italic*, ⌘/Ctrl+Shift+X (or S) →
 //     ~~strikethrough~~ on the current selection (toggle: applies or removes),
 //     plus a small B / I / S toolbar for discoverability.
-//   • A "Markdown" toggle: when on, the note is treated as Markdown — a
-//     Write / Preview switch appears and Preview renders it via MarkdownView.
-//     The flag is buffered like the note text; the parent persists both.
+//   • Notes are always treated as Markdown. A Write / Preview switch lets the
+//     user flip between the raw source and the rendered (MarkdownView) form;
+//     it opens on Preview by default.
 
 type Marker = '**' | '*' | '~~';
 
@@ -35,14 +35,12 @@ function toggleWrap(value: string, start: number, end: number, marker: Marker): 
 interface NotesEditorProps {
   value: string;
   onChange: (v: string) => void;
-  markdown: boolean;
-  onMarkdownChange: (v: boolean) => void;
   placeholder?: string;
   minHeight?: number;
 }
 
-export default function NotesEditor({ value, onChange, markdown, onMarkdownChange, placeholder = 'Add notes, context, or any details…', minHeight = 120 }: NotesEditorProps) {
-  const [tab, setTab] = useState<'write' | 'preview'>('write');
+export default function NotesEditor({ value, onChange, placeholder = 'Add notes, context, or any details…', minHeight = 120 }: NotesEditorProps) {
+  const [tab, setTab] = useState<'write' | 'preview'>('preview');
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   const resize = useCallback(() => {
@@ -76,7 +74,7 @@ export default function NotesEditor({ value, onChange, markdown, onMarkdownChang
     else if (e.shiftKey && (k === 'x' || k === 's')) { e.preventDefault(); applyFormat('~~'); }
   };
 
-  const showPreview = markdown && tab === 'preview';
+  const showPreview = tab === 'preview';
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? '');
   const mod = isMac ? '⌘' : 'Ctrl+';
 
@@ -100,39 +98,22 @@ export default function NotesEditor({ value, onChange, markdown, onMarkdownChang
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</div>
-          {markdown && (
-            <div style={{ display: 'inline-flex', background: '#faf9ff', border: '1px solid #F0EEF8', borderRadius: 8, padding: 2 }}>
-              {(['write', 'preview'] as const).map(t => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setTab(t)}
-                  style={{ padding: '3px 10px', borderRadius: 6, border: 'none', background: tab === t ? '#fff' : 'transparent', boxShadow: tab === t ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: tab === t ? '#5e4dbb' : '#787584', transition: 'all 120ms', textTransform: 'capitalize' }}>
-                  {t}
-                </button>
-              ))}
-            </div>
-          )}
+          <div style={{ display: 'inline-flex', background: '#faf9ff', border: '1px solid #F0EEF8', borderRadius: 8, padding: 2 }}>
+            {(['write', 'preview'] as const).map(t => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                style={{ padding: '3px 10px', borderRadius: 6, border: 'none', background: tab === t ? '#fff' : 'transparent', boxShadow: tab === t ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: tab === t ? '#5e4dbb' : '#787584', transition: 'all 120ms', textTransform: 'capitalize' }}>
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           {fmtBtn('format_bold', `Bold (${mod}B)`, '**')}
           {fmtBtn('format_italic', `Italic (${mod}I)`, '*')}
           {fmtBtn('strikethrough_s', `Strikethrough (${mod}⇧X)`, '~~')}
-          <div style={{ width: 1, height: 16, background: '#F0EEF8', margin: '0 6px' }} />
-          <button
-            type="button"
-            onClick={() => { onMarkdownChange(!markdown); if (markdown) setTab('write'); }}
-            title={markdown ? 'Markdown rendering on — notes display formatted' : 'Turn on Markdown rendering for these notes'}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 9999,
-              border: `1px solid ${markdown ? '#5e4dbb' : '#E5E7EB'}`,
-              background: markdown ? '#f0edff' : 'transparent',
-              cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600,
-              color: markdown ? '#5e4dbb' : '#787584', transition: 'all 120ms',
-            }}>
-            {markdown && <Icon name="check" size={12} color="#5e4dbb" />}
-            Markdown
-          </button>
           {value.trim() && <div style={{ marginLeft: 4 }}><CopyButton text={value} title="Copy notes to clipboard" /></div>}
         </div>
       </div>
@@ -152,8 +133,8 @@ export default function NotesEditor({ value, onChange, markdown, onMarkdownChang
           onKeyDown={onKeyDown}
           placeholder={placeholder}
           style={{
-            width: '100%', fontFamily: markdown ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : 'Inter, sans-serif',
-            fontSize: markdown ? 13 : 14, color: '#484552',
+            width: '100%', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            fontSize: 13, color: '#484552',
             background: 'transparent', border: 'none', outline: 'none', resize: 'none',
             lineHeight: 1.75, padding: 0, overflowY: 'hidden', minHeight,
           }}

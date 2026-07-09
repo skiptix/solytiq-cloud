@@ -102,7 +102,7 @@ export default function TaskDetailPopup({ task, anchor, onEdit, onGoToList, onCl
             )}
             {task.note && (
               <div style={{ marginTop: 4, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', lineHeight: 1.5, background: '#faf9ff', borderRadius: 8, padding: '8px 10px' }}>
-                {task.noteMarkdown ? <MarkdownView source={task.note} fontSize={12} /> : task.note}
+                <MarkdownView source={task.note} fontSize={12} />
               </div>
             )}
           </div>

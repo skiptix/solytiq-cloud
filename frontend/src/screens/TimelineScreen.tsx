@@ -100,7 +100,6 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
   const [date, setDate] = useState(initial?.date ?? '');
   const [time, setTime] = useState(initial?.time ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
-  const [descriptionMarkdown, setDescriptionMarkdown] = useState(initial?.descriptionMarkdown ?? false);
   const [status, setStatus] = useState<MilestoneStatus>(initial?.status ?? 'upcoming');
   const [emoji, setEmoji] = useState(initial?.emoji ?? '📍');
   const [color, setColor] = useState<string | null>(initial?.color ?? null);
@@ -211,7 +210,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
       date: date,
       time: time || null,
       description: description.trim() || null,
-      descriptionMarkdown,
+      descriptionMarkdown: true,
       status,
       emoji: emoji || null,
       color: color ?? null,
@@ -347,8 +346,6 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
             <NotesEditor
               value={description ?? ''}
               onChange={setDescription}
-              markdown={descriptionMarkdown}
-              onMarkdownChange={setDescriptionMarkdown}
               minHeight={90}
             />
           </div>
@@ -735,13 +732,9 @@ export default function TimelineScreen() {
                             </div>
                           )}
                           {m.description && layout !== 'compact' && (
-                            m.descriptionMarkdown ? (
-                              <div style={{ marginTop: 6, display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                <MarkdownView source={m.description} fontSize={13} />
-                              </div>
-                            ) : (
-                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#5a5664', marginTop: 6, lineHeight: 1.55, whiteSpace: 'pre-wrap', display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{m.description}</div>
-                            )
+                            <div style={{ marginTop: 6, display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                              <MarkdownView source={m.description} fontSize={13} />
+                            </div>
                           )}
                         </div>
                         {isOwner && (
