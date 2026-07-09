@@ -19,6 +19,16 @@ export interface Task {
   attachmentCount?: number;
 }
 
+export type MeetingRecurrenceFreq = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+/** Repeat preset for a new meeting series — expanded server-side into one row
+ *  per occurrence (all sharing `recurrenceId`) at creation time. */
+export interface MeetingRecurrenceRule {
+  freq: MeetingRecurrenceFreq;
+  interval: number; // e.g. freq=weekly interval=2 -> every 2 weeks
+  count: number;     // total occurrences including the first
+}
+
 /** A standalone calendar event that belongs to no list/timeline/workspace —
  *  it lives purely on the Calendar and is scoped to the owning user. */
 export interface Meeting {
@@ -31,6 +41,7 @@ export interface Meeting {
   endTime?: string | null;   // HH:MM (24h)
   allDay?: boolean;
   color?: string | null;
+  recurrenceId?: string | null; // shared by every occurrence of a repeating series
   createdAt?: string;
   updatedAt?: string;
 }

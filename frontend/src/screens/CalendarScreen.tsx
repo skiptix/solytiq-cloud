@@ -1,7 +1,8 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import type { Task, List, Timeline, Meeting } from '../types';
+import type { Task, List, Timeline, Meeting, MeetingRecurrenceRule } from '../types';
 import {
   apiGetTasks, apiGetLists, apiGetTimelines, apiGetMeetings,
   apiCreateTask, apiAddListTask, apiUpdateTask, apiUpdateListTask,
@@ -131,12 +132,43 @@ function layoutDay(chips: Chip[]): Map<Chip, { col: number; cols: number }> {
 interface MeetingModalProps {
   initial: Meeting | null;       // null = creating
   presetDate?: string;
-  onSave: (data: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt'>, id?: string) => void;
-  onDelete?: (id: string) => void;
+  seriesCount?: number;          // when editing: how many meetings share initial.recurrenceId
+  onSave: (data: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt'>, id?: string, repeat?: MeetingRecurrenceRule) => void;
+  onDelete?: (id: string, opts?: { series?: boolean }) => void;
   onClose: () => void;
 }
 
-function MeetingModal({ initial, presetDate, onSave, onDelete, onClose }: MeetingModalProps) {
+type RepeatPreset = 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
+
+const REPEAT_PRESETS: Array<{ value: RepeatPreset; label: string }> = [
+  { value: 'none', label: 'Does not repeat' },
+  { value: 'daily', label: 'Every day' },
+  { value: 'weekly', label: 'Every week' },
+  { value: 'biweekly', label: 'Every 2 weeks' },
+  { value: 'monthly', label: 'Every month' },
+  { value: 'quarterly', label: 'Every quarter' },
+  { value: 'yearly', label: 'Every year' },
+  { value: 'custom', label: 'Custom…' },
+];
+
+/** Map a UI repeat preset to the (freq, interval) pair the backend expects. */
+function repeatPresetToRule(preset: RepeatPreset, customDays: number, count: number): MeetingRecurrenceRule | undefined {
+  if (preset === 'none') return undefined;
+  const clampedCount = Math.max(2, Math.min(104, Math.floor(count) || 2));
+  switch (preset) {
+    case 'daily': return { freq: 'daily', interval: 1, count: clampedCount };
+    case 'weekly': return { freq: 'weekly', interval: 1, count: clampedCount };
+    case 'biweekly': return { freq: 'weekly', interval: 2, count: clampedCount };
+    case 'monthly': return { freq: 'monthly', interval: 1, count: clampedCount };
+    case 'quarterly': return { freq: 'monthly', interval: 3, count: clampedCount };
+    case 'yearly': return { freq: 'yearly', interval: 1, count: clampedCount };
+    case 'custom': return { freq: 'daily', interval: Math.max(1, Math.min(365, Math.floor(customDays) || 1)), count: clampedCount };
+  }
+}
+
+type PopoverKind = 'date' | 'start' | 'end' | 'repeat';
+
+function MeetingModal({ initial, presetDate, seriesCount, onSave, onDelete, onClose }: MeetingModalProps) {
   const [title, setTitle] = useState(initial?.title ?? '');
   const [date, setDate] = useState(initial?.date ?? presetDate ?? toIso(new Date()));
   const [allDay, setAllDay] = useState(initial?.allDay ?? false);
@@ -145,18 +177,43 @@ function MeetingModal({ initial, presetDate, onSave, onDelete, onClose }: Meetin
   const [location, setLocation] = useState(initial?.location ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [color, setColor] = useState(initial?.color ?? DEFAULT_MEETING_COLOR);
-  const [showCal, setShowCal] = useState(false);
-  const [showStart, setShowStart] = useState(false);
-  const [showEnd, setShowEnd] = useState(false);
+  const [repeatPreset, setRepeatPreset] = useState<RepeatPreset>('none');
+  const [customDays, setCustomDays] = useState(3);
+  const [repeatCount, setRepeatCount] = useState(10);
   const [showDelete, setShowDelete] = useState(false);
+  const [deleteWholeSeries, setDeleteWholeSeries] = useState(false);
+
+  // Date/Start/End/Repeat popovers are portaled to <body> and positioned from
+  // the trigger button's rect — they must escape this modal's scrollable,
+  // overflow-hidden body or they get visually clipped (see MeetingModal card).
+  const [popover, setPopover] = useState<PopoverKind | null>(null);
+  const [popPos, setPopPos] = useState<{ top: number; left?: number; right?: number }>({ top: 0 });
+  const dateBtnRef = useRef<HTMLButtonElement>(null);
+  const startBtnRef = useRef<HTMLButtonElement>(null);
+  const endBtnRef = useRef<HTMLButtonElement>(null);
+  const repeatBtnRef = useRef<HTMLButtonElement>(null);
+
+  const openPopover = (kind: PopoverKind, btnRef: React.RefObject<HTMLButtonElement | null>, align: 'left' | 'right' = 'left') => {
+    setPopover(p => {
+      if (p === kind) return null;
+      const rect = btnRef.current?.getBoundingClientRect();
+      if (rect) {
+        setPopPos(align === 'right'
+          ? { top: rect.bottom + 6, right: window.innerWidth - rect.right }
+          : { top: rect.bottom + 6, left: rect.left });
+      }
+      return kind;
+    });
+  };
 
   const canSave = title.trim().length > 0 && !!date;
+  const isRecurringSeries = !!initial?.recurrenceId && (seriesCount ?? 0) > 1;
 
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (popover) setPopover(null); else onClose(); } };
     document.addEventListener('keydown', h);
     return () => document.removeEventListener('keydown', h);
-  }, [onClose]);
+  }, [onClose, popover]);
 
   const handleSave = () => {
     if (!canSave) return;
@@ -169,12 +226,17 @@ function MeetingModal({ initial, presetDate, onSave, onDelete, onClose }: Meetin
       location: location.trim() || null,
       description: description.trim() || null,
       color,
-    }, initial?.id);
+    }, initial?.id, initial ? undefined : repeatPresetToRule(repeatPreset, customDays, repeatCount));
   };
 
   const friendlyDate = date
     ? new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
     : 'Pick a date';
+
+  const repeatLabel = REPEAT_PRESETS.find(p => p.value === repeatPreset)?.label ?? 'Does not repeat';
+  const repeatSummary = repeatPreset === 'none' ? repeatLabel
+    : repeatPreset === 'custom' ? `Every ${customDays} day${customDays === 1 ? '' : 's'}, ${repeatCount}x`
+    : `${repeatLabel}, ${repeatCount}x`;
 
   const labelStyle = { fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600 as const, color: '#484552', marginBottom: 6, display: 'block' };
   const triggerStyle = (active: boolean) => ({
@@ -184,8 +246,13 @@ function MeetingModal({ initial, presetDate, onSave, onDelete, onClose }: Meetin
   });
 
   return (
+    // Guard on e.target (not just onClick={onClose}) — the Date/Start/End/Repeat
+    // popovers below are portaled to document.body, so their clicks are DOM-detached
+    // from this backdrop but still bubble through the React tree to this handler.
+    // Checking e.target === e.currentTarget makes sure only an actual backdrop
+    // click (not a portaled descendant's) closes the modal.
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
-      onClick={onClose}>
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 480, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(94,77,187,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
         onClick={e => e.stopPropagation()}>
         {/* Accent stripe + header */}
@@ -217,17 +284,12 @@ function MeetingModal({ initial, presetDate, onSave, onDelete, onClose }: Meetin
           </div>
 
           {/* Date */}
-          <div style={{ position: 'relative' }}>
+          <div>
             <label style={labelStyle}>Date</label>
-            <button onClick={() => { setShowCal(v => !v); setShowStart(false); setShowEnd(false); }} style={triggerStyle(showCal)}>
+            <button ref={dateBtnRef} onClick={() => openPopover('date', dateBtnRef)} style={triggerStyle(popover === 'date')}>
               <Icon name="calendar_today" size={15} color={date ? '#5e4dbb' : '#b0acbe'} />
               <span style={{ flex: 1 }}>{friendlyDate}</span>
             </button>
-            {showCal && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 30 }}>
-                <CalendarPicker value={date} onChange={v => { setDate(v); setShowCal(false); }} />
-              </div>
-            )}
           </div>
 
           {/* All-day toggle */}
@@ -242,30 +304,39 @@ function MeetingModal({ initial, presetDate, onSave, onDelete, onClose }: Meetin
           {/* Times */}
           {!allDay && (
             <div style={{ display: 'flex', gap: 12 }}>
-              <div style={{ position: 'relative', flex: 1 }}>
+              <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Starts</label>
-                <button onClick={() => { setShowStart(v => !v); setShowEnd(false); setShowCal(false); }} style={triggerStyle(showStart)}>
+                <button ref={startBtnRef} onClick={() => openPopover('start', startBtnRef)} style={triggerStyle(popover === 'start')}>
                   <Icon name="schedule" size={15} color={startTime ? '#5e4dbb' : '#b0acbe'} />
                   <span style={{ flex: 1 }}>{startTime || '--:--'}</span>
                 </button>
-                {showStart && (
-                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 30 }}>
-                    <TimePicker value={startTime} onChange={v => { setStartTime(v); setShowStart(false); }} onClear={() => { setStartTime(''); setShowStart(false); }} />
-                  </div>
-                )}
               </div>
-              <div style={{ position: 'relative', flex: 1 }}>
+              <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Ends</label>
-                <button onClick={() => { setShowEnd(v => !v); setShowStart(false); setShowCal(false); }} style={triggerStyle(showEnd)}>
+                <button ref={endBtnRef} onClick={() => openPopover('end', endBtnRef, 'right')} style={triggerStyle(popover === 'end')}>
                   <Icon name="schedule" size={15} color={endTime ? '#5e4dbb' : '#b0acbe'} />
                   <span style={{ flex: 1 }}>{endTime || '--:--'}</span>
                 </button>
-                {showEnd && (
-                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 30 }}>
-                    <TimePicker value={endTime} onChange={v => { setEndTime(v); setShowEnd(false); }} onClear={() => { setEndTime(''); setShowEnd(false); }} />
-                  </div>
-                )}
               </div>
+            </div>
+          )}
+
+          {/* Repeat — only offered when creating; editing only touches this one occurrence */}
+          {!initial && (
+            <div>
+              <label style={labelStyle}>Repeat</label>
+              <button ref={repeatBtnRef} onClick={() => openPopover('repeat', repeatBtnRef)} style={triggerStyle(popover === 'repeat')}>
+                <Icon name="repeat" size={15} color={repeatPreset !== 'none' ? '#5e4dbb' : '#b0acbe'} />
+                <span style={{ flex: 1 }}>{repeatSummary}</span>
+              </button>
+            </div>
+          )}
+          {initial && isRecurringSeries && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F5F3FF', borderRadius: 8, padding: '8px 12px' }}>
+              <Icon name="repeat" size={15} color="#5e4dbb" />
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#5e4dbb' }}>
+                Part of a repeating series ({seriesCount} events)
+              </span>
             </div>
           )}
 
@@ -320,18 +391,144 @@ function MeetingModal({ initial, presetDate, onSave, onDelete, onClose }: Meetin
         {showDelete && initial && onDelete && (
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.25)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 160ms ease both' }}
             onClick={() => setShowDelete(false)}>
-            <div style={{ background: '#fff', borderRadius: 14, padding: '22px 24px', maxWidth: 320, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+            <div style={{ background: '#fff', borderRadius: 14, padding: '22px 24px', maxWidth: 340, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both' }}
               onClick={e => e.stopPropagation()}>
               <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 6 }}>Delete this meeting?</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: 18 }}>This can't be undone.</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: isRecurringSeries ? 12 : 18 }}>This can't be undone.</div>
+              {isRecurringSeries && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => setDeleteWholeSeries(false)}>
+                    <div style={{ width: 16, height: 16, borderRadius: '50%', border: `1.5px solid ${!deleteWholeSeries ? '#5e4dbb' : '#cbc6d8'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {!deleteWholeSeries && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#5e4dbb' }} />}
+                    </div>
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22' }}>Just this event</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => setDeleteWholeSeries(true)}>
+                    <div style={{ width: 16, height: 16, borderRadius: '50%', border: `1.5px solid ${deleteWholeSeries ? '#5e4dbb' : '#cbc6d8'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {deleteWholeSeries && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#5e4dbb' }} />}
+                    </div>
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22' }}>All {seriesCount} events in the series</span>
+                  </label>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                 <button onClick={() => setShowDelete(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Cancel</button>
-                <button onClick={() => { onDelete(initial.id); }} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Delete</button>
+                <button onClick={() => { onDelete(initial.id, { series: deleteWholeSeries }); }} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Delete</button>
               </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* Date/Time/Repeat popovers — portaled to <body> so position:fixed is
+          relative to the viewport, not this modal's scrollable body. */}
+      {popover === 'date' && createPortal(
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 1350 }} onClick={() => setPopover(null)} />
+          <div style={{ position: 'fixed', top: popPos.top, left: popPos.left, right: popPos.right, zIndex: 1400 }}>
+            <CalendarPicker value={date} onChange={v => { setDate(v); setPopover(null); }} />
+          </div>
+        </>, document.body
+      )}
+      {popover === 'start' && createPortal(
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 1350 }} onClick={() => setPopover(null)} />
+          <div style={{ position: 'fixed', top: popPos.top, left: popPos.left, right: popPos.right, zIndex: 1400 }}>
+            <TimePicker value={startTime} onChange={v => { setStartTime(v); setPopover(null); }} onClear={() => { setStartTime(''); setPopover(null); }} />
+          </div>
+        </>, document.body
+      )}
+      {popover === 'end' && createPortal(
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 1350 }} onClick={() => setPopover(null)} />
+          <div style={{ position: 'fixed', top: popPos.top, left: popPos.left, right: popPos.right, zIndex: 1400 }}>
+            <TimePicker value={endTime} onChange={v => { setEndTime(v); setPopover(null); }} onClear={() => { setEndTime(''); setPopover(null); }} />
+          </div>
+        </>, document.body
+      )}
+      {popover === 'repeat' && createPortal(
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 1350 }} onClick={() => setPopover(null)} />
+          <div style={{ position: 'fixed', top: popPos.top, left: popPos.left, right: popPos.right, zIndex: 1400 }}>
+            <RepeatPopover
+              preset={repeatPreset} onPresetChange={setRepeatPreset}
+              customDays={customDays} onCustomDaysChange={setCustomDays}
+              count={repeatCount} onCountChange={setRepeatCount}
+              onDone={() => setPopover(null)} />
+          </div>
+        </>, document.body
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Repeat picker — presets (daily/weekly/biweekly/monthly/quarterly/yearly)
+// plus a custom "every N days" option and a total-occurrence count.
+// Matches CalendarPicker/TimePicker chrome so the three feel like one family.
+// ════════════════════════════════════════════════════════════════════
+interface RepeatPopoverProps {
+  preset: RepeatPreset;
+  onPresetChange: (p: RepeatPreset) => void;
+  customDays: number;
+  onCustomDaysChange: (n: number) => void;
+  count: number;
+  onCountChange: (n: number) => void;
+  onDone: () => void;
+}
+
+function RepeatPopover({ preset, onPresetChange, customDays, onCustomDaysChange, count, onCountChange, onDone }: RepeatPopoverProps) {
+  const stepper = (value: number, onChange: (n: number) => void, min: number, max: number) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <button onClick={() => onChange(Math.max(min, value - 1))}
+        style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Icon name="remove" size={14} color="#5e4dbb" />
+      </button>
+      <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22', minWidth: 26, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+      <button onClick={() => onChange(Math.min(max, value + 1))}
+        style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Icon name="add" size={14} color="#5e4dbb" />
+      </button>
+    </div>
+  );
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '10px', width: Math.min(240, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {REPEAT_PRESETS.map(p => {
+          const active = preset === p.value;
+          return (
+            <button key={p.value} onClick={() => onPresetChange(p.value)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, border: 'none', background: active ? '#F5F3FF' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 120ms' }}
+              onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#faf8ff'; }}
+              onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}>
+              <div style={{ width: 16, height: 16, borderRadius: '50%', border: `1.5px solid ${active ? '#5e4dbb' : '#cbc6d8'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {active && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#5e4dbb' }} />}
+              </div>
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: active ? 600 : 400, color: active ? '#5e4dbb' : '#1c1b22' }}>{p.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {preset === 'custom' && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 10px 4px', borderTop: '1px solid #f0ecf8', marginTop: 6 }}>
+          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#484552' }}>Every {customDays} day{customDays === 1 ? '' : 's'}</span>
+          {stepper(customDays, onCustomDaysChange, 1, 365)}
+        </div>
+      )}
+
+      {preset !== 'none' && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 10px 4px', borderTop: '1px solid #f0ecf8', marginTop: preset === 'custom' ? 0 : 6 }}>
+          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#484552' }}>Ends after</span>
+          {stepper(count, onCountChange, 2, 104)}
+        </div>
+      )}
+
+      <button onClick={onDone}
+        style={{ width: '100%', marginTop: 10, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 7, padding: '8px 0', cursor: 'pointer' }}>
+        Done
+      </button>
     </div>
   );
 }
@@ -768,7 +965,7 @@ export default function CalendarScreen() {
   };
 
   // ── Meeting mutations ──────────────────────────────────────────
-  const saveMeeting = async (data: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt'>, id?: string) => {
+  const saveMeeting = async (data: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt'>, id?: string, repeat?: MeetingRecurrenceRule) => {
     setEditingMeeting(null);
     setCreatingMeeting(null);
     if (id) {
@@ -779,16 +976,23 @@ export default function CalendarScreen() {
       const temp: Meeting = { id: tempId, ...data };
       setMeetings(ms => [...ms, temp]);
       try {
-        const res = await apiCreateMeeting(data);
-        setMeetings(ms => ms.map(m => m.id === tempId ? res.meeting : m));
+        const res = await apiCreateMeeting({ ...data, repeat });
+        // A repeating series materializes multiple rows server-side; swap the
+        // optimistic placeholder for all of them at once.
+        setMeetings(ms => ms.flatMap(m => m.id === tempId ? res.meetings : [m]));
       } catch { setMeetings(ms => ms.filter(m => m.id !== tempId)); }
     }
   };
 
-  const deleteMeeting = (id: string) => {
+  const deleteMeeting = (id: string, opts?: { series?: boolean }) => {
     setEditingMeeting(null);
-    setMeetings(ms => ms.filter(m => m.id !== id));
-    apiDeleteMeeting(id).catch(() => loadData());
+    if (opts?.series) {
+      const recurrenceId = meetings.find(m => m.id === id)?.recurrenceId;
+      setMeetings(ms => ms.filter(m => m.id !== id && m.recurrenceId !== recurrenceId));
+    } else {
+      setMeetings(ms => ms.filter(m => m.id !== id));
+    }
+    apiDeleteMeeting(id, opts).catch(() => loadData());
   };
 
   // Move a meeting to another day (keeps its time). Sends the full object
@@ -1233,6 +1437,7 @@ export default function CalendarScreen() {
         <MeetingModal
           initial={editingMeeting}
           presetDate={creatingMeeting?.date}
+          seriesCount={editingMeeting?.recurrenceId ? meetings.filter(m => m.recurrenceId === editingMeeting.recurrenceId).length : undefined}
           onSave={saveMeeting}
           onDelete={editingMeeting ? deleteMeeting : undefined}
           onClose={() => { setCreatingMeeting(null); setEditingMeeting(null); }} />

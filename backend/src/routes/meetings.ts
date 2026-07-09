@@ -3,6 +3,7 @@ import { query } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
 import { werr } from '../workspaceUtil';
+import { parseRecurrenceRule, computeRecurrenceDates } from '../recurrence';
 
 const router = Router();
 router.use(authenticate);
@@ -24,23 +25,25 @@ interface MeetingRow {
   end_time: string | null;
   all_day: boolean;
   color: string | null;
+  recurrence_id: string | null;
   created_at: string;
   updated_at: string;
 }
 
 function sanitizeMeeting(m: MeetingRow) {
   return {
-    id:          m.id,
-    title:       m.title,
-    description: m.description,
-    location:    m.location,
-    date:        m.meeting_date,
-    startTime:   m.start_time,
-    endTime:     m.end_time,
-    allDay:      m.all_day,
-    color:       m.color,
-    createdAt:   m.created_at,
-    updatedAt:   m.updated_at,
+    id:            m.id,
+    title:         m.title,
+    description:   m.description,
+    location:      m.location,
+    date:          m.meeting_date,
+    startTime:     m.start_time,
+    endTime:       m.end_time,
+    allDay:        m.all_day,
+    color:         m.color,
+    recurrenceId:  m.recurrence_id,
+    createdAt:     m.created_at,
+    updatedAt:     m.updated_at,
   };
 }
 
@@ -70,7 +73,7 @@ router.get('/', async (req: Request, res: Response) => {
 // POST /api/meetings
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { id, title, description, location, date, startTime, endTime, allDay, color } = req.body as {
+    const { id, title, description, location, date, startTime, endTime, allDay, color, repeat } = req.body as {
       id?: string;
       title?: string;
       description?: string;
@@ -80,6 +83,7 @@ router.post('/', async (req: Request, res: Response) => {
       endTime?: string | null;
       allDay?: boolean;
       color?: string;
+      repeat?: unknown;
     };
 
     if (!title || !title.trim()) {
@@ -93,27 +97,35 @@ router.post('/', async (req: Request, res: Response) => {
 
     const meetingId = id ?? `mt_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
     const isAllDay = allDay === true;
+    const rule = parseRecurrenceRule(repeat);
+    const dates = rule ? computeRecurrenceDates(date, rule) : [date];
 
-    const result = await query<MeetingRow>(
-      `INSERT INTO meetings
-         (id, user_id, title, description, location, meeting_date, start_time, end_time, all_day, color)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING *`,
-      [
-        meetingId,
-        req.userId,
-        title.trim(),
-        description ?? null,
-        location ?? null,
-        date,
-        isAllDay ? null : (startTime ?? null),
-        isAllDay ? null : (endTime ?? null),
-        isAllDay,
-        color ?? null,
-      ]
-    );
+    const rows: MeetingRow[] = [];
+    for (let i = 0; i < dates.length; i++) {
+      const occurrenceId = i === 0 ? meetingId : `mt_${Date.now()}_${Math.floor(Math.random() * 1e6)}_${i}`;
+      const result = await query<MeetingRow>(
+        `INSERT INTO meetings
+           (id, user_id, title, description, location, meeting_date, start_time, end_time, all_day, color, recurrence_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         RETURNING *`,
+        [
+          occurrenceId,
+          req.userId,
+          title.trim(),
+          description ?? null,
+          location ?? null,
+          dates[i],
+          isAllDay ? null : (startTime ?? null),
+          isAllDay ? null : (endTime ?? null),
+          isAllDay,
+          color ?? null,
+          dates.length > 1 ? meetingId : null,
+        ]
+      );
+      rows.push(result.rows[0]);
+    }
 
-    res.status(201).json({ meeting: sanitizeMeeting(result.rows[0]) });
+    res.status(201).json({ meeting: sanitizeMeeting(rows[0]), meetings: rows.map(sanitizeMeeting) });
     broadcastToUser(req.userId!, 'meetings');
   } catch (err) {
     werr('meetings POST error:', err);
@@ -177,18 +189,29 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/meetings/:id
+// DELETE /api/meetings/:id — pass ?series=1 to delete every occurrence in the
+// same recurring series (falls back to just this one if it isn't recurring).
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const result = await query(
-      `DELETE FROM meetings WHERE id = $1 AND user_id = $2`,
-      [req.params.id, req.userId]
-    );
+    const deleteSeries = req.query.series === '1' || req.query.series === 'true';
+    const result = deleteSeries
+      ? await query(
+          `DELETE FROM meetings
+           WHERE user_id = $2 AND (
+             id = $1
+             OR recurrence_id = (SELECT recurrence_id FROM meetings WHERE id = $1 AND user_id = $2)
+           )`,
+          [req.params.id, req.userId]
+        )
+      : await query(
+          `DELETE FROM meetings WHERE id = $1 AND user_id = $2`,
+          [req.params.id, req.userId]
+        );
     if (result.rowCount === 0) {
       res.status(404).json({ error: 'Meeting not found' });
       return;
     }
-    res.json({ success: true });
+    res.json({ success: true, deletedCount: result.rowCount });
     broadcastToUser(req.userId!, 'meetings');
   } catch (err) {
     werr('meetings DELETE error:', err);
