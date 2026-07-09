@@ -135,6 +135,8 @@ export default function TemplatesScreen() {
   const [showCreate, setShowCreate] = useState(false);
   const [useTarget, setUseTarget] = useState<Template | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Template | null>(null);
+  const [renameTarget, setRenameTarget] = useState<Template | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   useEffect(() => { load(); }, [load]);
 
@@ -152,9 +154,16 @@ export default function TemplatesScreen() {
     });
   }, [templates, filter, search]);
 
-  const handleRename = (t: Template) => {
-    const next = window.prompt('Rename template', t.name);
-    if (next && next.trim() && next.trim() !== t.name) update(t.id, { name: next.trim() });
+  const openRename = (t: Template) => {
+    setRenameTarget(t);
+    setRenameValue(t.name);
+  };
+
+  const commitRename = () => {
+    if (!renameTarget) return;
+    const next = renameValue.trim();
+    if (next && next !== renameTarget.name) update(renameTarget.id, { name: next });
+    setRenameTarget(null);
   };
 
   return (
@@ -219,7 +228,7 @@ export default function TemplatesScreen() {
             {filtered.map((t, i) => (
               <TemplateCard key={t.id} template={t} index={i}
                 onUse={() => setUseTarget(t)}
-                onRename={() => handleRename(t)}
+                onRename={() => openRename(t)}
                 onToggleShared={() => update(t.id, { isShared: !t.isShared })}
                 onDelete={() => setConfirmDelete(t)} />
             ))}
@@ -236,6 +245,46 @@ export default function TemplatesScreen() {
           onCreatedList={(list) => { setUseTarget(null); navigate(`/list/${list.id}`); }}
           onCreatedTimeline={(timeline) => { setUseTarget(null); navigate(`/timeline/${timeline.id}`); }}
         />
+      )}
+
+      {renameTarget && createPortal(
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setRenameTarget(null); }}>
+          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', padding: 24, animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: renameTarget.colorBg ?? '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 17 }}>
+                {renameTarget.emoji ?? (renameTarget.type === 'list' ? '📋' : '🗓️')}
+              </div>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>Rename template</div>
+            </div>
+            <input
+              autoFocus
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onFocus={(e) => { e.target.select(); e.target.style.borderBottomColor = '#5e4dbb'; }}
+              onBlur={(e) => (e.target.style.borderBottomColor = '#E5E7EB')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && renameValue.trim()) commitRename();
+                if (e.key === 'Escape') setRenameTarget(null);
+              }}
+              maxLength={255}
+              style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, border: 'none', borderBottom: '1.5px solid #E5E7EB', padding: '8px 0', outline: 'none', color: '#1c1b22', background: 'transparent', marginBottom: 22 }}
+            />
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setRenameTarget(null)}
+                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 16px' }}>
+                Cancel
+              </button>
+              <button onClick={commitRename} disabled={!renameValue.trim()}
+                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: renameValue.trim() ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: renameValue.trim() ? 'pointer' : 'not-allowed', transition: 'background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)' }}
+                onMouseEnter={(e) => { if (renameValue.trim()) e.currentTarget.style.transform = 'scale(1.04)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}>
+                Save
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
       {confirmDelete && createPortal(
