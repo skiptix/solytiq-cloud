@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, Meeting, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -387,14 +387,14 @@ export const apiGetMeetings = (opts?: { from?: string; to?: string }) => {
   return apiFetch<{ meetings: Meeting[] }>(`/meetings${qs ? `?${qs}` : ''}`);
 };
 
-export const apiCreateMeeting = (data: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) =>
-  apiFetch<{ meeting: Meeting }>('/meetings', { method: 'POST', body: JSON.stringify(data) });
+export const apiCreateMeeting = (data: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt' | 'recurrenceId'> & { id?: string; repeat?: MeetingRecurrenceRule }) =>
+  apiFetch<{ meeting: Meeting; meetings: Meeting[] }>('/meetings', { method: 'POST', body: JSON.stringify(data) });
 
 export const apiUpdateMeeting = (id: string, data: Partial<Meeting>) =>
   apiFetch<{ meeting: Meeting }>(`/meetings/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
-export const apiDeleteMeeting = (id: string) =>
-  apiFetch<{ success: boolean }>(`/meetings/${id}`, { method: 'DELETE' });
+export const apiDeleteMeeting = (id: string, opts?: { series?: boolean }) =>
+  apiFetch<{ success: boolean; deletedCount: number }>(`/meetings/${id}${opts?.series ? '?series=1' : ''}`, { method: 'DELETE' });
 
 // CalDAV connection (Apple Calendar / Thunderbird / … sync)
 export interface CaldavStatus {

@@ -23,6 +23,7 @@ import { resolveWorkspaceForUser } from './workspaceUtil';
 import { softDeleteListTree, snapshotTimelineToTrash } from './trashUtil';
 import { extractTextFromBuffer } from './fileText';
 import { UPLOAD_DIR } from './routes/files';
+import { parseRecurrenceRule, computeRecurrenceDates } from './recurrence';
 
 // A minimal JSON Schema object for a tool's parameters.
 export interface JsonSchema {
@@ -816,7 +817,7 @@ export const aiTools: AiTool[] = [
   },
   {
     name: 'create_meeting',
-    description: 'Schedule a new calendar meeting.',
+    description: 'Schedule a new calendar meeting. Optionally repeat it on a schedule (daily/weekly/monthly/yearly, with an interval and a total occurrence count) to create a whole series in one call.',
     parameters: {
       type: 'object',
       properties: {
@@ -828,6 +829,16 @@ export const aiTools: AiTool[] = [
         end_time: { type: 'string', description: 'HH:MM (24-hour)' },
         all_day: { type: 'boolean' },
         color: { type: 'string', description: 'Hex color string (e.g. #3b82f6)' },
+        repeat: {
+          type: 'object',
+          description: 'Omit for a one-off meeting. When set, creates a recurring series starting on `date`.',
+          properties: {
+            freq: { type: 'string', enum: ['daily', 'weekly', 'monthly', 'yearly'] },
+            interval: { type: 'number', description: 'Repeat every N units of freq (e.g. freq=weekly, interval=2 → every 2 weeks). Default 1.' },
+            count: { type: 'number', description: 'Total number of occurrences including the first, 2-104.' },
+          },
+          required: ['freq', 'count'],
+        },
       },
       required: ['title', 'date'],
     },
@@ -837,13 +848,20 @@ export const aiTools: AiTool[] = [
       if (!title || !date) return fail('title and date are required');
       const allDay = args.all_day === true;
       const meetingId = `mt_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
-      await query(
-        `INSERT INTO meetings (id, user_id, title, description, location, meeting_date, start_time, end_time, all_day, color)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [meetingId, userId, title, str(args.description) ?? null, str(args.location) ?? null, date, allDay ? null : (str(args.start_time) ?? null), allDay ? null : (str(args.end_time) ?? null), allDay, str(args.color) ?? null]
-      );
+      const rule = parseRecurrenceRule(args.repeat);
+      const dates = rule ? computeRecurrenceDates(date, rule) : [date];
+      for (let i = 0; i < dates.length; i++) {
+        const occurrenceId = i === 0 ? meetingId : `mt_${Date.now()}_${Math.floor(Math.random() * 1e6)}_${i}`;
+        await query(
+          `INSERT INTO meetings (id, user_id, title, description, location, meeting_date, start_time, end_time, all_day, color, recurrence_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          [occurrenceId, userId, title, str(args.description) ?? null, str(args.location) ?? null, dates[i], allDay ? null : (str(args.start_time) ?? null), allDay ? null : (str(args.end_time) ?? null), allDay, str(args.color) ?? null, dates.length > 1 ? meetingId : null]
+        );
+      }
       broadcastToUser(userId, 'meetings');
-      return ok(`Scheduled meeting "${title}" on ${date}`, `Scheduled meeting "${title}"`);
+      return dates.length > 1
+        ? ok(`Scheduled ${dates.length} occurrences of "${title}" starting ${date}`, `Scheduled "${title}" (${dates.length}x)`)
+        : ok(`Scheduled meeting "${title}" on ${date}`, `Scheduled meeting "${title}"`);
     },
   },
   {
@@ -885,19 +903,33 @@ export const aiTools: AiTool[] = [
   },
   {
     name: 'delete_meeting',
-    description: 'Delete a calendar meeting.',
+    description: 'Delete a calendar meeting. Set delete_series to remove every occurrence of a recurring series instead of just this one.',
     parameters: {
       type: 'object',
-      properties: { meeting_id: { type: 'string' } },
+      properties: {
+        meeting_id: { type: 'string' },
+        delete_series: { type: 'boolean', description: 'Delete every occurrence in this meeting\'s recurring series, not just this one.' },
+      },
       required: ['meeting_id'],
     },
     handler: async (userId, args) => {
       const id = str(args.meeting_id);
       if (!id) return fail('meeting_id is required');
-      const r = await query<{ title: string }>(`DELETE FROM meetings WHERE id = $1 AND user_id = $2 RETURNING title`, [id, userId]);
+      const r = args.delete_series === true
+        ? await query<{ title: string }>(
+            `DELETE FROM meetings
+             WHERE user_id = $2 AND (
+               id = $1
+               OR recurrence_id = (SELECT recurrence_id FROM meetings WHERE id = $1 AND user_id = $2)
+             ) RETURNING title`,
+            [id, userId]
+          )
+        : await query<{ title: string }>(`DELETE FROM meetings WHERE id = $1 AND user_id = $2 RETURNING title`, [id, userId]);
       if (!r.rows.length) return fail('meeting not found');
       broadcastToUser(userId, 'meetings');
-      return ok(`Deleted meeting "${r.rows[0].title}"`, `Deleted meeting "${r.rows[0].title}"`);
+      return r.rows.length > 1
+        ? ok(`Deleted ${r.rows.length} occurrences of "${r.rows[0].title}"`, `Deleted "${r.rows[0].title}" series`)
+        : ok(`Deleted meeting "${r.rows[0].title}"`, `Deleted meeting "${r.rows[0].title}"`);
     },
   },
   // ───────────────────────────── global search ─────────────────────────────

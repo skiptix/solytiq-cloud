@@ -1299,6 +1299,11 @@ async function runMigrations() {
   // Resource name a CalDAV client assigned to a meeting it created (so GET/PUT/
   // DELETE by that href map back to the right row).
   await pool.query(`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS caldav_uid VARCHAR(255)`);
+  // Recurring meetings: repeat presets (daily/weekly/monthly/yearly) are
+  // materialized into one row per occurrence at creation time, all sharing
+  // the first occurrence's id here — no live RRULE to expand at read time.
+  await pool.query(`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS recurrence_id VARCHAR(100)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS meetings_recurrence_idx ON meetings(recurrence_id) WHERE recurrence_id IS NOT NULL`);
 
   // CalDAV app-specific credentials (email + generated password; only a hash is
   // stored). One per user; regenerating replaces it.
