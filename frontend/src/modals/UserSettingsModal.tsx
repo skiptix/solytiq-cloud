@@ -351,7 +351,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
         onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
       >
         <div
-          style={{ background: '#fff', borderRadius: isMobile ? '16px 16px 0 0' : 22, width: '100%', maxWidth: isMobile ? undefined : 840, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: closing ? 'settingsModalOut 190ms ease-in both' : (isMobile ? 'slideUp 300ms cubic-bezier(0.22,1,0.36,1) both' : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both'), overflow: 'hidden', maxHeight: '95vh', display: 'flex', flexDirection: 'column' }}
+          style={{ background: '#fff', borderRadius: isMobile ? '16px 16px 0 0' : 22, width: '100%', maxWidth: isMobile ? undefined : 1024, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: closing ? 'settingsModalOut 190ms ease-in both' : (isMobile ? 'slideUp 300ms cubic-bezier(0.22,1,0.36,1) both' : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both'), overflow: 'hidden', maxHeight: '95vh', display: 'flex', flexDirection: 'column' }}
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
@@ -369,7 +369,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
 
           {/* Tab bar */}
           <div style={{ padding: '16px 24px 0' }}>
-            <div style={{ display: 'flex', gap: 4, background: '#F5F3FF', borderRadius: 14, padding: 4, overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch', flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, background: '#F5F3FF', borderRadius: 14, padding: 4, overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch', flexShrink: 0 }}>
               {TABS.map(tab => {
                 const active = activeTab === tab.id;
                 return (
