@@ -51,9 +51,9 @@ export default function TemplateSelectStep({ type, onBack, onBlank, onCreatedLis
 
         <div style={{ padding: '16px 24px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <button onClick={onBlank}
-            style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 12, border: '1.5px dashed #d8d2e8', background: '#fcfbff', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#5e4dbb'; e.currentTarget.style.background = '#F5F3FF'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#d8d2e8'; e.currentTarget.style.background = '#fcfbff'; }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 12, border: '1.5px dashed #d8d2e8', background: '#fcfbff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 150ms, background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)', animation: 'menuItemIn 200ms ease both' }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#5e4dbb'; e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#d8d2e8'; e.currentTarget.style.background = '#fcfbff'; e.currentTarget.style.transform = 'translateY(0)'; }}>
             <Icon name="add_circle" size={22} color="#5e4dbb" />
             <div>
               <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22' }}>Start blank</div>
@@ -61,22 +61,22 @@ export default function TemplateSelectStep({ type, onBack, onBlank, onCreatedLis
             </div>
           </button>
 
-          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b0acbe', marginTop: 6 }}>
+          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b0acbe', marginTop: 6, animation: 'menuItemIn 200ms ease 40ms both' }}>
             Or use a template
           </div>
 
           {loading && list.length === 0 ? (
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', padding: '16px 0', textAlign: 'center' }}>Loading templates…</div>
           ) : list.length === 0 ? (
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', padding: '16px 0', textAlign: 'center' }}>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', padding: '16px 0', textAlign: 'center', animation: 'menuItemIn 200ms ease 40ms both' }}>
               No {type} templates yet — save one from the Templates page.
             </div>
           ) : (
-            list.map((t) => (
+            list.map((t, i) => (
               <button key={t.id} onClick={() => setSelected(t)}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 12, border: '1.5px solid #ece8f4', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.color ?? '#5e4dbb'; e.currentTarget.style.background = t.colorBg ?? '#F5F3FF'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#ece8f4'; e.currentTarget.style.background = '#fff'; }}>
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 12, border: '1.5px solid #ece8f4', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'border-color 150ms, background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)', animation: `menuItemIn 200ms ease ${40 + Math.min(i, 6) * 30}ms both` }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.color ?? '#5e4dbb'; e.currentTarget.style.background = t.colorBg ?? '#F5F3FF'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#ece8f4'; e.currentTarget.style.background = '#fff'; e.currentTarget.style.transform = 'translateY(0)'; }}>
                 <div style={{ width: 34, height: 34, borderRadius: 9, background: t.colorBg ?? '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 16 }}>
                   {t.emoji ?? (type === 'list' ? '📋' : '🗓️')}
                 </div>

@@ -59,8 +59,9 @@ function TemplateCardMenu({ template, onRename, onToggleShared, onDelete }: {
   );
 }
 
-function TemplateCard({ template, onUse, onRename, onToggleShared, onDelete }: {
+function TemplateCard({ template, index, onUse, onRename, onToggleShared, onDelete }: {
   template: Template;
+  index: number;
   onUse: () => void;
   onRename: () => void;
   onToggleShared: () => void;
@@ -71,11 +72,12 @@ function TemplateCard({ template, onUse, onRename, onToggleShared, onDelete }: {
   const summary = template.type === 'list'
     ? `${template.summary.sectionCount ?? 0} section${template.summary.sectionCount === 1 ? '' : 's'} · ${template.summary.taskCount ?? 0} task${template.summary.taskCount === 1 ? '' : 's'}`
     : `${template.summary.milestoneCount ?? 0} milestone${template.summary.milestoneCount === 1 ? '' : 's'}`;
+  const delay = Math.min(index * 40, 400);
 
   return (
-    <div style={{ background: '#fff', border: '1.5px solid #ece8f4', borderRadius: 16, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'all 150ms' }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.06)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#ece8f4'; e.currentTarget.style.boxShadow = 'none'; }}>
+    <div style={{ background: '#fff', border: '1.5px solid #ece8f4', borderRadius: 16, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'border-color 200ms, box-shadow 200ms, transform 200ms cubic-bezier(0.34,1.56,0.64,1)', animation: `cardIn 340ms cubic-bezier(0.34,1.56,0.64,1) ${delay}ms both` }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.boxShadow = `0 8px 20px ${accent}1a`; e.currentTarget.style.transform = 'translateY(-3px)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#ece8f4'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <div style={{ width: 40, height: 40, borderRadius: 11, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 19 }}>
           {template.emoji ?? (template.type === 'list' ? '📋' : '🗓️')}
@@ -110,7 +112,11 @@ function TemplateCard({ template, onUse, onRename, onToggleShared, onDelete }: {
           )}
         </div>
         <button onClick={onUse}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#fff', background: accent, border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#fff', background: accent, border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', transition: 'transform 150ms cubic-bezier(0.34,1.56,0.64,1), filter 150ms' }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.filter = 'brightness(1.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.filter = 'none'; }}
+          onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.96)'; }}
+          onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}>
           <Icon name="add" size={14} color="#fff" /> Use
         </button>
       </div>
@@ -164,9 +170,9 @@ export default function TemplatesScreen() {
             </div>
           </div>
           <button onClick={() => setShowCreate(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 10, padding: '9px 16px', cursor: 'pointer' }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = '#4f3fa8'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = '#5e4dbb'; }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 10, padding: '9px 16px', cursor: 'pointer', transition: 'background 180ms, transform 180ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 180ms' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = '#4f3fa8'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(94,77,187,0.3)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = '#5e4dbb'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
             <Icon name="add" size={16} color="#fff" /> New Template
           </button>
         </div>
@@ -176,7 +182,7 @@ export default function TemplatesScreen() {
           <div style={{ display: 'flex', background: '#f1ecf6', borderRadius: 9999, padding: 3, gap: 2 }}>
             {(['all', 'list', 'timeline'] as const).map((f) => (
               <button key={f} onClick={() => setFilter(f)}
-                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, padding: '6px 14px', borderRadius: 9999, border: 'none', cursor: 'pointer', background: filter === f ? '#5e4dbb' : 'transparent', color: filter === f ? '#fff' : '#787584', transition: 'all 150ms' }}>
+                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, padding: '6px 14px', borderRadius: 9999, border: 'none', cursor: 'pointer', background: filter === f ? '#5e4dbb' : 'transparent', color: filter === f ? '#fff' : '#787584', transform: filter === f ? 'scale(1.04)' : 'scale(1)', transition: 'background 180ms, color 180ms, transform 220ms cubic-bezier(0.34,1.56,0.64,1)' }}>
                 {f === 'all' ? 'All' : f === 'list' ? 'Lists' : 'Timelines'}
               </button>
             ))}
@@ -195,8 +201,10 @@ export default function TemplatesScreen() {
         {loading && templates.length === 0 ? (
           <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', padding: '40px 0', textAlign: 'center' }}>Loading templates…</div>
         ) : filtered.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '60px 20px', color: '#b0acbe' }}>
-            <Icon name="dashboard_customize" size={40} color="#d8d2e8" />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '60px 20px', color: '#b0acbe', animation: 'cardIn 380ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ animation: 'fileDropIconFloat 3s ease-in-out infinite' }}>
+              <Icon name="dashboard_customize" size={40} color="#d8d2e8" />
+            </div>
             <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 600, color: '#787584' }}>
               {templates.length === 0 ? 'No templates yet' : 'No templates match your search'}
             </div>
@@ -208,8 +216,8 @@ export default function TemplatesScreen() {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-            {filtered.map((t) => (
-              <TemplateCard key={t.id} template={t}
+            {filtered.map((t, i) => (
+              <TemplateCard key={t.id} template={t} index={i}
                 onUse={() => setUseTarget(t)}
                 onRename={() => handleRename(t)}
                 onToggleShared={() => update(t.id, { isShared: !t.isShared })}
