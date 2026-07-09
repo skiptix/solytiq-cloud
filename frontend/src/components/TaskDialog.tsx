@@ -239,7 +239,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
   const showOwner = Boolean(isPublic && task.creatorId);
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.note ?? '');
-  const [notesMarkdown, setNotesMarkdown] = useState(task.noteMarkdown ?? false);
   const [deadline, setDeadline] = useState(task.deadline ?? '');
   const [priority, setPriority] = useState<string>(task.priority ?? '');
   const [tag, setTag] = useState(task.badge ?? '');
@@ -314,7 +313,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
     if ((priority || '') !== (task.priority ?? '')) updates.priority = (priority as Task['priority']) || undefined;
     if ((tag || '') !== (task.badge ?? '')) updates.badge = tag || undefined;
     if ((notes || '') !== (task.note ?? '')) updates.note = notes || undefined;
-    if (notesMarkdown !== (task.noteMarkdown ?? false)) updates.noteMarkdown = notesMarkdown;
+    if (!task.noteMarkdown) updates.noteMarkdown = true;
     if (Object.keys(updates).length > 0) onUpdate(task.id, updates);
     onClose();
   };
@@ -617,8 +616,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
               <NotesEditor
                 value={notes}
                 onChange={setNotes}
-                markdown={notesMarkdown}
-                onMarkdownChange={setNotesMarkdown}
                 minHeight={160}
               />
             </div>

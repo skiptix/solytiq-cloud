@@ -304,13 +304,9 @@ export default function SharedTimelinePage() {
                                   </div>
                                 )}
                                 {m.description && (
-                                  m.descriptionMarkdown ? (
-                                    <div style={{ marginTop: 6, display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                      <MarkdownView source={m.description} fontSize={13} />
-                                    </div>
-                                  ) : (
-                                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#484552', lineHeight: 1.55, marginTop: 6, whiteSpace: 'pre-wrap', display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{m.description}</div>
-                                  )
+                                  <div style={{ marginTop: 6, display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                    <MarkdownView source={m.description} fontSize={13} />
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -389,9 +385,7 @@ function MilestonePreview({ milestone: m, onClose }: { milestone: SharedMileston
           {m.description && (
             <div>
               <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</div>
-              {m.descriptionMarkdown
-                ? <MarkdownView source={m.description} />
-                : <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', lineHeight: 1.7, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{m.description}</div>}
+              <MarkdownView source={m.description} />
             </div>
           )}
         </div>

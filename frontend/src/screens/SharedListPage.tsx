@@ -358,9 +358,7 @@ function ItemPreview({ task, accent, onClose }: { task: SharedTask; accent: stri
           {task.note && (
             <div>
               <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</div>
-              {task.noteMarkdown
-                ? <MarkdownView source={task.note} />
-                : <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', lineHeight: 1.7, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{task.note}</div>}
+              <MarkdownView source={task.note} />
             </div>
           )}
         </div>
