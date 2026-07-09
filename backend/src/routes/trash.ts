@@ -294,9 +294,9 @@ router.post('/:trashId/restore', async (req: Request, res: Response) => {
     const restored = await withTransaction(async (client) => {
       const taskResult = await client.query<TaskRow>(
         `INSERT INTO tasks
-           (id, user_id, title, note, checked, deadline, time_val, priority, badge,
+           (id, user_id, title, note, note_markdown, checked, deadline, time_val, priority, badge,
             source, list_id, section_id, position, workspace_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         VALUES ($1, $2, $3, $4, $15, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          ON CONFLICT (id) DO UPDATE
            SET source = EXCLUDED.source,
                list_id = EXCLUDED.list_id,
@@ -319,6 +319,7 @@ router.post('/:trashId/restore', async (req: Request, res: Response) => {
           sectionId,
           d.position    ?? 0,
           workspaceId,
+          d.noteMarkdown === true,
         ]
       );
       await client.query('DELETE FROM trash WHERE id = $1', [trashId]);
@@ -458,7 +459,7 @@ router.post('/lists/:trashId/restore', async (req: Request, res: Response) => {
       for (const row of linkedRes.rows) survivingLinked.add(row.id);
     }
 
-    const TASK_COLS = 15;
+    const TASK_COLS = 16;
     for (const section of sections) {
       sectionValues.push(
         section.id, d.id, section.label, section.emoji ?? null, section.position ?? 0
@@ -469,7 +470,7 @@ router.post('/lists/:trashId/restore', async (req: Request, res: Response) => {
         const linked = (task.linkedListId ?? task.linked_list_id) as string | null | undefined;
         const linkedOk = typeof linked === 'string' && survivingLinked.has(linked);
         taskValues.push(
-          task.id, req.userId, task.title, task.note ?? null, task.checked ?? false,
+          task.id, req.userId, task.title, task.note ?? null, task.noteMarkdown === true, task.checked ?? false,
           task.deadline ?? null, task.time ?? null, task.priority ?? null, task.badge ?? null,
           d.id, section.id, task.position ?? 0,
           linkedOk ? linked : null,
@@ -519,14 +520,14 @@ router.post('/lists/:trashId/restore', async (req: Request, res: Response) => {
 
           const placeholders = Array.from({ length: batchTasks }, (_, idx) => {
             const offset = idx * itemsPerRow;
-            return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, 'list', $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15})`;
+            return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, 'list', $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16})`;
           }).join(', ');
 
           // Upsert: recapture legacy orphaned task rows (list deletion used to
           // SET NULL their list_id instead of deleting them) so a restored list
           // gets its items back instead of conflicting into an empty list.
           await client.query(
-            `INSERT INTO tasks (id, user_id, title, note, checked, deadline, time_val, priority, badge, source, list_id, section_id, position, linked_list_id, linked_list_type, workspace_id)
+            `INSERT INTO tasks (id, user_id, title, note, note_markdown, checked, deadline, time_val, priority, badge, source, list_id, section_id, position, linked_list_id, linked_list_type, workspace_id)
              VALUES ${placeholders}
              ON CONFLICT (id) DO UPDATE
                SET source = EXCLUDED.source,
@@ -657,11 +658,11 @@ router.post('/timelines/:trashId/restore', async (req: Request, res: Response) =
       for (const m of milestones) {
         const ms = ['upcoming', 'in-progress', 'done'].includes(m.status as string) ? m.status : 'upcoming';
         await client.query(
-          `INSERT INTO milestones (id, timeline_id, title, description, milestone_date, time_val, status, emoji, color, position)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `INSERT INTO milestones (id, timeline_id, title, description, description_markdown, milestone_date, time_val, status, emoji, color, position)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            ON CONFLICT (id) DO NOTHING`,
           [
-            m.id, d.id, m.title, m.description ?? null, m.date ?? null, m.time ?? null,
+            m.id, d.id, m.title, m.description ?? null, m.descriptionMarkdown === true, m.date ?? null, m.time ?? null,
             ms, m.emoji ?? null, m.color ?? null, m.position ?? 0,
           ]
         );
@@ -862,12 +863,12 @@ router.post('/milestones/:trashId/restore', async (req: Request, res: Response) 
     const ms = ['upcoming', 'in-progress', 'done'].includes(d.status as string) ? d.status : 'upcoming';
     await withTransaction(async (client) => {
       await client.query(
-        `INSERT INTO milestones (id, timeline_id, title, description, milestone_date, time_val, status, emoji, color, position)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `INSERT INTO milestones (id, timeline_id, title, description, description_markdown, milestone_date, time_val, status, emoji, color, position)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          ON CONFLICT (id) DO NOTHING`,
         [
           d.id ?? trashRow.milestone_id, trashRow.timeline_id, d.title ?? '', d.description ?? null,
-          d.date ?? null, d.time ?? null, ms, d.emoji ?? null, d.color ?? null, d.position ?? 0,
+          d.descriptionMarkdown === true, d.date ?? null, d.time ?? null, ms, d.emoji ?? null, d.color ?? null, d.position ?? 0,
         ]
       );
       await client.query('DELETE FROM trash_milestones WHERE id = $1', [trashId]);

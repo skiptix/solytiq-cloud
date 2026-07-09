@@ -8,6 +8,8 @@ export interface Task {
   priority?: 'High' | 'Medium' | 'Low';
   badge?: string;
   note?: string;
+  /** When true, `note` is authored as Markdown and rendered formatted. */
+  noteMarkdown?: boolean;
   workspaceId?: string;
   _source?: 'dash' | 'list';
   _listId?: string;
@@ -89,6 +91,8 @@ export interface Milestone {
   timelineId?: string;
   title: string;
   description?: string | null;
+  /** When true, `description` is authored as Markdown and rendered formatted. */
+  descriptionMarkdown?: boolean;
   date?: string | null;      // YYYY-MM-DD
   time?: string | null;      // HH:MM
   status: MilestoneStatus;

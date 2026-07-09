@@ -33,6 +33,7 @@ interface TaskRowLike {
   user_id: string;
   title: string;
   note: string | null;
+  note_markdown: boolean;
   checked: boolean;
   deadline: string | null;
   time_val: string | null;
@@ -76,6 +77,7 @@ interface MilestoneRowLike {
   timeline_id: string;
   title: string;
   description: string | null;
+  description_markdown: boolean;
   milestone_date: string | null;
   time_val: string | null;
   status: string;
@@ -145,6 +147,7 @@ function taskData(t: TaskRowLike) {
     creatorId:      t.user_id,
     title:          t.title,
     note:           t.note,
+    noteMarkdown:   t.note_markdown ?? false,
     checked:        t.checked,
     deadline:       t.deadline,
     time:           t.time_val,
@@ -269,6 +272,7 @@ export async function snapshotTimelineToTrash(exec: QueryExec, timelineId: strin
       timelineId:  m.timeline_id,
       title:       m.title,
       description: m.description,
+      descriptionMarkdown: m.description_markdown ?? false,
       date:        m.milestone_date,
       time:        m.time_val,
       status:      m.status,

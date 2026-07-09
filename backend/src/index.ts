@@ -431,11 +431,11 @@ app.get('/api/share/list/:token/content', async (req, res) => {
       [list.id]
     );
     const tasksRes = await dbQuery<{
-      id: string; title: string; checked: boolean; note: string | null; deadline: string | null;
+      id: string; title: string; checked: boolean; note: string | null; note_markdown: boolean; deadline: string | null;
       time_val: string | null; priority: string | null; badge: string | null; section_id: string | null;
       position: number; linked_list_id: string | null; linked_list_type: string | null;
     }>(
-      `SELECT id, title, checked, note, deadline, time_val, priority, badge, section_id, position, linked_list_id, linked_list_type
+      `SELECT id, title, checked, note, note_markdown, deadline, time_val, priority, badge, section_id, position, linked_list_id, linked_list_type
        FROM tasks WHERE list_id = $1 AND source = 'list' ORDER BY position ASC, created_at ASC`,
       [list.id]
     );
@@ -478,6 +478,7 @@ app.get('/api/share/list/:token/content', async (req, res) => {
           title: t.title,
           checked: t.checked,
           note: t.note,
+          noteMarkdown: t.note_markdown ?? false,
           deadline: t.deadline,
           time: t.time_val,
           priority: t.priority,
@@ -532,10 +533,10 @@ app.get('/api/share/timeline/:token/content', async (req, res) => {
     }
 
     const msRes = await dbQuery<{
-      id: string; title: string; description: string | null; milestone_date: string | null;
+      id: string; title: string; description: string | null; description_markdown: boolean; milestone_date: string | null;
       time_val: string | null; status: string; emoji: string | null; color: string | null; position: number;
     }>(
-      `SELECT id, title, description, milestone_date, time_val, status, emoji, color, position
+      `SELECT id, title, description, description_markdown, milestone_date, time_val, status, emoji, color, position
        FROM milestones WHERE timeline_id = $1 ORDER BY milestone_date ASC NULLS LAST, position ASC, created_at ASC`,
       [tl.id]
     );
@@ -546,6 +547,7 @@ app.get('/api/share/timeline/:token/content', async (req, res) => {
         id: m.id,
         title: m.title,
         description: m.description,
+        descriptionMarkdown: m.description_markdown ?? false,
         date: m.milestone_date,
         time: m.time_val,
         status: m.status,
@@ -962,6 +964,9 @@ async function runMigrations() {
       EXECUTE FUNCTION update_tasks_updated_at()
   `);
 
+  // Markdown mode for item notes
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS note_markdown BOOLEAN NOT NULL DEFAULT false`);
+
   // Sublists & linked lists
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS linked_list_id VARCHAR(100) REFERENCES lists(id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS linked_list_type VARCHAR(10) CHECK (linked_list_type IN ('sublist', 'link'))`);
@@ -1119,6 +1124,9 @@ async function runMigrations() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS milestones_timeline_idx ON milestones(timeline_id)`);
+
+  // Markdown mode for milestone descriptions
+  await pool.query(`ALTER TABLE milestones ADD COLUMN IF NOT EXISTS description_markdown BOOLEAN NOT NULL DEFAULT false`);
 
   await pool.query(`
     UPDATE timelines t

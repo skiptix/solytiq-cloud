@@ -43,6 +43,7 @@ interface MilestoneRow {
   timeline_id: string;
   title: string;
   description: string | null;
+  description_markdown: boolean;
   milestone_date: string | null;
   time_val: string | null;
   status: string;
@@ -63,6 +64,7 @@ function sanitizeMilestone(m: MilestoneRow) {
     timelineId:  m.timeline_id,
     title:       m.title,
     description: m.description,
+    descriptionMarkdown: m.description_markdown ?? false,
     date:        m.milestone_date,
     time:        m.time_val,
     status:      m.status,
@@ -249,7 +251,7 @@ router.get('/upcoming', async (req: Request, res: Response) => {
     const result = await query<
       MilestoneRow & { timeline_name: string; timeline_emoji: string | null; timeline_color: string | null }
     >(
-      `SELECT m.id, m.timeline_id, m.title, m.description, m.milestone_date, m.time_val, m.status, m.emoji, m.color, m.position, m.created_at,
+      `SELECT m.id, m.timeline_id, m.title, m.description, m.description_markdown, m.milestone_date, m.time_val, m.status, m.emoji, m.color, m.position, m.created_at,
               t.name AS timeline_name, t.emoji AS timeline_emoji, t.color AS timeline_color
        FROM milestones m
        JOIN timelines t ON m.timeline_id = t.id
@@ -580,10 +582,11 @@ async function assertTimelineOwner(timelineId: string, req: Request): Promise<'o
 router.post('/:timelineId/milestones', async (req: Request, res: Response) => {
   try {
     const { timelineId } = req.params;
-    const { id, title, description, date, time, status, emoji, color } = req.body as {
+    const { id, title, description, descriptionMarkdown, date, time, status, emoji, color } = req.body as {
       id?: string;
       title?: string;
       description?: string;
+      descriptionMarkdown?: boolean;
       date?: string;
       time?: string;
       status?: string;
@@ -610,10 +613,10 @@ router.post('/:timelineId/milestones', async (req: Request, res: Response) => {
     const nextPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
 
     const result = await query<MilestoneRow>(
-      `INSERT INTO milestones (id, timeline_id, title, description, milestone_date, time_val, status, emoji, color, position)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO milestones (id, timeline_id, title, description, description_markdown, milestone_date, time_val, status, emoji, color, position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
-      [milestoneId, timelineId, title, description ?? null, date ?? null, time ?? null, validStatus, emoji ?? null, color ?? null, nextPos]
+      [milestoneId, timelineId, title, description ?? null, descriptionMarkdown === true, date ?? null, time ?? null, validStatus, emoji ?? null, color ?? null, nextPos]
     );
 
     res.status(201).json({ milestone: sanitizeMilestone(result.rows[0]) });
@@ -628,9 +631,10 @@ router.post('/:timelineId/milestones', async (req: Request, res: Response) => {
 router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
   try {
     const { milestoneId } = req.params;
-    const { title, description, date, time, status, emoji, color, position } = req.body as {
+    const { title, description, descriptionMarkdown, date, time, status, emoji, color, position } = req.body as {
       title?: string;
       description?: string;
+      descriptionMarkdown?: boolean;
       date?: string | null;
       time?: string | null;
       status?: string;
@@ -664,6 +668,7 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
       `UPDATE milestones
        SET title          = COALESCE($1, title),
            description     = CASE WHEN $2 THEN $3 ELSE description END,
+           description_markdown = COALESCE($15, description_markdown),
            milestone_date  = CASE WHEN $4 THEN $5 ELSE milestone_date END,
            time_val        = CASE WHEN $6 THEN $7 ELSE time_val END,
            status          = COALESCE($8, status),
@@ -682,6 +687,7 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
         updateColor, color ?? null,
         position ?? null,
         milestoneId,
+        typeof descriptionMarkdown === 'boolean' ? descriptionMarkdown : null,
       ]
     );
 

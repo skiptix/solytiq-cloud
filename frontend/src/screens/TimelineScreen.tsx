@@ -20,9 +20,10 @@ import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
 import CalendarPicker from '../components/CalendarPicker';
 import TimePicker from '../components/TimePicker';
-import CopyButton from '../components/CopyButton';
 import CreatorBubble from '../components/CreatorBubble';
-import { FilePicker, AttachBadge } from '../components/TaskDialog';
+import NotesEditor from '../components/NotesEditor';
+import MarkdownView from '../components/MarkdownView';
+import { FilePicker, AttachBadge, useAttachmentDrop, AttachDropOverlay } from '../components/TaskDialog';
 import { DeleteConfirmModal } from '../components/TaskItem';
 import useMembersStore from '../store/useMembersStore';
 
@@ -99,6 +100,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
   const [date, setDate] = useState(initial?.date ?? '');
   const [time, setTime] = useState(initial?.time ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
+  const [descriptionMarkdown, setDescriptionMarkdown] = useState(initial?.descriptionMarkdown ?? false);
   const [status, setStatus] = useState<MilestoneStatus>(initial?.status ?? 'upcoming');
   const [emoji, setEmoji] = useState(initial?.emoji ?? '📍');
   const [color, setColor] = useState<string | null>(initial?.color ?? null);
@@ -168,6 +170,14 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
     } catch { /* silent */ } finally { setUploadProgress(null); }
   };
 
+  const handleFilesUpload = async (files: File[]) => {
+    for (const f of files) await handleFileUpload(f);
+  };
+
+  // Drag & drop only works in edit mode — a new, unsaved milestone has nothing
+  // to attach files to yet.
+  const { dragging, dropHandlers } = useAttachmentDrop(handleFilesUpload, Boolean(milestoneId) && uploadProgress === null);
+
   const handleLinkFile = async (sf: SharedFile) => {
     if (!milestoneId) return;
     try {
@@ -201,6 +211,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
       date: date,
       time: time || null,
       description: description.trim() || null,
+      descriptionMarkdown,
       status,
       emoji: emoji || null,
       color: color ?? null,
@@ -215,7 +226,10 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
     <div onClick={onClose}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : '24px 20px', animation: 'backdropIn 200ms ease both' }}>
       <div onClick={e => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: isMobile ? '16px 16px 0 0' : 18, width: '100%', maxWidth: 800, maxHeight: isMobile ? '94vh' : '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.08)', animation: isMobile ? 'slideUp 280ms cubic-bezier(0.22,1,0.36,1) both' : 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+        {...dropHandlers}
+        style={{ background: '#fff', borderRadius: isMobile ? '16px 16px 0 0' : 18, width: '100%', maxWidth: 800, maxHeight: isMobile ? '94vh' : '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: '0 32px 80px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.08)', animation: isMobile ? 'slideUp 280ms cubic-bezier(0.22,1,0.36,1) both' : 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+
+        <AttachDropOverlay visible={dragging} subtitle="Files will be uploaded and attached to this milestone" />
 
         {/* Accent stripe */}
         <div style={{ height: 3, background: effectiveAccent, flexShrink: 0, transition: 'background 200ms' }} />
@@ -330,12 +344,13 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
 
           {/* Notes */}
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</div>
-              {description.trim() && <CopyButton text={description} title="Copy notes to clipboard" />}
-            </div>
-            <textarea value={description ?? ''} onChange={e => setDescription(e.target.value)} placeholder="Add notes, context, or any details…" rows={4}
-              style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#484552', background: 'transparent', border: 'none', outline: 'none', resize: 'vertical', lineHeight: 1.75, padding: 0, minHeight: 90 }} />
+            <NotesEditor
+              value={description ?? ''}
+              onChange={setDescription}
+              markdown={descriptionMarkdown}
+              onMarkdownChange={setDescriptionMarkdown}
+              minHeight={90}
+            />
           </div>
 
           {/* Attachments — only once the milestone exists (edit mode) */}
@@ -547,6 +562,7 @@ export default function TimelineScreen() {
       date: data.date ?? null,
       time: data.time ?? null,
       description: data.description ?? null,
+      descriptionMarkdown: data.descriptionMarkdown ?? false,
       status: (data.status as MilestoneStatus) ?? 'upcoming',
       emoji: data.emoji ?? null,
       color: data.color ?? null,
@@ -554,7 +570,7 @@ export default function TimelineScreen() {
     };
     updateStoreMilestones(ms => [...ms, optimistic]);
     setAdding(false);
-    apiCreateMilestone(timeline.id, { id, title: optimistic.title, date: optimistic.date, time: optimistic.time, description: optimistic.description, status: optimistic.status, emoji: optimistic.emoji, color: optimistic.color })
+    apiCreateMilestone(timeline.id, { id, title: optimistic.title, date: optimistic.date, time: optimistic.time, description: optimistic.description, descriptionMarkdown: optimistic.descriptionMarkdown, status: optimistic.status, emoji: optimistic.emoji, color: optimistic.color })
       .catch(() => loadFromApi());
   };
 
@@ -719,7 +735,13 @@ export default function TimelineScreen() {
                             </div>
                           )}
                           {m.description && layout !== 'compact' && (
-                            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#5a5664', marginTop: 6, lineHeight: 1.55, whiteSpace: 'pre-wrap', display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{m.description}</div>
+                            m.descriptionMarkdown ? (
+                              <div style={{ marginTop: 6, display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                <MarkdownView source={m.description} fontSize={13} />
+                              </div>
+                            ) : (
+                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#5a5664', marginTop: 6, lineHeight: 1.55, whiteSpace: 'pre-wrap', display: '-webkit-box', WebkitLineClamp: 6, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{m.description}</div>
+                            )
                           )}
                         </div>
                         {isOwner && (
