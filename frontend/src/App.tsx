@@ -6,6 +6,7 @@ import useAppStore from './store/useAppStore';
 import useSyncStore from './store/useSyncStore';
 import useMembersStore from './store/useMembersStore';
 import useWorkspaceStore from './store/useWorkspaceStore';
+import useInstalledAppsStore from './store/useInstalledAppsStore';
 import { apiCheckSetupRequired, connectSSE, disconnectSSE, setUnauthorizedHandler } from './api/client';
 
 // Delta-sync engine is on by default; set VITE_SYNC_ENGINE=0 to fall back to the
@@ -75,6 +76,9 @@ function AppLayout() {
   const [addWizardMode, setAddWizardMode] = useState<'list' | 'timeline' | undefined>(undefined);
   const isMobile = useMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { installedApps, loaded: appsLoaded } = useInstalledAppsStore();
+  const gpsInstalled = installedApps.includes('gps');
+  const filesInstalled = installedApps.includes('files');
 
   // "New list" shortcut — jumps straight into list creation instead of the
   // chooser the sidebar's "Add" button opens.
@@ -327,12 +331,12 @@ function AppLayout() {
               <Route path="/dashboard" element={<DashboardScreen />} />
               <Route path="/folder/:folderId" element={<FolderDashboardScreen />} />
               <Route path="/calendar" element={<CalendarScreen />} />
-              <Route path="/files" element={<FilesScreen />} />
+              <Route path="/files" element={!appsLoaded ? null : filesInstalled ? <FilesScreen /> : <Navigate to="/dashboard" replace />} />
               <Route path="/list/:listId" element={<ListScreen />} />
               <Route path="/timeline/:timelineId" element={<TimelineScreen />} />
               <Route path="/settings" element={<SettingsScreen />} />
               <Route path="/templates" element={<TemplatesScreen />} />
-              <Route path="/gps" element={<GPSScreen />} />
+              <Route path="/gps" element={!appsLoaded ? null : gpsInstalled ? <GPSScreen /> : <Navigate to="/dashboard" replace />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </div>
@@ -404,10 +408,21 @@ function AppLayout() {
 export default function App() {
   const { loggedIn, adminRegistered, isAdmin } = useAuthStore();
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
+  const { installedApps, loaded: appsLoaded, load: loadInstalledApps } = useInstalledAppsStore();
 
   useEffect(() => {
     apiCheckSetupRequired().then(r => setSetupRequired(r.required)).catch(() => setSetupRequired(!adminRegistered));
   }, [adminRegistered]);
+
+  // Loaded once per session as soon as the user is signed in — every route
+  // that gates on an app's installed state reads from this store rather than
+  // fetching its own copy (including the un-nested /gps/:id/edit route below,
+  // which sits outside AppLayout).
+  useEffect(() => {
+    if (loggedIn) loadInstalledApps();
+  }, [loggedIn, loadInstalledApps]);
+
+  const gpsInstalled = installedApps.includes('gps');
 
   return (
     <Routes>
@@ -419,7 +434,11 @@ export default function App() {
       <Route path="/setup" element={loggedIn ? <Navigate to="/dashboard" replace /> : <SetupWizard />} />
       <Route path="/admin-reset" element={loggedIn ? <Navigate to="/dashboard" replace /> : <AdminPasswordResetScreen />} />
       <Route path="/nuke" element={loggedIn && isAdmin ? <NukeScreen /> : <Navigate to={loggedIn ? '/dashboard' : '/login'} replace />} />
-      <Route path="/gps/:id/edit" element={loggedIn ? <GPSEditScreen /> : <Navigate to="/login" replace />} />
+      <Route path="/gps/:id/edit" element={
+        !loggedIn ? <Navigate to="/login" replace /> :
+        !appsLoaded ? null :
+        gpsInstalled ? <GPSEditScreen /> : <Navigate to="/dashboard" replace />
+      } />
       <Route path="/*" element={
         <Protected>
           <AppLayout />

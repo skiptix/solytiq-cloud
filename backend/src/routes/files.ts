@@ -5,6 +5,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { query } from '../db';
 import { authenticate } from '../middleware';
+import { requireAppInstalled } from '../appsRegistry';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 
@@ -87,6 +88,7 @@ async function getUserQuota(): Promise<number> {
 
 // ── Authenticated routes ──────────────────────────────────────────
 router.use(authenticate);
+router.use(requireAppInstalled('files'));
 
 // GET /api/files/storage
 router.get('/storage', async (req: Request, res: Response) => {

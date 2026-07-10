@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import useAuthStore from '../store/useAuthStore';
 import useShortcutsStore from '../store/useShortcutsStore';
+import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import { apiUpdateProfile, apiUploadProfileImage, apiUploadFile } from '../api/client';
 import UserSettingsModal from '../modals/UserSettingsModal';
 import CommandPalette from './CommandPalette';
@@ -28,6 +29,9 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
 
   // Profile state
   const { username, email, fullName, profileImage, isAdmin, setProfile, signOut } = useAuthStore();
+  const installedApps = useInstalledAppsStore(s => s.installedApps);
+  const gpsInstalled = installedApps.includes('gps');
+  const filesInstalled = installedApps.includes('files');
   const [profileOpen, setProfileOpen] = useState(false);
   const profileDropRef = useRef<HTMLDivElement>(null);
   const [avatarHover, setAvatarHover] = useState(false);
@@ -334,8 +338,8 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
             <Icon name="calendar_month" size={17} color="#787584" />
           </button>
 
-          {/* GPS Routes button — desktop only (available via sidebar on mobile) */}
-          {!isMobile && (
+          {/* GPS Routes button — desktop only, hidden until an admin installs the app */}
+          {!isMobile && gpsInstalled && (
             <button
               onClick={() => onNavigate('/gps')}
               title="GPS Routes"
@@ -347,8 +351,8 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
             </button>
           )}
 
-          {/* Files button + drag-to-upload — desktop only */}
-          {!isMobile && <div
+          {/* Files button + drag-to-upload — desktop only, hidden until an admin installs the app */}
+          {!isMobile && filesInstalled && <div
             style={{ position: 'relative' }}
             onDragEnter={e => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setFileDropHover(true); } }}
             onDragLeave={e => {

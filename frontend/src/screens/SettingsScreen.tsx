@@ -7,7 +7,9 @@ import useAIStore from '../store/useAIStore';
 import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiUpdateAppSettingsMcp, apiUpdateAppSettingsMobile, apiGetAIUsage, apiGetAdminReadApiKeys, apiRevokeAdminReadApiKey, type AdminReadApiKey, type AIUsageDay, type AIUsageModel, type AIUsageTotals } from '../api/client';
 import Icon from '../components/Icon';
 import AdminApiKeyWizard from '../modals/AdminApiKeyWizard';
+import AppsStoreModal from '../modals/AppsStoreModal';
 import { featureForScope } from '../modals/adminApiFeatures';
+import useInstalledAppsStore from '../store/useInstalledAppsStore';
 
 interface UserEntry {
   id: string;
@@ -136,6 +138,11 @@ export default function SettingsScreen() {
   // System storage state
   const [storage, setStorage] = useState<{ total: number; used: number; available: number } | null>(null);
   const [storageLoading, setStorageLoading] = useState(false);
+
+  // Discover Apps dialog
+  const [showAppsStore, setShowAppsStore] = useState(false);
+  const installedApps = useInstalledAppsStore(s => s.installedApps);
+  const loadInstalledApps = useInstalledAppsStore(s => s.load);
 
   // Storage quota settings
   const [quotaGb, setQuotaGb] = useState('');
@@ -611,6 +618,29 @@ export default function SettingsScreen() {
             {/* ── System Tab ── */}
             {activeTab === 'system' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {/* Apps */}
+                {sectionLabel('Apps')}
+                <div style={card}>
+                  <div style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Installed apps</div>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>
+                        {installedApps.length === 0 ? 'No optional apps installed yet.' : `${installedApps.length} app${installedApps.length === 1 ? '' : 's'} installed.`}
+                        {' '}Optional features stay hidden from every user until you install them here.
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowAppsStore(true)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, border: 'none', background: '#5e4dbb', color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0, boxShadow: '0 4px 14px rgba(94,77,187,0.28)' }}
+                      onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(0.92)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.filter = 'none'; }}
+                    >
+                      <Icon name="apps" size={16} color="#fff" />
+                      Discover Apps
+                    </button>
+                  </div>
+                </div>
+
                 {/* Disk Storage */}
                 {sectionLabel('Disk Storage')}
                 <div style={card}>
@@ -1664,6 +1694,11 @@ export default function SettingsScreen() {
           onClose={() => setShowApiKeyWizard(false)}
           onCreated={key => setApiKeys(prev => [key, ...prev])}
         />
+      )}
+
+      {/* ── Discover Apps ── */}
+      {showAppsStore && (
+        <AppsStoreModal onClose={() => { setShowAppsStore(false); loadInstalledApps(); }} />
       )}
     </div>
   );
