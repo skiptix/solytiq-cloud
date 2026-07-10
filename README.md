@@ -27,7 +27,9 @@
 - 📂 **Folders & Lists** — Deeply nestable folders and smart lists with custom emojis, colors, and progress tracking.
 - 🗺️ **GPS Tracks & Routing** — Upload, analyze, and map GPX/FIT files directly within your workspace.
 - 📈 **Visual Timelines** — Track project milestones and plan your schedule chronologically.
-- ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via Server-Sent Events.
+- ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via a cursor-based delta-sync engine over Server-Sent Events.
+- 📋 **Templates** — Save user-owned, workspace-agnostic snapshots of list/timeline structures for easy reuse.
+- ⌨️ **Keyboard Shortcuts** — Global shortcut registry with customizable user bindings.
 - 🔒 **Enhanced Security** — Built-in TOTP 2FA support, JWT-based authentication, and hardened security headers.
 - 🤖 **AI Assistant & MCP Server** — A floating AI chat powered by OpenRouter, plus an integrated Model Context Protocol (MCP) server for external AI agents (like Claude) to securely interact with your workspace via OAuth 2.1.
 - 📎 **Cloud File Sharing** — Securely share files (max upload size: 200 MB, Nginx proxy limit: 210 MB) with password protection, expiry dates, and public links.
@@ -146,7 +148,7 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 
 ## 🏗️ Architecture & Core Concepts
 
-- **Version Number** — Bump `v1.28.0` in both places in `frontend/src/components/Sidebar.tsx` on every deploy. Use semantic versioning.
+- **Version Number** — Bump `v1.31.0` in both places in `frontend/src/components/Sidebar.tsx` on every deploy. Use semantic versioning.
 - **Migrations in code, not files** — `runMigrations()` in `index.ts` uses guards and idempotent data heals/seeds.
 - **No ORM** — Raw SQL keeps queries explicit and avoids N+1 pitfalls; use `JOIN` freely. When doing bulk database inserts into PostgreSQL using a dynamic parameter array (e.g. `$1, $2...`), remember to chunk the parameters so you do not exceed PostgreSQL's maximum parameter limit (65535).
 - **Zustand over Redux** — Minimal boilerplate; each store is a standalone module. Stores call the API client directly; components call store actions.
@@ -156,11 +158,15 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **Two distinct notions of "public":**
   1. `is_public` on lists/folders/timelines = **in-app visibility to workspace members**.
   2. `share_enabled` + `share_token` = **anonymous read-only link** for anyone on the internet (no login), optionally password-protected and/or time-limited.
-- **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
+- **Real-time via SSE** — A cursor-based delta-sync engine (`sync_log` outbox) broadcasts refresh signals over `/api/events`; the frontend applies authoritative deltas. There is no WebSocket server.
+- **Templates** — Capture a user-owned, workspace-agnostic snapshot of list/timeline structures to instantiate them recursively.
+- **Keyboard Shortcuts** — Global shortcut registry (`frontend/src/shortcuts/registry.ts`) manages defaults and customizable user bindings, synced across devices.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
 - **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
 - **MCP Server** — Model Context Protocol server over Streamable HTTP. It exposes the shared tool registry to external agents (e.g. the Claude MCP connector) with bearer tokens minted via an OAuth 2.1 connector flow.
+- **Admin Nuke** — Total instance reset feature (`DELETE /api/admin/nuke`) that truncates tables, deletes files, and broadcasts a global SSE frame.
+- **n8n Community Node** — The `n8n/` directory contains the source for the `n8n-nodes-solytiq-cloud` npm package that wraps the instance-wide Admin API.
 - **Shared AI Tool Registry** — `backend/src/aiTools.ts` uses JSON-Schema specs and secure, user-scoped SQL handlers to prevent prompt injection.
 - **Mobile Responsiveness** — Every new component must work correctly on mobile (≥ 390px, e.g. iPhone 15 Pro) with mobile as an adaptive layer on top of desktop.
 - **Task Source Duality** — Tasks have a source duality (`'dash'` or `'list'`) which dictates the appropriate frontend store actions to use (`updateDashTask` vs `updateListTask`).
