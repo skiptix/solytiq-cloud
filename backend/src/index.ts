@@ -1305,6 +1305,20 @@ async function runMigrations() {
   await pool.query(`ALTER TABLE meetings ADD COLUMN IF NOT EXISTS recurrence_id VARCHAR(100)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS meetings_recurrence_idx ON meetings(recurrence_id) WHERE recurrence_id IS NOT NULL`);
 
+  // Meeting invitees — any instance user the organizer invites gets the
+  // meeting on their own calendar too (read-only: only the organizer,
+  // meetings.user_id, can edit/delete/re-invite). No RSVP state; an invitee
+  // either has the row (sees it) or doesn't (removed it / never invited).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS meeting_attendees (
+      meeting_id  VARCHAR(100) NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+      user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (meeting_id, user_id)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS meeting_attendees_user_idx ON meeting_attendees(user_id)`);
+
   // CalDAV app-specific credentials (email + generated password; only a hash is
   // stored). One per user; regenerating replaces it.
   await pool.query(`

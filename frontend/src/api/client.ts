@@ -387,14 +387,17 @@ export const apiGetMeetings = (opts?: { from?: string; to?: string }) => {
   return apiFetch<{ meetings: Meeting[] }>(`/meetings${qs ? `?${qs}` : ''}`);
 };
 
-export const apiCreateMeeting = (data: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt' | 'recurrenceId'> & { id?: string; repeat?: MeetingRecurrenceRule }) =>
+export const apiCreateMeeting = (data: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt' | 'recurrenceId' | 'organizerId' | 'isOwner' | 'attendeeIds'> & { id?: string; repeat?: MeetingRecurrenceRule; inviteeIds?: string[] }) =>
   apiFetch<{ meeting: Meeting; meetings: Meeting[] }>('/meetings', { method: 'POST', body: JSON.stringify(data) });
 
-export const apiUpdateMeeting = (id: string, data: Partial<Meeting>) =>
+export const apiUpdateMeeting = (id: string, data: Partial<Meeting> & { inviteeIds?: string[] }) =>
   apiFetch<{ meeting: Meeting }>(`/meetings/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiDeleteMeeting = (id: string, opts?: { series?: boolean }) =>
   apiFetch<{ success: boolean; deletedCount: number }>(`/meetings/${id}${opts?.series ? '?series=1' : ''}`, { method: 'DELETE' });
+
+export const apiLeaveMeeting = (id: string) =>
+  apiFetch<{ success: boolean }>(`/meetings/${id}/leave`, { method: 'POST' });
 
 // CalDAV connection (Apple Calendar / Thunderbird / … sync)
 export interface CaldavStatus {

@@ -170,7 +170,8 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 | `task_attachments` | Files attached to tasks: `attachment_type` (`upload｜linked`), optional `shared_file_id` |
 | `milestone_attachments` | Files attached to milestones — same shape as `task_attachments` (`milestone_id` FK, `upload｜linked`) |
 | `gps_files` | `file_type` (`gpx｜fit`), `file_path`, `metadata JSONB`, `smoothed`, `route_state JSONB` (Route Planner State v1) |
-| `meetings` | Standalone calendar events (no list/timeline/workspace): `user_id`, `title`, `meeting_date`, `start_time`/`end_time`, `all_day`, `location`, `color`, `caldav_uid` (CalDAV resource mapping) |
+| `meetings` | Standalone calendar events (no list/timeline/workspace), owned by `user_id`: `title`, `meeting_date`, `start_time`/`end_time`, `all_day`, `location`, `color`, `caldav_uid` (CalDAV resource mapping), `recurrence_id` (shared by every occurrence of a repeating series) |
+| `meeting_attendees` | `(meeting_id, user_id)` PK — instance users invited onto a meeting by its organizer; the meeting appears on their calendar too, read-only |
 | `caldav_credentials` | Per-user CalDAV app password: `user_id` PK, `password_hash` (bcrypt), `last_used_at` |
 | `mobile_connections` | One row per signed-in mobile device (Solytiq Cloud iOS app): `user_id`, `device_name`/`device_model`/`os_version`/`app_version`, `created_at`, `last_seen_at`. The row id is embedded in the device's JWT (`connectionId`) so it can be listed and revoked |
 | `trash`, `trash_lists`, `trash_folders`, `trash_timelines` | Soft-delete payloads as JSONB with a 30-day `expires_at` |

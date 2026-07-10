@@ -24,6 +24,7 @@ import { softDeleteListTree, snapshotTimelineToTrash } from './trashUtil';
 import { extractTextFromBuffer } from './fileText';
 import { UPLOAD_DIR } from './routes/files';
 import { parseRecurrenceRule, computeRecurrenceDates } from './recurrence';
+import { resolveInviteeIds, setMeetingAttendees } from './meetingAttendees';
 
 // A minimal JSON Schema object for a tool's parameters.
 export interface JsonSchema {
@@ -839,6 +840,11 @@ export const aiTools: AiTool[] = [
           },
           required: ['freq', 'count'],
         },
+        invitee_usernames: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Usernames of other instance users to invite. The meeting appears on their calendar too. Unknown usernames are silently skipped.',
+        },
       },
       required: ['title', 'date'],
     },
@@ -850,6 +856,11 @@ export const aiTools: AiTool[] = [
       const meetingId = `mt_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
       const rule = parseRecurrenceRule(args.repeat);
       const dates = rule ? computeRecurrenceDates(date, rule) : [date];
+      const usernames = Array.isArray(args.invitee_usernames) ? args.invitee_usernames.filter((x): x is string => typeof x === 'string') : [];
+      const invitees = usernames.length
+        ? (await query<{ id: string }>(`SELECT id FROM users WHERE username = ANY($1::text[])`, [usernames])).rows.map(r => r.id)
+        : [];
+      const resolvedInvitees = await resolveInviteeIds(invitees, userId);
       for (let i = 0; i < dates.length; i++) {
         const occurrenceId = i === 0 ? meetingId : `mt_${Date.now()}_${Math.floor(Math.random() * 1e6)}_${i}`;
         await query(
@@ -857,11 +868,14 @@ export const aiTools: AiTool[] = [
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
           [occurrenceId, userId, title, str(args.description) ?? null, str(args.location) ?? null, dates[i], allDay ? null : (str(args.start_time) ?? null), allDay ? null : (str(args.end_time) ?? null), allDay, str(args.color) ?? null, dates.length > 1 ? meetingId : null]
         );
+        if (resolvedInvitees.length > 0) await setMeetingAttendees(occurrenceId, resolvedInvitees);
       }
       broadcastToUser(userId, 'meetings');
+      for (const inviteeId of resolvedInvitees) broadcastToUser(inviteeId, 'meetings');
+      const invitedNote = resolvedInvitees.length > 0 ? ` and invited ${resolvedInvitees.length} ${resolvedInvitees.length === 1 ? 'person' : 'people'}` : '';
       return dates.length > 1
-        ? ok(`Scheduled ${dates.length} occurrences of "${title}" starting ${date}`, `Scheduled "${title}" (${dates.length}x)`)
-        : ok(`Scheduled meeting "${title}" on ${date}`, `Scheduled meeting "${title}"`);
+        ? ok(`Scheduled ${dates.length} occurrences of "${title}" starting ${date}${invitedNote}`, `Scheduled "${title}" (${dates.length}x)`)
+        : ok(`Scheduled meeting "${title}" on ${date}${invitedNote}`, `Scheduled meeting "${title}"`);
     },
   },
   {
