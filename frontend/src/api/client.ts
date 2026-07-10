@@ -180,7 +180,27 @@ export const apiChangePassword = (currentPassword: string, newPassword: string) 
   apiFetch<{ success: boolean }>('/auth/password', { method: 'PUT', body: JSON.stringify({ currentPassword, newPassword }) });
 
 export const apiGetFeatureFlags = () =>
-  apiFetch<{ twoFAEnabled: boolean; mcpEnabled: boolean; mobileEnabled: boolean }>('/auth/feature-flags');
+  apiFetch<{ twoFAEnabled: boolean; mcpEnabled: boolean; mobileEnabled: boolean; installedApps: string[] }>('/auth/feature-flags');
+
+// ── Apps (Settings → System → Discover Apps) ──────────────────────────────
+export interface AppCatalogEntry {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  accentColor: string;
+  installed: boolean;
+}
+
+export const apiGetAppsCatalog = () =>
+  apiFetch<{ apps: AppCatalogEntry[] }>('/apps');
+
+export const apiInstallApp = (appId: string) =>
+  apiFetch<{ ok: boolean }>(`/apps/${appId}/install`, { method: 'POST' });
+
+export const apiUninstallApp = (appId: string) =>
+  apiFetch<{ ok: boolean }>(`/apps/${appId}/uninstall`, { method: 'POST' });
 
 // ── Mobile app device connections ───────────────────────────────────────────
 export interface MobileConnection {

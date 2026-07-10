@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { LRUCache } from 'lru-cache';
 import { query } from '../db';
 import { authenticate } from '../middleware';
+import { requireAppInstalled } from '../appsRegistry';
 import {
   GpsPoint, WaypointInput, GpsRouteStateV1, ParsedGpxData,
   computeMetadata, buildElevationProfile,
@@ -54,6 +55,7 @@ const upload = multer({
 
 const router = Router();
 router.use(authenticate);
+router.use(requireAppInstalled('gps'));
 
 // ─── Internal types ──────────────────────────────────────────────────────────
 interface GpsFileRow {

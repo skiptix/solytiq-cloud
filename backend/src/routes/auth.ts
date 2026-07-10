@@ -7,6 +7,7 @@ import { generateToken, hashPassword, comparePassword, generatePendingToken, ver
 import { authenticate } from '../middleware';
 import { ensurePersonalWorkspace, wlog } from '../workspaceUtil';
 import { logSetupToken, clearSetupToken } from '../setupToken';
+import { getInstalledAppIds } from '../appsRegistry';
 
 // ---------------------------------------------------------------------------
 // Admin password reset — in-memory, single active code, 15-min TTL
@@ -798,10 +799,12 @@ router.get('/feature-flags', authenticate, async (_req: Request, res: Response) 
       "SELECT key, value FROM app_settings WHERE key IN ('two_fa_feature_enabled', 'mcp_enabled', 'mobile_app_enabled')"
     );
     const map = Object.fromEntries(result.rows.map(r => [r.key, r.value]));
+    const installedApps = await getInstalledAppIds();
     res.json({
       twoFAEnabled:  map['two_fa_feature_enabled'] !== 'false',
       mcpEnabled:    map['mcp_enabled'] !== 'false',
       mobileEnabled: map['mobile_app_enabled'] !== 'false',
+      installedApps,
     });
   } catch (err) {
     console.error('feature-flags error:', err);

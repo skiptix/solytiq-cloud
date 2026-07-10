@@ -34,6 +34,8 @@ import adminReadApiRouter from './routes/adminReadApi';
 import syncRouter from './routes/sync';
 import searchRouter from './routes/search';
 import templatesRouter from './routes/templates';
+import appsRouter from './routes/apps';
+import { isAppInstalled } from './appsRegistry';
 import { startSyncDispatcher, SYNC_CHANNEL } from './syncLog';
 import { getPublicBaseUrl } from './publicUrl';
 import { comparePassword } from './auth';
@@ -197,6 +199,7 @@ app.use('/api/admin-read', adminReadApiRouter);
 app.use('/api/sync',       syncRouter);
 app.use('/api/search',     searchRouter);
 app.use('/api/templates',  templatesRouter);
+app.use('/api/apps',       appsRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
@@ -248,6 +251,7 @@ async function resolveShareFile(token: string): Promise<ShareFileRow | null> {
 // GET /api/share/:token — file info (JSON, no download)
 app.get('/api/share/:token', async (req, res) => {
   try {
+    if (!(await isAppInstalled('files'))) { res.status(404).json({ error: 'File not found' }); return; }
     const file = await resolveShareFile(req.params.token);
     if (!file) { res.status(404).json({ error: 'File not found' }); return; }
     if (!file.is_public) { res.status(403).json({ error: 'This file is private' }); return; }
@@ -286,6 +290,7 @@ app.get('/api/share/:token', async (req, res) => {
 // GET /api/share/:token/download/:fileId — download one file from a shared bundle
 app.get('/api/share/:token/download/:fileId', async (req, res) => {
   try {
+    if (!(await isAppInstalled('files'))) { res.status(404).json({ error: 'File not found' }); return; }
     const { token, fileId } = req.params;
     const pw = (req.query.password ?? '') as string;
     const file = await resolveShareFile(token);
@@ -316,6 +321,7 @@ app.get('/api/share/:token/download/:fileId', async (req, res) => {
 // GET /api/share/:token/download — actual file download
 app.get('/api/share/:token/download', async (req, res) => {
   try {
+    if (!(await isAppInstalled('files'))) { res.status(404).json({ error: 'File not found' }); return; }
     const { token } = req.params;
     const pw = (req.query.password ?? '') as string;
     const file = await resolveShareFile(token);
@@ -1564,6 +1570,18 @@ async function runMigrations() {
   // Per-user keyboard shortcut customizations (overrides only; any action not
   // present here falls back to the frontend registry's default binding).
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS keyboard_shortcuts JSONB NOT NULL DEFAULT '{}'::jsonb`);
+
+  // Admin-installable apps (Settings → System → Discover Apps). The catalog
+  // itself lives in code (appsRegistry.ts); this table just tracks which
+  // ones are currently switched on. Apps start uninstalled — see
+  // requireAppInstalled() for how routes are gated on this.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS installed_apps (
+      app_id       VARCHAR(50) PRIMARY KEY,
+      installed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      installed_by UUID REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
 
   console.log('Database migrations applied.');
 }
