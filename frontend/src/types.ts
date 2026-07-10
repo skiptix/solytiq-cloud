@@ -30,7 +30,8 @@ export interface MeetingRecurrenceRule {
 }
 
 /** A standalone calendar event that belongs to no list/timeline/workspace —
- *  it lives purely on the Calendar and is scoped to the owning user. */
+ *  it lives purely on the Calendar, owned by one user who may invite other
+ *  instance users onto it (see `attendeeIds`). */
 export interface Meeting {
   id: string;
   title: string;
@@ -42,6 +43,9 @@ export interface Meeting {
   allDay?: boolean;
   color?: string | null;
   recurrenceId?: string | null; // shared by every occurrence of a repeating series
+  organizerId?: string;      // meeting owner's user id
+  isOwner?: boolean;         // true when the requesting user is the organizer
+  attendeeIds?: string[];    // other instance users invited onto this meeting
   createdAt?: string;
   updatedAt?: string;
 }

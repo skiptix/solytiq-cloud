@@ -7,14 +7,18 @@ import {
   apiGetTasks, apiGetLists, apiGetTimelines, apiGetMeetings,
   apiCreateTask, apiAddListTask, apiUpdateTask, apiUpdateListTask,
   apiDeleteTask, apiDeleteListTask, apiAddToTrash,
-  apiCreateMeeting, apiUpdateMeeting, apiDeleteMeeting,
+  apiCreateMeeting, apiUpdateMeeting, apiDeleteMeeting, apiLeaveMeeting,
 } from '../api/client';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
 import useSyncStore from '../store/useSyncStore';
+import useMembersStore from '../store/useMembersStore';
+import useAuthStore from '../store/useAuthStore';
 import TaskDialog from '../components/TaskDialog';
 import CalendarPicker from '../components/CalendarPicker';
 import TimePicker from '../components/TimePicker';
+import NotesEditor from '../components/NotesEditor';
+import MarkdownView from '../components/MarkdownView';
 import Icon from '../components/Icon';
 import { useMobile } from '../hooks/useBreakpoint';
 
@@ -133,9 +137,29 @@ interface MeetingModalProps {
   initial: Meeting | null;       // null = creating
   presetDate?: string;
   seriesCount?: number;          // when editing: how many meetings share initial.recurrenceId
-  onSave: (data: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt'>, id?: string, repeat?: MeetingRecurrenceRule) => void;
+  onSave: (data: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt'>, id?: string, repeat?: MeetingRecurrenceRule, inviteeIds?: string[]) => void;
   onDelete?: (id: string, opts?: { series?: boolean }) => void;
   onClose: () => void;
+}
+
+function memberInitials(fullName: string | null | undefined, username: string): string {
+  return (fullName || username || 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+/** Small inline avatar for a member id — initials fallback, lazy-loaded photo. */
+function MemberAvatar({ userId, size = 20 }: { userId: string; size?: number }) {
+  const member = useMembersStore(s => s.members[userId]);
+  const avatar = useMembersStore(s => s.avatars[userId]);
+  const ensureAvatar = useMembersStore(s => s.ensureAvatar);
+  useEffect(() => { if (member?.hasImage) ensureAvatar(userId); }, [userId, member?.hasImage, ensureAvatar]);
+  if (!member) return null;
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', background: 'linear-gradient(135deg, #9d8dff 0%, #5e4dbb 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {avatar
+        ? <img src={avatar} alt={member.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        : <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: size * 0.4, fontWeight: 700, color: '#fff' }}>{memberInitials(member.fullName, member.username)}</span>}
+    </div>
+  );
 }
 
 type RepeatPreset = 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
@@ -166,7 +190,7 @@ function repeatPresetToRule(preset: RepeatPreset, customDays: number, count: num
   }
 }
 
-type PopoverKind = 'date' | 'start' | 'end' | 'repeat';
+type PopoverKind = 'date' | 'start' | 'end' | 'repeat' | 'invite';
 
 function MeetingModal({ initial, presetDate, seriesCount, onSave, onDelete, onClose }: MeetingModalProps) {
   const [title, setTitle] = useState(initial?.title ?? '');
@@ -180,6 +204,14 @@ function MeetingModal({ initial, presetDate, seriesCount, onSave, onDelete, onCl
   const [repeatPreset, setRepeatPreset] = useState<RepeatPreset>('none');
   const [customDays, setCustomDays] = useState(3);
   const [repeatCount, setRepeatCount] = useState(10);
+  const [inviteeIds, setInviteeIds] = useState<string[]>(initial?.attendeeIds ?? []);
+  const [inviteSearch, setInviteSearch] = useState('');
+  const currentUserId = useAuthStore(s => s.userId);
+  const allMembers = useMembersStore(s => s.members);
+  const inviteCandidates = useMemo(
+    () => Object.values(allMembers).filter(m => m.id !== currentUserId),
+    [allMembers, currentUserId]
+  );
   const [showDelete, setShowDelete] = useState(false);
   const [deleteWholeSeries, setDeleteWholeSeries] = useState(false);
 
@@ -192,6 +224,7 @@ function MeetingModal({ initial, presetDate, seriesCount, onSave, onDelete, onCl
   const startBtnRef = useRef<HTMLButtonElement>(null);
   const endBtnRef = useRef<HTMLButtonElement>(null);
   const repeatBtnRef = useRef<HTMLButtonElement>(null);
+  const inviteBtnRef = useRef<HTMLButtonElement>(null);
 
   const openPopover = (kind: PopoverKind, btnRef: React.RefObject<HTMLButtonElement | null>, align: 'left' | 'right' = 'left') => {
     setPopover(p => {
@@ -226,7 +259,7 @@ function MeetingModal({ initial, presetDate, seriesCount, onSave, onDelete, onCl
       location: location.trim() || null,
       description: description.trim() || null,
       color,
-    }, initial?.id, initial ? undefined : repeatPresetToRule(repeatPreset, customDays, repeatCount));
+    }, initial?.id, initial ? undefined : repeatPresetToRule(repeatPreset, customDays, repeatCount), inviteeIds);
   };
 
   const friendlyDate = date
@@ -245,7 +278,12 @@ function MeetingModal({ initial, presetDate, seriesCount, onSave, onDelete, onCl
     cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', textAlign: 'left' as const, boxSizing: 'border-box' as const,
   });
 
-  return (
+  // Portaled to <body> — CalendarScreen is a routed screen, and its
+  // `.page-transition` wrapper (App.tsx) is left with a non-`none` transform
+  // after the pageIn animation, making it a containing block for `position:
+  // fixed` descendants. Without the portal, this modal's backdrop is
+  // clipped to that wrapper and never covers the Sidebar/TopBar.
+  return createPortal(
     // Guard on e.target (not just onClick={onClose}) — the Date/Start/End/Repeat
     // popovers below are portaled to document.body, so their clicks are DOM-detached
     // from this backdrop but still bubble through the React tree to this handler.
@@ -340,6 +378,31 @@ function MeetingModal({ initial, presetDate, seriesCount, onSave, onDelete, onCl
             </div>
           )}
 
+          {/* Invite — other instance users; an invited meeting appears on their calendar too */}
+          <div>
+            <label style={labelStyle}>Invite</label>
+            <button ref={inviteBtnRef} onClick={() => openPopover('invite', inviteBtnRef)} style={triggerStyle(popover === 'invite')}>
+              <Icon name="person_add" size={15} color={inviteeIds.length > 0 ? '#5e4dbb' : '#b0acbe'} />
+              <span style={{ flex: 1 }}>{inviteeIds.length > 0 ? `${inviteeIds.length} invited` : 'Invite others'}</span>
+            </button>
+            {inviteeIds.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {inviteeIds.map(id => (
+                  <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F5F3FF', borderRadius: 9999, padding: '3px 8px 3px 3px' }}>
+                    <MemberAvatar userId={id} size={18} />
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#5e4dbb', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {allMembers[id]?.fullName || allMembers[id]?.username || '…'}
+                    </span>
+                    <button onClick={() => setInviteeIds(ids => ids.filter(x => x !== id))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center' }}>
+                      <Icon name="close" size={11} color="#9d8dff" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Location */}
           <div>
             <label style={labelStyle}>Location</label>
@@ -363,14 +426,8 @@ function MeetingModal({ initial, presetDate, seriesCount, onSave, onDelete, onCl
             </div>
           </div>
 
-          {/* Description */}
-          <div>
-            <label style={labelStyle}>Notes</label>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Add notes…" rows={3}
-              style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: '#faf9ff', border: '1.5px solid #E5E7EB', borderRadius: 8, padding: '9px 12px', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
-              onFocus={e => (e.target.style.borderColor = '#5e4dbb')}
-              onBlur={e => (e.target.style.borderColor = '#E5E7EB')} />
-          </div>
+          {/* Notes — same Markdown editor+preview as items/milestones */}
+          <NotesEditor value={description} onChange={setDescription} minHeight={100} />
         </div>
 
         {/* Footer */}
@@ -458,6 +515,75 @@ function MeetingModal({ initial, presetDate, seriesCount, onSave, onDelete, onCl
           </div>
         </>, document.body
       )}
+      {popover === 'invite' && createPortal(
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 1350 }} onClick={() => setPopover(null)} />
+          <div style={{ position: 'fixed', top: popPos.top, left: popPos.left, right: popPos.right, zIndex: 1400 }}>
+            <InvitePopover
+              candidates={inviteCandidates}
+              search={inviteSearch} onSearchChange={setInviteSearch}
+              selectedIds={inviteeIds}
+              onToggle={id => setInviteeIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])}
+              onDone={() => setPopover(null)} />
+          </div>
+        </>, document.body
+      )}
+    </div>,
+    document.body
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Invite picker — searchable list of other instance users to invite onto
+// a meeting. Matches the CalendarPicker/TimePicker/RepeatPopover chrome.
+// ════════════════════════════════════════════════════════════════════
+interface InvitePopoverProps {
+  candidates: Array<{ id: string; username: string; fullName: string | null }>;
+  search: string;
+  onSearchChange: (v: string) => void;
+  selectedIds: string[];
+  onToggle: (id: string) => void;
+  onDone: () => void;
+}
+
+function InvitePopover({ candidates, search, onSearchChange, selectedIds, onToggle, onDone }: InvitePopoverProps) {
+  const filtered = search.trim()
+    ? candidates.filter(m => (m.fullName || m.username).toLowerCase().includes(search.trim().toLowerCase()))
+    : candidates;
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '10px', width: Math.min(260, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#faf9ff', borderRadius: 8, padding: '6px 10px', border: '1px solid #e8e4f0', marginBottom: 8 }}>
+        <Icon name="search" size={13} color="#787584" />
+        <input autoFocus value={search} onChange={e => onSearchChange(e.target.value)} placeholder="Search people…"
+          style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22', flex: 1 }} />
+      </div>
+
+      <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {filtered.length === 0 && (
+          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', padding: '8px 4px', textAlign: 'center' }}>No matches</div>
+        )}
+        {filtered.map(m => {
+          const active = selectedIds.includes(m.id);
+          return (
+            <button key={m.id} onClick={() => onToggle(m.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 8, border: 'none', background: active ? '#F5F3FF' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 120ms' }}
+              onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#faf8ff'; }}
+              onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}>
+              <MemberAvatar userId={m.id} size={22} />
+              <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: active ? 600 : 400, color: active ? '#5e4dbb' : '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {m.fullName || m.username}
+              </span>
+              {active && <Icon name="check" size={15} color="#5e4dbb" />}
+            </button>
+          );
+        })}
+      </div>
+
+      <button onClick={onDone}
+        style={{ width: '100%', marginTop: 10, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 7, padding: '8px 0', cursor: 'pointer' }}>
+        Done
+      </button>
     </div>
   );
 }
@@ -534,6 +660,136 @@ function RepeatPopover({ preset, onPresetChange, customDays, onCustomDaysChange,
 }
 
 // ════════════════════════════════════════════════════════════════════
+// Meeting view modal — a meeting someone else invited you to. Read-only:
+// only the organizer can edit/delete/re-invite; an invitee can just leave.
+// ════════════════════════════════════════════════════════════════════
+function MeetingViewModal({ meeting, onClose, onLeave }: { meeting: Meeting; onClose: () => void; onLeave: () => void }) {
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const allMembers = useMembersStore(s => s.members);
+  const currentUserId = useAuthStore(s => s.userId);
+  const organizer = meeting.organizerId ? allMembers[meeting.organizerId] : undefined;
+  const color = meeting.color || DEFAULT_MEETING_COLOR;
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [onClose]);
+
+  const friendlyDate = new Date(meeting.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  const rowStyle = { display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0' };
+  // Excludes the viewer themselves — from their own view, "who else is invited" shouldn't list "you".
+  const others = (meeting.attendeeIds ?? []).filter(id => id !== currentUserId && allMembers[id]);
+
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 440, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(94,77,187,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', position: 'relative' }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ height: 5, background: color, flexShrink: 0 }} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 12px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: tint(color, 0.16), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Icon name="event" size={19} color={color} />
+            </div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {meeting.title}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: '#f1ecf6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="close" size={16} color="#787584" />
+          </button>
+        </div>
+
+        <div style={{ padding: '4px 24px 20px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+          {organizer && (
+            <div style={rowStyle}>
+              <MemberAvatar userId={meeting.organizerId!} size={22} />
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#484552' }}>
+                Organized by <strong>{organizer.fullName || organizer.username}</strong>
+              </span>
+            </div>
+          )}
+
+          <div style={rowStyle}>
+            <Icon name="calendar_today" size={15} color="#b0acbe" />
+            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22' }}>{friendlyDate}</span>
+          </div>
+
+          {!meeting.allDay && (meeting.startTime || meeting.endTime) && (
+            <div style={rowStyle}>
+              <Icon name="schedule" size={15} color="#b0acbe" />
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22' }}>
+                {meeting.startTime || '--:--'}{meeting.endTime ? ` – ${meeting.endTime}` : ''}
+              </span>
+            </div>
+          )}
+          {meeting.allDay && (
+            <div style={rowStyle}>
+              <Icon name="schedule" size={15} color="#b0acbe" />
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22' }}>All day</span>
+            </div>
+          )}
+
+          {meeting.location && (
+            <div style={rowStyle}>
+              <Icon name="location_on" size={15} color="#b0acbe" />
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22' }}>{meeting.location}</span>
+            </div>
+          )}
+
+          {others.length > 0 && (
+            <div style={rowStyle}>
+              <Icon name="group" size={15} color="#b0acbe" />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {others.map(id => (
+                  <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#F5F3FF', borderRadius: 9999, padding: '2px 8px 2px 2px' }}>
+                    <MemberAvatar userId={id} size={16} />
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#5e4dbb' }}>{allMembers[id]?.fullName || allMembers[id]?.username}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {meeting.description && meeting.description.trim() && (
+            <>
+              <div style={{ height: 1, background: '#F0EEF8', margin: '10px 0' }} />
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Notes</div>
+              <MarkdownView source={meeting.description} />
+            </>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 24px 20px', borderTop: '1px solid #F5F3FF', flexShrink: 0 }}>
+          <button onClick={() => setConfirmLeave(true)}
+            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#ba1a1a', background: '#fff5f5', border: '1px solid #ffdad6', borderRadius: 8, padding: '9px 16px', cursor: 'pointer', marginRight: 'auto' }}>
+            Remove from my calendar
+          </button>
+          <button onClick={onClose} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>Close</button>
+        </div>
+
+        {confirmLeave && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.25)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 160ms ease both' }}
+            onClick={() => setConfirmLeave(false)}>
+            <div style={{ background: '#fff', borderRadius: 14, padding: '22px 24px', maxWidth: 320, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 6 }}>Remove this meeting?</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: 18 }}>It'll disappear from your calendar. {organizer ? (organizer.fullName || organizer.username) : 'The organizer'} keeps it on theirs.</div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button onClick={() => setConfirmLeave(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={onLeave} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Remove</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
 // Day "what to add" chooser
 // ════════════════════════════════════════════════════════════════════
 function DayAddChooser({ date, onTask, onMeeting, onClose }: { date: string; onTask: () => void; onMeeting: () => void; onClose: () => void }) {
@@ -552,7 +808,8 @@ function DayAddChooser({ date, onTask, onMeeting, onClose }: { date: string; onT
       </div>
     </button>
   );
-  return (
+  // Portaled to <body> — see the comment on MeetingModal's return for why.
+  return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
       onClick={onClose}>
       <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
@@ -571,7 +828,8 @@ function DayAddChooser({ date, onTask, onMeeting, onClose }: { date: string; onT
           {opt('event', 'Meeting', 'A standalone calendar event', onMeeting)}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -600,7 +858,8 @@ function AddToDateModal({ date, lists, onAdd, onClose }: AddToDateModalProps) {
     onAdd(title.trim(), { type: 'list', listId: dest, sectionId });
   };
 
-  return (
+  // Portaled to <body> — see the comment on MeetingModal's return for why.
+  return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={onClose}>
       <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 420, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
@@ -656,7 +915,8 @@ function AddToDateModal({ date, lists, onAdd, onClose }: AddToDateModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -965,18 +1225,18 @@ export default function CalendarScreen() {
   };
 
   // ── Meeting mutations ──────────────────────────────────────────
-  const saveMeeting = async (data: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt'>, id?: string, repeat?: MeetingRecurrenceRule) => {
+  const saveMeeting = async (data: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt'>, id?: string, repeat?: MeetingRecurrenceRule, inviteeIds?: string[]) => {
     setEditingMeeting(null);
     setCreatingMeeting(null);
     if (id) {
-      setMeetings(ms => ms.map(m => m.id === id ? { ...m, ...data } : m));
-      apiUpdateMeeting(id, data).catch(() => loadData());
+      setMeetings(ms => ms.map(m => m.id === id ? { ...m, ...data, attendeeIds: inviteeIds ?? m.attendeeIds } : m));
+      apiUpdateMeeting(id, { ...data, inviteeIds }).catch(() => loadData());
     } else {
       const tempId = `tmp_${Date.now()}`;
-      const temp: Meeting = { id: tempId, ...data };
+      const temp: Meeting = { id: tempId, ...data, isOwner: true, attendeeIds: inviteeIds ?? [] };
       setMeetings(ms => [...ms, temp]);
       try {
-        const res = await apiCreateMeeting({ ...data, repeat });
+        const res = await apiCreateMeeting({ ...data, repeat, inviteeIds });
         // A repeating series materializes multiple rows server-side; swap the
         // optimistic placeholder for all of them at once.
         setMeetings(ms => ms.flatMap(m => m.id === tempId ? res.meetings : [m]));
@@ -993,6 +1253,14 @@ export default function CalendarScreen() {
       setMeetings(ms => ms.filter(m => m.id !== id));
     }
     apiDeleteMeeting(id, opts).catch(() => loadData());
+  };
+
+  // An invitee removing a meeting from their own calendar — doesn't touch it
+  // for the organizer or any other attendee.
+  const leaveMeeting = (id: string) => {
+    setEditingMeeting(null);
+    setMeetings(ms => ms.filter(m => m.id !== id));
+    apiLeaveMeeting(id).catch(() => loadData());
   };
 
   // Move a meeting to another day (keeps its time). Sends the full object
@@ -1406,8 +1674,9 @@ export default function CalendarScreen() {
         </>
       )}
 
-      {/* Mobile: pick a date to schedule a tapped task */}
-      {mobileScheduleTask && (
+      {/* Mobile: pick a date to schedule a tapped task — portaled to <body>,
+          see the comment on MeetingModal's return for why. */}
+      {mobileScheduleTask && createPortal(
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
           onClick={() => setMobileScheduleTask(null)}>
           <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
@@ -1417,7 +1686,8 @@ export default function CalendarScreen() {
             <CalendarPicker value={mobileScheduleTask.deadline}
               onChange={d => { assignDeadline(mobileScheduleTask.id, d); setMobileScheduleTask(null); }} />
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Modals */}
@@ -1433,7 +1703,12 @@ export default function CalendarScreen() {
       {addingTaskDate && (
         <AddToDateModal date={addingTaskDate} lists={lists} onAdd={handleAddToDate} onClose={() => setAddingTaskDate(null)} />
       )}
-      {(creatingMeeting || editingMeeting) && (
+      {editingMeeting && editingMeeting.isOwner === false ? (
+        <MeetingViewModal
+          meeting={editingMeeting}
+          onClose={() => setEditingMeeting(null)}
+          onLeave={() => leaveMeeting(editingMeeting.id)} />
+      ) : (creatingMeeting || editingMeeting) && (
         <MeetingModal
           initial={editingMeeting}
           presetDate={creatingMeeting?.date}
