@@ -34,6 +34,7 @@
 - 👥 **Multi-User & Admin** — Full member management with 15 GB per-user storage quotas and admin-controlled permissions.
 - 📅 **CalDAV Server** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing meetings.
 - 🗑️ **Trash & Restore** — Comprehensive protection against accidental deletions with a 30-day recovery window.
+- 📋 **Templates** — Capture any list or timeline as a reusable template, keeping relative dates and recursive sublist structures intact.
 
 ---
 
@@ -146,7 +147,7 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 
 ## 🏗️ Architecture & Core Concepts
 
-- **Version Number** — Bump `v1.28.0` in both places in `frontend/src/components/Sidebar.tsx` on every deploy. Use semantic versioning.
+- **Version Number** — On every deploy / release, update the version string in `frontend/src/components/Sidebar.tsx`. Use semantic versioning.
 - **Migrations in code, not files** — `runMigrations()` in `index.ts` uses guards and idempotent data heals/seeds.
 - **No ORM** — Raw SQL keeps queries explicit and avoids N+1 pitfalls; use `JOIN` freely. When doing bulk database inserts into PostgreSQL using a dynamic parameter array (e.g. `$1, $2...`), remember to chunk the parameters so you do not exceed PostgreSQL's maximum parameter limit (65535).
 - **Zustand over Redux** — Minimal boilerplate; each store is a standalone module. Stores call the API client directly; components call store actions.
@@ -280,6 +281,18 @@ curl -X POST "https://<your-host>/api/admin-read/items" \
 ```
 
 > **Security:** treat admin API keys like passwords. They can read and modify **all** users' data within the scopes granted. Store them in a secret manager, prefer the narrowest set of permissions, rotate periodically, and revoke unused keys.
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+- **`frontend/src/shortcuts/registry.ts`** is the single source of truth for every global keyboard shortcut.
+- **User overrides** are persisted to `users.keyboard_shortcuts` and managed via Account Settings → Controls.
+- A global listener in `frontend/src/components/KeyboardShortcuts.tsx` handles execution and cross-component signaling.
+
+## 🔗 n8n Community Node
+
+The `n8n/` directory contains the source for the `n8n-nodes-solytiq-cloud` npm package. This community node wraps the instance-wide Admin API. Whenever the API changes, this node must be updated and published to npm to stay in sync.
 
 ---
 
