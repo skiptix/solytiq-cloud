@@ -6,9 +6,9 @@ import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { checkVersionConflict } from '../concurrency';
-import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
+import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, werr } from '../workspaceUtil';
 import { snapshotTimelineToTrash } from '../trashUtil';
-import { getPrivateAncestors, buildPromoteConflict, promoteAncestors } from '../visibility';
+import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestrictConflict } from '../visibility';
 
 const router = Router();
 router.use(authenticate);
@@ -531,6 +531,76 @@ router.put('/:timelineId', async (req: Request, res: Response) => {
   }
 });
 
+// PUT /api/timelines/:timelineId/workspace — move this timeline into a
+// different workspace the user has access to. Mirrors the lists.ts endpoint
+// of the same shape (see comment there for the visibility-conflict rationale).
+router.put('/:timelineId/workspace', async (req: Request, res: Response) => {
+  try {
+    const { timelineId } = req.params;
+    const { workspaceId, cascade } = req.body as { workspaceId?: string; cascade?: boolean };
+    if (!workspaceId) {
+      res.status(400).json({ error: 'workspaceId is required' });
+      return;
+    }
+
+    const existing = await query<TimelineRow>('SELECT user_id, workspace_id, folder_id, is_public, name FROM timelines WHERE id = $1', [timelineId]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'Timeline not found' });
+      return;
+    }
+    const timeline = existing.rows[0];
+    const isOwner = timeline.user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    if (timeline.workspace_id === workspaceId) {
+      res.json({ timeline: await getTimelineForUser(req.userId!, timelineId) });
+      return;
+    }
+
+    const canAccess = await userCanAccessWorkspace(req.userId!, workspaceId);
+    if (!canAccess) {
+      res.status(403).json({ error: 'You do not have access to that workspace' });
+      return;
+    }
+
+    const targetWs = await query<{ visibility: string }>('SELECT visibility FROM workspaces WHERE id = $1', [workspaceId]);
+    const targetIsPrivate = targetWs.rows[0]?.visibility !== 'public';
+    const willForcePrivate = targetIsPrivate && timeline.is_public;
+
+    if (willForcePrivate) {
+      const conflict = buildRestrictConflict('timeline', timeline.name, [{ type: 'timeline', id: timelineId, name: timeline.name }]);
+      if (!cascade) { res.status(409).json(conflict); return; }
+    }
+
+    let detachFolder = false;
+    if (timeline.folder_id) {
+      const f = await query<{ workspace_id: string | null }>('SELECT workspace_id FROM folders WHERE id = $1', [timeline.folder_id]);
+      if (f.rows[0]?.workspace_id !== workspaceId) detachFolder = true;
+    }
+
+    await query(
+      `UPDATE timelines
+       SET workspace_id = $1,
+           is_public = CASE WHEN $3 THEN false ELSE is_public END
+           ${detachFolder ? ', folder_id = NULL' : ''}
+       WHERE id = $2`,
+      [workspaceId, timelineId, willForcePrivate]
+    );
+
+    wlog(`timeline MOVE-WORKSPACE ✓ id=${timelineId} → workspace=${workspaceId} owner=${req.userId}`);
+    res.json({ timeline: await getTimelineForUser(req.userId!, timelineId) });
+    broadcastToUser(req.userId!, 'timelines');
+    broadcastToUser(req.userId!, 'workspaces');
+  } catch (err) {
+    werr('timelines PUT /workspace error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // DELETE /api/timelines/:timelineId  — soft delete to trash
 router.delete('/:timelineId', async (req: Request, res: Response) => {
   try {
@@ -631,7 +701,7 @@ router.post('/:timelineId/milestones', async (req: Request, res: Response) => {
 router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
   try {
     const { milestoneId } = req.params;
-    const { title, description, descriptionMarkdown, date, time, status, emoji, color, position } = req.body as {
+    const { title, description, descriptionMarkdown, date, time, status, emoji, color, position, timelineId } = req.body as {
       title?: string;
       description?: string;
       descriptionMarkdown?: boolean;
@@ -641,10 +711,11 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
       emoji?: string | null;
       color?: string | null;
       position?: number;
+      timelineId?: string;
     };
 
-    const ownerCheck = await query<{ user_id: string }>(
-      `SELECT t.user_id FROM milestones m JOIN timelines t ON m.timeline_id = t.id WHERE m.id = $1`,
+    const ownerCheck = await query<{ user_id: string; timeline_id: string }>(
+      `SELECT t.user_id, m.timeline_id FROM milestones m JOIN timelines t ON m.timeline_id = t.id WHERE m.id = $1`,
       [milestoneId]
     );
     if (ownerCheck.rows.length === 0) {
@@ -656,6 +727,25 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
       return;
     }
 
+    // Moving to another timeline: the caller must own (or admin) the target
+    // timeline too, and the milestone is appended to the end of it.
+    let targetTimelineId: string | null = null;
+    let targetPosition: number | null = null;
+    if (timelineId && timelineId !== ownerCheck.rows[0].timeline_id) {
+      const targetOwner = await query<{ user_id: string }>('SELECT user_id FROM timelines WHERE id = $1', [timelineId]);
+      if (targetOwner.rows.length === 0) {
+        res.status(404).json({ error: 'Target timeline not found' });
+        return;
+      }
+      if (targetOwner.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+        res.status(403).json({ error: 'Permission denied for target timeline' });
+        return;
+      }
+      targetTimelineId = timelineId;
+      const posRes = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM milestones WHERE timeline_id = $1', [timelineId]);
+      targetPosition = posRes.rows[0].max !== null ? parseInt(posRes.rows[0].max, 10) + 1 : 0;
+    }
+
     const validStatus = status !== undefined && ['upcoming', 'in-progress', 'done'].includes(status) ? status : null;
     // Allow explicitly clearing description/date/time/emoji/color when the key is present.
     const updateDescription = 'description' in req.body;
@@ -663,6 +753,7 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
     const updateTime = 'time' in req.body;
     const updateEmoji = 'emoji' in req.body;
     const updateColor = 'color' in req.body;
+    const finalPosition = targetTimelineId !== null ? targetPosition : (position ?? null);
 
     const result = await query<MilestoneRow>(
       `UPDATE milestones
@@ -674,7 +765,8 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
            status          = COALESCE($8, status),
            emoji           = CASE WHEN $9 THEN $10 ELSE emoji END,
            color           = CASE WHEN $11 THEN $12 ELSE color END,
-           position        = COALESCE($13, position)
+           position        = COALESCE($13, position),
+           timeline_id     = COALESCE($16, timeline_id)
        WHERE id = $14
        RETURNING *`,
       [
@@ -685,12 +777,16 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
         validStatus,
         updateEmoji, emoji ?? null,
         updateColor, color ?? null,
-        position ?? null,
+        finalPosition,
         milestoneId,
         typeof descriptionMarkdown === 'boolean' ? descriptionMarkdown : null,
+        targetTimelineId,
       ]
     );
 
+    if (targetTimelineId) {
+      wlog(`milestone MOVE ✓ id=${milestoneId} ${ownerCheck.rows[0].timeline_id} → ${targetTimelineId} owner=${req.userId}`);
+    }
     res.json({ milestone: sanitizeMilestone(result.rows[0]) });
     broadcastToUser(req.userId!, 'timelines');
   } catch (err) {

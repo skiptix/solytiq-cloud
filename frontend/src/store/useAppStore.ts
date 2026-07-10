@@ -25,6 +25,7 @@ import {
   apiCreateTask,
   apiUpdateTask,
   apiDeleteTask,
+  apiMoveTask,
   apiCreateList,
   apiUpdateList,
   apiDeleteList,
@@ -558,64 +559,80 @@ const useAppStore = create<AppState>()(
 
       setSidebarWidth: (w) => set({ sidebarWidth: w }),
 
-      moveTaskToList: (taskId, targetListId) => {
+      // A real move (backend UPDATE, not delete+recreate) so the task's id,
+      // attachments and any linked sublist survive — works whether the task is
+      // currently a dash task or already lives in another list (including a
+      // different workspace). `dashTasks` is a flat superset containing both
+      // pure dash tasks AND a mirrored copy of every list task (see
+      // `listTasksAsDash`), so a single lookup there covers both cases.
+      moveTaskToList: (taskId, targetListId, targetSectionId) => {
         const state = get();
         const task = state.dashTasks.find(t => t.id === taskId);
         if (!task) return;
         const targetList = state.lists.find(l => l.id === targetListId);
         if (!targetList || !targetList.sections.length) return;
-        const firstSection = targetList.sections[0];
-        const tempTask = { ...task, _source: 'list' as const, _listId: targetListId, _listName: targetList.name };
+        const targetSection = (targetSectionId && targetList.sections.find(s => s.id === targetSectionId)) || targetList.sections[0];
+        const sourceListId = task._source === 'list' ? task._listId : undefined;
+        if (sourceListId === targetListId) return;
+
+        const tempTask: Task = { ...task, _source: 'list', _listId: targetListId, _listName: targetList.name, workspaceId: targetList.workspaceId };
 
         set(s => ({
-          dashTasks: s.dashTasks.filter(t => t.id !== taskId),
-          lists: s.lists.map(l =>
-            l.id !== targetListId ? l : {
-              ...l,
-              sections: l.sections.map((sec, i) =>
-                i === 0 ? { ...sec, tasks: [...sec.tasks, tempTask] } : sec
-              ),
+          dashTasks: upsertById(s.dashTasks, tempTask),
+          lists: s.lists.map(l => {
+            if (sourceListId && l.id === sourceListId) {
+              return { ...l, sections: l.sections.map(sec => ({ ...sec, tasks: sec.tasks.filter(t => t.id !== taskId) })) };
             }
-          ),
+            if (l.id === targetListId) {
+              return { ...l, sections: l.sections.map(sec => sec.id === targetSection.id ? { ...sec, tasks: [...sec.tasks, tempTask] } : sec) };
+            }
+            return l;
+          }),
         }));
 
-        (async () => {
-          try {
-            await apiDeleteTask(taskId);
-            const res = await apiAddListTask(targetListId, firstSection.id, {
-              title: task.title,
-              note: task.note,
-              deadline: task.deadline,
-              priority: task.priority,
-              badge: task.badge,
-              workspaceId: targetList.workspaceId,
-            });
-            const realId = Number(res.task.id);
-            set(s => ({
-              lists: s.lists.map(l =>
-                l.id !== targetListId ? l : {
-                  ...l,
-                  sections: l.sections.map(sec => ({
-                    ...sec,
-                    tasks: sec.tasks.map(t => t.id === taskId ? { ...t, id: realId } : t),
-                  })),
-                }
-              ),
-            }));
-          } catch {
-            set(s => ({
-              dashTasks: [...s.dashTasks, task],
-              lists: s.lists.map(l =>
-                l.id !== targetListId ? l : {
-                  ...l,
-                  sections: l.sections.map((sec, i) =>
-                    i === 0 ? { ...sec, tasks: sec.tasks.filter(t => t.id !== taskId) } : sec
-                  ),
-                }
-              ),
-            }));
-          }
-        })();
+        apiMoveTask(taskId, targetListId, targetSectionId).then(res => {
+          const updated: Task = { ...res.task, _source: 'list', _listId: targetListId, _listName: targetList.name };
+          set(s => ({
+            dashTasks: upsertById(s.dashTasks, updated),
+            lists: s.lists.map(l => l.id !== targetListId ? l : {
+              ...l,
+              sections: l.sections.map(sec => ({ ...sec, tasks: sec.tasks.map(t => t.id === taskId ? updated : t) })),
+            }),
+          }));
+        }).catch(() => {
+          set(s => ({
+            dashTasks: s.dashTasks.filter(t => t.id !== taskId),
+            lists: s.lists.map(l => l.id !== targetListId ? l : {
+              ...l,
+              sections: l.sections.map(sec => ({ ...sec, tasks: sec.tasks.filter(t => t.id !== taskId) })),
+            }),
+          }));
+          get().loadFromApi();
+        });
+      },
+
+      // Move a list task back out to the Dashboard (targetListId = null on the
+      // backend). No-ops for tasks that are already dash tasks.
+      moveTaskToDashboard: (taskId) => {
+        const state = get();
+        const task = state.dashTasks.find(t => t.id === taskId);
+        if (!task || task._source !== 'list' || !task._listId) return;
+        const sourceListId = task._listId;
+        const tempTask: Task = { ...task, _source: 'dash', _listId: undefined, _listName: undefined };
+
+        set(s => ({
+          dashTasks: upsertById(s.dashTasks, tempTask),
+          lists: s.lists.map(l => l.id !== sourceListId ? l : {
+            ...l,
+            sections: l.sections.map(sec => ({ ...sec, tasks: sec.tasks.filter(t => t.id !== taskId) })),
+          }),
+        }));
+
+        apiMoveTask(taskId, null).then(res => {
+          set(s => ({ dashTasks: upsertById(s.dashTasks, { ...res.task, _source: 'dash' }) }));
+        }).catch(() => {
+          get().loadFromApi();
+        });
       },
 
       hydrateFromSnapshot: (snap) => {

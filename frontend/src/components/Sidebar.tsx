@@ -7,6 +7,9 @@ import useWorkspaceStore from '../store/useWorkspaceStore';
 import WorkspaceWizard from '../modals/WorkspaceWizard';
 import WorkspaceSettingsModal from '../modals/WorkspaceSettingsModal';
 import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSettingsModal';
+import MoveToWorkspaceModal from '../modals/MoveToWorkspaceModal';
+import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
+import RenameDialog from './RenameDialog';
 import { apiGetGpsFiles, apiReorderTimelines, type ShareInfo } from '../api/client';
 
 const MINI = 60;
@@ -40,40 +43,6 @@ function NavItem({ icon, label, active, onClick, collapsed }: NavItemProps) {
   );
 }
 
-// ── RenameDialog ──────────────────────────────────────────────────────────────
-function RenameDialog({ value, accentColor = '#5e4dbb', onChange, onSave, onCancel }: {
-  value: string; accentColor?: string;
-  onChange: (v: string) => void; onSave: () => void; onCancel: () => void;
-}) {
-  return createPortal(
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', animation: 'backdropIn 180ms ease both' }}
-      onClick={onCancel}>
-      <div style={{ background: '#fff', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 360, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
-        onClick={e => e.stopPropagation()}>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 16 }}>Rename</div>
-        <input
-          autoFocus
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') onSave(); if (e.key === 'Escape') onCancel(); }}
-          style={{ width: '100%', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, border: `1.5px solid ${accentColor}`, borderRadius: 8, outline: 'none', padding: '10px 12px', color: '#1c1b22', background: '#faf8ff', boxSizing: 'border-box' }}
-        />
-        <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
-          <button onClick={onCancel}
-            style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #e8e4f0', background: '#f7f2fc', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#787584', cursor: 'pointer' }}>
-            Cancel
-          </button>
-          <button onClick={onSave}
-            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: accentColor, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', cursor: 'pointer' }}>
-            Save
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
 // ── ListItemRow ───────────────────────────────────────────────────────────────
 interface ListItemRowProps {
   list: List;
@@ -95,26 +64,12 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [editingName, setEditingName] = useState(false);
-  const [nameInput, setNameInput] = useState(list.name);
   const [showSettings, setShowSettings] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showMoveWorkspace, setShowMoveWorkspace] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const { deleteList, updateList, setLists } = useAppStore();
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        menuBtnRef.current && !menuBtnRef.current.contains(e.target as Node)
-      ) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [menuOpen]);
+  const currentWorkspaceId = useWorkspaceStore(s => s.currentWorkspaceId);
 
   const openMenu = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -123,8 +78,15 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
     setMenuOpen(o => !o);
   };
 
-  const handleRename = () => {
-    const trimmed = nameInput.trim();
+  const openContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuPos({ top: e.clientY, left: e.clientX });
+    setMenuOpen(true);
+  };
+
+  const handleRename = (v: string) => {
+    const trimmed = v.trim();
     if (trimmed && trimmed !== list.name) updateList(list.id, { name: trimmed });
     setEditingName(false);
   };
@@ -140,6 +102,14 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
     updateList(list.id, updates as Partial<List>);
   };
 
+  const menuItems: ContextMenuEntry[] = [
+    { key: 'rename', label: 'Edit name', icon: 'edit', onClick: () => setEditingName(true) },
+    { key: 'settings', label: 'More settings…', icon: 'tune', onClick: () => setShowSettings(true) },
+    { key: 'move-ws', label: 'Move to workspace…', icon: 'drive_file_move', onClick: () => setShowMoveWorkspace(true) },
+    { key: 'div1', divider: true },
+    { key: 'delete', label: 'Delete list', icon: 'delete', danger: true, onClick: () => setShowDeleteDialog(true) },
+  ];
+
   return (
     <>
       <div draggable
@@ -147,6 +117,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
+        onContextMenu={openContextMenu}
         onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
         style={{
           display: 'flex', alignItems: 'center', borderRadius: 8,
@@ -219,42 +190,9 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
         )}
       </div>
 
-      {/* Dropdown menu */}
+      {/* Right-click / "..." menu — shared component, two triggers */}
       {menuOpen && menuPos && (
-        <div ref={menuRef}
-          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 400, background: '#fff', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', minWidth: 180, padding: '4px 0', animation: 'menuIn 140ms ease both', transformOrigin: 'top left' }}>
-          <button
-            onClick={() => { setMenuOpen(false); setEditingName(true); setNameInput(list.name); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '0ms' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >
-            <Icon name="edit" size={15} color="#787584" />
-            Edit name
-          </button>
-
-          <button
-            onClick={() => { setMenuOpen(false); setShowSettings(true); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '30ms' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >
-            <Icon name="tune" size={15} color="#787584" />
-            More settings…
-          </button>
-
-          <div style={{ height: 1, background: '#f0ecf8', margin: '3px 0' }} />
-
-          <button
-            onClick={() => { setMenuOpen(false); setShowDeleteDialog(true); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#ba1a1a', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '60ms' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#fff0ef')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >
-            <Icon name="delete" size={15} color="#ba1a1a" />
-            Delete list
-          </button>
-        </div>
+        <ContextMenu x={menuPos.left} y={menuPos.top} items={menuItems} onClose={() => setMenuOpen(false)} />
       )}
 
       {/* More settings dialog */}
@@ -277,12 +215,29 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
         />
       )}
 
+      {/* Move to another workspace */}
+      {showMoveWorkspace && (
+        <MoveToWorkspaceModal
+          kind="list"
+          itemId={list.id}
+          itemName={list.name}
+          currentWorkspaceId={list.workspaceId}
+          onMoved={(workspaceId) => {
+            if (currentWorkspaceId && workspaceId !== currentWorkspaceId) {
+              setLists(prev => prev.filter(l => l.id !== list.id));
+            } else {
+              setLists(prev => prev.map(l => l.id === list.id ? { ...l, workspaceId } : l));
+            }
+          }}
+          onClose={() => setShowMoveWorkspace(false)}
+        />
+      )}
+
       {editingName && (
         <RenameDialog
-          value={nameInput}
-          onChange={setNameInput}
+          value={list.name}
           onSave={handleRename}
-          onCancel={() => { setEditingName(false); setNameInput(list.name); }}
+          onCancel={() => setEditingName(false)}
         />
       )}
 
@@ -332,26 +287,12 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [editingName, setEditingName] = useState(false);
-  const [nameInput, setNameInput] = useState(timeline.name);
   const [showSettings, setShowSettings] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showMoveWorkspace, setShowMoveWorkspace] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const { updateTimeline, deleteTimeline, setTimelines } = useAppStore();
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        menuBtnRef.current && !menuBtnRef.current.contains(e.target as Node)
-      ) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [menuOpen]);
+  const currentWorkspaceId = useWorkspaceStore(s => s.currentWorkspaceId);
 
   const openMenu = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -360,8 +301,15 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
     setMenuOpen(o => !o);
   };
 
-  const handleRename = () => {
-    const trimmed = nameInput.trim();
+  const openContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuPos({ top: e.clientY, left: e.clientX });
+    setMenuOpen(true);
+  };
+
+  const handleRename = (v: string) => {
+    const trimmed = v.trim();
     if (trimmed && trimmed !== timeline.name) updateTimeline(timeline.id, { name: trimmed });
     setEditingName(false);
   };
@@ -378,6 +326,14 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
 
   const accent = timeline.color ?? '#1D4ED8';
 
+  const menuItems: ContextMenuEntry[] = [
+    { key: 'rename', label: 'Edit name', icon: 'edit', onClick: () => setEditingName(true) },
+    { key: 'settings', label: 'More settings…', icon: 'tune', onClick: () => setShowSettings(true) },
+    { key: 'move-ws', label: 'Move to workspace…', icon: 'drive_file_move', onClick: () => setShowMoveWorkspace(true) },
+    { key: 'div1', divider: true },
+    { key: 'delete', label: 'Delete timeline', icon: 'delete', danger: true, onClick: () => setShowDeleteDialog(true) },
+  ];
+
   return (
     <>
       <div
@@ -386,6 +342,7 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
+        onContextMenu={openContextMenu}
         onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
         style={{ display: 'flex', alignItems: 'center', borderRadius: 8, position: 'relative', paddingLeft: indented ? 8 : 0, borderTop: dragOverId === timeline.id ? '2px solid #9d8dff' : '2px solid transparent', transition: 'border-color 120ms' }}>
 
@@ -421,42 +378,9 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
         )}
       </div>
 
-      {/* Dropdown menu */}
+      {/* Right-click / "..." menu — shared component, two triggers */}
       {menuOpen && menuPos && (
-        <div ref={menuRef}
-          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 400, background: '#fff', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', minWidth: 190, padding: '4px 0', animation: 'menuIn 140ms ease both', transformOrigin: 'top left' }}>
-          <button
-            onClick={() => { setMenuOpen(false); setEditingName(true); setNameInput(timeline.name); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left', animation: 'menuItemIn 160ms ease both' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >
-            <Icon name="edit" size={15} color="#787584" />
-            Edit name
-          </button>
-
-          <button
-            onClick={() => { setMenuOpen(false); setShowSettings(true); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '30ms' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >
-            <Icon name="tune" size={15} color="#787584" />
-            More settings…
-          </button>
-
-          <div style={{ height: 1, background: '#f0ecf8', margin: '3px 0' }} />
-
-          <button
-            onClick={() => { setMenuOpen(false); setShowDeleteDialog(true); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#ba1a1a', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '60ms' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#fff0ef')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >
-            <Icon name="delete" size={15} color="#ba1a1a" />
-            Delete timeline
-          </button>
-        </div>
+        <ContextMenu x={menuPos.left} y={menuPos.top} items={menuItems} onClose={() => setMenuOpen(false)} />
       )}
 
       {/* More settings dialog */}
@@ -479,13 +403,30 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
         />
       )}
 
+      {/* Move to another workspace */}
+      {showMoveWorkspace && (
+        <MoveToWorkspaceModal
+          kind="timeline"
+          itemId={timeline.id}
+          itemName={timeline.name}
+          currentWorkspaceId={timeline.workspaceId}
+          onMoved={(workspaceId) => {
+            if (currentWorkspaceId && workspaceId !== currentWorkspaceId) {
+              setTimelines(prev => prev.filter(t => t.id !== timeline.id));
+            } else {
+              setTimelines(prev => prev.map(t => t.id === timeline.id ? { ...t, workspaceId } : t));
+            }
+          }}
+          onClose={() => setShowMoveWorkspace(false)}
+        />
+      )}
+
       {editingName && (
         <RenameDialog
-          value={nameInput}
+          value={timeline.name}
           accentColor={accent}
-          onChange={setNameInput}
           onSave={handleRename}
-          onCancel={() => { setEditingName(false); setNameInput(timeline.name); }}
+          onCancel={() => setEditingName(false)}
         />
       )}
 
@@ -558,29 +499,23 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
   const [nameInput, setNameInput] = useState(folder.name);
   const [showSettings, setShowSettings] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showMoveWorkspace, setShowMoveWorkspace] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const { updateFolder, deleteFolder, setFolders } = useAppStore();
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target as Node) &&
-        menuBtnRef.current && !menuBtnRef.current.contains(e.target as Node)
-      ) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [menuOpen]);
+  const { updateFolder, deleteFolder, setFolders, setLists, setTimelines } = useAppStore();
+  const currentWorkspaceId = useWorkspaceStore(s => s.currentWorkspaceId);
 
   const openMenu = (e: React.MouseEvent) => {
     e.stopPropagation();
     const rect = menuBtnRef.current?.getBoundingClientRect();
     if (rect) setMenuPos({ top: rect.bottom + 4, left: rect.left });
     setMenuOpen(o => !o);
+  };
+
+  const openContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuPos({ top: e.clientY, left: e.clientX });
+    setMenuOpen(true);
   };
 
   const handleRename = () => {
@@ -602,6 +537,14 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
   const isDragTarget = dragOverFolderId === folder.id;
   const isActiveDash = active === 'folder' && activeFolderId === folder.id;
 
+  const menuItems: ContextMenuEntry[] = [
+    { key: 'rename', label: 'Edit name', icon: 'edit', onClick: () => { setEditingName(true); setNameInput(folder.name); } },
+    { key: 'settings', label: 'More settings…', icon: 'tune', onClick: () => setShowSettings(true) },
+    { key: 'move-ws', label: 'Move to workspace…', icon: 'drive_file_move', onClick: () => setShowMoveWorkspace(true) },
+    { key: 'div1', divider: true },
+    { key: 'delete', label: 'Delete folder', icon: 'delete', danger: true, onClick: () => setShowDeleteDialog(true) },
+  ];
+
   return (
     <>
       {/* Folder header */}
@@ -620,6 +563,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
           onFolderDrop(folder.id, e);
           onFolderReorderDrop(folder.id, e);
         }}
+        onContextMenu={openContextMenu}
         onMouseEnter={() => setHov(true)}
         onMouseLeave={() => setHov(false)}
         style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', borderTop: dragOverFolderReorderId === folder.id ? '2px solid #9d8dff' : isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', transition: 'all 120ms', background: isDragTarget ? `${accentColor}15` : 'transparent' }}>
@@ -739,43 +683,9 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
         </div>
       )}
 
-      {/* Folder 3-dot menu */}
+      {/* Right-click / "..." menu — shared component, two triggers */}
       {menuOpen && menuPos && (
-        <div ref={menuRef}
-          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, zIndex: 400, background: '#fff', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', minWidth: 180, padding: '4px 0', animation: 'menuIn 140ms ease both', transformOrigin: 'top left' }}>
-
-          <button
-            onClick={() => { setMenuOpen(false); setEditingName(true); setNameInput(folder.name); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '0ms' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >
-            <Icon name="edit" size={15} color="#787584" />
-            Edit name
-          </button>
-
-          <button
-            onClick={() => { setMenuOpen(false); setShowSettings(true); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '30ms' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >
-            <Icon name="tune" size={15} color="#787584" />
-            More settings…
-          </button>
-
-          <div style={{ height: 1, background: '#f0ecf8', margin: '3px 0' }} />
-
-          <button
-            onClick={() => { setMenuOpen(false); setShowDeleteDialog(true); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#ba1a1a', textAlign: 'left', animation: 'menuItemIn 160ms ease both', animationDelay: '60ms' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#fff0ef')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-          >
-            <Icon name="delete" size={15} color="#ba1a1a" />
-            Delete folder
-          </button>
-        </div>
+        <ContextMenu x={menuPos.left} y={menuPos.top} items={menuItems} onClose={() => setMenuOpen(false)} />
       )}
 
       {/* More settings dialog */}
@@ -791,6 +701,28 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
           onVisibilityApplied={(p: boolean) => setFolders(prev => prev.map(f => f.id === folder.id ? { ...f, isPublic: p } : f))}
           onChange={updates => updateFolder(folder.id, updates as Partial<Folder>)}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {/* Move to another workspace — cascades to every list/timeline inside */}
+      {showMoveWorkspace && (
+        <MoveToWorkspaceModal
+          kind="folder"
+          itemId={folder.id}
+          itemName={folder.name}
+          currentWorkspaceId={folder.workspaceId}
+          onMoved={(workspaceId) => {
+            if (currentWorkspaceId && workspaceId !== currentWorkspaceId) {
+              setFolders(prev => prev.filter(f => f.id !== folder.id));
+              setLists(prev => prev.filter(l => l.folderId !== folder.id));
+              setTimelines(prev => prev.filter(t => t.folderId !== folder.id));
+            } else {
+              setFolders(prev => prev.map(f => f.id === folder.id ? { ...f, workspaceId } : f));
+              setLists(prev => prev.map(l => l.folderId === folder.id ? { ...l, workspaceId } : l));
+              setTimelines(prev => prev.map(t => t.folderId === folder.id ? { ...t, workspaceId } : t));
+            }
+          }}
+          onClose={() => setShowMoveWorkspace(false)}
         />
       )}
 
@@ -1114,7 +1046,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
 
   const handleListDrop = useCallback((toId: string, e: React.DragEvent) => {
     e.preventDefault();
-    const taskId = e.dataTransfer.getData('dashtaskid');
+    const taskId = e.dataTransfer.getData('dashtaskid') || e.dataTransfer.getData('listtaskid');
     if (taskId) {
       const id = parseInt(taskId, 10);
       if (!isNaN(id)) handleTaskDrop(toId, id);
@@ -1352,7 +1284,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.34.0
+              v1.35.0
             </div>
           )}
         </div>
@@ -1492,7 +1424,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
               {...timelineDragHandlers}
               onListDragStart={(listId, e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('listId', listId); }}
               onListDragOver={(listId, e) => {
-                if (e.dataTransfer.types.includes('dashtaskid')) {
+                if (e.dataTransfer.types.includes('dashtaskid') || e.dataTransfer.types.includes('listtaskid')) {
                   e.preventDefault();
                   setDragOverTaskListId(listId);
                   setDragOverId(null);
@@ -1551,7 +1483,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
               onNavigate={onNavigate}
               onListDragStart={(listId, e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('listId', listId); }}
               onListDragOver={(listId, e) => {
-                if (e.dataTransfer.types.includes('dashtaskid')) {
+                if (e.dataTransfer.types.includes('dashtaskid') || e.dataTransfer.types.includes('listtaskid')) {
                   e.preventDefault();
                   setDragOverTaskListId(listId);
                   setDragOverId(null);
@@ -1590,7 +1522,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.34.0
+            v1.35.0
           </div>
         )}
       </div>

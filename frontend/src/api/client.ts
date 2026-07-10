@@ -233,6 +233,12 @@ export const apiUpdateTask = (id: number, data: Partial<Task>) =>
 export const apiDeleteTask = (id: number) =>
   apiFetch<{ success: boolean }>(`/tasks/${id}`, { method: 'DELETE' });
 
+/** Move a task to another list (or to the Dashboard when targetListId is
+ *  omitted/null), including across workspaces. Preserves the task's id,
+ *  attachments and any linked sublist. */
+export const apiMoveTask = (id: number, targetListId?: string | null, targetSectionId?: string) =>
+  apiFetch<{ task: Task }>(`/tasks/${id}/move`, { method: 'PUT', body: JSON.stringify({ targetListId, targetSectionId }) });
+
 // Lists
 export const apiGetLists = (workspaceId?: string) =>
   apiFetch<{ lists: List[] }>(`/lists${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`);
@@ -242,6 +248,9 @@ export const apiCreateList = (data: Omit<List, 'sections'> & { sections?: List['
 
 export const apiUpdateList = (id: string, data: Partial<List> & { cascade?: boolean; expectedVersion?: number }) =>
   apiFetch<{ list: List }>(`/lists/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const apiMoveListWorkspace = (id: string, workspaceId: string, cascade?: boolean) =>
+  apiFetch<{ list: List }>(`/lists/${id}/workspace`, { method: 'PUT', body: JSON.stringify({ workspaceId, cascade }) });
 
 export const apiDeleteList = (id: string) =>
   apiFetch<{ success: boolean }>(`/lists/${id}`, { method: 'DELETE' });
@@ -342,6 +351,9 @@ export const apiReorderTimelines = (ids: string[]) =>
 export const apiUpdateTimeline = (id: string, data: Partial<Timeline> & { cascade?: boolean; expectedVersion?: number }) =>
   apiFetch<{ timeline: Timeline }>(`/timelines/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
+export const apiMoveTimelineWorkspace = (id: string, workspaceId: string, cascade?: boolean) =>
+  apiFetch<{ timeline: Timeline }>(`/timelines/${id}/workspace`, { method: 'PUT', body: JSON.stringify({ workspaceId, cascade }) });
+
 export const apiDeleteTimeline = (id: string) =>
   apiFetch<{ success: boolean }>(`/timelines/${id}`, { method: 'DELETE' });
 
@@ -351,7 +363,7 @@ export const apiUpdateTimelineShare = (id: string, data: ShareUpdate) =>
 export const apiCreateMilestone = (timelineId: string, data: Partial<Milestone> & { title: string }) =>
   apiFetch<{ milestone: Milestone }>(`/timelines/${timelineId}/milestones`, { method: 'POST', body: JSON.stringify(data) });
 
-export const apiUpdateMilestone = (milestoneId: string, data: Partial<Milestone>) =>
+export const apiUpdateMilestone = (milestoneId: string, data: Partial<Milestone> & { timelineId?: string }) =>
   apiFetch<{ milestone: Milestone }>(`/timelines/milestones/${milestoneId}`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiDeleteMilestone = (milestoneId: string) =>
@@ -422,6 +434,9 @@ export const apiCreateFolder = (data: { id: string; name: string; emoji?: string
 
 export const apiUpdateFolder = (id: string, data: Partial<Omit<Folder, 'id'>> & { cascade?: boolean }) =>
   apiFetch<{ ok: boolean; folder?: Folder }>(`/folders/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const apiMoveFolderWorkspace = (id: string, workspaceId: string, cascade?: boolean) =>
+  apiFetch<{ ok: boolean; folder: Folder }>(`/folders/${id}/workspace`, { method: 'PUT', body: JSON.stringify({ workspaceId, cascade }) });
 
 export const apiDeleteFolder = (id: string) =>
   apiFetch<{ ok: boolean }>(`/folders/${id}`, { method: 'DELETE' });

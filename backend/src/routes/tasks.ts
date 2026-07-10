@@ -1,9 +1,10 @@
 import crypto from 'crypto';
 import { Router, Request, Response } from 'express';
-import { query } from '../db';
+import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
+import { collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
 
 const router = Router();
 router.use(authenticate);
@@ -287,6 +288,118 @@ router.put('/:id', async (req: Request, res: Response) => {
     broadcastToUser(req.userId!, 'tasks');
   } catch (err) {
     werr('tasks PUT error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/tasks/:id/move — move a task to another list (or to the Dashboard,
+// when targetListId is omitted/null), including across workspaces. A real
+// UPDATE (not delete+recreate), so the task's id, attachments and any linked
+// sublist survive the move. Works for both dash- and list-sourced tasks,
+// since both live in the same `tasks` table.
+router.put('/:id/move', async (req: Request, res: Response) => {
+  try {
+    const taskId = req.params.id;
+    const { targetListId, targetSectionId } = req.body as {
+      targetListId?: string | null;
+      targetSectionId?: string;
+    };
+
+    const existing = await query<TaskRow>('SELECT * FROM tasks WHERE id = $1', [taskId]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'Task not found' });
+      return;
+    }
+    const task = existing.rows[0];
+    const isAdmin = req.user?.isAdmin === true;
+
+    // Ownership: dash tasks are owned directly; list tasks are owned via their list.
+    let isOwner = task.user_id === req.userId;
+    if (task.source === 'list' && task.list_id) {
+      const listOwner = await query<{ user_id: string }>('SELECT user_id FROM lists WHERE id = $1', [task.list_id]);
+      isOwner = listOwner.rows[0]?.user_id === req.userId;
+    }
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    const oldWorkspaceId = task.workspace_id;
+    let newWorkspaceId: string | null = task.workspace_id;
+    let newSectionId: string | null = null;
+
+    if (targetListId) {
+      const targetList = await query<{ user_id: string; workspace_id: string | null }>(
+        'SELECT user_id, workspace_id FROM lists WHERE id = $1', [targetListId]
+      );
+      if (targetList.rows.length === 0) {
+        res.status(404).json({ error: 'Target list not found' });
+        return;
+      }
+      if (targetList.rows[0].user_id !== req.userId && !isAdmin) {
+        res.status(403).json({ error: 'Permission denied for target list' });
+        return;
+      }
+      newWorkspaceId = targetList.rows[0].workspace_id;
+
+      if (targetSectionId) {
+        const sectionCheck = await query('SELECT id FROM sections WHERE id = $1 AND list_id = $2', [targetSectionId, targetListId]);
+        if (sectionCheck.rows.length === 0) {
+          res.status(400).json({ error: 'Target section does not belong to the target list' });
+          return;
+        }
+        newSectionId = targetSectionId;
+      } else {
+        const firstSection = await query<{ id: string }>('SELECT id FROM sections WHERE list_id = $1 ORDER BY position ASC LIMIT 1', [targetListId]);
+        if (firstSection.rows.length === 0) {
+          res.status(400).json({ error: 'Target list has no sections' });
+          return;
+        }
+        newSectionId = firstSection.rows[0].id;
+      }
+    } else {
+      // Moving to the Dashboard (no list) — resolve to a workspace the user
+      // can access, same fallback as creating a new dash task.
+      newWorkspaceId = await resolveWorkspaceForUser(req.userId!, task.workspace_id ?? undefined);
+    }
+
+    const posRes = await query<{ max: string | null }>(
+      targetListId
+        ? 'SELECT MAX(position) AS max FROM tasks WHERE section_id = $1'
+        : `SELECT MAX(position) AS max FROM tasks WHERE user_id = $1 AND source = 'dash'`,
+      targetListId ? [newSectionId] : [req.userId]
+    );
+    const nextPosition = posRes.rows[0].max !== null ? parseInt(posRes.rows[0].max, 10) + 1 : 0;
+
+    const result = await withTransaction(async (client) => {
+      const r = await client.query<TaskRow>(
+        `UPDATE tasks
+         SET source = $1, list_id = $2, section_id = $3, workspace_id = $4, position = $5
+         WHERE id = $6
+         RETURNING *`,
+        [targetListId ? 'list' : 'dash', targetListId ?? null, newSectionId, newWorkspaceId, nextPosition, taskId]
+      );
+
+      // If this task links an owned sublist, cascade the sublist (+ its own
+      // tasks) into the new workspace too — a sublist always shares the
+      // workspace of the task that links it in.
+      if (task.linked_list_type === 'sublist' && task.linked_list_id && newWorkspaceId !== oldWorkspaceId) {
+        const exec = (text: string, params?: unknown[]) => client.query(text, params);
+        const descendantIds = await collectDescendantListIdsShared(exec, task.linked_list_id);
+        const subIds = [task.linked_list_id, ...descendantIds];
+        await client.query(`UPDATE lists SET workspace_id = $1 WHERE id = ANY($2::varchar[])`, [newWorkspaceId, subIds]);
+        await client.query(`UPDATE tasks SET workspace_id = $1 WHERE list_id = ANY($2::varchar[])`, [newWorkspaceId, subIds]);
+      }
+
+      return r;
+    });
+
+    wlog(`task MOVE ✓ id=${taskId} → list=${targetListId ?? 'dashboard'} workspace=${newWorkspaceId ?? 'null'} owner=${req.userId}`);
+    res.json({ task: sanitizeTask(result.rows[0]) });
+    broadcastToUser(req.userId!, 'tasks');
+    broadcastToUser(req.userId!, 'lists');
+  } catch (err) {
+    werr('task move error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
