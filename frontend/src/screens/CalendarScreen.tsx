@@ -20,6 +20,7 @@ import TimePicker from '../components/TimePicker';
 import NotesEditor from '../components/NotesEditor';
 import MarkdownView from '../components/MarkdownView';
 import Icon from '../components/Icon';
+import ContextMenu, { type ContextMenuEntry } from '../components/ContextMenu';
 import { useMobile } from '../hooks/useBreakpoint';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -99,6 +100,7 @@ interface Chip {
   endMin?: number;
   dragData?: string;        // when set, the chip can be dragged to reschedule
   onClick: () => void;
+  contextItems?: ContextMenuEntry[]; // right-click menu — omitted disables the menu
 }
 
 /** Greedy column layout for overlapping timed chips within one day. */
@@ -923,9 +925,10 @@ function AddToDateModal({ date, lists, onAdd, onClose }: AddToDateModalProps) {
 // ════════════════════════════════════════════════════════════════════
 // Compact chip (month / year) & card (week)
 // ════════════════════════════════════════════════════════════════════
-function ChipCompact({ chip }: { chip: Chip }) {
+function ChipCompact({ chip, onOpenMenu }: { chip: Chip; onOpenMenu?: (e: React.MouseEvent, items: ContextMenuEntry[]) => void }) {
   return (
     <div onClick={e => { e.stopPropagation(); chip.onClick(); }}
+      onContextMenu={e => { if (chip.contextItems) onOpenMenu?.(e, chip.contextItems); }}
       title={chip.label}
       draggable={!!chip.dragData}
       onDragStart={chip.dragData ? e => { e.dataTransfer.setData('text/plain', chip.dragData!); e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); } : undefined}
@@ -942,9 +945,10 @@ function ChipCompact({ chip }: { chip: Chip }) {
   );
 }
 
-function ChipCard({ chip }: { chip: Chip }) {
+function ChipCard({ chip, onOpenMenu }: { chip: Chip; onOpenMenu?: (e: React.MouseEvent, items: ContextMenuEntry[]) => void }) {
   return (
     <div onClick={chip.onClick}
+      onContextMenu={e => { if (chip.contextItems) onOpenMenu?.(e, chip.contextItems); }}
       draggable={!!chip.dragData}
       onDragStart={chip.dragData ? e => { e.dataTransfer.setData('text/plain', chip.dragData!); e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); } : undefined}
       style={{ display: 'flex', gap: 7, background: chip.bg, borderRadius: 8, padding: '7px 9px', cursor: chip.dragData ? 'grab' : 'pointer', borderLeft: `3px solid ${chip.accent}`, transition: 'filter 120ms' }}
@@ -999,6 +1003,12 @@ export default function CalendarScreen() {
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
+  const [chipMenu, setChipMenu] = useState<{ x: number; y: number; items: ContextMenuEntry[] } | null>(null);
+  const openChipMenu = useCallback((e: React.MouseEvent, items: ContextMenuEntry[]) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setChipMenu({ x: e.clientX, y: e.clientY, items });
+  }, []);
   const [creatingMeeting, setCreatingMeeting] = useState<{ date: string } | null>(null);
   const [dayChooser, setDayChooser] = useState<string | null>(null);
   const [addingTaskDate, setAddingTaskDate] = useState<string | null>(null);
@@ -1107,6 +1117,7 @@ export default function CalendarScreen() {
         startMin: s ?? undefined, endMin: s != null ? s + 30 : undefined,
         dragData: String(t.id),
         onClick: () => setSelectedTask(t),
+        contextItems: [{ key: 'view', label: 'View details', icon: 'tune', onClick: () => setSelectedTask(t) }],
       });
     }
 
@@ -1122,6 +1133,7 @@ export default function CalendarScreen() {
           emoji: m.emoji || tl.emoji || null, subtitle: tl.name,
           startMin: s ?? undefined, endMin: s != null ? s + 30 : undefined,
           onClick: () => navigate(`/timeline/${tl.id}`),
+          contextItems: [{ key: 'view', label: 'View details', icon: 'tune', onClick: () => navigate(`/timeline/${tl.id}`) }],
         });
       }
     }
@@ -1136,6 +1148,7 @@ export default function CalendarScreen() {
         startMin: s ?? undefined, endMin: e ?? undefined,
         dragData: `meeting:${mt.id}`,
         onClick: () => setEditingMeeting(mt),
+        contextItems: [{ key: 'edit', label: mt.isOwner === false ? 'View meeting' : 'Edit meeting', icon: mt.isOwner === false ? 'tune' : 'edit', onClick: () => setEditingMeeting(mt) }],
       });
     }
 
@@ -1339,7 +1352,7 @@ export default function CalendarScreen() {
                   )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {visible.map(c => <ChipCompact key={c.key} chip={c} />)}
+                  {visible.map(c => <ChipCompact key={c.key} chip={c} onOpenMenu={openChipMenu} />)}
                   {overflow > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: '#787584', paddingLeft: 5 }}>+{overflow} more</div>}
                 </div>
               </div>
@@ -1387,7 +1400,7 @@ export default function CalendarScreen() {
               onDragOver={e => e.preventDefault()}
               onDrop={e => handleDayDrop(iso, e)}
               style={{ borderLeft: '1px solid #f4f1f9', padding: 4, display: 'flex', flexDirection: 'column', gap: 3, minHeight: 30 }}>
-              {untimed.map(c => <ChipCard key={c.key} chip={c} />)}
+              {untimed.map(c => <ChipCard key={c.key} chip={c} onOpenMenu={openChipMenu} />)}
             </div>
           ))}
         </div>
@@ -1426,6 +1439,7 @@ export default function CalendarScreen() {
                   return (
                     <div key={c.key}
                       onClick={e => { e.stopPropagation(); c.onClick(); }}
+                      onContextMenu={e => { if (c.contextItems) openChipMenu(e, c.contextItems); }}
                       draggable={!!c.dragData}
                       onDragStart={c.dragData ? e => { e.dataTransfer.setData('text/plain', c.dragData!); e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); } : undefined}
                       title={c.label}
@@ -1691,6 +1705,9 @@ export default function CalendarScreen() {
       )}
 
       {/* Modals */}
+      {chipMenu && (
+        <ContextMenu x={chipMenu.x} y={chipMenu.y} items={chipMenu.items} onClose={() => setChipMenu(null)} />
+      )}
       {selectedTask && (
         <TaskDialog task={selectedTask} onUpdate={saveTask} onDelete={deleteTask} onClose={() => setSelectedTask(null)} />
       )}

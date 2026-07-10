@@ -3,11 +3,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
-import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
-import { snapshotFolderToTrash } from '../trashUtil';
+import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, werr } from '../workspaceUtil';
+import { snapshotFolderToTrash, collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
 import {
   getPrivateAncestors, buildPromoteConflict, promoteAncestors,
   getPublicDescendants, buildRestrictConflict, restrictDescendants,
+  type ConflictDescendant,
 } from '../visibility';
 
 const router = Router();
@@ -229,6 +230,117 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (promote.length > 0 || restrict.length > 0) { broadcastToUser(req.userId!, 'lists'); broadcastToUser(req.userId!, 'timelines'); broadcastToUser(req.userId!, 'workspaces'); }
   } catch (err) {
     werr('folders PUT error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/folders/:id/workspace — move this folder and everything directly
+// inside it (lists + their sublists, timelines) into a different workspace.
+// A folder move always cascades to its contents — a folder never leaves lists
+// behind, since a folder and its contents must share one workspace.
+router.put('/:id/workspace', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { workspaceId, cascade } = req.body as { workspaceId?: string; cascade?: boolean };
+    if (!workspaceId) {
+      res.status(400).json({ error: 'workspaceId is required' });
+      return;
+    }
+
+    const existing = await query<FolderRow>('SELECT user_id, is_public, name, workspace_id FROM folders WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'Folder not found' });
+      return;
+    }
+    const folder = existing.rows[0];
+    const isOwner = folder.user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    if (folder.workspace_id === workspaceId) {
+      res.json({ ok: true, folder: await getFolderForUser(req.userId!, id) });
+      return;
+    }
+
+    const canAccess = await userCanAccessWorkspace(req.userId!, workspaceId);
+    if (!canAccess) {
+      res.status(403).json({ error: 'You do not have access to that workspace' });
+      return;
+    }
+
+    const listRows = await query<{ id: string; is_public: boolean; name: string }>(
+      'SELECT id, is_public, name FROM lists WHERE folder_id = $1', [id]
+    );
+    const timelineRows = await query<{ id: string; is_public: boolean; name: string }>(
+      'SELECT id, is_public, name FROM timelines WHERE folder_id = $1', [id]
+    );
+
+    let allListIds: string[] = [];
+    for (const l of listRows.rows) {
+      const descendants = await collectDescendantListIdsShared(query, l.id);
+      allListIds.push(l.id, ...descendants);
+    }
+    allListIds = Array.from(new Set(allListIds));
+    const timelineIds = timelineRows.rows.map(t => t.id);
+
+    const targetWs = await query<{ visibility: string }>('SELECT visibility FROM workspaces WHERE id = $1', [workspaceId]);
+    const targetIsPrivate = targetWs.rows[0]?.visibility !== 'public';
+
+    let forcePrivateListIds: string[] = [];
+    let forcePrivateTimelineIds: string[] = [];
+    let forceFolderPrivate = false;
+    const conflictDescendants: ConflictDescendant[] = [];
+    if (targetIsPrivate) {
+      if (folder.is_public) { forceFolderPrivate = true; conflictDescendants.push({ type: 'folder', id, name: folder.name }); }
+      if (allListIds.length > 0) {
+        const publicLists = await query<{ id: string; name: string }>(
+          `SELECT id, name FROM lists WHERE id = ANY($1::varchar[]) AND is_public = true`, [allListIds]
+        );
+        forcePrivateListIds = publicLists.rows.map(r => r.id);
+        conflictDescendants.push(...publicLists.rows.map(r => ({ type: 'list' as const, id: r.id, name: r.name })));
+      }
+      const publicTimelines = timelineRows.rows.filter(t => t.is_public);
+      forcePrivateTimelineIds = publicTimelines.map(t => t.id);
+      conflictDescendants.push(...publicTimelines.map(t => ({ type: 'timeline' as const, id: t.id, name: t.name })));
+    }
+
+    if (conflictDescendants.length > 0) {
+      const conflict = buildRestrictConflict('folder', folder.name, conflictDescendants);
+      if (!cascade) { res.status(409).json(conflict); return; }
+    }
+
+    await withTransaction(async (client) => {
+      if (forceFolderPrivate) {
+        await client.query('UPDATE folders SET is_public = false WHERE id = $1', [id]);
+      }
+      if (forcePrivateListIds.length > 0) {
+        await client.query('UPDATE lists SET is_public = false WHERE id = ANY($1::varchar[])', [forcePrivateListIds]);
+      }
+      if (forcePrivateTimelineIds.length > 0) {
+        await client.query('UPDATE timelines SET is_public = false WHERE id = ANY($1::varchar[])', [forcePrivateTimelineIds]);
+      }
+      await client.query('UPDATE folders SET workspace_id = $1 WHERE id = $2', [workspaceId, id]);
+      if (allListIds.length > 0) {
+        await client.query('UPDATE lists SET workspace_id = $1 WHERE id = ANY($2::varchar[])', [workspaceId, allListIds]);
+        await client.query('UPDATE tasks SET workspace_id = $1 WHERE list_id = ANY($2::varchar[])', [workspaceId, allListIds]);
+      }
+      if (timelineIds.length > 0) {
+        await client.query('UPDATE timelines SET workspace_id = $1 WHERE id = ANY($2::varchar[])', [workspaceId, timelineIds]);
+      }
+    });
+
+    wlog(`folder MOVE-WORKSPACE ✓ id=${id} (+${allListIds.length} list(s), +${timelineIds.length} timeline(s)) → workspace=${workspaceId} owner=${req.userId}`);
+    res.json({ ok: true, folder: await getFolderForUser(req.userId!, id) });
+    broadcastToUser(req.userId!, 'folders');
+    broadcastToUser(req.userId!, 'lists');
+    broadcastToUser(req.userId!, 'timelines');
+    broadcastToUser(req.userId!, 'tasks');
+    broadcastToUser(req.userId!, 'workspaces');
+  } catch (err) {
+    werr('folders PUT /workspace error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

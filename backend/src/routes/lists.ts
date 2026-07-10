@@ -6,9 +6,9 @@ import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { checkVersionConflict } from '../concurrency';
-import { resolveWorkspaceForUser, wlog, wwarn, werr } from '../workspaceUtil';
+import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, wwarn, werr } from '../workspaceUtil';
 import { softDeleteListTree, collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
-import { getPrivateAncestors, buildPromoteConflict, promoteAncestors } from '../visibility';
+import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestrictConflict } from '../visibility';
 
 const router = Router();
 router.use(authenticate);
@@ -598,6 +598,93 @@ router.put('/:listId', async (req: Request, res: Response) => {
     if (promote.length > 0) { broadcastToUser(req.userId!, 'folders'); broadcastToUser(req.userId!, 'workspaces'); broadcastToUser(req.userId!, 'timelines'); }
   } catch (err) {
     werr('lists PUT error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/lists/:listId/workspace — move this list (and any owned sublists +
+// their tasks) into a different workspace the user has access to. If the list
+// or a sublist is public and the target workspace is private, the caller must
+// confirm via `cascade: true`, which forces those items private as part of
+// the same move (mirrors the promote/restrict visibility conflict above).
+router.put('/:listId/workspace', async (req: Request, res: Response) => {
+  try {
+    const { listId } = req.params;
+    const { workspaceId, cascade } = req.body as { workspaceId?: string; cascade?: boolean };
+    if (!workspaceId) {
+      res.status(400).json({ error: 'workspaceId is required' });
+      return;
+    }
+
+    const existing = await query<ListRow>('SELECT user_id, workspace_id, folder_id, is_public, name FROM lists WHERE id = $1', [listId]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'List not found' });
+      return;
+    }
+    const list = existing.rows[0];
+    const isOwner = list.user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    if (list.workspace_id === workspaceId) {
+      res.json({ list: await getListForUser(req.userId!, listId) });
+      return;
+    }
+
+    const canAccess = await userCanAccessWorkspace(req.userId!, workspaceId);
+    if (!canAccess) {
+      res.status(403).json({ error: 'You do not have access to that workspace' });
+      return;
+    }
+
+    const descendantIds = await collectDescendantListIdsShared(query, listId);
+    const allIds = [listId, ...descendantIds];
+
+    const targetWs = await query<{ visibility: string }>('SELECT visibility FROM workspaces WHERE id = $1', [workspaceId]);
+    const targetIsPrivate = targetWs.rows[0]?.visibility !== 'public';
+
+    let forcePrivateIds: string[] = [];
+    if (targetIsPrivate) {
+      const publicRows = await query<{ id: string; name: string }>(
+        `SELECT id, name FROM lists WHERE id = ANY($1::varchar[]) AND is_public = true`,
+        [allIds]
+      );
+      if (publicRows.rows.length > 0) {
+        const conflict = buildRestrictConflict('list', list.name, publicRows.rows.map(r => ({ type: 'list' as const, id: r.id, name: r.name })));
+        if (!cascade) { res.status(409).json(conflict); return; }
+        forcePrivateIds = publicRows.rows.map(r => r.id);
+      }
+    }
+
+    // If the list's current folder isn't in the target workspace, detach it —
+    // a folder and its contents must always share one workspace.
+    let detachFolder = false;
+    if (list.folder_id) {
+      const f = await query<{ workspace_id: string | null }>('SELECT workspace_id FROM folders WHERE id = $1', [list.folder_id]);
+      if (f.rows[0]?.workspace_id !== workspaceId) detachFolder = true;
+    }
+
+    await withTransaction(async (client) => {
+      if (forcePrivateIds.length > 0) {
+        await client.query(`UPDATE lists SET is_public = false WHERE id = ANY($1::varchar[])`, [forcePrivateIds]);
+      }
+      await client.query(
+        `UPDATE lists SET workspace_id = $1${detachFolder ? ', folder_id = NULL' : ''} WHERE id = ANY($2::varchar[])`,
+        [workspaceId, allIds]
+      );
+      await client.query(`UPDATE tasks SET workspace_id = $1 WHERE list_id = ANY($2::varchar[])`, [workspaceId, allIds]);
+    });
+
+    wlog(`list MOVE-WORKSPACE ✓ id=${listId} (+${descendantIds.length} sublist(s)) → workspace=${workspaceId} owner=${req.userId}`);
+    res.json({ list: await getListForUser(req.userId!, listId) });
+    broadcastToUser(req.userId!, 'lists');
+    broadcastToUser(req.userId!, 'tasks');
+    broadcastToUser(req.userId!, 'workspaces');
+  } catch (err) {
+    werr('lists PUT /workspace error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

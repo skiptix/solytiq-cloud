@@ -502,7 +502,8 @@ export interface AppState {
   restoreFolderFromTrash: (trashId: number) => void;
   deleteFolderFromTrash: (trashId: number) => void;
   setSidebarWidth: (w: number) => void;
-  moveTaskToList: (taskId: number, targetListId: string) => void;
+  moveTaskToList: (taskId: number, targetListId: string, targetSectionId?: string) => void;
+  moveTaskToDashboard: (taskId: number) => void;
   loadFromApi: (
     workspaceId?: string,
     opts?: { only?: Array<'tasks' | 'lists' | 'folders' | 'timelines' | 'trash'>; attempt?: number }

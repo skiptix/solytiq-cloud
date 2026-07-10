@@ -8,6 +8,9 @@ import RingProgress from './RingProgress';
 import SlashCommandInput from './SlashCommandInput';
 import type { SlashCommandResult } from './SlashCommandInput';
 import { markdownToPlainText } from './MarkdownView';
+import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
+import RenameDialog from './RenameDialog';
+import MoveTaskModal from '../modals/MoveTaskModal';
 
 const BADGE_COLORS: Record<string, { bg: string; color: string }> = {
   Work:     { bg: '#f9e287', color: '#6e5e0d' },
@@ -215,8 +218,11 @@ interface TaskItemProps {
   currentListId?: string;
 }
 
-export default function TaskItem({ task, onToggle, onRowClick, onDragStart, onDragEnd, onDragOver, onDrop, isDragging, isDragOver, hideListBadge, availableLists = [] }: TaskItemProps) {
+export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClick, onDragStart, onDragEnd, onDragOver, onDrop, isDragging, isDragOver, hideListBadge, availableLists = [] }: TaskItemProps) {
   const [hovered, setHovered] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [showRename, setShowRename] = useState(false);
+  const [showMoveList, setShowMoveList] = useState(false);
   const navigate = useNavigate();
   const { title, note, priority, badge, checked, deadline, time, linkedListId } = task;
   const bc = badge ? (BADGE_COLORS[badge] ?? { bg: '#F5F3FF', color: '#484552' }) : null;
@@ -227,6 +233,14 @@ export default function TaskItem({ task, onToggle, onRowClick, onDragStart, onDr
   const ringProgress = linkedList?.linkedProgress ?? { total: 0, completed: 0 };
   const isLinkedComplete = linkedList && ringProgress.total > 0 && ringProgress.completed === ringProgress.total;
 
+  const menuItems: ContextMenuEntry[] = [
+    { key: 'details', label: 'More details', icon: 'tune', onClick: () => onRowClick?.(task, {} as React.MouseEvent), disabled: !onRowClick },
+    { key: 'rename', label: 'Rename', icon: 'edit', onClick: () => setShowRename(true) },
+    { key: 'move', label: 'Move to another list', icon: 'drive_file_move', onClick: () => setShowMoveList(true) },
+    { key: 'div1', divider: true },
+    { key: 'delete', label: 'Delete', icon: 'delete', danger: true, onClick: () => onDelete?.(task.id), disabled: !onDelete },
+  ];
+
   return (
     <>
       <div
@@ -235,12 +249,18 @@ export default function TaskItem({ task, onToggle, onRowClick, onDragStart, onDr
           e.dataTransfer.effectAllowed = 'move';
           if (!task._source || task._source === 'dash') {
             e.dataTransfer.setData('dashtaskid', task.id.toString());
+          } else {
+            // A list-sourced task can also be dropped onto another sidebar
+            // list/sublist — distinct key so the sidebar drop handler can
+            // tell it apart from a dashboard task drop.
+            e.dataTransfer.setData('listtaskid', task.id.toString());
           }
           onDragStart?.(task.id);
         }}
         onDragOver={e => { e.preventDefault(); onDragOver?.(task.id); }}
         onDrop={e => { e.preventDefault(); e.stopPropagation(); onDrop?.(task.id); }}
         onDragEnd={() => onDragEnd?.()}
+        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY }); }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
@@ -310,6 +330,20 @@ export default function TaskItem({ task, onToggle, onRowClick, onDragStart, onDr
           <Icon name="drag_indicator" size={16} color="#c9c4d5" />
         </div>
       </div>
+
+      {contextMenu && (
+        <ContextMenu x={contextMenu.x} y={contextMenu.y} items={menuItems} onClose={() => setContextMenu(null)} />
+      )}
+
+      {showRename && (
+        <RenameDialog
+          value={title}
+          onSave={v => { const trimmed = v.trim(); if (trimmed && trimmed !== title) onUpdate?.(task.id, { title: trimmed }); setShowRename(false); }}
+          onCancel={() => setShowRename(false)}
+        />
+      )}
+
+      {showMoveList && <MoveTaskModal task={task} onClose={() => setShowMoveList(false)} />}
     </>
   );
 }

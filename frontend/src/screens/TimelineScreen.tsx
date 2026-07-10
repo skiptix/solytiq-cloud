@@ -25,6 +25,9 @@ import NotesEditor from '../components/NotesEditor';
 import MarkdownView from '../components/MarkdownView';
 import { FilePicker, AttachBadge, useAttachmentDrop, AttachDropOverlay } from '../components/TaskDialog';
 import { DeleteConfirmModal } from '../components/TaskItem';
+import ContextMenu, { type ContextMenuEntry } from '../components/ContextMenu';
+import RenameDialog from '../components/RenameDialog';
+import MoveMilestoneModal from '../modals/MoveMilestoneModal';
 import useMembersStore from '../store/useMembersStore';
 
 function fmtAttSize(bytes: number): string {
@@ -472,6 +475,9 @@ export default function TimelineScreen() {
   const [editing, setEditing] = useState<Milestone | null>(null);
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<Milestone | null>(null);
+  const [renaming, setRenaming] = useState<Milestone | null>(null);
+  const [moving, setMoving] = useState<Milestone | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; milestone: Milestone } | null>(null);
 
   // "New milestone" shortcut — same as the "Add Milestone" buttons (owner only,
   // and only when no milestone editor is already open).
@@ -580,6 +586,11 @@ export default function TimelineScreen() {
   const handleDelete = (milestoneId: string) => {
     updateStoreMilestones(ms => ms.filter(m => m.id !== milestoneId));
     apiDeleteMilestone(milestoneId).catch(() => loadFromApi());
+  };
+
+  const handleMove = (milestoneId: string, targetTimelineId: string) => {
+    updateStoreMilestones(ms => ms.filter(m => m.id !== milestoneId));
+    apiUpdateMilestone(milestoneId, { timelineId: targetTimelineId }).catch(() => loadFromApi());
   };
 
   const cycleStatus = (m: Milestone) => {
@@ -709,7 +720,8 @@ export default function TimelineScreen() {
                     {/* Card */}
                     <div style={{ flex: 1, minWidth: 0, background: effectivelyDone ? `${dot}08` : '#fff', border: `1px solid ${effectivelyDone ? dot + '30' : '#ece8f4'}`, borderLeft: `3px solid ${dot}`, borderRadius: 12, padding: cardPad, transition: 'box-shadow 150ms, background 300ms', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}
                       onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.07)')}
-                      onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)')}>
+                      onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)')}
+                      onContextMenu={e => { if (!isOwner) return; e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, milestone: m }); }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                         {m.emoji && <span style={{ fontSize: layout === 'detailed' ? 20 : 16, lineHeight: 1.2, flexShrink: 0 }}>{m.emoji}</span>}
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -782,6 +794,36 @@ export default function TimelineScreen() {
           description={<>"<span style={{ color: '#1c1b22', fontWeight: 500 }}>{deleting.title}</span>" will be moved to trash.</>}
           onConfirm={() => { handleDelete(deleting.id); setDeleting(null); }}
           onCancel={() => setDeleting(null)}
+        />
+      )}
+
+      {contextMenu && (() => {
+        const m = contextMenu.milestone;
+        const items: ContextMenuEntry[] = [
+          { key: 'settings', label: 'More settings…', icon: 'tune', onClick: () => setEditing(m) },
+          { key: 'rename', label: 'Rename', icon: 'edit', onClick: () => setRenaming(m) },
+          { key: 'move', label: 'Move to another timeline', icon: 'drive_file_move', onClick: () => setMoving(m) },
+          { key: 'div1', divider: true },
+          { key: 'delete', label: 'Delete', icon: 'delete', danger: true, onClick: () => setDeleting(m) },
+        ];
+        return <ContextMenu x={contextMenu.x} y={contextMenu.y} items={items} onClose={() => setContextMenu(null)} />;
+      })()}
+
+      {renaming && (
+        <RenameDialog
+          value={renaming.title}
+          accentColor={accent}
+          onSave={v => { const trimmed = v.trim(); if (trimmed && trimmed !== renaming.title) handleSave(renaming.id, { title: trimmed }); setRenaming(null); }}
+          onCancel={() => setRenaming(null)}
+        />
+      )}
+
+      {moving && (
+        <MoveMilestoneModal
+          milestone={moving}
+          currentTimelineId={timeline.id}
+          onPick={targetTimelineId => handleMove(moving.id, targetTimelineId)}
+          onClose={() => setMoving(null)}
         />
       )}
     </div>
