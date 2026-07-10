@@ -287,17 +287,54 @@ curl -X POST "https://<your-host>/api/admin-read/items" \
 
 ```text
 solytiq-cloud/
-├── 🌐 frontend/         # React SPA
-│   ├── src/api/         # API clients & SSE logic
-│   ├── src/store/       # Zustand global state (Auth, App, AI)
-│   ├── src/screens/     # Main view components
-│   └── src/modals/      # Wizards and overlay dialogs
-├── ⚙️ backend/          # Express API
-│   ├── src/routes/      # API endpoints (Workspaces, AI, Files, etc.)
-│   ├── src/auth.ts      # JWT & 2FA helpers
-│   └── src/db.ts        # Database connection & migrations
-├── 🛡️ nginx/            # Reverse proxy & security headers
-└── 🐳 docker-compose.yml # Full stack orchestration
+├── backend/          # Express REST API (Node.js / TypeScript)
+│   ├── src/
+│   │   ├── index.ts          # App entry, middleware, routes, runMigrations(), public share + SSE endpoints
+│   │   ├── db.ts             # PostgreSQL pool + query() helper
+│   │   ├── auth.ts           # JWT helpers (generateToken/verifyToken), bcrypt
+│   │   ├── middleware.ts     # Auth middleware (verifyToken) — sets req.userId
+│   │   ├── sse.ts            # Server-Sent Events client registry + broadcastToUser()
+│   │   ├── gpx.ts            # GPX/FIT parsing & serialization (fast-xml-parser, fit-file-parser)
+│   │   ├── workspaceUtil.ts  # Workspace access-control helpers
+│   │   ├── setupToken.ts     # First-run setup token generation/logging
+│   │   ├── __tests__/        # Vitest tests (currently gpx.test.ts + GPX fixtures)
+│   │   └── routes/           # One file per resource
+│   │       ├── auth.ts            # /api/auth — register, login, profile, TOTP 2FA
+│   │       ├── tasks.ts           # /api/tasks — CRUD, reorder
+│   │       ├── lists.ts           # /api/lists — CRUD, sections, sublists, links, share link
+│   │       ├── folders.ts         # /api/folders — CRUD
+│   │       ├── timelines.ts       # /api/timelines — CRUD, milestones, upcoming, share link
+│   │       ├── workspaces.ts      # /api/workspaces — CRUD, members
+│   │       ├── trash.ts           # /api/trash — soft delete, restore (tasks/lists/folders/timelines)
+│   │       ├── files.ts           # /api/files — upload/download (multer), share settings
+│   │       ├── taskAttachments.ts # /api/tasks/:taskId/attachments — upload/link files to tasks
+│   │       ├── gps.ts             # /api/gps — GPX/FIT upload, edit, route planning, POIs
+│   │       ├── admin.ts           # /api/admin — users, roles, nuke, settings
+│   │       └── ai.ts              # /api/ai — OpenRouter chat, sessions, file uploads, usage
+│   ├── init.sql              # (legacy) initial schema — migrations now in index.ts
+│   ├── tsconfig.json
+│   └── package.json
+├── frontend/         # React SPA (Vite + TypeScript)
+│   ├── src/
+│   │   ├── main.tsx          # React DOM entry
+│   │   ├── App.tsx           # Router, layout shell, modal state, SSE connect
+│   │   ├── types.ts          # All shared TypeScript interfaces
+│   │   ├── index.css         # Tailwind v4 base + Material Symbols font + keyframe animations
+│   │   ├── App.css           # Component-scoped styles / overrides
+│   │   ├── api/client.ts     # All HTTP calls (fetch wrappers) + SSE connect/disconnect
+│   │   ├── store/            # Zustand stores (see State Management below)
+│   │   ├── components/       # Reusable UI (Sidebar, TopBar, TaskItem, Icon, AIAssistant, GPS map widgets, …)
+│   │   ├── screens/          # Full-page views (one per route) + public share pages
+│   │   └── modals/           # Modal overlays (wizards, settings)
+│   ├── tsconfig.json / tsconfig.app.json
+│   ├── vite.config.ts
+│   ├── eslint.config.js
+│   └── package.json
+├── nginx/
+│   └── nginx.conf            # Reverse proxy, SPA fallback, gzip, headers
+├── docker-compose.yml        # Three services: postgres, backend, frontend
+├── .env.example              # Required environment variable template
+└── security_report.md        # Prior security audit findings and fixes
 ```
 
 ---
