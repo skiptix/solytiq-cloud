@@ -15,8 +15,10 @@ const XLSX: {
   utils: { sheet_to_csv: (sheet: unknown) => string };
 } = require('xlsx');
 
-// Cap on extracted text length, mirroring the internal AI file limit.
-export const MAX_TEXT_CHARS = 50000;
+// Cap on extracted text length, mirroring the internal AI file limit. Raised
+// from the original 50,000 so a full-length contract or report (tens of
+// pages) fits in one call without truncation for the common case.
+export const MAX_TEXT_CHARS = 150000;
 
 // Extensions whose MIME type is often wrong/ambiguous in the browser
 // (e.g. .ts files arrive as video/mp2t) but are really plain text.
@@ -37,10 +39,20 @@ export interface ExtractedFile {
   isImage: boolean;
 }
 
+/** Cap `text` to maxChars, appending a visible notice instead of cutting it silently. */
+function capWithNotice(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const omitted = text.length - maxChars;
+  return `${text.slice(0, maxChars)}\n\n[... truncated — ${omitted} more characters omitted (${text.length} total). Use the read_file tool with an offset to read the rest.]`;
+}
+
 /**
  * Extract readable content from a file buffer based on its MIME type and name.
  * Never throws — parse failures degrade to a bracketed placeholder string so
- * callers always get something back.
+ * callers always get something back. Truncation (when the extracted text
+ * exceeds maxChars) is always flagged in the returned text rather than done
+ * silently, so a caller — or the model reading it — knows content is missing
+ * instead of mistaking a partial document for the whole thing.
  */
 export async function extractTextFromBuffer(
   buffer: Buffer,
@@ -57,7 +69,7 @@ export async function extractTextFromBuffer(
   if (mimetype === 'application/pdf') {
     try {
       const parsed = await pdfParse(buffer);
-      return { contentText: parsed.text.slice(0, maxChars), isImage: false };
+      return { contentText: capWithNotice(parsed.text, maxChars), isImage: false };
     } catch {
       return { contentText: '[PDF could not be parsed]', isImage: false };
     }
@@ -70,14 +82,14 @@ export async function extractTextFromBuffer(
         const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[name]);
         return `Sheet: ${name}\n${csv}`;
       }).join('\n\n');
-      return { contentText: sheets.slice(0, maxChars), isImage: false };
+      return { contentText: capWithNotice(sheets, maxChars), isImage: false };
     } catch {
       return { contentText: '[XLSX could not be parsed]', isImage: false };
     }
   }
 
   if (mimetype.startsWith('text/') || isTextByExt) {
-    return { contentText: buffer.toString('utf-8').slice(0, maxChars), isImage: false };
+    return { contentText: capWithNotice(buffer.toString('utf-8'), maxChars), isImage: false };
   }
 
   if (mimetype.startsWith('image/')) {

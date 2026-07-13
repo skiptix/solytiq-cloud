@@ -306,8 +306,8 @@ export default function AIChatWindow({
       setTimeout(() => setUploadError(null), 4000);
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setUploadError('File too large — max 10 MB.');
+    if (file.size > 25 * 1024 * 1024) {
+      setUploadError('File too large — max 25 MB.');
       setTimeout(() => setUploadError(null), 4000);
       return;
     }
@@ -857,7 +857,7 @@ export default function AIChatWindow({
               textAlign: 'center',
             }}
           >
-            PDF, XLSX, CSV, HTML, Markdown, TypeScript, images · max 10 MB
+            PDF, XLSX, CSV, HTML, Markdown, TypeScript, images · max 25 MB
           </div>
         </div>
       )}
