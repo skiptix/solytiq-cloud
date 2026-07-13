@@ -25,8 +25,14 @@ import { useMobile } from '../hooks/useBreakpoint';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+// Indexed by JS getDay() (0 = Sunday) — used to label a column from its real weekday.
 const DAYS_SHORT = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-const DAYS_MINI = ['S','M','T','W','T','F','S'];
+// Header rows, in Monday-first display order (weeks start on Monday).
+const WEEK_HEADER = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const DAYS_MINI = ['M','T','W','T','F','S','S'];
+
+/** JS weekday (0 = Sun) → Monday-first index (0 = Mon … 6 = Sun). */
+function monIndex(jsDay: number): number { return (jsDay + 6) % 7; }
 const PRIORITY_COLORS: Record<string, string> = { High: '#ea580c', Medium: '#f59e0b', Low: '#787584' };
 
 // Curated, saturated palette for meetings — readable as chip text and on-brand.
@@ -67,8 +73,16 @@ function tint(hex: string | null | undefined, alpha = 0.14): string {
 function startOfWeek(d: Date): Date {
   const r = new Date(d);
   r.setHours(0, 0, 0, 0);
-  r.setDate(r.getDate() - r.getDay());
+  r.setDate(r.getDate() - monIndex(r.getDay()));
   return r;
+}
+
+/** Minutes since midnight → "HH:MM" (clamped to a valid 00:00–23:59). */
+function minToStr(min: number): string {
+  const clamped = Math.max(0, Math.min(1439, Math.round(min)));
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 function getAllTasks(dashTasks: Task[], lists: List[]): Task[] {
@@ -138,6 +152,8 @@ function layoutDay(chips: Chip[]): Map<Chip, { col: number; cols: number }> {
 interface MeetingModalProps {
   initial: Meeting | null;       // null = creating
   presetDate?: string;
+  presetStart?: string;          // pre-fill start time (from a week-grid drag)
+  presetEnd?: string;            // pre-fill end time (from a week-grid drag)
   seriesCount?: number;          // when editing: how many meetings share initial.recurrenceId
   onSave: (data: Omit<Meeting, 'id' | 'createdAt' | 'updatedAt'>, id?: string, repeat?: MeetingRecurrenceRule, inviteeIds?: string[]) => void;
   onDelete?: (id: string, opts?: { series?: boolean }) => void;
@@ -194,12 +210,12 @@ function repeatPresetToRule(preset: RepeatPreset, customDays: number, count: num
 
 type PopoverKind = 'date' | 'start' | 'end' | 'repeat' | 'invite';
 
-function MeetingModal({ initial, presetDate, seriesCount, onSave, onDelete, onClose }: MeetingModalProps) {
+function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount, onSave, onDelete, onClose }: MeetingModalProps) {
   const [title, setTitle] = useState(initial?.title ?? '');
   const [date, setDate] = useState(initial?.date ?? presetDate ?? toIso(new Date()));
   const [allDay, setAllDay] = useState(initial?.allDay ?? false);
-  const [startTime, setStartTime] = useState<string>(initial?.startTime ?? '');
-  const [endTime, setEndTime] = useState<string>(initial?.endTime ?? '');
+  const [startTime, setStartTime] = useState<string>(initial?.startTime ?? presetStart ?? '');
+  const [endTime, setEndTime] = useState<string>(initial?.endTime ?? presetEnd ?? '');
   const [location, setLocation] = useState(initial?.location ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [color, setColor] = useState(initial?.color ?? DEFAULT_MEETING_COLOR);
@@ -932,7 +948,7 @@ function ChipCompact({ chip, onOpenMenu }: { chip: Chip; onOpenMenu?: (e: React.
       title={chip.label}
       draggable={!!chip.dragData}
       onDragStart={chip.dragData ? e => { e.dataTransfer.setData('text/plain', chip.dragData!); e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); } : undefined}
-      style={{ display: 'flex', alignItems: 'center', gap: 4, background: chip.bg, borderRadius: 4, padding: '2px 5px', cursor: chip.dragData ? 'grab' : 'pointer', transition: 'filter 120ms' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 4, background: chip.bg, borderRadius: 4, padding: '2px 5px', cursor: chip.dragData ? 'grab' : 'pointer', transition: 'filter 120ms', minWidth: 0, overflow: 'hidden' }}
       onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(0.96)')}
       onMouseLeave={e => (e.currentTarget.style.filter = 'none')}>
       {chip.priorityColor
@@ -940,7 +956,7 @@ function ChipCompact({ chip, onOpenMenu }: { chip: Chip; onOpenMenu?: (e: React.
         : chip.emoji
           ? <span style={{ fontSize: 10, lineHeight: 1, flexShrink: 0 }}>{chip.emoji}</span>
           : <div style={{ width: 5, height: 5, borderRadius: '50%', background: chip.accent, flexShrink: 0 }} />}
-      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: chip.accent, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontWeight: 500 }}>{chip.label}</span>
+      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: chip.accent, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, fontWeight: 500 }}>{chip.label}</span>
     </div>
   );
 }
@@ -967,6 +983,43 @@ function ChipCard({ chip, onOpenMenu }: { chip: Chip; onOpenMenu?: (e: React.Mou
         )}
       </div>
     </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Day items modal — opened from a month cell's "+N more". Lists every item
+// scheduled on that day; clicking one opens its detail (and closes this).
+// ════════════════════════════════════════════════════════════════════
+function DayItemsModal({ date, chips, onClose, onOpenMenu }: { date: string; chips: Chip[]; onClose: () => void; onOpenMenu?: (e: React.MouseEvent, items: ContextMenuEntry[]) => void }) {
+  const friendly = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [onClose]);
+  // Portaled to <body> — see the comment on MeetingModal's return for why.
+  return createPortal(
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+      onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px 12px', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>{friendly}</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{chips.length} {chips.length === 1 ? 'item' : 'items'}</div>
+          </div>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: '#f1ecf6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="close" size={15} color="#787584" />
+          </button>
+        </div>
+        <div style={{ padding: '4px 16px 18px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {chips.map(c => (
+            <ChipCard key={c.key} chip={{ ...c, onClick: () => { onClose(); c.onClick(); } }} onOpenMenu={onOpenMenu} />
+          ))}
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1009,9 +1062,15 @@ export default function CalendarScreen() {
     e.stopPropagation();
     setChipMenu({ x: e.clientX, y: e.clientY, items });
   }, []);
-  const [creatingMeeting, setCreatingMeeting] = useState<{ date: string } | null>(null);
+  const [creatingMeeting, setCreatingMeeting] = useState<{ date: string; startTime?: string; endTime?: string } | null>(null);
   const [dayChooser, setDayChooser] = useState<string | null>(null);
   const [addingTaskDate, setAddingTaskDate] = useState<string | null>(null);
+  const [dayItemsIso, setDayItemsIso] = useState<string | null>(null);
+
+  // Week view: click-and-drag on the time grid to block out a meeting's time.
+  // The live drag state lives in the beginWeekSelect closure; this only mirrors
+  // it for rendering the selection overlay.
+  const [weekSel, setWeekSel] = useState<{ iso: string; aMin: number; bMin: number } | null>(null);
 
   const [search, setSearch] = useState('');
   const [dragTaskId, setDragTaskId] = useState<number | null>(null);
@@ -1289,6 +1348,42 @@ export default function CalendarScreen() {
     }).catch(() => loadData());
   };
 
+  // Week time-grid: press-and-drag to block out a time range, then release to
+  // open the meeting composer pre-filled with that day + start/end. A plain
+  // click (no drag) falls back to the day "what to add" chooser.
+  const beginWeekSelect = useCallback((iso: string, e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    // Ignore presses that start on an existing chip — those drag/open the chip.
+    if ((e.target as HTMLElement).closest('[data-cal-chip]')) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const minAt = (clientY: number) => {
+      const y = clientY - rect.top;
+      const snapped = Math.round((y / HOUR_H) * 60 / 15) * 15;   // snap to 15 min
+      return Math.max(0, Math.min(24 * 60, snapped));
+    };
+    const start = minAt(e.clientY);
+    const sel = { aMin: start, bMin: start, moved: false };
+    setWeekSel({ iso, aMin: start, bMin: start });
+
+    const onMove = (ev: MouseEvent) => {
+      const b = minAt(ev.clientY);
+      if (b !== sel.aMin) sel.moved = true;
+      sel.bMin = b;
+      setWeekSel({ iso, aMin: sel.aMin, bMin: b });
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      setWeekSel(null);
+      const lo = Math.min(sel.aMin, sel.bMin), hi = Math.max(sel.aMin, sel.bMin);
+      if (!sel.moved || hi - lo < 15) setDayChooser(iso);
+      else setCreatingMeeting({ date: iso, startTime: minToStr(lo), endTime: minToStr(hi) });
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
+
   // ── Period navigation ──────────────────────────────────────────
   const go = (dir: number) => setAnchor(a => {
     const d = new Date(a);
@@ -1316,7 +1411,7 @@ export default function CalendarScreen() {
   // ════════════════════════════════════════════════════════════════
   const renderMonth = () => {
     const y = anchor.getFullYear(), mo = anchor.getMonth();
-    const firstDay = new Date(y, mo, 1).getDay();
+    const firstDay = monIndex(new Date(y, mo, 1).getDay());
     const daysInMonth = new Date(y, mo + 1, 0).getDate();
     const daysInPrev = new Date(y, mo, 0).getDate();
     const cells: Array<{ date: Date; current: boolean }> = [];
@@ -1326,8 +1421,8 @@ export default function CalendarScreen() {
 
     return (
       <div style={{ flex: 1, overflow: 'auto', padding: '0 16px 16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1 }}>
-          {DAYS_SHORT.map(d => (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 1 }}>
+          {WEEK_HEADER.map(d => (
             <div key={d} style={{ textAlign: 'center', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#b0acbe', padding: '10px 0' }}>{d}</div>
           ))}
           {cells.map((cell, i) => {
@@ -1341,7 +1436,7 @@ export default function CalendarScreen() {
                 onDragOver={e => { if (cell.current) e.preventDefault(); }}
                 onDrop={e => { if (cell.current) handleDayDrop(iso, e); }}
                 onClick={() => { if (cell.current) setDayChooser(iso); }}
-                style={{ minHeight: isMobile ? 76 : 100, border: isToday ? '1.5px solid #c8bfff' : '1px solid #f1ecf6', background: isToday ? '#faf8ff' : cell.current ? '#fff' : '#fafafa', borderRadius: 6, padding: 4, transition: 'background 150ms', cursor: cell.current ? 'pointer' : 'default', position: 'relative' }}
+                style={{ minHeight: isMobile ? 76 : 100, border: isToday ? '1.5px solid #c8bfff' : '1px solid #f1ecf6', background: isToday ? '#faf8ff' : cell.current ? '#fff' : '#fafafa', borderRadius: 6, padding: 4, transition: 'background 150ms', cursor: cell.current ? 'pointer' : 'default', position: 'relative', minWidth: 0, overflow: 'hidden' }}
                 className="cal-cell">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, padding: '0 2px' }}>
                   <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? '#5e4dbb' : cell.current ? '#1c1b22' : '#c9c4d5' }}>{cell.date.getDate()}</div>
@@ -1351,9 +1446,16 @@ export default function CalendarScreen() {
                     </div>
                   )}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                   {visible.map(c => <ChipCompact key={c.key} chip={c} onOpenMenu={openChipMenu} />)}
-                  {overflow > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: '#787584', paddingLeft: 5 }}>+{overflow} more</div>}
+                  {overflow > 0 && (
+                    <button onClick={e => { e.stopPropagation(); setDayItemsIso(iso); }}
+                      style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#787584', background: 'transparent', border: 'none', textAlign: 'left', padding: '1px 5px', borderRadius: 4, cursor: 'pointer', transition: 'all 120ms' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#f1ecf6'; e.currentTarget.style.color = '#5e4dbb'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#787584'; }}>
+                      +{overflow} more
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -1367,7 +1469,7 @@ export default function CalendarScreen() {
     const ws = startOfWeek(anchor);
     const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(ws); d.setDate(d.getDate() + i); return d; });
     const gutter = isMobile ? 42 : 56;
-    const gridCols = `${gutter}px repeat(7, 1fr)`;
+    const gridCols = `${gutter}px repeat(7, minmax(0, 1fr))`;
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
 
@@ -1419,13 +1521,21 @@ export default function CalendarScreen() {
             {/* Day columns */}
             {dayData.map(({ iso, isToday, timed, layout }) => (
               <div key={iso}
-                onClick={() => setDayChooser(iso)}
+                onMouseDown={e => beginWeekSelect(iso, e)}
                 onDragOver={e => e.preventDefault()}
                 onDrop={e => handleDayDrop(iso, e)}
                 style={{ position: 'relative', height: 24 * HOUR_H, borderLeft: '1px solid #f4f1f9', background: isToday ? '#fbfaff' : '#fff', cursor: 'pointer' }}>
                 {HOURS.map(h => (
                   <div key={h} style={{ position: 'absolute', top: h * HOUR_H, left: 0, right: 0, borderTop: '1px solid #f4f1f9' }} />
                 ))}
+                {weekSel && weekSel.iso === iso && (() => {
+                  const lo = Math.min(weekSel.aMin, weekSel.bMin), hi = Math.max(weekSel.aMin, weekSel.bMin);
+                  return (
+                    <div style={{ position: 'absolute', top: (lo / 60) * HOUR_H, height: Math.max(((hi - lo) / 60) * HOUR_H, 2), left: 2, right: 2, background: 'rgba(94,77,187,0.16)', border: '1.5px solid #5e4dbb', borderRadius: 5, zIndex: 4, pointerEvents: 'none', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '2px 0' }}>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 9.5, fontWeight: 600, color: '#5e4dbb' }}>{minToStr(lo)} – {minToStr(hi)}</span>
+                    </div>
+                  );
+                })()}
                 {isToday && (
                   <div style={{ position: 'absolute', top: (nowMin / 60) * HOUR_H, left: 0, right: 0, height: 2, background: '#ef4444', zIndex: 3 }}>
                     <div style={{ position: 'absolute', left: -3, top: -3, width: 7, height: 7, borderRadius: '50%', background: '#ef4444' }} />
@@ -1438,6 +1548,8 @@ export default function CalendarScreen() {
                   const wPct = 100 / lay.cols;
                   return (
                     <div key={c.key}
+                      data-cal-chip
+                      onMouseDown={e => e.stopPropagation()}
                       onClick={e => { e.stopPropagation(); c.onClick(); }}
                       onContextMenu={e => { if (c.contextItems) openChipMenu(e, c.contextItems); }}
                       draggable={!!c.dragData}
@@ -1467,7 +1579,7 @@ export default function CalendarScreen() {
       <div style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 16 }}>
           {MONTHS.map((monthName, mo) => {
-            const firstDay = new Date(y, mo, 1).getDay();
+            const firstDay = monIndex(new Date(y, mo, 1).getDay());
             const daysInMonth = new Date(y, mo + 1, 0).getDate();
             const cells: Array<Date | null> = [];
             for (let i = 0; i < firstDay; i++) cells.push(null);
@@ -1720,6 +1832,9 @@ export default function CalendarScreen() {
       {addingTaskDate && (
         <AddToDateModal date={addingTaskDate} lists={lists} onAdd={handleAddToDate} onClose={() => setAddingTaskDate(null)} />
       )}
+      {dayItemsIso && (
+        <DayItemsModal date={dayItemsIso} chips={chipsByDate[dayItemsIso] ?? []} onOpenMenu={openChipMenu} onClose={() => setDayItemsIso(null)} />
+      )}
       {editingMeeting && editingMeeting.isOwner === false ? (
         <MeetingViewModal
           meeting={editingMeeting}
@@ -1729,6 +1844,8 @@ export default function CalendarScreen() {
         <MeetingModal
           initial={editingMeeting}
           presetDate={creatingMeeting?.date}
+          presetStart={creatingMeeting?.startTime}
+          presetEnd={creatingMeeting?.endTime}
           seriesCount={editingMeeting?.recurrenceId ? meetings.filter(m => m.recurrenceId === editingMeeting.recurrenceId).length : undefined}
           onSave={saveMeeting}
           onDelete={editingMeeting ? deleteMeeting : undefined}

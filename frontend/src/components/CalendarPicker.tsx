@@ -7,7 +7,8 @@ interface CalendarPickerProps {
   onClear?: () => void;
 }
 
-const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+// Monday-first (weeks start on Monday across the app).
+const DAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function toIso(d: Date): string {
@@ -31,7 +32,8 @@ export default function CalendarPicker({ value, onChange, onClear }: CalendarPic
     setView(v => v.month === 11 ? { year: v.year + 1, month: 0 } : { year: v.year, month: v.month + 1 });
   }
 
-  const firstDay = new Date(view.year, view.month, 1).getDay();
+  // Monday-first: 0 = Mon … 6 = Sun, so the leading blanks land correctly.
+  const firstDay = (new Date(view.year, view.month, 1).getDay() + 6) % 7;
   const daysInMonth = new Date(view.year, view.month + 1, 0).getDate();
   const daysInPrev = new Date(view.year, view.month, 0).getDate();
   const cells: Array<{ date: Date; current: boolean }> = [];
