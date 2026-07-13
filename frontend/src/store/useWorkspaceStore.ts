@@ -103,9 +103,12 @@ const useWorkspaceStore = create<WorkspaceState>()(
 );
 
 export const clearWorkspaceStore = () => {
+  // Keep the persisted `currentWorkspaceId` so a user lands back in the workspace
+  // they last worked in after signing out and back in. loadWorkspaces() validates
+  // it against the signed-in user's workspaces and falls back to the first one if
+  // it isn't valid for them, so preserving it is safe even across different users.
   useWorkspaceStore.setState({
     workspaces: [],
-    currentWorkspaceId: null,
     workspacesLoaded: false,
     deletingWorkspaceId: null,
   });

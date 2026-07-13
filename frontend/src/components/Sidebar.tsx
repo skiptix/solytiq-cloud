@@ -1000,7 +1000,13 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsSearch, setGpsSearch] = useState('');
 
-  const { folders, timelines, addFolder, updateList, updateFolder, updateTimeline, setFolders, setTimelines, loadFromApi } = useAppStore();
+  const { folders, timelines, addFolder, updateList, updateFolder, updateTimeline, setFolders, setTimelines, loadFromApi, setSidebarWidth } = useAppStore();
+
+  // Click-to-toggle the sidebar collapse (an alternative to dragging the resize
+  // handle). Mirrors the `toggle-sidebar` keyboard shortcut in KeyboardShortcuts.tsx.
+  const toggleCollapsed = useCallback(() => {
+    setSidebarWidth(width <= 72 ? 256 : MINI);
+  }, [width, setSidebarWidth]);
 
   // Scroll sidebar to top whenever the mobile drawer opens so the logo is always visible.
   useEffect(() => {
@@ -1178,6 +1184,15 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
             onMouseEnter={() => setHandleHov(true)} onMouseLeave={() => setHandleHov(false)}
             style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, background: handleHov ? 'rgba(94,77,187,0.10)' : 'transparent', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {handleHov && <div style={{ width: 2, height: 48, borderRadius: 2, background: '#9d8dff', opacity: 0.7 }} />}
+            {handleHov && (
+              <button type="button"
+                onMouseDown={e => e.stopPropagation()}
+                onClick={e => { e.stopPropagation(); toggleCollapsed(); }}
+                title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                style={{ position: 'absolute', top: '50%', right: 3, transform: 'translateY(-50%)', width: 20, height: 20, borderRadius: '50%', border: '1px solid #e8e4f0', background: '#fff', boxShadow: '0 2px 8px rgba(94,77,187,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 60 }}>
+                <Icon name={collapsed ? 'chevron_right' : 'chevron_left'} size={14} color="#5e4dbb" />
+              </button>
+            )}
           </div>
         )}
 
@@ -1284,7 +1299,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.36.0
+              v1.37.0
             </div>
           )}
         </div>
@@ -1321,6 +1336,15 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           onMouseEnter={() => setHandleHov(true)} onMouseLeave={() => setHandleHov(false)}
           style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, background: handleHov ? 'rgba(94,77,187,0.10)' : 'transparent', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {handleHov && <div style={{ width: 2, height: 48, borderRadius: 2, background: '#9d8dff', opacity: 0.7 }} />}
+          {handleHov && (
+            <button type="button"
+              onMouseDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); toggleCollapsed(); }}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              style={{ position: 'absolute', top: '50%', right: 3, transform: 'translateY(-50%)', width: 20, height: 20, borderRadius: '50%', border: '1px solid #e8e4f0', background: '#fff', boxShadow: '0 2px 8px rgba(94,77,187,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 60 }}>
+              <Icon name={collapsed ? 'chevron_right' : 'chevron_left'} size={14} color="#5e4dbb" />
+            </button>
+          )}
         </div>
       )}
 
@@ -1522,7 +1546,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.36.0
+            v1.37.0
           </div>
         )}
       </div>
