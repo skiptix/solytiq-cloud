@@ -13,7 +13,7 @@ import { milestoneCompletion, railFillIndex } from '../utils/timeline';
 import {
   apiCreateMilestone, apiUpdateMilestone, apiDeleteMilestone,
   apiGetMilestoneAttachments, apiUploadMilestoneAttachment, apiLinkMilestoneAttachment,
-  apiDeleteMilestoneAttachment, apiDownloadMilestoneAttachment,
+  apiDeleteMilestoneAttachment, apiDownloadMilestoneAttachment, apiMilestoneAttachmentBlob,
 } from '../api/client';
 import { genId } from '../utils/id';
 import Icon from '../components/Icon';
@@ -24,6 +24,8 @@ import CreatorBubble from '../components/CreatorBubble';
 import NotesEditor from '../components/NotesEditor';
 import MarkdownView from '../components/MarkdownView';
 import { FilePicker, AttachBadge, useAttachmentDrop, AttachDropOverlay } from '../components/TaskDialog';
+import AttachmentPreviewModal from '../components/AttachmentPreview';
+import { isPreviewable } from '../utils/attachmentPreview';
 import { DeleteConfirmModal } from '../components/TaskItem';
 import ContextMenu, { type ContextMenuEntry } from '../components/ContextMenu';
 import RenameDialog from '../components/RenameDialog';
@@ -122,6 +124,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [removingAttId, setRemovingAttId] = useState<string | null>(null);
   const [downloadingAttId, setDownloadingAttId] = useState<string | null>(null);
+  const [previewAtt, setPreviewAtt] = useState<MilestoneAttachment | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Close calendar on outside click
@@ -367,16 +370,28 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
                     <div style={{ width: 13, height: 13, border: '2px solid #c9c4d5', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
                     <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading…</span>
                   </div>
-                ) : attachments.map(att => (
+                ) : attachments.map(att => {
+                  const canPreview = isPreviewable(att.mimeType, att.name);
+                  return (
                   <div key={att.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: '#faf9ff', marginBottom: 6, border: '1px solid #F0EEF8' }}>
-                    <AttachBadge mime={att.mimeType} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{att.name}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
-                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe' }}>{fmtAttSize(att.size)}</span>
-                        {att.attachmentType === 'linked' && (
-                          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 99, padding: '1px 6px' }}>from Files</span>
-                        )}
+                    <div
+                      onClick={() => canPreview ? setPreviewAtt(att) : handleDownloadAttachment(att)}
+                      title={canPreview ? 'Click to preview' : 'Download'}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, cursor: 'pointer', borderRadius: 8 }}>
+                      <AttachBadge mime={att.mimeType} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{att.name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
+                          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe' }}>{fmtAttSize(att.size)}</span>
+                          {canPreview && (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#5e4dbb' }}>
+                              <Icon name="visibility" size={11} color="#5e4dbb" /> Preview
+                            </span>
+                          )}
+                          {att.attachmentType === 'linked' && (
+                            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 99, padding: '1px 6px' }}>from Files</span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <button onClick={() => handleDownloadAttachment(att)} disabled={downloadingAttId === att.id} title="Download"
@@ -396,7 +411,8 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
                         : <Icon name="close" size={14} color="#ba1a1a" />}
                     </button>
                   </div>
-                ))}
+                  );
+                })}
 
                 {uploadProgress !== null && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: '#faf9ff', marginBottom: 6, border: '1px solid #F0EEF8' }}>
@@ -454,6 +470,15 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
         description={<>"<span style={{ color: '#1c1b22', fontWeight: 500 }}>{title.trim() || initial?.title}</span>" will be moved to trash.</>}
         onConfirm={() => { setShowDelete(false); onDelete(); }}
         onCancel={() => setShowDelete(false)}
+      />
+    )}
+    {previewAtt && milestoneId && (
+      <AttachmentPreviewModal
+        name={previewAtt.name}
+        mimeType={previewAtt.mimeType}
+        fetchBlob={() => apiMilestoneAttachmentBlob(milestoneId, previewAtt.id, previewAtt.mimeType)}
+        onDownload={() => handleDownloadAttachment(previewAtt)}
+        onClose={() => setPreviewAtt(null)}
       />
     )}
     </>,

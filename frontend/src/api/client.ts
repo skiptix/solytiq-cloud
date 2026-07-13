@@ -646,6 +646,24 @@ export async function apiDownloadTaskAttachment(taskId: number, attachmentId: st
   URL.revokeObjectURL(url);
 }
 
+// Fetch an attachment as a Blob for in-app preview (image/pdf/video/audio/text).
+// The backend serves non-allowlisted types as `application/octet-stream`, so we
+// re-tag the blob with the attachment's known mime type — the bytes are
+// identical; only the label the browser renders by changes.
+async function fetchAttachmentBlob(url: string, mimeType: string): Promise<Blob> {
+  const token = getToken();
+  const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const raw = await res.blob();
+  return mimeType && raw.type !== mimeType ? raw.slice(0, raw.size, mimeType) : raw;
+}
+
+export const apiTaskAttachmentBlob = (taskId: number, attachmentId: string, mimeType: string) =>
+  fetchAttachmentBlob(`${BASE_URL}/tasks/${taskId}/attachments/${attachmentId}/download`, mimeType);
+
+export const apiMilestoneAttachmentBlob = (milestoneId: string, attachmentId: string, mimeType: string) =>
+  fetchAttachmentBlob(`${BASE_URL}/timelines/milestones/${milestoneId}/attachments/${attachmentId}/download`, mimeType);
+
 // Milestone attachments — mirrors task attachments (mounted under /timelines/milestones/:id/attachments)
 export const apiGetMilestoneAttachments = (milestoneId: string) =>
   apiFetch<{ attachments: MilestoneAttachment[] }>(`/timelines/milestones/${milestoneId}/attachments`);
