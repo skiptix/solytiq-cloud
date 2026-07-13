@@ -61,7 +61,7 @@ export default function UseTemplateModal({ template, onClose, onCreatedList, onC
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid #f1ecf6' }}>
           <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>
-            New {template.type === 'list' ? 'List' : 'Timeline'} from Template
+            New {template.type === 'list' ? 'To-Do' : 'Timeline'} from Template
           </span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}>
             <Icon name="close" size={18} color="#787584" />
@@ -83,7 +83,7 @@ export default function UseTemplateModal({ template, onClose, onCreatedList, onC
 
           <div style={{ animation: 'wizardStepIn 260ms cubic-bezier(0.22,1,0.36,1) 40ms both' }}>
             <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 6 }}>
-              {template.type === 'list' ? 'List' : 'Timeline'} Name *
+              {template.type === 'list' ? 'To-Do' : 'Timeline'} Name *
             </label>
             <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
               style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, border: 'none', borderBottom: '1.5px solid #E5E7EB', padding: '8px 0', outline: 'none', color: '#1c1b22', background: 'transparent' }}

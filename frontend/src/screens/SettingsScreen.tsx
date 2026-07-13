@@ -1129,7 +1129,7 @@ export default function SettingsScreen() {
                     <code style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, overflowWrap: 'anywhere' }}>{apiOrigin}</code>
                     <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 4 }}>Read everything (needs the <b>read</b> permission):</div>
                     <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, overflowX: 'auto' }}>{exportExample}</pre>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 4 }}>Create a list for a user (needs the <b>lists</b> permission). Write endpoints accept an optional <b>ownerId</b> — the target user; it defaults to the admin who owns the key:</div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 4 }}>Create a to-do for a user (needs the <b>lists</b> permission). Write endpoints accept an optional <b>ownerId</b> — the target user; it defaults to the admin who owns the key:</div>
                     <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, overflowX: 'auto' }}>{writeExample}</pre>
                   </div>
                 </div>

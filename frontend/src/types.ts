@@ -79,6 +79,7 @@ export interface List {
   shareExpiresAt?: string | null;
   shareSubpages?: boolean;
   version?: number;   // optimistic-concurrency token (bumps on every server-side update)
+  viewMode?: 'list' | 'kanban';   // To-Do screen's layout — persisted per list, synced across devices
   linkedProgress?: {
     total: number;
     completed: number;

@@ -134,7 +134,7 @@ export function EditModal({ task = {}, mode = 'edit', onSave, onClose, available
           </div>
           {linkedList && (
             <div>
-              <label style={fl}>Linked List</label>
+              <label style={fl}>Linked To-Do</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F5F3FF', border: '1px solid #c4b5fd', borderRadius: 8, padding: '6px 12px', flex: 1 }}>
                   <Icon name="format_list_bulleted" size={14} color="#5e4dbb" />
@@ -236,7 +236,7 @@ export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClic
   const menuItems: ContextMenuEntry[] = [
     { key: 'details', label: 'More details', icon: 'tune', onClick: () => onRowClick?.(task, {} as React.MouseEvent), disabled: !onRowClick },
     { key: 'rename', label: 'Rename', icon: 'edit', onClick: () => setShowRename(true) },
-    { key: 'move', label: 'Move to another list', icon: 'drive_file_move', onClick: () => setShowMoveList(true) },
+    { key: 'move', label: 'Move to another to-do', icon: 'drive_file_move', onClick: () => setShowMoveList(true) },
     { key: 'div1', divider: true },
     { key: 'delete', label: 'Delete', icon: 'delete', danger: true, onClick: () => onDelete?.(task.id), disabled: !onDelete },
   ];
@@ -389,7 +389,7 @@ export function QuickAdd({ placeholder = 'Add a new task…', onAdd, availableLi
     } else if (cmd.type === 'link' && cmd.linkedListId) {
       const linkedList = availableLists.find(l => l.id === cmd.linkedListId);
       const payload = {
-        title: linkedList?.name ?? 'Linked list',
+        title: linkedList?.name ?? 'Linked to-do',
         linkedListType: 'link' as const,
         linkedListId: cmd.linkedListId,
       };

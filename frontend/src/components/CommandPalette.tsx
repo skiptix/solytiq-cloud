@@ -17,7 +17,7 @@ const SETTINGS_RESULTS = [
 type Result = GlobalSearchResult | { type: 'setting'; label: string; sub: string; icon: string; action: 'account-settings' | 'sign-out' };
 
 const GROUP_COLORS: Record<string, string> = { task: '#5e4dbb', list: '#1D4ED8', setting: '#10B981', timeline: '#D946EF', milestone: '#F59E0B', meeting: '#EF4444', workspace: '#8B5CF6' };
-const GROUP_LABELS: Record<string, string> = { task: 'Tasks', list: 'Lists', setting: 'Settings', timeline: 'Timelines', milestone: 'Milestones', meeting: 'Meetings', workspace: 'Workspaces' };
+const GROUP_LABELS: Record<string, string> = { task: 'Tasks', list: 'To-Dos', setting: 'Settings', timeline: 'Timelines', milestone: 'Milestones', meeting: 'Meetings', workspace: 'Workspaces' };
 const GROUP_ICONS: Record<string, string> = { task: 'check_circle', list: 'format_list_bulleted', timeline: 'timeline', milestone: 'flag', meeting: 'event', workspace: 'workspaces' };
 
 function highlight(text: string, query: string): React.ReactNode {

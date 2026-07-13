@@ -350,7 +350,7 @@ export default function DashboardScreen() {
                 {lists.length > 0 && (
                   <select value={!['all','local'].includes(filter) ? filter : ''} onChange={e => { if (e.target.value) setFilter(e.target.value); }}
                     style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, border: 'none', borderRadius: 9999, padding: '4px 10px', cursor: 'pointer', background: !['all','local'].includes(filter) ? '#5e4dbb' : '#f1ecf6', color: !['all','local'].includes(filter) ? '#fff' : '#787584' }}>
-                    <option value="">List ▾</option>
+                    <option value="">To-Do ▾</option>
                     {lists.map(l => <option key={l.id} value={l.id}>{l.emoji} {l.name}</option>)}
                   </select>
                 )}

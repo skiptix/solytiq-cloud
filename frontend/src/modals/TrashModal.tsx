@@ -98,7 +98,7 @@ export default function TrashModal({ onClose }: TrashModalProps) {
   const TABS: { id: TrashTab; label: string; count: number }[] = [
     { id: 'all', label: 'All', count: totalCount },
     { id: 'tasks', label: 'Tasks', count: trashTasks.length },
-    { id: 'lists', label: 'Lists', count: trashLists.length },
+    { id: 'lists', label: 'To-Dos', count: trashLists.length },
     { id: 'timelines', label: 'Timelines', count: trashTimelines.length },
     { id: 'milestones', label: 'Milestones', count: trashMilestones.length },
     { id: 'folders', label: 'Folders', count: trashFolders.length },
@@ -328,7 +328,7 @@ function ListTrashRow({ item, onRestore, onDelete }: { item: TrashedList; onRest
           {item.list.name}
         </div>
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe', marginTop: 2 }}>
-          List · {count} task{count !== 1 ? 's' : ''} · {friendlyTime(item.deletedAt)}
+          To-Do · {count} task{count !== 1 ? 's' : ''} · {friendlyTime(item.deletedAt)}
         </div>
       </div>
       <ActionButtons onRestore={onRestore} onDelete={onDelete} hov={hov} />

@@ -52,10 +52,12 @@ export default function ListScreen() {
   const totalCount = allTasks.length;
   const completedCount = allTasks.filter(t => t.checked).length;
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const viewMode: 'list' | 'kanban' = list?.viewMode === 'kanban' ? 'kanban' : 'list';
+  const setViewMode = (v: 'list' | 'kanban') => { if (list && v !== viewMode) updateList(list.id, { viewMode: v }); };
 
-  let pageTitle = 'Loading list...';
+  let pageTitle = 'Loading to-do...';
   if (!list && !listsLoading) {
-    pageTitle = 'List not found';
+    pageTitle = 'To-Do not found';
   } else if (list) {
     const openTasks = totalCount - completedCount;
     const taskBadge = openTasks > 0 ? `(${openTasks})` : '(Done)';
@@ -75,7 +77,7 @@ export default function ListScreen() {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 18, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>List not found</div>
+          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 18, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>To-Do not found</div>
           <button onClick={() => navigate('/dashboard')} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Go to Dashboard</button>
         </div>
       </div>
@@ -328,7 +330,27 @@ export default function ListScreen() {
 
   return (
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
-      <div style={{ maxWidth: 680, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
+      <div style={{ maxWidth: viewMode === 'kanban' ? 1400 : 680, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
+
+        {/* View switcher — List / Kanban, top-left */}
+        <div style={{ display: 'inline-flex', alignSelf: 'flex-start', background: '#F5F3FF', borderRadius: 10, padding: 3, gap: 2 }}>
+          {(['list', 'kanban'] as const).map(v => (
+            <button
+              key={v}
+              onClick={() => setViewMode(v)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600,
+                color: viewMode === v ? '#5e4dbb' : '#787584',
+                background: viewMode === v ? '#fff' : 'transparent',
+                boxShadow: viewMode === v ? '0 1px 4px rgba(94,77,187,0.18)' : 'none',
+                border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', transition: 'all 150ms',
+              }}>
+              <Icon name={v === 'list' ? 'format_list_bulleted' : 'view_kanban'} size={15} color={viewMode === v ? '#5e4dbb' : '#787584'} />
+              {v === 'list' ? 'List' : 'Kanban'}
+            </button>
+          ))}
+        </div>
 
         {/* Hero */}
         <div style={{ background: list.colorBg ?? '#F9FAFB', border: `1px solid ${list.color ?? '#E5E7EB'}40`, borderRadius: 16, padding: '20px 24px', position: 'relative', overflow: 'hidden' }}>
@@ -372,7 +394,8 @@ export default function ListScreen() {
           </div>
         </div>
 
-        {/* Sections */}
+        {/* Sections — List view (stacked) */}
+        {viewMode === 'list' && <div key="view-list" style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'sectionFadeUp 260ms ease both' }}>
         {list.sections.map(section => {
           const isSectionDropTarget = dragOverSectionId === section.id && draggedSectionId !== null && draggedSectionId !== section.id;
           const isSectionReorderTarget = sectionDragOverId === section.id && sectionDragId !== null && sectionDragId !== section.id;
@@ -557,6 +580,190 @@ export default function ListScreen() {
             <Icon name="add" size={15} color="inherit" />
             Add section
           </button>
+        )}
+        </div>}
+
+        {/* Sections — Kanban view (columns) */}
+        {viewMode === 'kanban' && (
+          <div key="view-kanban" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 12, alignItems: 'flex-start', animation: 'sectionFadeUp 260ms ease both' }}>
+            {list.sections.map((section, idx) => {
+              const isSectionDropTarget = dragOverSectionId === section.id && draggedSectionId !== null && draggedSectionId !== section.id;
+              const isSectionReorderTarget = sectionDragOverId === section.id && sectionDragId !== null && sectionDragId !== section.id;
+              const isBeingDraggedSection = sectionDragId === section.id;
+              return (
+                <div
+                  key={section.id}
+                  style={{
+                    display: 'flex', flexDirection: 'column', gap: 8, width: 280, flexShrink: 0,
+                    opacity: isBeingDraggedSection ? 0.4 : 1,
+                    borderLeft: isSectionReorderTarget ? '2px solid #9d8dff' : '2px solid transparent',
+                    borderRadius: isSectionReorderTarget ? 4 : 0,
+                    transition: 'opacity 150ms, border-color 120ms',
+                    animation: `cardIn 240ms ease ${idx * 40}ms both`,
+                  }}
+                  onDragOver={e => {
+                    if (sectionDragId && sectionDragId !== section.id) { e.preventDefault(); setSectionDragOverId(section.id); return; }
+                    if (draggedId && draggedSectionId !== section.id) { e.preventDefault(); setDragOverSectionId(section.id); }
+                  }}
+                  onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) { setDragOverSectionId(null); setSectionDragOverId(null); } }}
+                  onDrop={e => { e.preventDefault(); if (sectionDragId) handleSectionDrop(section.id); else handleDropOnSection(section.id); }}
+                >
+                  {/* Column header */}
+                  <div
+                    onMouseEnter={() => setHoverSectionId(section.id)}
+                    onMouseLeave={() => setHoverSectionId(null)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px' }}>
+                    {isOwner && (
+                      <button
+                        draggable
+                        onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setSectionDragId(section.id); }}
+                        onDragEnd={clearDragState}
+                        title="Drag to reorder column"
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, flexShrink: 0,
+                          border: 'none', background: 'transparent', cursor: 'grab', padding: 0, marginLeft: -4,
+                          opacity: hoverSectionId === section.id ? 1 : 0,
+                          pointerEvents: hoverSectionId === section.id ? 'auto' : 'none',
+                          transition: 'opacity 180ms ease',
+                        }}>
+                        <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+                      </button>
+                    )}
+                    {section.emoji && editingSection?.id !== section.id && <span style={{ fontSize: 14 }}>{section.emoji}</span>}
+
+                    {editingSection?.id === section.id ? (
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <EmojiSelector
+                          value={editingSection.emoji}
+                          onChange={em => setEditingSection(s => s ? { ...s, emoji: em } : null)}
+                          direction="down"
+                          size={26}
+                        />
+                        <input
+                          autoFocus
+                          value={editingSection.label}
+                          onChange={e => setEditingSection(s => s ? { ...s, label: e.target.value } : null)}
+                          onBlur={() => handleUpdateSection(section.id, editingSection.label, editingSection.emoji)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleUpdateSection(section.id, editingSection.label, editingSection.emoji);
+                            if (e.key === 'Escape') setEditingSection(null);
+                          }}
+                          style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5e5e5e', border: 'none', borderBottom: '1.5px solid #5e4dbb', outline: 'none', background: 'transparent', padding: '0 2px 1px', minWidth: 80 }}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5e5e5e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{section.label}</span>
+                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', flexShrink: 0 }}>{section.tasks.length}</span>
+                      </div>
+                    )}
+
+                    {(() => {
+                      const visible = hoverSectionId === section.id && editingSection?.id !== section.id;
+                      return (
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0,
+                          opacity: visible ? 1 : 0,
+                          pointerEvents: visible ? 'auto' : 'none',
+                          transition: 'opacity 180ms ease',
+                        }}>
+                          <button
+                            onClick={() => setEditingSection({ id: section.id, label: section.label, emoji: section.emoji ?? '' })}
+                            title="Edit column"
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer' }}>
+                            <Icon name="edit" size={13} color="#9d8dff" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSection(section.id)}
+                            title="Delete column"
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer' }}>
+                            <Icon name="delete" size={13} color="#ba1a1a" />
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Cards — scroll independently within the column */}
+                  <div style={{
+                    display: 'flex', flexDirection: 'column', gap: 2, background: '#F9FAFB', borderRadius: 12,
+                    border: isSectionDropTarget ? '1.5px solid #9d8dff' : '1px solid #E5E7EB',
+                    overflowY: 'auto', maxHeight: 'calc(100vh - 340px)',
+                    boxShadow: isSectionDropTarget ? '0 0 0 3px rgba(157,141,255,0.15)' : 'none',
+                    transition: 'border-color 120ms',
+                  }}>
+                    {section.tasks.length === 0 ? (
+                      <div style={{ padding: '16px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: isSectionDropTarget ? '#9d8dff' : '#b0acbe', textAlign: 'center', transition: 'color 120ms' }}>
+                        {isSectionDropTarget ? 'Drop here to move' : 'No tasks.'}
+                      </div>
+                    ) : (
+                      <div style={{ padding: '4px' }}>
+                        {section.tasks.map(task => {
+                          const enrichedTask = { ...task, _source: 'list' as const, _listId: listId, _listName: list.name };
+                          return (
+                            <TaskItem key={task.id} task={enrichedTask}
+                              onToggle={toggle} onDelete={deleteTask}
+                              onUpdate={(id, upd) => updateListTask(listId!, id, upd)}
+                              onRowClick={t => setSelectedTask(t)}
+                              onDragStart={id => { setDraggedId(id); setDraggedSectionId(section.id); }}
+                              onDragOver={id => setDragOverId(id)}
+                              onDrop={id => handleDrop(section.id, id)}
+                              onDragEnd={clearDragState}
+                              isDragging={draggedId === task.id}
+                              isDragOver={dragOverId === task.id && draggedId !== task.id}
+                              hideListBadge
+                              availableLists={lists}
+                              currentListId={listId} />
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div data-quickadd-root style={{ borderTop: section.tasks.length > 0 ? '1px solid #f1ecf6' : 'none' }}>
+                      <QuickAdd placeholder="Add task…" onAdd={data => handleAddTask(section.id, data)} availableLists={lists} currentListId={listId} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Add column */}
+            <div style={{ width: 280, flexShrink: 0, animation: `cardIn 240ms ease ${list.sections.length * 40}ms both` }}>
+              {addingSection ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: '#F9FAFB', border: '1.5px solid #5e4dbb', borderRadius: 12, padding: 10, animation: 'sectionFadeUp 220ms ease both' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <EmojiSelector value={newSectionEmoji} onChange={setNewSectionEmoji} direction="down" />
+                    <input
+                      ref={newSectionInputRef}
+                      autoFocus
+                      value={newSectionLabel}
+                      onChange={e => setNewSectionLabel(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleAddSection(); if (e.key === 'Escape') { setAddingSection(false); setNewSectionLabel(''); setNewSectionEmoji(''); } }}
+                      placeholder="Column name…"
+                      style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none', color: '#1c1b22', background: '#fff' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={handleAddSection} disabled={!newSectionLabel.trim()}
+                      style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#fff', background: newSectionLabel.trim() ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 8, padding: '8px', cursor: newSectionLabel.trim() ? 'pointer' : 'default' }}>
+                      Add
+                    </button>
+                    <button onClick={() => { setAddingSection(false); setNewSectionLabel(''); setNewSectionEmoji(''); }}
+                      style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 500, color: '#787584', background: 'transparent', border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setAddingSection(true)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#787584', background: '#f1f0f4', border: '1.5px dashed #d4cfe8', borderRadius: 10, padding: '11px', cursor: 'pointer', width: '100%', transition: 'all 150ms' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#ebe6f5'; e.currentTarget.style.color = '#5e4dbb'; e.currentTarget.style.borderColor = '#9d8dff'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = '#f1f0f4'; e.currentTarget.style.color = '#787584'; e.currentTarget.style.borderColor = '#d4cfe8'; }}>
+                  <Icon name="add" size={15} color="inherit" />
+                  Add column
+                </button>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
