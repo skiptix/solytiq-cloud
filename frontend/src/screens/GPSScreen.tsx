@@ -1,5 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -1146,7 +1147,7 @@ export default function GPSScreen() {
         )}
 
         {/* Smooth wizard modal */}
-        {smoothWizardOpen && (
+        {smoothWizardOpen && createPortal(
           <div
             style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(8,5,18,0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onClick={e => { if (e.target === e.currentTarget) setSmoothWizardOpen(false); }}
@@ -1227,7 +1228,8 @@ export default function GPSScreen() {
                 </button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </>

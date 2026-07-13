@@ -1,6 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useMobile } from '../hooks/useBreakpoint';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { SharedFile } from '../types';
 import { apiGetFiles, apiUpdateFile, apiDeleteFile, apiUploadFile, apiUploadFilesBundle, apiGetStorageUsage, apiPreviewFile } from '../api/client';
 import useAuthStore from '../store/useAuthStore';
@@ -117,7 +118,7 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true, initialFile
     if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
   };
 
-  return (
+  return createPortal(
     <div
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
@@ -275,7 +276,8 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true, initialFile
         </div>
       </div>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -344,7 +346,7 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
     ? 'backdropOut 190ms ease both'
     : 'backdropIn 220ms ease both';
 
-  return (
+  return createPortal(
     <div onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : 24, animation: backdropAnim }}>
       <div onClick={e => e.stopPropagation()}
@@ -496,7 +498,8 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -814,7 +817,7 @@ export default function FilesScreen() {
       {editTarget && <FileDetailModal file={editTarget} onClose={() => setEditTarget(null)} onSaved={handleSaved} />}
 
       {/* Delete confirmation */}
-      {deleteTarget && (
+      {deleteTarget && createPortal(
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) setDeleteTarget(null); }}>
           <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 400, padding: '28px 28px 24px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)' }}>
@@ -837,7 +840,8 @@ export default function FilesScreen() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

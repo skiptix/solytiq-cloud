@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { GpsFile, GapMode } from '../types';
 import { apiUploadGpsFile, apiMergeGpsFilesDownload, apiMergeGpsFilesSave } from '../api/client';
 import Icon from './Icon';
@@ -129,7 +130,7 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
   // ── Step headers
   const STEPS = ['Add Routes', 'Connect Routes', 'Save'];
 
-  return (
+  return createPortal(
     <div
       onClick={onClose}
       style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
@@ -528,6 +529,7 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
