@@ -115,9 +115,9 @@ export default function SharedListPage() {
   const completed = allTasks.filter(t => t.checked || (t.linkedProgress && t.linkedProgress.total > 0 && t.linkedProgress.completed === t.linkedProgress.total)).length;
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-  let pageTitle = 'Loading list...';
+  let pageTitle = 'Loading to-do...';
   if (state === 'notfound') {
-    pageTitle = 'List not found';
+    pageTitle = 'To-Do not found';
   } else if (meta) {
     const prefix = meta.emoji ? `${meta.emoji} ` : '';
     pageTitle = `${prefix}${meta.name}`;
@@ -165,12 +165,12 @@ export default function SharedListPage() {
             </div>
             <div>
               <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 18, fontWeight: 700, color: '#1c1b22', marginBottom: 6 }}>
-                {state === 'notfound' ? 'List not found' : state === 'expired' ? 'Link expired' : 'Something went wrong'}
+                {state === 'notfound' ? 'To-Do not found' : state === 'expired' ? 'Link expired' : 'Something went wrong'}
               </div>
               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#787584', lineHeight: 1.5 }}>
                 {state === 'notfound' ? "This share link doesn't exist or has been removed." :
                  state === 'expired'  ? 'This share link has expired and is no longer available.' :
-                                        'Unable to load this list. Please try again.'}
+                                        'Unable to load this to-do. Please try again.'}
               </div>
             </div>
           </div>
@@ -183,8 +183,8 @@ export default function SharedListPage() {
               <Icon name="lock" size={28} color="#5e4dbb" />
             </div>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', marginBottom: 4 }}>{meta?.name ?? 'Protected list'}</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#787584' }}>This list is password protected.</div>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', marginBottom: 4 }}>{meta?.name ?? 'Protected to-do'}</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#787584' }}>This to-do is password protected.</div>
             </div>
             <div style={{ width: '100%' }}>
               <input
@@ -203,7 +203,7 @@ export default function SharedListPage() {
               disabled={loadingContent || !password}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#fff', background: loadingContent || !password ? '#9d8dff' : '#5e4dbb', border: 'none', borderRadius: 12, padding: '13px', cursor: loadingContent || !password ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}>
               {loadingContent ? <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> : <Icon name="visibility" size={18} color="#fff" />}
-              View list
+              View to-do
             </button>
           </div>
         )}
@@ -232,7 +232,7 @@ export default function SharedListPage() {
             {/* Sections */}
             <div style={{ padding: '24px 32px 32px', display: 'flex', flexDirection: 'column', gap: 22 }}>
               {content.sections.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#b0acbe' }}>This list is empty.</div>
+                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#b0acbe' }}>This to-do is empty.</div>
               )}
               {content.sections.map(section => (
                 <div key={section.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

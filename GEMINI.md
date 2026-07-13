@@ -158,7 +158,7 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 | Table | Purpose / key columns |
 |---|---|
 | `users` | `id UUID`, `username`, `email`, `password_hash`, `is_admin`, `token_version` (JWT invalidation), `profile_image`, `totp_secret`/`totp_enabled` (2FA), `last_online` |
-| `lists` | List metadata + `is_public` (workspace visibility), `folder_id`, `workspace_id`, `parent_task_id`/`depth` (sublists), and share-link columns (`share_token`, `share_enabled`, `share_password_hash`, `share_expires_at`, `share_subpages`) |
+| `lists` | List metadata + `is_public` (workspace visibility), `folder_id`, `workspace_id`, `parent_task_id`/`depth` (sublists), `view_mode` (`list｜kanban` — the To-Do screen's layout, per list), and share-link columns (`share_token`, `share_enabled`, `share_password_hash`, `share_expires_at`, `share_subpages`) |
 | `sections` | Ordered groups within a list (`list_id`, `label`, `emoji`, `position`) |
 | `tasks` | `id BIGINT`, `source` `'dash'｜'list'`, `list_id`/`section_id`, `linked_list_id`/`linked_list_type` (`'sublist'｜'link'`), `workspace_id`; `updated_at` maintained by a trigger |
 | `folders` | Groups lists/timelines; `is_public`, `collapsed`, `workspace_id` |
@@ -344,7 +344,7 @@ Routes are defined in `App.tsx` using React Router v7. Authenticated app routes 
 Authenticated routes:
 - `/dashboard` → `DashboardScreen` (due today + priority tasks + upcoming-milestone widget)
 - `/folder/:folderId` → `FolderDashboardScreen`
-- `/list/:listId` → `ListScreen`
+- `/list/:listId` → `ListScreen` (labeled "To-Do" in the UI — see below; the `list` entity name, route, and store fields are unchanged)
 - `/timeline/:timelineId` → `TimelineScreen`
 - `/calendar` → `CalendarScreen`
 - `/files` → `FilesScreen`
@@ -411,6 +411,17 @@ A list task can link to another list via `linkedListId` + `linkedListType`:
 - `'link'` — a reference to an existing standalone list.
 
 Create them via `apiCreateSublistTask` / `apiLinkListAsTask`. Sublists always share the parent's `workspace_id`.
+
+### To-Do UI naming vs. the `list` entity
+
+The `ListScreen`/`AddListWizard` feature is labeled **"To-Do"** in user-facing text (nav, wizards, dialogs, empty states) — this is a display-label rename only. The underlying `List` type, `lists` DB table, `/api/lists/*` routes, `list_id`/`listId` fields, `ListScreen.tsx` filename, and store actions (`useAppStore.lists`, `updateListTask`, etc.) all keep their original names. When adding new user-facing text for this feature, say "To-Do"; when touching code, keep using `list`/`List`.
+
+### To-Do Screen: List vs Kanban View
+
+`ListScreen.tsx` renders a **List/Kanban tab switcher** at the top-left of the page (above the progress hero). Both views render the exact same data via the same handlers (drag state, `handleDrop`/`handleDropOnSection`/`handleSectionDrop`, `handleAddTask`, section CRUD) — only the layout differs:
+- **List** (default): sections stacked vertically, each a full-width block — the original layout.
+- **Kanban**: sections rendered as horizontal columns (`lists.sections` → columns), each task a card (the same `TaskItem`). Dragging a card onto another column moves the task there (`sectionId` update + reorder); dragging a column's drag-handle reorders columns left-to-right using the same section-reorder endpoint as the List view's top-to-bottom reorder.
+- The active view is **persisted per list** in `lists.view_mode` (`'list' | 'kanban'`, default `'list'`) — a plain column set via `PUT /api/lists/:listId` (`viewMode` in the body) and synced like any other list field, so switching to Kanban on one device shows Kanban everywhere. It is **not** a separate "Kanban" entity — same list, same sections, same tasks, just a different `view_mode`.
 
 ### Keyboard Shortcuts
 

@@ -77,7 +77,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid #f1ecf6' }}>
           <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>
-            {step === 0 ? 'New List' : step === 1 ? 'Add Sections' : 'Review & Create'}
+            {step === 0 ? 'New To-Do' : step === 1 ? 'Add Sections' : 'Review & Create'}
           </span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}>
             <Icon name="close" size={18} color="#787584" />
@@ -102,7 +102,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
               </div>
               {/* Name */}
               <div>
-                <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 6 }}>List Name *</label>
+                <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 6 }}>To-Do Name *</label>
                 <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Work Projects"
                   style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, border: 'none', borderBottom: '1.5px solid #E5E7EB', padding: '8px 0', outline: 'none', color: '#1c1b22', background: 'transparent' }}
                   onFocus={e => (e.target.style.borderBottomColor = '#5e4dbb')}
@@ -132,7 +132,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
                   </button>
                 </div>
                 <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584', marginTop: 6 }}>
-                  {isPublic ? 'Everyone in this workspace can see this list.' : 'Only you can see and edit this list.'}
+                  {isPublic ? 'Everyone in this workspace can see this to-do.' : 'Only you can see and edit this to-do.'}
                 </div>
               </div>
               {/* Color */}
@@ -149,7 +149,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
               <div style={{ background: selectedColor.bg, border: `1px solid ${selectedColor.color}40`, borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 20 }}>{emoji}</span>
                 <div>
-                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22' }}>{name || 'List Name'}</div>
+                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22' }}>{name || 'To-Do Name'}</div>
                   {subtitle && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>{subtitle}</div>}
                 </div>
               </div>
@@ -158,7 +158,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
 
           {step === 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>Sections organize tasks within your list. You can add or skip them.</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>Sections organize tasks within your to-do. You can add or skip them.</div>
               {sections.map(sec => (
                 <div key={sec.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f7f4fc', borderRadius: 10, border: '1px solid #e8e4f0' }}>
                   <span style={{ fontSize: 16 }}>{sec.emoji}</span>
@@ -229,7 +229,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
           ) : (
             <button onClick={handleCreate} disabled={loading}
               style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: loading ? '#9d8dff' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: loading ? 'wait' : 'pointer' }}>
-              {loading ? 'Creating…' : 'Create List'}
+              {loading ? 'Creating…' : 'Create To-Do'}
             </button>
           )}
         </div>

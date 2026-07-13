@@ -17,7 +17,7 @@ const OPTIONS = [
   {
     key: 'list' as const,
     icon: 'format_list_bulleted',
-    title: 'List',
+    title: 'To-Do',
     desc: 'Organize tasks into sections with progress, sharing and more.',
     color: '#5e4dbb',
     bg: '#F5F3FF',

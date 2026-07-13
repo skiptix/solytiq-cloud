@@ -11,9 +11,9 @@ interface MoveTaskModalProps {
   onClose: () => void;
 }
 
-/** Picker for "Move to another list" — spans every workspace the user belongs
+/** Picker for "Move to another to-do" — spans every workspace the user belongs
  *  to (a task can move across workspaces), grouped by workspace so a large
- *  list directory stays navigable. */
+ *  to-do directory stays navigable. */
 export default function MoveTaskModal({ task, onClose }: MoveTaskModalProps) {
   const { moveTaskToList, moveTaskToDashboard } = useAppStore();
   const { workspaces } = useWorkspaceStore();
@@ -63,7 +63,7 @@ export default function MoveTaskModal({ task, onClose }: MoveTaskModalProps) {
             <Icon name="drive_file_move" size={19} color="#5e4dbb" />
           </div>
           <div style={{ flex: 1, overflow: 'hidden' }}>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>Move to another list</div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>Move to another to-do</div>
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</div>
           </div>
         </div>
@@ -75,7 +75,7 @@ export default function MoveTaskModal({ task, onClose }: MoveTaskModalProps) {
               autoFocus
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Search lists…"
+              placeholder="Search to-dos…"
               style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22' }}
             />
           </div>
@@ -94,10 +94,10 @@ export default function MoveTaskModal({ task, onClose }: MoveTaskModalProps) {
           )}
 
           {lists === null && (
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', padding: '12px 2px' }}>Loading lists…</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', padding: '12px 2px' }}>Loading to-dos…</div>
           )}
           {lists !== null && filtered.length === 0 && (
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', padding: '12px 2px' }}>No matching lists.</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', padding: '12px 2px' }}>No matching to-dos.</div>
           )}
 
           {grouped.map(([wsName, wsLists]) => (

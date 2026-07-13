@@ -38,6 +38,7 @@ interface ListRow {
   share_expires_at: string | null;
   share_subpages: boolean;
   version?: number;
+  view_mode: string;
 }
 
 interface SectionRow {
@@ -137,6 +138,7 @@ function sanitizeList(
     shareExpiresAt:   list.share_expires_at ?? null,
     shareSubpages:    list.share_subpages ?? false,
     version:      list.version ?? 1,
+    viewMode:     (list.view_mode === 'kanban' ? 'kanban' : 'list') as 'list' | 'kanban',
     sections,
     ...(linkedProgress !== undefined ? { linkedProgress } : {}),
   };
@@ -514,7 +516,7 @@ router.put('/:listId/share', async (req: Request, res: Response) => {
 router.put('/:listId', async (req: Request, res: Response) => {
   try {
     const { listId } = req.params;
-    const { name, emoji, color, colorBg, subtitle, position, isPublic, folderId, cascade } = req.body as {
+    const { name, emoji, color, colorBg, subtitle, position, isPublic, folderId, cascade, viewMode } = req.body as {
       name?: string;
       emoji?: string;
       color?: string;
@@ -524,7 +526,9 @@ router.put('/:listId', async (req: Request, res: Response) => {
       isPublic?: boolean;
       folderId?: string | null;
       cascade?: boolean;
+      viewMode?: string;
     };
+    const validViewMode = viewMode === 'list' || viewMode === 'kanban' ? viewMode : null;
 
     const existing = await query<ListRow>('SELECT user_id, workspace_id, folder_id, name FROM lists WHERE id = $1', [listId]);
     if (existing.rows.length === 0) {
@@ -577,11 +581,12 @@ router.put('/:listId', async (req: Request, res: Response) => {
            subtitle  = COALESCE($5, subtitle),
            position  = COALESCE($6, position),
            is_public = COALESCE($7, is_public),
-           folder_id = CASE WHEN $9 THEN $10 ELSE folder_id END
+           folder_id = CASE WHEN $9 THEN $10 ELSE folder_id END,
+           view_mode = COALESCE($11, view_mode)
        WHERE id = $8
        RETURNING *`;
     const updateParams = [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, isPublic ?? null, listId,
-      updateFolderId, folderId ?? null];
+      updateFolderId, folderId ?? null, validViewMode];
 
     let result;
     if (promote.length > 0) {

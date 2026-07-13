@@ -346,9 +346,9 @@ function AppLayout() {
               <div style={{ width: 72, height: 72, borderRadius: 20, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
                 <span style={{ fontSize: 36 }}>📋</span>
               </div>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22' }}>No lists yet</div>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22' }}>No to-dos yet</div>
               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#787584', textAlign: 'center', maxWidth: 280, lineHeight: 1.6 }}>
-                This workspace is empty. Create your first list to get started.
+                This workspace is empty. Create your first to-do to get started.
               </div>
               <button
                 onClick={() => setModal('add')}
@@ -357,7 +357,7 @@ function AppLayout() {
                 onMouseLeave={e => (e.currentTarget.style.background = '#5e4dbb')}
               >
                 <span style={{ fontSize: 18, lineHeight: 1 }}>+</span>
-                Create List
+                Create To-Do
               </button>
             </div>
           )}

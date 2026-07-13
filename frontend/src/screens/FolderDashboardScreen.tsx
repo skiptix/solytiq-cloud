@@ -252,7 +252,7 @@ export default function FolderDashboardScreen() {
                 </span>
               </div>
               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#787584', marginTop: 5 }}>
-                {folderLists.length} list{folderLists.length !== 1 ? 's' : ''} · {total} task{total !== 1 ? 's' : ''}
+                {folderLists.length} to-do{folderLists.length !== 1 ? 's' : ''} · {total} task{total !== 1 ? 's' : ''}
               </div>
             </div>
           </div>
@@ -285,7 +285,7 @@ export default function FolderDashboardScreen() {
           <StatCard num={open} label="Open Tasks" sub="remaining" icon="inventory_2" iconBg="#F5F3FF" iconColor="#5e4dbb" />
           <StatCard num={done} label="Completed" sub={total > 0 ? `${pct}%` : 'none yet'} icon="check_circle" iconBg="rgba(16,185,129,0.10)" iconColor="#10B981" accent="#10B981" />
           <StatCard num={todayTasks.length} label="Due Today" sub="urgent" icon="today" iconBg="rgba(234,88,12,0.10)" iconColor="#ea580c" accent="#ea580c" />
-          <StatCard num={folderLists.length} label="Lists" sub="in folder" icon="folder_open" iconBg={acBg} iconColor={ac} accent={ac} />
+          <StatCard num={folderLists.length} label="To-Dos" sub="in folder" icon="folder_open" iconBg={acBg} iconColor={ac} accent={ac} />
         </section>
 
         {/* ── Task panels ─────────────────────────────────────── */}
@@ -306,13 +306,13 @@ export default function FolderDashboardScreen() {
         <section style={{ animation: 'folderDashIn 420ms 240ms ease both' }}>
           <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Icon name="folder_open" size={18} color={ac} />
-            Lists in {folder.name}
+            To-Dos in {folder.name}
           </div>
           {folderLists.length === 0 ? (
             <div style={{ background: '#F9FAFB', border: '1px dashed #E5E7EB', borderRadius: 14, padding: '56px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
               <Icon name="playlist_add" size={36} color="#b0acbe" />
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 600, color: '#b0acbe' }}>No lists yet</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Move or add a list to this folder from the sidebar</div>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 600, color: '#b0acbe' }}>No to-dos yet</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Move or add a to-do to this folder from the sidebar</div>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>

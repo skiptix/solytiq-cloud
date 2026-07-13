@@ -84,7 +84,7 @@ export default function CreateTemplateModal({ onClose, onCreated, initialType }:
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#ece8f4'; e.currentTarget.style.background = '#fff'; e.currentTarget.style.transform = 'translateY(0)'; }}>
                   <Icon name={k === 'list' ? 'format_list_bulleted' : 'timeline'} size={22} color="#5e4dbb" />
                   <div>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14.5, fontWeight: 700, color: '#1c1b22' }}>{k === 'list' ? 'List' : 'Timeline'}</div>
+                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14.5, fontWeight: 700, color: '#1c1b22' }}>{k === 'list' ? 'To-Do' : 'Timeline'}</div>
                     <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>Save an existing {k} as a reusable template</div>
                   </div>
                 </button>
@@ -96,7 +96,7 @@ export default function CreateTemplateModal({ onClose, onCreated, initialType }:
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18, animation: 'wizardStepIn 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
               <div>
                 <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 6 }}>
-                  Source {type === 'list' ? 'List' : 'Timeline'} *
+                  Source {type === 'list' ? 'To-Do' : 'Timeline'} *
                 </label>
                 {sourceOptions === null ? (
                   <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading…</div>

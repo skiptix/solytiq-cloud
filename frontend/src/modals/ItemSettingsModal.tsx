@@ -380,7 +380,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
             <div>
               <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 200 : 420 }}>{name}</div>
               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', marginTop: 1 }}>
-                {kind === 'folder' ? 'Folder settings' : kind === 'timeline' ? 'Timeline settings' : 'List settings'}
+                {kind === 'folder' ? 'Folder settings' : kind === 'timeline' ? 'Timeline settings' : 'To-Do settings'}
               </div>
             </div>
           </div>
@@ -531,7 +531,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
           {/* ── ADMIN ── */}
           {activeTab === 'admin' && isAdmin && itemId && kind !== 'folder' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18, animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
-              {sectionLabel(`${kind === 'timeline' ? 'Timeline' : 'List'} ID`)}
+              {sectionLabel(`${kind === 'timeline' ? 'Timeline' : 'To-Do'} ID`)}
               <div style={{ background: '#F5F3FF', border: '1px solid #e8e4f0', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <code style={{ flex: 1, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#484552', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemId}</code>
                 <button onClick={copyAdminId} style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: copiedAdminId ? '#10B981' : '#5e4dbb', background: '#fff', border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', flexShrink: 0 }}>

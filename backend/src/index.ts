@@ -1583,6 +1583,10 @@ async function runMigrations() {
     )
   `);
 
+  // Per-list layout preference — the To-Do screen's List/Kanban tab switcher.
+  // Persisted (not just local UI state) so it's the same on every device.
+  await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS view_mode VARCHAR(20) NOT NULL DEFAULT 'list'`);
+
   console.log('Database migrations applied.');
 }
 

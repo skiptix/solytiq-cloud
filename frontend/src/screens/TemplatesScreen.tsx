@@ -175,7 +175,7 @@ export default function TemplatesScreen() {
           <div>
             <h1 style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 28, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.02em', margin: 0 }}>Templates</h1>
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginTop: 2 }}>
-              Save a list or timeline's full structure to reuse — or shared by others on this instance.
+              Save a to-do or timeline's full structure to reuse — or shared by others on this instance.
             </div>
           </div>
           <button onClick={() => setShowCreate(true)}
@@ -192,7 +192,7 @@ export default function TemplatesScreen() {
             {(['all', 'list', 'timeline'] as const).map((f) => (
               <button key={f} onClick={() => setFilter(f)}
                 style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, padding: '6px 14px', borderRadius: 9999, border: 'none', cursor: 'pointer', background: filter === f ? '#5e4dbb' : 'transparent', color: filter === f ? '#fff' : '#787584', transform: filter === f ? 'scale(1.04)' : 'scale(1)', transition: 'background 180ms, color 180ms, transform 220ms cubic-bezier(0.34,1.56,0.64,1)' }}>
-                {f === 'all' ? 'All' : f === 'list' ? 'Lists' : 'Timelines'}
+                {f === 'all' ? 'All' : f === 'list' ? 'To-Dos' : 'Timelines'}
               </button>
             ))}
           </div>
@@ -292,7 +292,7 @@ export default function TemplatesScreen() {
           onClick={(e) => { if (e.target === e.currentTarget) setConfirmDelete(null); }}>
           <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', padding: 24, animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
             <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Delete "{confirmDelete.name}"?</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: 20 }}>This can't be undone. Lists/timelines already created from it are not affected.</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: 20 }}>This can't be undone. To-Dos/timelines already created from it are not affected.</div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button onClick={() => setConfirmDelete(null)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 16px' }}>Cancel</button>
               <button onClick={() => { remove(confirmDelete.id); setConfirmDelete(null); }}

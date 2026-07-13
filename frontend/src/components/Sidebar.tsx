@@ -150,7 +150,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
             <button
               ref={menuBtnRef}
               onClick={openMenu}
-              title="List options"
+              title="To-Do options"
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? '#ebe6f0' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
               onMouseEnter={e => (e.currentTarget.style.background = '#ebe6f0')}
               onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background = 'transparent'; }}
@@ -1300,7 +1300,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.40.0
+              v1.41.0
             </div>
           )}
         </div>
@@ -1356,7 +1356,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         {!collapsed && (
           <>
             <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 500, color: '#5e4dbb', lineHeight: 1.2, whiteSpace: 'nowrap' }}>Solytiq Cloud</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>Your lists. Your cloud.</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>Your to-dos. Your cloud.</div>
           </>
         )}
       </button>
@@ -1566,7 +1566,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.40.0
+            v1.41.0
           </div>
         )}
       </div>
