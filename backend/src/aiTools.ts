@@ -21,10 +21,21 @@ import { query, withTransaction } from './db';
 import { broadcastToUser } from './sse';
 import { resolveWorkspaceForUser } from './workspaceUtil';
 import { softDeleteListTree, snapshotTimelineToTrash } from './trashUtil';
-import { extractTextFromBuffer } from './fileText';
+import { extractTextFromBuffer, MAX_TEXT_CHARS } from './fileText';
 import { UPLOAD_DIR } from './routes/files';
 import { parseRecurrenceRule, computeRecurrenceDates } from './recurrence';
 import { resolveInviteeIds, setMeetingAttendees } from './meetingAttendees';
+import { hashPassword } from './auth';
+import {
+  captureListStructure,
+  captureTimelineStructure,
+  instantiateListStructure,
+  instantiateTimelineStructure,
+  makeTaskIdGenerator,
+  todayISODate,
+  type TemplateListNode,
+  type TemplateTimelineNode,
+} from './templateUtil';
 
 // A minimal JSON Schema object for a tool's parameters.
 export interface JsonSchema {
@@ -71,12 +82,31 @@ function fail(result: string): ToolResult {
 export const aiTools: AiTool[] = [
   // ───────────────────────────── reads ─────────────────────────────
   {
-    name: 'list_lists',
-    description: "List all of the user's lists with their sections (ids included). Use to discover list_id and section_id before creating tasks.",
+    name: 'list_workspaces',
+    description: "List every workspace the user belongs to (id, name, description, visibility, role). Use this — together with the workspace_id shown on list_lists/list_folders/list_timelines — to figure out which workspace a batch of new content thematically belongs to when the user hasn't said which one to use.",
     parameters: { type: 'object', properties: {} },
     handler: async (userId) => {
-      const lists = await query<{ id: string; name: string; emoji: string | null; folder_id: string | null }>(
-        `SELECT id, name, emoji, folder_id FROM lists WHERE user_id = $1 AND depth = 0 ORDER BY position ASC`,
+      const rows = await query<{ id: string; name: string; description: string | null; visibility: string; role: string }>(
+        `SELECT w.id, w.name, w.description, w.visibility, wm.role
+         FROM workspaces w
+         LEFT JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.user_id = $1
+         WHERE wm.user_id = $1 OR w.owner_id = $1 OR w.visibility = 'public'
+         ORDER BY w.created_at ASC`,
+        [userId]
+      );
+      if (!rows.rows.length) return ok('You have no workspaces.');
+      return ok(rows.rows.map((w) => `• "${w.name}" (workspace_id: ${w.id}; ${w.visibility}; role: ${w.role ?? 'member'}${w.description ? `; "${w.description}"` : ''})`).join('\n'));
+    },
+  },
+  {
+    name: 'list_lists',
+    description: "List all of the user's lists across every workspace, with their sections (ids included) and which workspace each belongs to. Use to discover list_id and section_id before creating tasks, and workspace_id to figure out which workspace a list lives in.",
+    parameters: { type: 'object', properties: {} },
+    handler: async (userId) => {
+      const lists = await query<{ id: string; name: string; emoji: string | null; folder_id: string | null; workspace_id: string | null; workspace_name: string | null }>(
+        `SELECT l.id, l.name, l.emoji, l.folder_id, l.workspace_id, w.name AS workspace_name
+         FROM lists l LEFT JOIN workspaces w ON w.id = l.workspace_id
+         WHERE l.user_id = $1 AND l.depth = 0 ORDER BY l.position ASC`,
         [userId]
       );
       if (!lists.rows.length) return ok('You have no lists yet.');
@@ -88,7 +118,7 @@ export const aiTools: AiTool[] = [
       const byList: Record<string, string[]> = {};
       for (const s of secs.rows) (byList[s.list_id] ??= []).push(`"${s.label}" (section_id: ${s.id})`);
       const text = lists.rows
-        .map((l) => `• ${l.emoji ?? ''} "${l.name}" (list_id: ${l.id})\n    sections: ${(byList[l.id] ?? ['none']).join(', ')}`)
+        .map((l) => `• ${l.emoji ?? ''} "${l.name}" (list_id: ${l.id}; workspace: "${l.workspace_name ?? 'unknown'}" [workspace_id: ${l.workspace_id}])\n    sections: ${(byList[l.id] ?? ['none']).join(', ')}`)
         .join('\n');
       return ok(text);
     },
@@ -155,31 +185,34 @@ export const aiTools: AiTool[] = [
   },
   {
     name: 'list_folders',
-    description: "List all of the user's folders (ids included), used to group lists and timelines.",
+    description: "List all of the user's folders across every workspace (ids included), used to group lists and timelines. Includes which workspace each folder belongs to.",
     parameters: { type: 'object', properties: {} },
     handler: async (userId) => {
-      const rows = await query<{ id: string; name: string; emoji: string | null }>(
-        `SELECT id, name, emoji FROM folders WHERE user_id = $1 ORDER BY position ASC`,
+      const rows = await query<{ id: string; name: string; emoji: string | null; workspace_id: string | null; workspace_name: string | null }>(
+        `SELECT f.id, f.name, f.emoji, f.workspace_id, w.name AS workspace_name
+         FROM folders f LEFT JOIN workspaces w ON w.id = f.workspace_id
+         WHERE f.user_id = $1 ORDER BY f.position ASC`,
         [userId]
       );
       if (!rows.rows.length) return ok('You have no folders yet.');
-      return ok(rows.rows.map((f) => `• ${f.emoji ?? ''} "${f.name}" (folder_id: ${f.id})`).join('\n'));
+      return ok(rows.rows.map((f) => `• ${f.emoji ?? ''} "${f.name}" (folder_id: ${f.id}; workspace: "${f.workspace_name ?? 'unknown'}" [workspace_id: ${f.workspace_id}])`).join('\n'));
     },
   },
   {
     name: 'list_timelines',
-    description: "List all of the user's timelines with milestone counts (ids included).",
+    description: "List all of the user's timelines across every workspace with milestone counts (ids included) and which workspace each belongs to.",
     parameters: { type: 'object', properties: {} },
     handler: async (userId) => {
-      const rows = await query<{ id: string; name: string; emoji: string | null; total: string; done: string }>(
-        `SELECT t.id, t.name, t.emoji,
+      const rows = await query<{ id: string; name: string; emoji: string | null; total: string; done: string; workspace_id: string | null; workspace_name: string | null }>(
+        `SELECT t.id, t.name, t.emoji, t.workspace_id, w.name AS workspace_name,
                 (SELECT COUNT(*) FROM milestones m WHERE m.timeline_id = t.id) AS total,
                 (SELECT COUNT(*) FROM milestones m WHERE m.timeline_id = t.id AND m.status = 'done') AS done
-         FROM timelines t WHERE t.user_id = $1 ORDER BY t.position ASC`,
+         FROM timelines t LEFT JOIN workspaces w ON w.id = t.workspace_id
+         WHERE t.user_id = $1 ORDER BY t.position ASC`,
         [userId]
       );
       if (!rows.rows.length) return ok('You have no timelines yet.');
-      return ok(rows.rows.map((t) => `• ${t.emoji ?? ''} "${t.name}" (timeline_id: ${t.id}; ${t.done}/${t.total} done)`).join('\n'));
+      return ok(rows.rows.map((t) => `• ${t.emoji ?? ''} "${t.name}" (timeline_id: ${t.id}; ${t.done}/${t.total} done; workspace: "${t.workspace_name ?? 'unknown'}" [workspace_id: ${t.workspace_id}])`).join('\n'));
     },
   },
   {
@@ -213,7 +246,7 @@ export const aiTools: AiTool[] = [
   // ───────────────────────────── tasks ─────────────────────────────
   {
     name: 'create_dashboard_task',
-    description: 'Create a new task on the Dashboard (a quick-add task not inside any list).',
+    description: 'Create a new task on the Dashboard (a quick-add task not inside any list). If the user did not say which workspace to use, pass workspace_id only when you have good evidence (from list_workspaces/list_lists) that a workspace other than the current one is the better fit — otherwise omit it to use the current workspace.',
     parameters: {
       type: 'object',
       properties: {
@@ -221,6 +254,7 @@ export const aiTools: AiTool[] = [
         deadline: { type: 'string', description: 'Due date YYYY-MM-DD (optional)' },
         priority: { type: 'string', enum: ['High', 'Medium', 'Low'] },
         note: { type: 'string', description: 'Optional notes' },
+        workspace_id: { type: 'string', description: 'Target workspace ID (from list_workspaces). Omit to use the current/personal workspace.' },
       },
       required: ['title'],
     },
@@ -229,7 +263,7 @@ export const aiTools: AiTool[] = [
       if (!title) return fail('title is required');
       const priority = str(args.priority);
       if (priority && !PRIORITIES.has(priority)) return fail('priority must be High, Medium, or Low');
-      const ws = await resolveWorkspaceForUser(userId, null);
+      const ws = await resolveWorkspaceForUser(userId, str(args.workspace_id) ?? null);
       const pos = await query<{ max: string | null }>(
         `SELECT MAX(position) AS max FROM tasks WHERE user_id = $1 AND source = 'dash'`,
         [userId]
@@ -350,7 +384,7 @@ export const aiTools: AiTool[] = [
   // ───────────────────────────── lists & sections ─────────────────────────────
   {
     name: 'create_list',
-    description: 'Create a new list. A default "Tasks" section is created automatically — the result includes its section_id for immediate use.',
+    description: 'Create a new list. A default "Tasks" section is created automatically — the result includes its section_id for immediate use. If the user did not say which workspace to use, pass workspace_id only when you have good evidence (from list_workspaces/list_lists) that a workspace other than the current one is the better fit — otherwise omit it to use the current workspace.',
     parameters: {
       type: 'object',
       properties: {
@@ -358,6 +392,7 @@ export const aiTools: AiTool[] = [
         emoji: { type: 'string', description: 'Optional emoji icon' },
         folder_id: { type: 'string', description: 'Optional folder ID to place the list in' },
         is_public: { type: 'boolean', description: 'Workspace visibility (default false)' },
+        workspace_id: { type: 'string', description: 'Target workspace ID (from list_workspaces). Omit to use the current/personal workspace.' },
       },
       required: ['name'],
     },
@@ -369,7 +404,7 @@ export const aiTools: AiTool[] = [
         const f = await query(`SELECT 1 FROM folders WHERE id = $1 AND user_id = $2`, [folderId, userId]);
         if (!f.rows.length) return fail('folder not found');
       }
-      const ws = await resolveWorkspaceForUser(userId, null);
+      const ws = await resolveWorkspaceForUser(userId, str(args.workspace_id) ?? null);
       const listId = `list_${uuidv4()}`;
       const pos = await query<{ max: string | null }>(`SELECT MAX(position) AS max FROM lists WHERE user_id = $1`, [userId]);
       const nextPos = pos.rows[0].max !== null ? parseInt(pos.rows[0].max, 10) + 1 : 0;
@@ -468,20 +503,21 @@ export const aiTools: AiTool[] = [
   // ───────────────────────────── folders ─────────────────────────────
   {
     name: 'create_folder',
-    description: 'Create a folder to organise lists and timelines.',
+    description: 'Create a folder to organise lists and timelines. If the user did not say which workspace to use, pass workspace_id only when you have good evidence (from list_workspaces/list_folders) that a workspace other than the current one is the better fit — otherwise omit it to use the current workspace.',
     parameters: {
       type: 'object',
       properties: {
         name: { type: 'string' },
         emoji: { type: 'string' },
         is_public: { type: 'boolean', description: 'Workspace visibility (default true)' },
+        workspace_id: { type: 'string', description: 'Target workspace ID (from list_workspaces). Omit to use the current/personal workspace.' },
       },
       required: ['name'],
     },
     handler: async (userId, args) => {
       const name = str(args.name);
       if (!name) return fail('name is required');
-      const ws = await resolveWorkspaceForUser(userId, null);
+      const ws = await resolveWorkspaceForUser(userId, str(args.workspace_id) ?? null);
       const id = `folder_${uuidv4()}`;
       const pos = await query<{ max: string | null }>(`SELECT MAX(position) AS max FROM folders WHERE user_id = $1`, [userId]);
       const nextPos = pos.rows[0].max !== null ? parseInt(pos.rows[0].max, 10) + 1 : 0;
@@ -547,7 +583,7 @@ export const aiTools: AiTool[] = [
   // ───────────────────────────── timelines & milestones ─────────────────────────────
   {
     name: 'create_timeline',
-    description: 'Create a new timeline to track milestones and project progress.',
+    description: 'Create a new timeline to track milestones and project progress. If the user did not say which workspace to use, pass workspace_id only when you have good evidence (from list_workspaces/list_timelines) that a workspace other than the current one is the better fit — otherwise omit it to use the current workspace.',
     parameters: {
       type: 'object',
       properties: {
@@ -558,6 +594,7 @@ export const aiTools: AiTool[] = [
         layout: { type: 'string', enum: ['vertical', 'compact', 'detailed'] },
         is_public: { type: 'boolean' },
         folder_id: { type: 'string' },
+        workspace_id: { type: 'string', description: 'Target workspace ID (from list_workspaces). Omit to use the current/personal workspace.' },
       },
       required: ['name'],
     },
@@ -566,7 +603,7 @@ export const aiTools: AiTool[] = [
       if (!name) return fail('name is required');
       const layout = str(args.layout);
       if (layout && !LAYOUTS.has(layout)) return fail('layout must be vertical, compact, or detailed');
-      const ws = await resolveWorkspaceForUser(userId, null);
+      const ws = await resolveWorkspaceForUser(userId, str(args.workspace_id) ?? null);
       const id = `timeline_${uuidv4()}`;
       const pos = await query<{ max: string | null }>(`SELECT MAX(position) AS max FROM timelines WHERE user_id = $1`, [userId]);
       const nextPos = pos.rows[0].max !== null ? parseInt(pos.rows[0].max, 10) + 1 : 0;
@@ -764,10 +801,14 @@ export const aiTools: AiTool[] = [
   },
   {
     name: 'read_file',
-    description: 'Extract and return the text content of one of the user\'s uploaded files (PDF, spreadsheet, CSV, text, code). Returns extracted text for analysis/summarisation.',
+    description: 'Extract and return the text content of one of the user\'s uploaded files (PDF, spreadsheet, CSV, text, code) — e.g. a contract or other large document. The full extracted text is never silently cut off: if it does not fit in one call, the result tells you the total length and the offset to pass on your next call so you can read the whole document across multiple calls.',
     parameters: {
       type: 'object',
-      properties: { file_id: { type: 'string', description: 'ID of the file (from list_files)' } },
+      properties: {
+        file_id: { type: 'string', description: 'ID of the file (from list_files)' },
+        offset: { type: 'number', description: 'Character offset to start reading from (default 0). Use the "next offset" from a previous truncated read_file result to continue.' },
+        max_chars: { type: 'number', description: `Max characters to return in this call (default ${MAX_TEXT_CHARS}, capped at ${MAX_TEXT_CHARS * 4}).` },
+      },
       required: ['file_id'],
     },
     handler: async (userId, args) => {
@@ -785,9 +826,178 @@ export const aiTools: AiTool[] = [
       if (!filePath.startsWith(baseDir + path.sep)) return fail('invalid file path');
       if (!fs.existsSync(filePath)) return fail('file not found on disk');
       const buffer = await fs.promises.readFile(filePath);
-      const { contentText, isImage } = await extractTextFromBuffer(buffer, mime_type, original_name);
+      // Extract the FULL text (no cap) so pagination below can walk arbitrarily
+      // large documents (contracts, long reports) without ever losing content.
+      const { contentText, isImage } = await extractTextFromBuffer(buffer, mime_type, original_name, Infinity);
       if (isImage) return ok(`"${original_name}" is an image; image content cannot be returned as text.`);
-      return ok(`Content of "${original_name}":\n\n${contentText ?? '(empty)'}`);
+      const full = contentText ?? '';
+      const offset = Math.max(0, Math.trunc(Number(args.offset) || 0));
+      const requested = Math.trunc(Number(args.max_chars) || MAX_TEXT_CHARS);
+      const maxChars = Math.min(Math.max(requested, 1000), MAX_TEXT_CHARS * 4);
+      const chunk = full.slice(offset, offset + maxChars);
+      const nextOffset = offset + chunk.length;
+      const hasMore = nextOffset < full.length;
+      const header = full.length > maxChars
+        ? `Content of "${original_name}" (characters ${offset}-${nextOffset} of ${full.length} total):`
+        : `Content of "${original_name}":`;
+      const footer = hasMore
+        ? `\n\n[${full.length - nextOffset} more characters remain — call read_file again with file_id "${fileId}" and offset ${nextOffset} to continue reading]`
+        : '';
+      return ok(`${header}\n\n${chunk || '(empty)'}${footer}`);
+    },
+  },
+  {
+    name: 'share_file',
+    description: 'Enable, update, or disable the public share link for one of the user\'s uploaded files. Enabling returns the share token; the public URL is /share/<token>.',
+    parameters: {
+      type: 'object',
+      properties: {
+        file_id: { type: 'string', description: 'ID of the file (from list_files)' },
+        enabled: { type: 'boolean', description: 'true to enable/keep the public link, false to disable it' },
+        password: { type: 'string', description: 'Optional password to protect the link. Omit to leave the current password as-is, or pass "" to remove password protection.' },
+        expires_at: { type: 'string', description: 'Optional ISO expiry timestamp, or "" to clear it' },
+      },
+      required: ['file_id', 'enabled'],
+    },
+    handler: async (userId, args) => {
+      const fileId = str(args.file_id);
+      if (!fileId) return fail('file_id is required');
+      if (typeof args.enabled !== 'boolean') return fail('enabled is required');
+      const existing = await query<{ id: string; original_name: string; share_token: string }>(
+        `SELECT id, original_name, share_token FROM shared_files WHERE id = $1 AND user_id = $2`,
+        [fileId, userId]
+      );
+      if (!existing.rows.length) return fail('file not found');
+      const password = str(args.password);
+      const clearPassword = args.password === '';
+      const clearExpiry = args.expires_at === '';
+      const expiresAt = clearExpiry ? null : (str(args.expires_at) ?? undefined);
+      const sets: string[] = ['is_public = $1'];
+      const params: unknown[] = [args.enabled];
+      let i = 2;
+      if (password) { sets.push(`password_hash = $${i++}`); params.push(await hashPassword(password)); }
+      else if (clearPassword) { sets.push(`password_hash = $${i++}`); params.push(null); }
+      if (expiresAt !== undefined) { sets.push(`expires_at = $${i++}`); params.push(expiresAt); }
+      params.push(fileId, userId);
+      await query(`UPDATE shared_files SET ${sets.join(', ')} WHERE id = $${i++} AND user_id = $${i}`, params);
+      const { original_name, share_token } = existing.rows[0];
+      return args.enabled
+        ? ok(`Enabled sharing for "${original_name}" — public link: /share/${share_token}`, `Shared "${original_name}"`)
+        : ok(`Disabled sharing for "${original_name}"`, `Unshared "${original_name}"`);
+    },
+  },
+  {
+    name: 'delete_file',
+    description: "Permanently delete one of the user's uploaded files (and any bundle it belongs to). Confirm with the user first.",
+    parameters: {
+      type: 'object',
+      properties: { file_id: { type: 'string', description: 'ID of the file (from list_files)' } },
+      required: ['file_id'],
+    },
+    handler: async (userId, args) => {
+      const fileId = str(args.file_id);
+      if (!fileId) return fail('file_id is required');
+      const existing = await query<{ original_name: string }>(
+        `SELECT original_name FROM shared_files WHERE id = $1 AND user_id = $2`,
+        [fileId, userId]
+      );
+      if (!existing.rows.length) return fail('file not found');
+      const deleted = await query<{ file_path: string }>(
+        `DELETE FROM shared_files sf
+         WHERE sf.user_id = $2
+           AND COALESCE(sf.bundle_id, sf.id) = COALESCE((SELECT bundle_id FROM shared_files WHERE id = $1), $1)
+         RETURNING file_path`,
+        [fileId, userId]
+      );
+      const baseDir = path.resolve(UPLOAD_DIR);
+      for (const row of deleted.rows) {
+        const filePath = path.join(baseDir, path.basename(row.file_path));
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      }
+      broadcastToUser(userId, 'files');
+      return ok(`Deleted file "${existing.rows[0].original_name}"`, `Deleted "${existing.rows[0].original_name}"`);
+    },
+  },
+  {
+    name: 'list_task_attachments',
+    description: "List the files attached to a task.",
+    parameters: {
+      type: 'object',
+      properties: { task_id: { type: 'number', description: 'ID of the task' } },
+      required: ['task_id'],
+    },
+    handler: async (userId, args) => {
+      const taskId = Number(args.task_id);
+      if (!Number.isFinite(taskId)) return fail('task_id is required');
+      const owns = await query(`SELECT 1 FROM tasks WHERE id = $1 AND user_id = $2`, [taskId, userId]);
+      if (!owns.rows.length) return fail('task not found');
+      const rows = await query<{ id: string; attachment_type: string; original_name: string | null; sf_name: string | null }>(
+        `SELECT ta.id, ta.attachment_type, ta.original_name, sf.original_name AS sf_name
+         FROM task_attachments ta LEFT JOIN shared_files sf ON ta.shared_file_id = sf.id
+         WHERE ta.task_id = $1 ORDER BY ta.created_at ASC`,
+        [taskId]
+      );
+      if (!rows.rows.length) return ok('No attachments on this task.');
+      return ok(rows.rows.map((a) => `• "${a.original_name ?? a.sf_name}" (attachment_id: ${a.id}; ${a.attachment_type})`).join('\n'));
+    },
+  },
+  {
+    name: 'attach_file_to_task',
+    description: "Attach one of the user's existing uploaded files (from list_files) to a task as a linked attachment.",
+    parameters: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'number', description: 'ID of the task to attach to' },
+        file_id: { type: 'string', description: 'ID of the file (from list_files)' },
+      },
+      required: ['task_id', 'file_id'],
+    },
+    handler: async (userId, args) => {
+      const taskId = Number(args.task_id);
+      const fileId = str(args.file_id);
+      if (!Number.isFinite(taskId) || !fileId) return fail('task_id and file_id are required');
+      const owns = await query(`SELECT 1 FROM tasks WHERE id = $1 AND user_id = $2`, [taskId, userId]);
+      if (!owns.rows.length) return fail('task not found');
+      const file = await query<{ original_name: string; mime_type: string; file_size: number }>(
+        `SELECT original_name, mime_type, file_size FROM shared_files WHERE id = $1 AND user_id = $2`,
+        [fileId, userId]
+      );
+      if (!file.rows.length) return fail('file not found');
+      const dup = await query(`SELECT 1 FROM task_attachments WHERE task_id = $1 AND shared_file_id = $2`, [taskId, fileId]);
+      if (dup.rows.length) return fail('file already attached to this task');
+      const id = uuidv4();
+      await query(
+        `INSERT INTO task_attachments (id, task_id, user_id, attachment_type, original_name, mime_type, file_size, shared_file_id)
+         VALUES ($1, $2, $3, 'linked', $4, $5, $6, $7)`,
+        [id, taskId, userId, file.rows[0].original_name, file.rows[0].mime_type, file.rows[0].file_size, fileId]
+      );
+      broadcastToUser(userId, 'tasks');
+      return ok(`Attached "${file.rows[0].original_name}" to task (attachment_id: ${id})`, `Attached "${file.rows[0].original_name}"`);
+    },
+  },
+  {
+    name: 'remove_task_attachment',
+    description: 'Remove an attachment from a task (only removes the link for linked attachments; the underlying file in Files is not deleted).',
+    parameters: {
+      type: 'object',
+      properties: { attachment_id: { type: 'string', description: 'ID of the attachment (from list_task_attachments)' } },
+      required: ['attachment_id'],
+    },
+    handler: async (userId, args) => {
+      const attachmentId = str(args.attachment_id);
+      if (!attachmentId) return fail('attachment_id is required');
+      const r = await query<{ attachment_type: string; file_path: string | null; original_name: string | null }>(
+        `DELETE FROM task_attachments WHERE id = $1 AND user_id = $2 RETURNING attachment_type, file_path, original_name`,
+        [attachmentId, userId]
+      );
+      if (!r.rows.length) return fail('attachment not found');
+      const { attachment_type, file_path, original_name } = r.rows[0];
+      if (attachment_type === 'upload' && file_path) {
+        const filePath = path.join(path.resolve(UPLOAD_DIR), path.basename(file_path));
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      }
+      broadcastToUser(userId, 'tasks');
+      return ok(`Removed attachment "${original_name ?? attachmentId}"`, `Removed attachment "${original_name ?? attachmentId}"`);
     },
   },
   // ───────────────────────────── meetings ─────────────────────────────
@@ -1001,6 +1211,235 @@ export const aiTools: AiTool[] = [
       if (workspacesRes.rows.length) lines.push('Workspaces:', ...workspacesRes.rows.map(w => `  - [Workspace] ${w.name} (id: ${w.id})`));
 
       if (!lines.length) return ok(`No items found matching "${q}".`);
+      return ok(lines.join('\n'));
+    },
+  },
+
+  // ───────────────────────────── templates ─────────────────────────────
+  {
+    name: 'list_templates',
+    description: "List the user's saved templates (own + every shared template from other users of this instance) — reusable snapshots of a list's or timeline's structure. Use use_template to materialize one into a new list/timeline.",
+    parameters: {
+      type: 'object',
+      properties: { type: { type: 'string', enum: ['list', 'timeline'], description: 'Optional filter' } },
+    },
+    handler: async (userId, args) => {
+      const type = str(args.type);
+      const params: unknown[] = [userId];
+      let typeFilter = '';
+      if (type === 'list' || type === 'timeline') { params.push(type); typeFilter = `AND t.type = $${params.length}`; }
+      const rows = await query<{ id: string; type: string; name: string; is_shared: boolean; user_id: string }>(
+        `SELECT t.id, t.type, t.name, t.is_shared, t.user_id
+         FROM templates t WHERE (t.user_id = $1 OR t.is_shared = true) ${typeFilter} ORDER BY t.updated_at DESC`,
+        params
+      );
+      if (!rows.rows.length) return ok('No templates found.');
+      return ok(rows.rows.map((t) => `• "${t.name}" (template_id: ${t.id}; ${t.type}${t.user_id === userId ? '; yours' : '; shared by another user'})`).join('\n'));
+    },
+  },
+  {
+    name: 'create_template',
+    description: "Save one of the user's own lists or timelines as a reusable template. Deadlines/milestone dates are stored as relative day-offsets so the template stays meaningful whenever it's reused.",
+    parameters: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['list', 'timeline'] },
+        source_id: { type: 'string', description: 'ID of the list or timeline to capture (must be owned by the user)' },
+        name: { type: 'string', description: 'Template name (defaults to the source name)' },
+        description: { type: 'string' },
+        is_shared: { type: 'boolean', description: 'Make this template visible read-only to every other user of this instance (default false)' },
+      },
+      required: ['type', 'source_id'],
+    },
+    handler: async (userId, args) => {
+      const type = str(args.type);
+      const sourceId = str(args.source_id);
+      if (type !== 'list' && type !== 'timeline') return fail('type must be "list" or "timeline"');
+      if (!sourceId) return fail('source_id is required');
+      const today = todayISODate();
+      let structure: TemplateListNode | TemplateTimelineNode;
+      let templateName = str(args.name);
+      if (type === 'list') {
+        const own = await query<{ user_id: string; name: string }>('SELECT user_id, name FROM lists WHERE id = $1', [sourceId]);
+        if (!own.rows.length) return fail('list not found');
+        if (own.rows[0].user_id !== userId) return fail('you can only save your own lists as templates');
+        structure = await captureListStructure(sourceId, userId, today);
+        if (!templateName) templateName = own.rows[0].name;
+      } else {
+        const own = await query<{ user_id: string; name: string }>('SELECT user_id, name FROM timelines WHERE id = $1', [sourceId]);
+        if (!own.rows.length) return fail('timeline not found');
+        if (own.rows[0].user_id !== userId) return fail('you can only save your own timelines as templates');
+        structure = await captureTimelineStructure(sourceId, userId, today);
+        if (!templateName) templateName = own.rows[0].name;
+      }
+      const templateId = `template_${uuidv4()}`;
+      await query(
+        `INSERT INTO templates (id, user_id, type, name, description, emoji, color, color_bg, is_shared, structure)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [templateId, userId, type, templateName, str(args.description) ?? null, structure.emoji, structure.color, structure.colorBg, args.is_shared === true, JSON.stringify(structure)]
+      );
+      broadcastToUser(userId, 'template');
+      return ok(`Saved template "${templateName}" (template_id: ${templateId})`, `Saved template "${templateName}"`);
+    },
+  },
+  {
+    name: 'use_template',
+    description: 'Materialize a new list or timeline from a saved template (own or shared). Dates are resolved against today.',
+    parameters: {
+      type: 'object',
+      properties: {
+        template_id: { type: 'string', description: 'ID of the template (from list_templates)' },
+        name: { type: 'string', description: 'Name for the new list/timeline (defaults to the template name)' },
+        is_public: { type: 'boolean' },
+        workspace_id: { type: 'string', description: 'Target workspace ID. Omit to use the current/personal workspace.' },
+        folder_id: { type: 'string' },
+      },
+      required: ['template_id'],
+    },
+    handler: async (userId, args) => {
+      const templateId = str(args.template_id);
+      if (!templateId) return fail('template_id is required');
+      const tRes = await query<{ id: string; user_id: string; type: string; is_shared: boolean; structure: TemplateListNode | TemplateTimelineNode }>(
+        'SELECT id, user_id, type, is_shared, structure FROM templates WHERE id = $1', [templateId]
+      );
+      if (!tRes.rows.length) return fail('template not found');
+      const tpl = tRes.rows[0];
+      if (tpl.user_id !== userId && !tpl.is_shared) return fail('template not found');
+      const resolvedWs = await resolveWorkspaceForUser(userId, str(args.workspace_id) ?? null);
+      const allowAttachments = tpl.user_id === userId;
+      const nextTaskId = makeTaskIdGenerator();
+      const trimmedName = str(args.name);
+      const folderId = str(args.folder_id) ?? null;
+      if (tpl.type === 'list') {
+        const node = tpl.structure as TemplateListNode;
+        const createdId = await withTransaction((client) =>
+          instantiateListStructure(client, node, { userId, workspaceId: resolvedWs, folderId, depth: 0, allowAttachments, nextTaskId }, trimmedName, args.is_public as boolean | undefined)
+        );
+        broadcastToUser(userId, 'lists');
+        return ok(`Created list "${trimmedName ?? node.name}" from template (list_id: ${createdId})`, `Created list "${trimmedName ?? node.name}"`);
+      } else {
+        const node = tpl.structure as TemplateTimelineNode;
+        const createdId = await withTransaction((client) =>
+          instantiateTimelineStructure(client, node, { userId, workspaceId: resolvedWs, folderId, allowAttachments }, trimmedName, args.is_public as boolean | undefined)
+        );
+        broadcastToUser(userId, 'timelines');
+        return ok(`Created timeline "${trimmedName ?? node.name}" from template (timeline_id: ${createdId})`, `Created timeline "${trimmedName ?? node.name}"`);
+      }
+    },
+  },
+  {
+    name: 'delete_template',
+    description: 'Delete a saved template (metadata only — does not affect any lists/timelines created from it). Confirm with the user first.',
+    parameters: {
+      type: 'object',
+      properties: { template_id: { type: 'string' } },
+      required: ['template_id'],
+    },
+    handler: async (userId, args) => {
+      const templateId = str(args.template_id);
+      if (!templateId) return fail('template_id is required');
+      const existing = await query<{ user_id: string; name: string }>('SELECT user_id, name FROM templates WHERE id = $1', [templateId]);
+      if (!existing.rows.length) return fail('template not found');
+      if (existing.rows[0].user_id !== userId) return fail('you can only delete your own templates');
+      await query('DELETE FROM templates WHERE id = $1', [templateId]);
+      broadcastToUser(userId, 'template');
+      return ok(`Deleted template "${existing.rows[0].name}"`, `Deleted template "${existing.rows[0].name}"`);
+    },
+  },
+
+  // ───────────────────────────── GPS files ─────────────────────────────
+  {
+    name: 'list_gps_files',
+    description: 'List the GPS route/workout files (.gpx/.fit) the user has uploaded — names, ids, distance, elevation gain, duration.',
+    parameters: { type: 'object', properties: {} },
+    handler: async (userId) => {
+      const rows = await query<{ id: string; original_name: string; file_type: string; metadata: { totalDistance?: number; totalElevationGain?: number; duration?: number } | null }>(
+        `SELECT id, original_name, file_type, metadata FROM gps_files WHERE user_id = $1 ORDER BY created_at DESC`,
+        [userId]
+      );
+      if (!rows.rows.length) return ok('No GPS files uploaded.');
+      return ok(rows.rows.map((r) => {
+        const m = r.metadata;
+        const dist = m?.totalDistance != null ? ` ${(m.totalDistance / 1000).toFixed(1)} km` : '';
+        const elev = m?.totalElevationGain != null ? ` ↑${Math.round(m.totalElevationGain)}m` : '';
+        const dur = m?.duration != null ? ` ${Math.round(m.duration / 60)}min` : '';
+        return `• "${r.original_name}" (gps_file_id: ${r.id}; ${r.file_type.toUpperCase()}${dist}${elev}${dur})`;
+      }).join('\n'));
+    },
+  },
+  {
+    name: 'rename_gps_file',
+    description: 'Rename a GPS route/workout file.',
+    parameters: {
+      type: 'object',
+      properties: {
+        gps_file_id: { type: 'string' },
+        name: { type: 'string', description: 'New file name' },
+      },
+      required: ['gps_file_id', 'name'],
+    },
+    handler: async (userId, args) => {
+      const id = str(args.gps_file_id);
+      const name = str(args.name);
+      if (!id || !name) return fail('gps_file_id and name are required');
+      const r = await query<{ original_name: string }>(
+        `UPDATE gps_files SET original_name = $1 WHERE id = $2 AND user_id = $3 RETURNING original_name`,
+        [name, id, userId]
+      );
+      if (!r.rows.length) return fail('GPS file not found');
+      broadcastToUser(userId, 'gps');
+      return ok(`Renamed GPS file to "${r.rows[0].original_name}"`, `Renamed to "${r.rows[0].original_name}"`);
+    },
+  },
+  {
+    name: 'delete_gps_file',
+    description: 'Permanently delete a GPS route/workout file. Confirm with the user first.',
+    parameters: {
+      type: 'object',
+      properties: { gps_file_id: { type: 'string' } },
+      required: ['gps_file_id'],
+    },
+    handler: async (userId, args) => {
+      const id = str(args.gps_file_id);
+      if (!id) return fail('gps_file_id is required');
+      const r = await query<{ original_name: string; file_path: string }>(
+        `DELETE FROM gps_files WHERE id = $1 AND user_id = $2 RETURNING original_name, file_path`,
+        [id, userId]
+      );
+      if (!r.rows.length) return fail('GPS file not found');
+      const filePath = path.join(path.resolve(UPLOAD_DIR), path.basename(r.rows[0].file_path));
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      broadcastToUser(userId, 'gps');
+      return ok(`Deleted GPS file "${r.rows[0].original_name}"`, `Deleted "${r.rows[0].original_name}"`);
+    },
+  },
+
+  // ───────────────────────────── trash (read-only) ─────────────────────────────
+  {
+    name: 'list_trash',
+    description: 'List everything currently in the trash (deleted tasks, lists, folders, and timelines — each recoverable for 30 days from deletion). Use this to check what was recently deleted; restoring must be done from the Trash view in the app.',
+    parameters: { type: 'object', properties: {} },
+    handler: async (userId) => {
+      const [tasks, lists, folders, timelines] = await Promise.all([
+        query<{ id: number; task_data: { title?: string }; deleted_at: string }>(
+          `SELECT id, task_data, deleted_at FROM trash WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`, [userId]
+        ),
+        query<{ id: number; list_data: { name?: string }; deleted_at: string }>(
+          `SELECT id, list_data, deleted_at FROM trash_lists WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`, [userId]
+        ),
+        query<{ id: number; folder_data: { name?: string }; deleted_at: string }>(
+          `SELECT id, folder_data, deleted_at FROM trash_folders WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`, [userId]
+        ),
+        query<{ id: number; timeline_data: { name?: string }; deleted_at: string }>(
+          `SELECT id, timeline_data, deleted_at FROM trash_timelines WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`, [userId]
+        ),
+      ]);
+      const lines: string[] = [];
+      if (tasks.rows.length) lines.push('Tasks:', ...tasks.rows.map(t => `  - "${t.task_data?.title ?? 'untitled'}" (trash_id: ${t.id}, deleted ${t.deleted_at})`));
+      if (lists.rows.length) lines.push('Lists:', ...lists.rows.map(l => `  - "${l.list_data?.name ?? 'untitled'}" (trash_id: ${l.id}, deleted ${l.deleted_at})`));
+      if (folders.rows.length) lines.push('Folders:', ...folders.rows.map(f => `  - "${f.folder_data?.name ?? 'untitled'}" (trash_id: ${f.id}, deleted ${f.deleted_at})`));
+      if (timelines.rows.length) lines.push('Timelines:', ...timelines.rows.map(t => `  - "${t.timeline_data?.name ?? 'untitled'}" (trash_id: ${t.id}, deleted ${t.deleted_at})`));
+      if (!lines.length) return ok('Trash is empty.');
       return ok(lines.join('\n'));
     },
   },

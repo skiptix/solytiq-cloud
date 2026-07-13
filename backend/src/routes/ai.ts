@@ -7,10 +7,11 @@ import { getOpenRouterToolDefs, executeAiTool } from '../aiTools';
 
 const router = Router();
 
-// Multer: in-memory, 10 MB limit for AI file uploads
+// Multer: in-memory, 25 MB limit for AI file uploads — large enough for a
+// full-length contract or report PDF while keeping in-memory buffering sane.
 const aiUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 25 * 1024 * 1024 },
 });
 
 // GET /api/ai/settings — readable by any authenticated user
