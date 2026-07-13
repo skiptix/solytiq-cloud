@@ -327,17 +327,6 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
             </button>
           )}
 
-          {/* Calendar button — available on mobile and desktop */}
-          <button
-            onClick={() => onNavigate('/calendar')}
-            title="Calendar"
-            style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid #e8e4f0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.borderColor = '#c4b8f0'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#e8e4f0'; }}
-          >
-            <Icon name="calendar_month" size={17} color="#787584" />
-          </button>
-
           {/* GPS Routes button — desktop only, hidden until an admin installs the app */}
           {!isMobile && gpsInstalled && (
             <button

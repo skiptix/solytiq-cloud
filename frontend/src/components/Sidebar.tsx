@@ -985,6 +985,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   const [addHov, setAddHov] = useState(false);
   const [folderHov, setFolderHov] = useState(false);
   const [templatesHov, setTemplatesHov] = useState(false);
+  const [calendarHov, setCalendarHov] = useState(false);
   const [handleHov, setHandleHov] = useState(false);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dragOverTimelineId, setDragOverTimelineId] = useState<string | null>(null);
@@ -1299,7 +1300,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.38.0
+              v1.38.1
             </div>
           )}
         </div>
@@ -1362,6 +1363,25 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <WorkspaceSwitcher collapsed={collapsed} />
+
+        {/* Calendar — global (all-workspace) view */}
+        <button
+          onClick={() => onNavigate('/calendar')}
+          title={collapsed ? 'Calendar' : undefined}
+          onMouseEnter={() => setCalendarHov(true)}
+          onMouseLeave={() => setCalendarHov(false)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8,
+            padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start',
+            borderRadius: 8, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5,
+            fontWeight: active === 'calendar' ? 700 : 500,
+            color: active === 'calendar' ? '#5e4dbb' : '#484552',
+            background: active === 'calendar' ? '#F5F3FF' : (calendarHov ? '#faf9ff' : 'transparent'),
+            border: 'none', transition: 'background 150ms', width: '100%',
+          }}>
+          <Icon name="calendar_month" size={17} color={active === 'calendar' ? '#5e4dbb' : '#787584'} />
+          {!collapsed && <span>Calendar</span>}
+        </button>
 
         {/* Templates — global gallery, not scoped to the current workspace */}
         <button
@@ -1546,7 +1566,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.38.0
+            v1.38.1
           </div>
         )}
       </div>
