@@ -1,5 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-editable';
@@ -3156,9 +3157,9 @@ export default function GPSEditScreen() {
           )}
 
           {/* ── Add-Pin Dialog ──────────────────────────────────────────── */}
-          {addPinDialog && (
+          {addPinDialog && createPortal(
             <div
-              style={{ position: 'absolute', inset: 0, zIndex: 1200, background: 'rgba(8,5,18,0.40)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(8,5,18,0.40)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               onClick={e => { if (e.target === e.currentTarget) setAddPinDialog(null); }}
             >
               <div style={{ background: '#fff', borderRadius: 16, padding: '20px', width: 340, boxShadow: '0 20px 60px rgba(0,0,0,0.18)', border: '1px solid #e8e4f0', fontFamily: 'Inter, sans-serif', animation: 'wpPopIn 180ms ease both' }}>
@@ -3227,7 +3228,8 @@ export default function GPSEditScreen() {
                   </button>
                 </div>
               </div>
-            </div>
+            </div>,
+            document.body
           )}
 
           {/* Elevation chart with trim handles */}

@@ -130,7 +130,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
 
         <button title={collapsed ? list.name : undefined}
           onClick={() => onNavigate(`/list/${list.id}`)}
-          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, background: hov ? (list.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? (list.color ?? '#5e4dbb') : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: hov ? (list.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? (list.color ?? '#5e4dbb') : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
           {!collapsed && (
             <Icon
               name={list.isPublic ? 'public' : 'lock'}
@@ -142,7 +142,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
             ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{list.emoji}</span>
             : <Icon name="format_list_bulleted" size={19} color={isActive ? (list.color ?? '#5e4dbb') : '#787584'} />
           }
-          {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>}
+          {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{list.name}</span>}
         </button>
 
         {!collapsed && !isTaskDropTarget && (
@@ -348,7 +348,7 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
 
         <button title={collapsed ? timeline.name : undefined}
           onClick={() => onNavigate(`/timeline/${timeline.id}`)}
-          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, background: hov ? (timeline.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? accent : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: hov ? (timeline.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? accent : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
             {!collapsed && (
               <Icon name={timeline.isPublic ? 'public' : 'lock'} size={13} color="#b0acbe" />
             )}
@@ -356,7 +356,7 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
               ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{timeline.emoji}</span>
               : <Icon name="timeline" size={19} color={isActive ? accent : '#787584'} />
             }
-            {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{timeline.name}</span>}
+            {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{timeline.name}</span>}
           </button>
 
         {!collapsed && (
@@ -583,7 +583,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
             />
           </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', flex: 1, borderRadius: 8, background: isActiveDash ? `${accentColor}18` : 'transparent', transition: 'background 150ms' }}>
+          <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0, borderRadius: 8, background: isActiveDash ? `${accentColor}18` : 'transparent', transition: 'background 150ms' }}>
             {/* Chevron — toggles collapse */}
             {!collapsed && (
               <button
@@ -598,14 +598,14 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
             <button
               onClick={() => onNavigate(`/folder/${folder.id}`)}
               title={collapsed ? folder.name : `Open ${folder.name} overview`}
-              style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '5px 8px 5px 4px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, background: 'transparent', borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%', color: accentColor }}
+              style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '5px 8px 5px 4px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: 'transparent', borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%', color: accentColor }}
             >
               {folder.emoji
                 ? <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{folder.emoji}</span>
                 : <Icon name="folder" size={17} color={accentColor} />
               }
               {!collapsed && (
-                <span style={{ fontWeight: isActiveDash ? 700 : 600, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.01em' }}>
+                <span style={{ fontWeight: isActiveDash ? 700 : 600, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '0.01em', minWidth: 0 }}>
                   {folder.name}
                 </span>
               )}
@@ -1190,7 +1190,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
                 onMouseDown={e => e.stopPropagation()}
                 onClick={e => { e.stopPropagation(); toggleCollapsed(); }}
                 title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                style={{ position: 'absolute', top: '50%', right: 3, transform: 'translateY(-50%)', width: 20, height: 20, borderRadius: '50%', border: '1px solid #e8e4f0', background: '#fff', boxShadow: '0 2px 8px rgba(94,77,187,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 60 }}>
+                style={{ position: 'fixed', top: '50%', left: width - 12, transform: 'translateY(-50%)', width: 24, height: 24, borderRadius: 7, border: '1px solid #e8e4f0', background: '#fff', boxShadow: '0 2px 8px rgba(94,77,187,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 60 }}>
                 <Icon name={collapsed ? 'chevron_right' : 'chevron_left'} size={14} color="#5e4dbb" />
               </button>
             )}
@@ -1300,7 +1300,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.39.0
+              v1.39.1
             </div>
           )}
         </div>
@@ -1566,7 +1566,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.39.0
+            v1.39.1
           </div>
         )}
       </div>
