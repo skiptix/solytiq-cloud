@@ -351,7 +351,10 @@ export interface TemplateTimelineNode {
 // Automation Hub — per-workspace, flow-chart-style automations. V1 graphs are
 // linear (one trigger node feeding one or more chained action nodes, no
 // branching); the shape mirrors what @xyflow/react expects (nodes + edges +
-// canvas position), validated server-side by automationGraph.ts.
+// canvas position), validated server-side by automationGraph.ts. Every node
+// produces a JSON `output` (AutomationRunStep.output); a later node's string
+// params can reference an earlier one via {{trigger.x}}/{{$json.x}}/
+// {{nodes.<id>.x}} tokens, resolved server-side before that node runs.
 // ---------------------------------------------------------------------------
 
 export interface AutomationParamProperty {
@@ -363,6 +366,12 @@ export interface AutomationParamProperty {
   isFolderId?: boolean;
   isWorkspaceId?: boolean;
   enum?: string[];
+  /** Repeatable {key, value} row editor (HTTP node headers/query params). Stored as Array<{key,value}>. */
+  isKeyValue?: boolean;
+  /** Multi-line textarea, still a template string (expression-substituted like any other string param). */
+  isLongText?: boolean;
+  /** Multi-line textarea holding raw source, NOT expression-substituted (the Code action's script). */
+  isCode?: boolean;
 }
 
 export interface AutomationParamSchema {
@@ -433,6 +442,8 @@ export interface AutomationRunStep {
   ok: boolean;
   summary: string;
   error?: string;
+  /** JSON this node produced — feeds {{$json...}}/{{nodes.<id>...}} in later nodes and the editor's Output viewer. The trigger itself appears as steps[0]. */
+  output?: unknown;
 }
 
 export interface AutomationRun {

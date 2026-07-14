@@ -12,18 +12,36 @@
 // call site (task-completed/task-created in routes/lists.ts, plus the
 // schedule sweep below, which isn't mutation-triggered at all).
 //
-// A run's entire action chain executes inside one transaction (all-or-
-// nothing) and is never awaited by the request that caused it — a user
-// checking a task must not have their click latency depend on how many
-// automations fire. Downstream effects reach other clients the normal way,
-// via the DB-trigger → sync_log → SSE pipeline every other mutation uses.
+// EXECUTION MODEL — per-step, not one all-or-nothing transaction: each node
+// runs and, if it writes to the database, commits its own writes immediately
+// (single-statement actions via the bare `query` on ctx.exec; any action with
+// more than one dependent write opens its own short-lived transaction via
+// ctx.withTransaction). If a later node fails, EARLIER successful writes are
+// NOT rolled back — this replaces an earlier "whole run is one transaction"
+// guarantee, a deliberate change: once an HTTP request has been sent (the new
+// http_request action) there is no way to "undo" it anyway, so treating the
+// whole chain as atomic was never fully honest once external side effects
+// entered the picture. Run History's per-step log shows exactly how far a
+// run got. A run is still fired `void ...catch(...)`, never awaited by the
+// request that caused it, and downstream effects reach other clients the
+// normal way, via the DB-trigger → sync_log → SSE pipeline every other
+// mutation uses.
+//
+// DATA FLOW — every node (the trigger, and every action) produces a JSON
+// `output`, accumulated into `nodeOutputs` (keyed by node id, seeded with the
+// trigger's own output under its node id). Before each action's params reach
+// validate()/execute(), resolveExpressions() (automationExpressions.ts)
+// substitutes any `{{trigger.x}}`/`{{$json.x}}`/`{{nodes.<id>.x}}` tokens
+// against the scope built so far — so a later node can reference an earlier
+// one's result without any action implementing this itself.
 // ---------------------------------------------------------------------------
 
 import { v4 as uuidv4 } from 'uuid';
 import { query, withTransaction } from './db';
 import { QueryExec } from './workspaceUtil';
-import { getActionDef, TriggerContext } from './automationTypes';
+import { getActionDef, getTriggerDef, serializeTriggerOutput, ActionRollbackSignal, type ActionResult, type TriggerContext } from './automationTypes';
 import { normalizeAutomationGraph, orderedActionNodes, AutomationGraph } from './automationGraph';
+import { buildScope, resolveExpressions } from './automationExpressions';
 
 export type MutationActor =
   | { type: 'user'; userId: string }
@@ -47,12 +65,13 @@ export interface AutomationRow {
   updated_at: string;
 }
 
-interface RunStep {
+export interface RunStep {
   nodeId: string;
   actionType: string;
   ok: boolean;
   summary: string;
   error?: string;
+  output?: unknown;
 }
 
 export interface RunResult {
@@ -61,6 +80,9 @@ export interface RunResult {
   steps: RunStep[];
   error: string | null;
 }
+
+const CODE_SKIP_KEYS = new Set(['code']);
+const MAX_STORED_OUTPUT_CHARS = 50_000;
 
 function alog(...args: unknown[]): void {
   console.log('⚡', ...args);
@@ -103,6 +125,53 @@ export async function fireTrigger(type: TriggerTypeId, ctx: TriggerContext, acto
 }
 
 /**
+ * Opens a fresh, self-contained transaction for one action's own dependent
+ * writes. An action reports failure by RETURNING `{ok: false}`, not by
+ * throwing — a plain return would otherwise let db.ts's withTransaction
+ * commit whatever was already written before the failure was noticed, so a
+ * failed result is turned into a thrown ActionRollbackSignal (forcing
+ * ROLLBACK) and unwrapped back into the original result afterwards.
+ */
+async function runActionTransaction<T>(fn: (exec: QueryExec) => Promise<T>): Promise<T> {
+  try {
+    return await withTransaction(async (client) => {
+      const exec: QueryExec = (text, params) => client.query(text, params);
+      const result = await fn(exec);
+      if (result && typeof result === 'object' && 'ok' in (result as object) && (result as unknown as { ok: unknown }).ok === false) {
+        throw new ActionRollbackSignal(result as unknown as ActionResult);
+      }
+      return result;
+    });
+  } catch (err) {
+    if (err instanceof ActionRollbackSignal) return err.result as unknown as T;
+    throw err;
+  }
+}
+
+function truncateStepForStorage(step: RunStep): RunStep {
+  if (step.output === undefined) return step;
+  let json: string;
+  try {
+    json = JSON.stringify(step.output);
+  } catch {
+    return { ...step, output: undefined };
+  }
+  if (json === undefined || json.length <= MAX_STORED_OUTPUT_CHARS) return step;
+  return { ...step, output: { truncated: true, preview: json.slice(0, MAX_STORED_OUTPUT_CHARS) } };
+}
+
+async function recordRunOutcome(runId: string, status: 'success' | 'failed', steps: RunStep[], error: string | null): Promise<void> {
+  try {
+    await query(
+      `UPDATE automation_runs SET status = $1, steps = $2, error = $3, finished_at = NOW() WHERE id = $4`,
+      [status, JSON.stringify(steps.map(truncateStepForStorage)), error, runId]
+    );
+  } catch (err) {
+    aerr('failed to record automation_runs outcome', runId, err);
+  }
+}
+
+/**
  * Executes one automation's action chain for a single trigger event. Never
  * throws — every failure path is recorded on the automation_runs row instead,
  * so this is safe to call fire-and-forget (fireTrigger) or awaited in a loop
@@ -130,47 +199,83 @@ export async function runAutomation(
   }
 
   const steps: RunStep[] = [];
-  try {
-    const normalized = normalizeAutomationGraph(automation.graph);
-    if (!normalized.ok) throw new Error(normalized.error);
-    const actionNodes = orderedActionNodes(normalized.value.graph, normalized.value.orderedActionIds);
-    const actorTag: MutationActor = { type: 'automation', automationId: automation.id, runId };
 
-    await withTransaction(async (client) => {
-      const exec: QueryExec = (text, params) => client.query(text, params);
-      for (const node of actionNodes) {
-        const def = getActionDef(node.type);
-        if (!def) throw new Error(`unknown action type "${node.type}"`);
-        const result = await def.execute(
-          {
-            exec,
-            workspaceId: automation.workspace_id,
-            automationId: automation.id,
-            automationOwnerId: automation.user_id,
-            runId,
-            actor: actorTag,
-            trigger: ctx,
-          },
-          node.params
-        );
-        steps.push({ nodeId: node.id, actionType: node.type, ok: result.ok, summary: result.summary, error: result.error });
-        if (!result.ok) throw new Error(result.error ?? `action "${node.type}" failed`);
-      }
-    });
-
-    await query(`UPDATE automation_runs SET status = 'success', steps = $1, finished_at = NOW() WHERE id = $2`, [JSON.stringify(steps), runId]);
-    alog(`run ✓ automation=${automation.id} trigger=${triggerType} steps=${steps.length}${isTest ? ' (test)' : ''}`);
-    return { runId, status: 'success', steps, error: null };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    aerr(`run ✗ automation=${automation.id} trigger=${triggerType}:`, message);
-    try {
-      await query(`UPDATE automation_runs SET status = 'failed', steps = $1, error = $2, finished_at = NOW() WHERE id = $3`, [JSON.stringify(steps), message, runId]);
-    } catch (err2) {
-      aerr('failed to record automation_runs failure', automation.id, err2);
-    }
-    return { runId, status: 'failed', steps, error: message };
+  const normalized = normalizeAutomationGraph(automation.graph);
+  if (!normalized.ok) {
+    aerr(`run ✗ automation=${automation.id} trigger=${triggerType}: invalid graph:`, normalized.error);
+    await recordRunOutcome(runId, 'failed', steps, normalized.error);
+    return { runId, status: 'failed', steps, error: normalized.error };
   }
+
+  const triggerNode = normalized.value.graph.nodes.find((n) => n.kind === 'trigger')!;
+  const actionNodes = orderedActionNodes(normalized.value.graph, normalized.value.orderedActionIds);
+  const actorTag: MutationActor = { type: 'automation', automationId: automation.id, runId };
+
+  const nodeOutputs: Record<string, unknown> = { [triggerNode.id]: serializeTriggerOutput(triggerType, ctx) };
+  const triggerDef = getTriggerDef(triggerNode.type);
+  steps.push({
+    nodeId: triggerNode.id,
+    actionType: triggerNode.type,
+    ok: true,
+    summary: `Trigger: ${triggerDef?.label ?? triggerNode.type}`,
+    output: nodeOutputs[triggerNode.id],
+  });
+
+  let previousNodeId = triggerNode.id;
+  let failed = false;
+  let errorMessage: string | null = null;
+
+  for (const node of actionNodes) {
+    const def = getActionDef(node.type);
+    if (!def) {
+      errorMessage = `unknown action type "${node.type}"`;
+      steps.push({ nodeId: node.id, actionType: node.type, ok: false, summary: errorMessage, error: errorMessage });
+      failed = true;
+      break;
+    }
+
+    const scope = buildScope(nodeOutputs, triggerNode.id, previousNodeId);
+    const resolvedParams = resolveExpressions(node.params, scope, node.type === 'code' ? CODE_SKIP_KEYS : undefined);
+
+    let result: ActionResult;
+    try {
+      result = await def.execute(
+        {
+          exec: query,
+          withTransaction: runActionTransaction,
+          workspaceId: automation.workspace_id,
+          automationId: automation.id,
+          automationOwnerId: automation.user_id,
+          runId,
+          actor: actorTag,
+          trigger: ctx,
+          scope,
+        },
+        resolvedParams
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      result = { ok: false, summary: message, error: message };
+    }
+
+    steps.push({ nodeId: node.id, actionType: node.type, ok: result.ok, summary: result.summary, error: result.error, output: result.output });
+
+    if (!result.ok) {
+      errorMessage = result.error ?? result.summary;
+      failed = true;
+      break;
+    }
+    nodeOutputs[node.id] = result.output;
+    previousNodeId = node.id;
+  }
+
+  await recordRunOutcome(runId, failed ? 'failed' : 'success', steps, errorMessage);
+  if (failed) {
+    aerr(`run ✗ automation=${automation.id} trigger=${triggerType}:`, errorMessage);
+  } else {
+    alog(`run ✓ automation=${automation.id} trigger=${triggerType} steps=${steps.length}${isTest ? ' (test)' : ''}`);
+  }
+  return { runId, status: failed ? 'failed' : 'success', steps, error: failed ? errorMessage : null };
 }
 
 // ---------------------------------------------------------------------------
