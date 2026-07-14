@@ -1040,7 +1040,12 @@ export async function createListTask(
     const { fireTrigger } = await import('../automationEngine');
     await fireTrigger('task_created', {
       workspaceId: itemWorkspaceId,
-      task: { id: String(task.id), title: task.title, listId, checked: false },
+      task: {
+        id: String(task.id), title: task.title, listId, checked: task.checked,
+        note: task.note, noteMarkdown: task.note_markdown ?? false, deadline: task.deadline, time: task.time_val,
+        priority: task.priority, badge: task.badge, sectionId: task.section_id, position: task.position,
+        createdAt: task.created_at, updatedAt: task.updated_at,
+      },
       list: { id: listId, name: listName },
     }, actor).catch((e) => werr('fireTrigger task_created failed:', e));
   }
@@ -1121,7 +1126,12 @@ export async function updateListTaskFields(
       const listCtx = { id: listId, name: (listRow.rows[0] as { name: string }).name };
       await fireTrigger('task_completed', {
         workspaceId: wsId,
-        task: { id: String(saved.id), title: saved.title, listId, checked: true },
+        task: {
+          id: String(saved.id), title: saved.title, listId, checked: saved.checked,
+          note: saved.note, noteMarkdown: saved.note_markdown ?? false, deadline: saved.deadline, time: saved.time_val,
+          priority: saved.priority, badge: saved.badge, sectionId: saved.section_id, position: saved.position,
+          createdAt: saved.created_at, updatedAt: saved.updated_at,
+        },
         list: listCtx,
       }, actor).catch((e) => werr('fireTrigger task_completed failed:', e));
 
