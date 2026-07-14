@@ -13,7 +13,7 @@ Solytiq Cloud is a self-hosted, full-stack productivity suite: task lists, proje
 
 The current version is displayed at the bottom-left of the sidebar in `frontend/src/components/Sidebar.tsx`.
 
-**On every deploy / release, update the version string** in that file — search for the `v1.14.0` literal (it appears in two places, for the expanded and collapsed sidebar states) and bump **both**. Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
+**On every deploy / release, update the version string** in that file — search for the `vX.Y.Z` literal it currently holds (e.g. `v1.43.0`; it appears in two places, for the expanded and collapsed sidebar states) and bump **both**. Use semantic versioning: patch for small fixes, minor for new features, major for breaking changes.
 
 ---
 
@@ -32,11 +32,15 @@ solytiq-cloud/
 │   │   ├── workspaceUtil.ts  # Workspace access-control helpers
 │   │   ├── templateUtil.ts   # Template structure capture/instantiate (recursive sublists, date-offset math)
 │   │   ├── setupToken.ts     # First-run setup token generation/logging
-│   │   ├── __tests__/        # Vitest tests (currently gpx.test.ts + GPX fixtures)
+│   │   ├── appsRegistry.ts   # App Directory catalog (admin-installable apps: gps, files, mcp, automations) + requireAppInstalled()
+│   │   ├── automationTypes.ts   # Automation Hub trigger/action node-type registry (schemas + action handlers)
+│   │   ├── automationGraph.ts   # Automation Hub graph validation (linear-chain enforcement, IDOR list-scope guard)
+│   │   ├── automationEngine.ts  # Automation Hub execution engine (fireTrigger/runAutomation, loop prevention, schedule sweep)
+│   │   ├── __tests__/        # Vitest tests — GPX parsing, workspace integrity/auth, CalDAV, Automation Hub, etc.
 │   │   └── routes/           # One file per resource
 │   │       ├── auth.ts            # /api/auth — register, login, profile, TOTP 2FA
 │   │       ├── tasks.ts           # /api/tasks — CRUD, reorder
-│   │       ├── lists.ts           # /api/lists — CRUD, sections, sublists, links, share link
+│   │       ├── lists.ts           # /api/lists — CRUD, sections, sublists, links, share link, archive/unarchive
 │   │       ├── folders.ts         # /api/folders — CRUD
 │   │       ├── timelines.ts       # /api/timelines — CRUD, milestones, upcoming, share link
 │   │       ├── workspaces.ts      # /api/workspaces — CRUD, members
@@ -47,6 +51,8 @@ solytiq-cloud/
 │   │       ├── admin.ts           # /api/admin — users, roles, nuke, settings, admin API keys (scoped)
 │   │       ├── adminReadApi.ts    # /api/admin-read — instance-wide Admin API (scoped read + write) via admin API keys
 │   │       ├── templates.ts       # /api/templates — CRUD + instantiate (create list/timeline from a saved template)
+│   │       ├── automations.ts     # /api/automations — Automation Hub CRUD, run history, notifications (App Directory-gated)
+│   │       ├── apps.ts            # /api/apps — admin install/uninstall for the App Directory catalog
 │   │       └── ai.ts              # /api/ai — OpenRouter chat, sessions, file uploads, usage
 │   ├── init.sql              # (legacy) initial schema — migrations now in index.ts
 │   ├── tsconfig.json
@@ -158,7 +164,7 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 | Table | Purpose / key columns |
 |---|---|
 | `users` | `id UUID`, `username`, `email`, `password_hash`, `is_admin`, `token_version` (JWT invalidation), `profile_image`, `totp_secret`/`totp_enabled` (2FA), `last_online` |
-| `lists` | List metadata + `is_public` (workspace visibility), `folder_id`, `workspace_id`, `parent_task_id`/`depth` (sublists), `view_mode` (`list｜kanban` — the To-Do screen's layout, per list), and share-link columns (`share_token`, `share_enabled`, `share_password_hash`, `share_expires_at`, `share_subpages`) |
+| `lists` | List metadata + `is_public` (workspace visibility), `folder_id`, `workspace_id`, `parent_task_id`/`depth` (sublists), `view_mode` (`list｜kanban` — the To-Do screen's layout, per list), `is_archived`/`archived_at` (hidden from the normal workspace view — see Automation Hub), and share-link columns (`share_token`, `share_enabled`, `share_password_hash`, `share_expires_at`, `share_subpages`) |
 | `sections` | Ordered groups within a list (`list_id`, `label`, `emoji`, `position`) |
 | `tasks` | `id BIGINT`, `source` `'dash'｜'list'`, `list_id`/`section_id`, `linked_list_id`/`linked_list_type` (`'sublist'｜'link'`), `workspace_id`; `updated_at` maintained by a trigger |
 | `folders` | Groups lists/timelines; `is_public`, `collapsed`, `workspace_id` |
@@ -176,6 +182,10 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 | `mobile_connections` | One row per signed-in mobile device (Solytiq Cloud iOS app): `user_id`, `device_name`/`device_model`/`os_version`/`app_version`, `created_at`, `last_seen_at`. The row id is embedded in the device's JWT (`connectionId`) so it can be listed and revoked |
 | `trash`, `trash_lists`, `trash_folders`, `trash_timelines` | Soft-delete payloads as JSONB with a 30-day `expires_at` |
 | `templates` | User-owned, workspace-agnostic snapshot of a list's or timeline's full structure: `type` (`list｜timeline`), `is_shared` (visible read-only to every other instance user), `structure JSONB` (versioned tree built/consumed by `templateUtil.ts`) |
+| `automations` | Per-workspace flow-chart automation: `workspace_id`, `user_id` (creator = sole editor), `enabled`, `graph JSONB` (nodes/edges, validated by `automationGraph.ts`), `trigger_type`/`trigger_scope JSONB` (denormalized from `graph` for an indexed lookup), `next_fire_at` (schedule triggers), `version` (optimistic concurrency) |
+| `automation_runs` | Execution log for one automation firing: `trigger_type`, `trigger_context JSONB`, `status` (`running｜success｜failed`), `steps JSONB` (per-action result), `error` |
+| `automation_notifications` | Inbox backing the `notify` action — always addressed to the automation's creator: `automation_id`, `run_id`, `message`, `read_at` |
+| `installed_apps` | Admin-installable App Directory catalog state (Settings → System → Discover Apps): `app_id` on/off per instance. Catalog itself is code (`appsRegistry.ts`) — `gps`, `files`, `mcp`, `automations` |
 | `app_settings` | Key/value config (storage quota, `ai_assistant_enabled`, `ai_model`, `two_fa_feature_enabled`, `mcp_enabled`, `mobile_app_enabled`) |
 | `ai_chat_sessions`, `ai_chats`, `ai_chat_files`, `ai_usage` | AI conversations, messages, uploaded files (30-day TTL), and per-call token usage |
 
@@ -259,6 +269,20 @@ Sharing model for lists/timelines (distinct from the workspace `is_public` flag 
 - **`routes/templates.ts`** (`/api/templates`): `GET /` (own + every shared template, optional `?type=list|timeline`), `POST /` (capture from a list/timeline you own), `PUT /:id`/`DELETE /:id` (metadata only — owner or admin), `POST /:id/use` (instantiate; body: `name`, `isPublic`, `workspaceId`, `folderId`). A private template you don't own 404s rather than 403s (existence isn't leaked).
 - Frontend: the **Templates** sidebar nav item (below the workspace switcher, workspace-agnostic) opens `/templates` (`TemplatesScreen.tsx`) to create/browse/share/delete templates. `AddWizard` inserts a template-select step (`TemplateSelectStep.tsx` → `UseTemplateModal.tsx`) between choosing List/Timeline and the classic blank-creation wizard.
 
+### Automation Hub
+
+Per-workspace, flow-chart-style automations (e.g. "delete a task once it's checked" or "archive a list once everything on it is done"). Gated behind the **App Directory** (`appsRegistry.ts` — must be installed instance-wide via Settings → System → Discover Apps before `/api/automations` and the `/automations` nav item appear, same `requireAppInstalled('automations')` gate as `gps`/`files`/`mcp`) and sits directly below **Templates** in the Sidebar — but unlike Templates it is workspace-scoped, not global.
+
+- **V1 graphs are linear**: exactly one trigger node feeding one or more chained action nodes — no branching, no cycles. This is enforced server-side on every save by **`automationGraph.ts`**'s `normalizeAutomationGraph()` (walks the edge chain; rejects multi-trigger, branching, cycles, unknown node types, and trigger/action incompatibilities) regardless of what the client sends — the frontend editor also only ever produces this shape by construction, but the backend check is the real guarantee.
+- **Node-type registry (`automationTypes.ts`)** is the single source of truth, mirroring `aiTools.ts`'s pattern: each trigger/action has a JSON-Schema-ish `paramsSchema`; actions also have a server-side `execute()` handler. V1 triggers: `task_completed`, `list_all_completed`, `task_created` (all list-scoped — dashboard tasks don't participate), `schedule` (daily/weekly, no mutation actor). V1 actions: `delete_task`, `archive_list`, `move_task`, `create_task`, `notify`. A `providesTask`/`providesList` vs `requiresTriggerTask`/`requiresTriggerList` compatibility matrix stops an automation from being saved if an action needs data its trigger doesn't supply.
+- **Loop prevention (`automationEngine.ts`), by construction, not a depth counter**: every mutation that can fire a trigger takes an explicit `MutationActor` (`{type:'user', userId}` or `{type:'automation', automationId, runId}`). `fireTrigger()` no-ops immediately unless `actor.type === 'user'`. The three extracted, actor-tagged mutation functions in `routes/lists.ts` (`createListTask`, `updateListTaskFields`, plus `setListArchived`/`deleteTaskRow` for the actions) are called by BOTH the HTTP routes (`user` actor) and the engine's action handlers (`automation` actor) — so an automation's own writes can never re-trigger another automation run. Grep `fireTrigger(` to audit every call site.
+- **Execution**: `runAutomation()` runs the whole action chain inside one `withTransaction` (all-or-nothing), logs to `automation_runs`, and is fired `void ...catch()` (never awaited by the request that triggered it) so a user's click latency never depends on how many automations run. The `schedule` trigger isn't mutation-driven — a 5-minute `setInterval` sweep (registered in `index.ts`'s `start()`, same pattern as the AI-file-purge cron) fires anything with `next_fire_at <= NOW()`.
+- **IDOR guard**: any node param naming a list (`trigger_scope.listId`, an action's `targetListId`) must belong to the automation's own workspace — checked at save time (`assertGraphListsInWorkspace`) and again at execution time (`assertListInWorkspace` in `automationTypes.ts`, since a list can move/be deleted after the automation was saved).
+- **Permissions**: any workspace member can create their own automation; only the creator (or an admin) can rename/edit its graph/enable-disable/delete it; every workspace member can view it and its run history read-only (`routes/automations.ts`).
+- **Archiving**: `archive_list` sets `lists.is_archived`/`archived_at` — a genuine hidden state (not the workspace `is_public` flag, not trash), filtered out of `buildListsForUser`/`GET /api/lists` by default. Surfaced via `GET /api/lists?archived=true` and a small **Archived** modal (`ArchivedModal.tsx`, opened from a Sidebar bottom-nav item next to Completed/Trash) — view + `PUT /api/lists/:listId/unarchive`, no expiry.
+- **Sync**: `automation` is a SIGNAL sync entity (like `template`) — `AutomationsScreen.tsx` refetches on `entityRevisions.automation` bumps rather than being patched in place like tasks/lists/folders/timelines.
+- Frontend: `AutomationsScreen.tsx` (gallery, mirrors `TemplatesScreen.tsx`) and `AutomationEditorScreen.tsx` (the flow-chart editor) at `/automations` and `/automations/:id`. Desktop uses `@xyflow/react` for a real drag/pan/zoom node canvas (edges are engine-managed, not user-drawn — adding/removing/reordering nodes always keeps the linear-chain invariant); mobile renders the identical graph as a vertical step-card list (`useMobile()` at the screen root, per the Mobile Responsiveness rules below) — both write the same JSON via `PUT /api/automations/:id`.
+
 ### AI Assistant
 
 - Thin proxy to OpenRouter (`/api/ai/chat`). Requires `OPENROUTER_API_KEY`.
@@ -317,6 +341,8 @@ All shared state lives in **Zustand stores** under `src/store/`. Do not use Reac
 | `useGpsStore` | GPS screen UI state |
 | `useUserPrefsStore` | Per-user UI preferences |
 | `useTemplatesStore` | Templates gallery (own + shared), create/update/delete/use actions — workspace-agnostic |
+| `useAutomationsStore` | Automation Hub: automations for the active workspace, node-type catalog, create/update/setEnabled/remove/run-history actions |
+| `useInstalledAppsStore` | App Directory install state (`gps`, `files`, `mcp`, `automations`) — gates nav items and routes |
 
 `useAppStore.loadFromApi()` is called on mount in `App.tsx`. It fetches tasks, lists, folders, and timelines (scoped to the active workspace) in parallel.
 
@@ -350,6 +376,7 @@ Authenticated routes:
 - `/files` → `FilesScreen`
 - `/gps` → `GPSScreen`, `/gps/:id/edit` → `GPSEditScreen`
 - `/templates` → `TemplatesScreen` (workspace-agnostic — create/browse/share/delete templates, use one to create a list/timeline)
+- `/automations` → `AutomationsScreen`, `/automations/:id` → `AutomationEditorScreen` (workspace-scoped; only present once the `automations` app is installed via the App Directory — see Automation Hub)
 - `/settings` → `SettingsScreen`
 - `/nuke` → `NukeScreen` (admin-only total instance reset; route-guarded on `isAdmin`, not just `loggedIn`)
 
@@ -364,7 +391,7 @@ Public / unauthenticated routes:
 
 ### Modal State
 
-Top-level modal visibility is managed by a single `modal` string state in `App.tsx` (e.g. `'completed'`, `'trash'`, workspace wizard, add wizard, `null`). Creation/settings wizards live in `src/modals/` (`AddListWizard`, `AddTimelineWizard`, `WorkspaceWizard`, `ItemSettingsModal`, `UserSettingsModal`, `WorkspaceSettingsModal`, `TwoFAWizard`, `TrashModal`, `CompletedModal`).
+Top-level modal visibility is managed by a single `modal` string state in `App.tsx` (e.g. `'completed'`, `'trash'`, `'archived'`, workspace wizard, add wizard, `null`). Creation/settings wizards live in `src/modals/` (`AddListWizard`, `AddTimelineWizard`, `WorkspaceWizard`, `ItemSettingsModal`, `UserSettingsModal`, `WorkspaceSettingsModal`, `TwoFAWizard`, `TrashModal`, `CompletedModal`, `ArchivedModal`).
 
 The per-item **"More settings…"** menu in the `Sidebar` opens `ItemSettingsModal`, which is where accessibility (workspace Public/Private), color, emoji, folder, and the **public Share link** controls live for lists and timelines.
 
@@ -467,7 +494,7 @@ docker compose logs -f backend  # Stream backend logs
 
 ## Tests
 
-A **Vitest** suite exists (`npm test` in both `backend/` and `frontend/`). Coverage is currently minimal — the only committed backend tests are GPX parsing tests in `backend/src/__tests__/gpx.test.ts` with `.gpx` fixtures. There are no frontend tests yet. Vitest is the standard for new tests in both packages; add backend tests under `src/__tests__/`. Beyond automated tests, verify manually:
+A **Vitest** suite exists (`npm test` in both `backend/` and `frontend/`). Backend coverage spans GPX parsing (`gpx.test.ts` + fixtures), workspace/auth/CalDAV integrity, and Automation Hub (`automationGraph.test.ts`, `automationEngine.test.ts`, `automationTypes.test.ts` — graph validation, loop-prevention, and action IDOR guards, using a mock `QueryExec` per the `workspaceIntegrity.test.ts` convention so no live DB is needed). A small frontend Vitest suite also exists (route-state math, delta-reducer store logic). Vitest is the standard for new tests in both packages; add backend tests under `src/__tests__/`. Beyond automated tests, verify manually:
 - Backend: `curl` or a REST client against `http://localhost:3001`
 - Frontend: run the dev server and test in browser
 

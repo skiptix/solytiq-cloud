@@ -4,6 +4,7 @@ import type { List, Folder, Timeline, GpsFile } from '../types';
 import Icon from './Icon';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
+import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import WorkspaceWizard from '../modals/WorkspaceWizard';
 import WorkspaceSettingsModal from '../modals/WorkspaceSettingsModal';
 import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSettingsModal';
@@ -462,7 +463,7 @@ interface FolderRowProps {
   folder: Folder;
   lists: List[];
   timelines: Timeline[];
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations';
   activeListId?: string;
   activeTimelineId?: string;
   activeFolderId?: string;
@@ -757,7 +758,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
 interface StandaloneListWithSublistsProps {
   list: List;
   sublists: List[];
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations';
   activeListId?: string;
   collapsed: boolean;
   dragOverId: string | null;
@@ -959,7 +960,7 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations';
   activeListId?: string;
   activeTimelineId?: string;
   activeFolderId?: string;
@@ -967,7 +968,7 @@ interface SidebarProps {
   lists: List[];
   width: number;
   onNavigate: (path: string) => void;
-  onOpenModal: (modal: 'add' | 'completed' | 'trash') => void;
+  onOpenModal: (modal: 'add' | 'completed' | 'trash' | 'archived') => void;
   onReorderLists: (fromId: string, toId: string) => void;
   onResizeStart: (startX: number) => void;
   onTaskDropToList: (taskId: number, listId: string) => void;
@@ -985,6 +986,8 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   const [addHov, setAddHov] = useState(false);
   const [folderHov, setFolderHov] = useState(false);
   const [templatesHov, setTemplatesHov] = useState(false);
+  const [automationsHov, setAutomationsHov] = useState(false);
+  const automationsInstalled = useInstalledAppsStore((s) => s.installedApps.includes('automations'));
   const [calendarHov, setCalendarHov] = useState(false);
   const [handleHov, setHandleHov] = useState(false);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -1300,7 +1303,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.42.0
+              v1.43.0
             </div>
           )}
         </div>
@@ -1401,6 +1404,28 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           <Icon name="dashboard_customize" size={17} color={active === 'templates' ? '#5e4dbb' : '#787584'} />
           {!collapsed && <span>Templates</span>}
         </button>
+
+        {/* Automations — per-workspace, only shown once the admin has
+            installed the Automation Hub app (Settings → System → Discover Apps) */}
+        {automationsInstalled && (
+          <button
+            onClick={() => onNavigate('/automations')}
+            title={collapsed ? 'Automations' : undefined}
+            onMouseEnter={() => setAutomationsHov(true)}
+            onMouseLeave={() => setAutomationsHov(false)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8,
+              padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start',
+              borderRadius: 8, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5,
+              fontWeight: active === 'automations' ? 700 : 500,
+              color: active === 'automations' ? '#5e4dbb' : '#484552',
+              background: active === 'automations' ? '#F5F3FF' : (automationsHov ? '#faf9ff' : 'transparent'),
+              border: 'none', transition: 'background 150ms', width: '100%',
+            }}>
+            <Icon name="bolt" size={17} color={active === 'automations' ? '#5e4dbb' : '#787584'} />
+            {!collapsed && <span>Automations</span>}
+          </button>
+        )}
 
         <div style={{ height: 1, background: '#e8e4f0', margin: '6px 8px' }} />
 
@@ -1564,9 +1589,10 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
       <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <NavItem icon="check_circle" label="Completed" active={false} onClick={() => onOpenModal('completed')} collapsed={collapsed} />
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
+        <NavItem icon="archive" label="Archived" active={false} onClick={() => onOpenModal('archived')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.42.0
+            v1.43.0
           </div>
         )}
       </div>

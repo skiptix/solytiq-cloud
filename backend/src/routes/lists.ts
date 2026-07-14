@@ -6,9 +6,10 @@ import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { checkVersionConflict } from '../concurrency';
-import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, wwarn, werr } from '../workspaceUtil';
+import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, wwarn, werr, QueryExec } from '../workspaceUtil';
 import { softDeleteListTree, collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestrictConflict } from '../visibility';
+import type { MutationActor } from '../automationEngine';
 
 const router = Router();
 router.use(authenticate);
@@ -39,6 +40,8 @@ interface ListRow {
   share_subpages: boolean;
   version?: number;
   view_mode: string;
+  is_archived?: boolean;
+  archived_at?: string | null;
 }
 
 interface SectionRow {
@@ -139,6 +142,8 @@ function sanitizeList(
     shareSubpages:    list.share_subpages ?? false,
     version:      list.version ?? 1,
     viewMode:     (list.view_mode === 'kanban' ? 'kanban' : 'list') as 'list' | 'kanban',
+    isArchived:   list.is_archived ?? false,
+    archivedAt:   list.archived_at ?? null,
     sections,
     ...(linkedProgress !== undefined ? { linkedProgress } : {}),
   };
@@ -156,7 +161,7 @@ function summarizeListRows(rows: ListRow[]): string {
     .join(', ') + (rows.length > 25 ? `, … +${rows.length - 25} more` : '');
 }
 
-export async function buildListsForUser(userId: string, workspaceId?: string) {
+export async function buildListsForUser(userId: string, workspaceId?: string, includeArchived = false) {
   // When workspaceId is provided: return lists in that workspace the user can access,
   // plus the user's own lists with no workspace assigned (backward-compatible "personal" lists).
   // When omitted: return all lists the user owns or has access to (global view).
@@ -174,6 +179,9 @@ export async function buildListsForUser(userId: string, workspaceId?: string) {
       OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public')
     ))
   )`;
+  // Archived lists are hidden from the normal workspace view (sidebar, dashboards,
+  // etc.) — surfaced only via the dedicated Archived modal (GET /?archived=true).
+  const archivedFilter = includeArchived ? 'AND l.is_archived = true' : 'AND l.is_archived = false';
 
   const [listsResult, sectionsResult, tasksResult] = await Promise.all([
     query<ListRow>(
@@ -181,6 +189,7 @@ export async function buildListsForUser(userId: string, workspaceId?: string) {
        LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
        WHERE ${accessCondition}
        ${wsFilter}
+       ${archivedFilter}
        ORDER BY l.position ASC, l.created_at ASC`,
       params
     ),
@@ -299,12 +308,44 @@ export async function getListForUser(userId: string, listId: string) {
 router.get('/', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
-    wlog(`lists GET ⇢ user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} rawQuery=${JSON.stringify(req.query)}`);
-    const lists = await buildListsForUser(req.userId!, workspaceId);
+    const includeArchived = req.query.archived === 'true';
+    wlog(`lists GET ⇢ user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} archived=${includeArchived} rawQuery=${JSON.stringify(req.query)}`);
+    const lists = await buildListsForUser(req.userId!, workspaceId, includeArchived);
     wlog(`lists GET ⇠ user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} returned=${lists.length} ids=[${lists.slice(0, 25).map(l => `${l.id}{ws=${l.workspaceId ?? 'NULL'},folder=${l.folderId ?? 'root'}}`).join(', ')}${lists.length > 25 ? `, … +${lists.length - 25} more` : ''}]`);
     res.json({ lists });
   } catch (err) {
     werr('lists GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/lists/:listId/unarchive — owner/admin only. archive_list itself is
+// performed by the Automation Hub action or directly by the owner via the
+// Archived modal; there is no manual "archive" endpoint in V1 since archiving
+// is intended to be an automation-driven action (see automationTypes.ts).
+router.put('/:listId/unarchive', async (req: Request, res: Response) => {
+  try {
+    const { listId } = req.params;
+    const ownerCheck = await query<{ user_id: string }>('SELECT user_id FROM lists WHERE id = $1', [listId]);
+    if (ownerCheck.rows.length === 0) {
+      res.status(404).json({ error: 'List not found' });
+      return;
+    }
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    const updated = await setListArchived(query, listId, false);
+    if (!updated) {
+      res.status(404).json({ error: 'List not found' });
+      return;
+    }
+
+    res.json({ list: sanitizeList(updated, []) });
+    broadcastToUser(req.userId!, 'lists');
+  } catch (err) {
+    werr('list unarchive error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -940,6 +981,175 @@ router.delete('/sections/:sectionId', async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
+// List Tasks — mutation core
+//
+// These are the actual reads/writes behind the HTTP handlers below. They're
+// extracted (rather than inlined in the route closures) so the Automation
+// Hub engine (backend/src/automationEngine.ts) can perform the exact same
+// mutations for its delete_task/create_task actions. Every caller passes an
+// explicit MutationActor; createListTask/updateListTaskFields fire the
+// matching automation trigger only for actor.type === 'user' — an
+// automation's own writes can therefore never re-trigger another automation
+// run (loop prevention by construction, see automationEngine.ts).
+// ---------------------------------------------------------------------------
+
+export async function createListTask(
+  exec: QueryExec,
+  listId: string,
+  sectionId: string,
+  userId: string,
+  fields: {
+    id?: number;
+    title: string;
+    note?: string | null;
+    deadline?: string | null;
+    priority?: string | null;
+    badge?: string | null;
+    linkedListId?: string | null;
+    linkedListType?: string | null;
+  },
+  actor: MutationActor
+): Promise<{ task: TaskRow; workspaceId: string | null } | null> {
+  // An item ALWAYS inherits its parent list's workspace — never trust a
+  // client-supplied workspaceId here, so an item can never drift out of the
+  // workspace its list lives in (which would make it vanish on reload).
+  const sectionInfo = await exec(
+    `SELECT l.workspace_id, l.name FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
+    [sectionId, listId]
+  );
+  if (sectionInfo.rows.length === 0) return null;
+  const itemWorkspaceId = (sectionInfo.rows[0] as { workspace_id: string | null }).workspace_id;
+  const listName = (sectionInfo.rows[0] as { name: string }).name;
+
+  const taskId = fields.id ?? (Date.now() * 1000 + crypto.randomInt(1000));
+
+  const posResult = await exec(`SELECT MAX(position) AS max FROM tasks WHERE section_id = $1`, [sectionId]);
+  const maxPos = (posResult.rows[0] as { max: string | null }).max;
+  const nextPos = maxPos !== null ? parseInt(maxPos, 10) + 1 : 0;
+
+  const result = await exec(
+    `INSERT INTO tasks
+       (id, user_id, title, note, deadline, priority, badge, source, list_id, section_id, position, linked_list_id, linked_list_type, workspace_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'list', $8, $9, $10, $11, $12, $13)
+     RETURNING *`,
+    [taskId, userId, fields.title, fields.note ?? null, fields.deadline ?? null, fields.priority ?? null, fields.badge ?? null, listId, sectionId, nextPos, fields.linkedListId ?? null, fields.linkedListType ?? null, itemWorkspaceId]
+  );
+  const task = result.rows[0] as unknown as TaskRow;
+
+  if (itemWorkspaceId) {
+    const { fireTrigger } = await import('../automationEngine');
+    await fireTrigger('task_created', {
+      workspaceId: itemWorkspaceId,
+      task: { id: String(task.id), title: task.title, listId, checked: false },
+      list: { id: listId, name: listName },
+    }, actor).catch((e) => werr('fireTrigger task_created failed:', e));
+  }
+
+  return { task, workspaceId: itemWorkspaceId };
+}
+
+export async function updateListTaskFields(
+  exec: QueryExec,
+  listId: string,
+  taskId: string,
+  fields: {
+    title?: string | null;
+    note?: string | null;
+    noteMarkdown?: boolean | null;
+    checked?: boolean | null;
+    deadline?: string | null;
+    time_val?: string | null;
+    priority?: string | null;
+    badge?: string | null;
+    position?: number | null;
+    sectionId?: string | null;
+    updateLinkedList: boolean;
+    linkedListId?: string | null;
+    linkedListType?: string | null;
+  },
+  actor: MutationActor
+): Promise<TaskRow | null> {
+  const before = await exec(`SELECT checked FROM tasks WHERE id = $1 AND list_id = $2`, [taskId, listId]);
+  if (before.rows.length === 0) return null;
+  const wasChecked = (before.rows[0] as { checked: boolean }).checked;
+
+  const result = await exec(
+    `UPDATE tasks
+     SET title          = COALESCE($1, title),
+         note           = COALESCE($2, note),
+         note_markdown  = COALESCE($14, note_markdown),
+         checked        = COALESCE($3, checked),
+         deadline       = COALESCE($4, deadline),
+         time_val       = COALESCE($5, time_val),
+         priority       = COALESCE($6, priority),
+         badge          = COALESCE($7, badge),
+         position       = COALESCE($8, position),
+         section_id     = COALESCE($9, section_id),
+         linked_list_id   = CASE WHEN $11 THEN $12 ELSE linked_list_id END,
+         linked_list_type = CASE WHEN $11 THEN $13 ELSE linked_list_type END
+     WHERE id = $10
+     RETURNING *`,
+    [
+      fields.title ?? null,
+      fields.note ?? null,
+      fields.checked ?? null,
+      fields.deadline ?? null,
+      fields.time_val ?? null,
+      fields.priority ?? null,
+      fields.badge ?? null,
+      fields.position ?? null,
+      fields.sectionId ?? null,
+      taskId,
+      fields.updateLinkedList,
+      fields.linkedListId ?? null,
+      fields.linkedListType ?? null,
+      typeof fields.noteMarkdown === 'boolean' ? fields.noteMarkdown : null,
+    ]
+  );
+
+  if (result.rows.length === 0) return null;
+  const saved = result.rows[0] as unknown as TaskRow;
+
+  // Fire triggers only on a false → true checked transition, and only for
+  // genuine user actions (see file header). A list-all-completed check piggy
+  // -backs on the same transition since it can only ever become true here.
+  if (fields.checked === true && !wasChecked) {
+    const listRow = await exec(`SELECT workspace_id, name FROM lists WHERE id = $1`, [listId]);
+    const wsId = listRow.rows.length > 0 ? (listRow.rows[0] as { workspace_id: string | null }).workspace_id : null;
+    if (wsId) {
+      const { fireTrigger } = await import('../automationEngine');
+      const listCtx = { id: listId, name: (listRow.rows[0] as { name: string }).name };
+      await fireTrigger('task_completed', {
+        workspaceId: wsId,
+        task: { id: String(saved.id), title: saved.title, listId, checked: true },
+        list: listCtx,
+      }, actor).catch((e) => werr('fireTrigger task_completed failed:', e));
+
+      const remaining = await exec(`SELECT COUNT(*)::int AS n FROM tasks WHERE list_id = $1 AND checked = false`, [listId]);
+      if (Number((remaining.rows[0] as { n: number }).n) === 0) {
+        await fireTrigger('list_all_completed', { workspaceId: wsId, list: listCtx }, actor)
+          .catch((e) => werr('fireTrigger list_all_completed failed:', e));
+      }
+    }
+  }
+
+  return saved;
+}
+
+export async function deleteTaskRow(exec: QueryExec, listId: string, taskId: string): Promise<boolean> {
+  const result = await exec(`DELETE FROM tasks WHERE id = $1 AND list_id = $2`, [taskId, listId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+export async function setListArchived(exec: QueryExec, listId: string, archived: boolean): Promise<ListRow | null> {
+  const result = await exec(
+    `UPDATE lists SET is_archived = $1, archived_at = CASE WHEN $1 THEN NOW() ELSE NULL END WHERE id = $2 RETURNING *`,
+    [archived, listId]
+  );
+  return result.rows.length > 0 ? (result.rows[0] as unknown as ListRow) : null;
+}
+
+// ---------------------------------------------------------------------------
 // List Tasks
 // ---------------------------------------------------------------------------
 
@@ -966,8 +1176,8 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
     }
 
     // Only owner or admin can add tasks
-    const ownerCheck = await query<{ user_id: string; workspace_id: string | null }>(
-      `SELECT l.user_id, l.workspace_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
+    const ownerCheck = await query<{ user_id: string }>(
+      `SELECT l.user_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
       [sectionId, listId]
     );
     if (ownerCheck.rows.length === 0) {
@@ -980,31 +1190,25 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
       return;
     }
 
-    const taskId = id ?? (Date.now() * 1000 + crypto.randomInt(1000));
+    const created = await createListTask(query, listId, sectionId, req.userId!, {
+      id,
+      title,
+      note: note ?? null,
+      deadline: deadline ?? null,
+      priority: priority ?? null,
+      badge: badge ?? null,
+      linkedListId: linked_list_id ?? null,
+      linkedListType: linked_list_type ?? null,
+    }, { type: 'user', userId: req.userId! });
 
-    // An item ALWAYS inherits its parent list's workspace — never trust a
-    // client-supplied workspaceId here, so an item can never drift out of the
-    // workspace its list lives in (which would make it vanish on reload).
-    const itemWorkspaceId = ownerCheck.rows[0].workspace_id;
+    if (!created) {
+      werr(`item CREATE 404 — section ${sectionId} not found in list ${listId} for user=${req.userId}`);
+      res.status(404).json({ error: 'List or section not found' });
+      return;
+    }
 
-    const posResult = await query<{ max: string | null }>(
-      `SELECT MAX(position) AS max FROM tasks WHERE section_id = $1`,
-      [sectionId]
-    );
-    const nextPos = posResult.rows[0].max !== null
-      ? parseInt(posResult.rows[0].max, 10) + 1
-      : 0;
-
-    const result = await query<TaskRow>(
-      `INSERT INTO tasks
-         (id, user_id, title, note, deadline, priority, badge, source, list_id, section_id, position, linked_list_id, linked_list_type, workspace_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'list', $8, $9, $10, $11, $12, $13)
-       RETURNING *`,
-      [taskId, req.userId, title, note ?? null, deadline ?? null, priority ?? null, badge ?? null, listId, sectionId, nextPos, linked_list_id ?? null, linked_list_type ?? null, itemWorkspaceId]
-    );
-
-    wlog(`item CREATE ✓ id=${result.rows[0].id} list=${listId} section=${sectionId} workspace=${itemWorkspaceId ?? 'null'}`);
-    res.status(201).json({ task: sanitizeTask(result.rows[0]) });
+    wlog(`item CREATE ✓ id=${created.task.id} list=${listId} section=${sectionId} workspace=${created.workspaceId ?? 'null'}`);
+    res.status(201).json({ task: sanitizeTask(created.task) });
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     werr('list task POST error:', err);
@@ -1062,47 +1266,28 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await query<TaskRow>(
-      `UPDATE tasks
-       SET title          = COALESCE($1, title),
-           note           = COALESCE($2, note),
-           note_markdown  = COALESCE($14, note_markdown),
-           checked        = COALESCE($3, checked),
-           deadline       = COALESCE($4, deadline),
-           time_val       = COALESCE($5, time_val),
-           priority       = COALESCE($6, priority),
-           badge          = COALESCE($7, badge),
-           position       = COALESCE($8, position),
-           section_id     = COALESCE($9, section_id),
-           linked_list_id   = CASE WHEN $11 THEN $12 ELSE linked_list_id END,
-           linked_list_type = CASE WHEN $11 THEN $13 ELSE linked_list_type END
-       WHERE id = $10
-       RETURNING *`,
-      [
-        title     ?? null,
-        note      ?? null,
-        checked   ?? null,
-        deadline  ?? null,
-        time_val  ?? null,
-        priority  ?? null,
-        badge     ?? null,
-        position  ?? null,
-        sectionId ?? null,
-        taskId,
-        updateLinkedList,
-        linked_list_id ?? null,
-        linked_list_type ?? null,
-        typeof noteMarkdown === 'boolean' ? noteMarkdown : null,
-      ]
-    );
+    const saved = await updateListTaskFields(query, listId, taskId, {
+      title: title ?? null,
+      note: note ?? null,
+      noteMarkdown: typeof noteMarkdown === 'boolean' ? noteMarkdown : null,
+      checked: checked ?? null,
+      deadline: deadline ?? null,
+      time_val: time_val ?? null,
+      priority: priority ?? null,
+      badge: badge ?? null,
+      position: position ?? null,
+      sectionId: sectionId ?? null,
+      updateLinkedList,
+      linkedListId: linked_list_id ?? null,
+      linkedListType: linked_list_type ?? null,
+    }, { type: 'user', userId: req.userId! });
 
-    if (result.rows.length === 0) {
+    if (!saved) {
       wlog(`item UPDATE ✗ 404 — taskId=${taskId} not found in listId=${listId} for userId=${req.userId}`);
       res.status(404).json({ error: 'Task not found' });
       return;
     }
 
-    const saved = result.rows[0];
     wlog(`item UPDATE ✓ updated → linked_list_id=${saved.linked_list_id} linked_list_type=${saved.linked_list_type}`);
     res.json({ task: sanitizeTask(saved) });
     broadcastToUser(req.userId!, 'lists');
@@ -1131,12 +1316,8 @@ router.delete('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await query(
-      `DELETE FROM tasks WHERE id = $1 AND list_id = $2`,
-      [taskId, listId]
-    );
-
-    if (result.rowCount === 0) {
+    const deleted = await deleteTaskRow(query, listId, taskId);
+    if (!deleted) {
       res.status(404).json({ error: 'Task not found' });
       return;
     }

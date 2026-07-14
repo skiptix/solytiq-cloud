@@ -46,6 +46,14 @@ export const APPS_REGISTRY: AppDef[] = [
     category: 'Integrations',
     accentColor: '#5e4dbb',
   },
+  {
+    id: 'automations',
+    name: 'Automation Hub',
+    description: 'Build flow-chart automations that trigger on task and list events (or a schedule) — auto-delete checked items, archive finished lists, and more.',
+    icon: 'bolt',
+    category: 'Automation',
+    accentColor: '#f59e0b',
+  },
 ];
 
 export function getAppDef(appId: string): AppDef | undefined {

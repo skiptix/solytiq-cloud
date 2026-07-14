@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationGraph, AutomationRun, AutomationNotification, TriggerTypeDef, ActionTypeDef } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -274,6 +274,14 @@ export const apiMoveListWorkspace = (id: string, workspaceId: string, cascade?: 
 
 export const apiDeleteList = (id: string) =>
   apiFetch<{ success: boolean }>(`/lists/${id}`, { method: 'DELETE' });
+
+// Archived lists (set by the Automation Hub's archive_list action, or
+// unarchived manually) — hidden from the normal workspace view.
+export const apiGetArchivedLists = (workspaceId?: string) =>
+  apiFetch<{ lists: List[] }>(`/lists?archived=true${workspaceId ? `&workspaceId=${encodeURIComponent(workspaceId)}` : ''}`);
+
+export const apiUnarchiveList = (id: string) =>
+  apiFetch<{ list: List }>(`/lists/${id}/unarchive`, { method: 'PUT' });
 
 // Public link sharing
 export interface ShareUpdate {
@@ -1237,3 +1245,38 @@ export const apiGetTemplateStructure = (id: string) =>
 
 export const apiUpdateTemplateStructure = (id: string, structure: TemplateListNode | TemplateTimelineNode) =>
   apiFetch<{ template: Template }>(`/templates/${id}/structure`, { method: 'PUT', body: JSON.stringify({ structure }) });
+
+// ── Automation Hub ───────────────────────────────────────────────────────────
+
+export const apiGetAutomationNodeTypes = () =>
+  apiFetch<{ triggers: TriggerTypeDef[]; actions: ActionTypeDef[] }>('/automations/node-types');
+
+export const apiGetAutomations = (workspaceId: string) =>
+  apiFetch<{ automations: Automation[] }>(`/automations?workspaceId=${encodeURIComponent(workspaceId)}`);
+
+export const apiGetAutomation = (id: string) =>
+  apiFetch<{ automation: Automation }>(`/automations/${id}`);
+
+export const apiCreateAutomation = (data: { workspaceId: string; name: string; description?: string; graph: AutomationGraph }) =>
+  apiFetch<{ automation: Automation }>('/automations', { method: 'POST', body: JSON.stringify(data) });
+
+export const apiUpdateAutomation = (id: string, data: { name?: string; description?: string | null; graph?: AutomationGraph; expectedVersion?: number }) =>
+  apiFetch<{ automation: Automation }>(`/automations/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const apiSetAutomationEnabled = (id: string, enabled: boolean) =>
+  apiFetch<{ automation: Automation }>(`/automations/${id}/enabled`, { method: 'PUT', body: JSON.stringify({ enabled }) });
+
+export const apiDeleteAutomation = (id: string) =>
+  apiFetch<{ success: boolean }>(`/automations/${id}`, { method: 'DELETE' });
+
+export const apiGetAutomationRuns = (id: string, limit?: number) =>
+  apiFetch<{ runs: AutomationRun[] }>(`/automations/${id}/runs${limit ? `?limit=${limit}` : ''}`);
+
+export const apiGetAutomationNotifications = (unreadOnly?: boolean) =>
+  apiFetch<{ notifications: AutomationNotification[] }>(`/automations/notifications${unreadOnly ? '?unreadOnly=true' : ''}`);
+
+export const apiMarkAutomationNotificationRead = (id: string) =>
+  apiFetch<{ success: boolean }>(`/automations/notifications/${id}/read`, { method: 'PUT' });
+
+export const apiMarkAllAutomationNotificationsRead = () =>
+  apiFetch<{ success: boolean }>('/automations/notifications/read-all', { method: 'PUT' });
