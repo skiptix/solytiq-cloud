@@ -24,7 +24,7 @@ import { broadcastToUsers } from './sse';
 
 export type SyncEntity =
   | 'task' | 'list' | 'folder' | 'timeline' | 'milestone'
-  | 'workspace' | 'trash' | 'meeting' | 'file';
+  | 'workspace' | 'trash' | 'meeting' | 'file' | 'automation';
 
 /** The channel Postgres triggers NOTIFY on. */
 export const SYNC_CHANNEL = 'solytiq_sync';
@@ -59,6 +59,7 @@ export async function resolveWorkspaceAudience(
         UNION SELECT user_id FROM timelines WHERE workspace_id = $1
         UNION SELECT user_id FROM folders   WHERE workspace_id = $1
         UNION SELECT user_id FROM tasks     WHERE workspace_id = $1
+        UNION SELECT user_id FROM automations WHERE workspace_id = $1
      ) c
      WHERE EXISTS (SELECT 1 FROM workspaces w WHERE w.id = $1 AND w.visibility = 'public')`,
     [workspaceId],

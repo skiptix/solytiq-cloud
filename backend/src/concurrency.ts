@@ -13,7 +13,7 @@ import { query } from './db';
  * `table` is only ever a hard-coded literal — never client input.
  */
 export async function checkVersionConflict(
-  table: 'lists' | 'timelines',
+  table: 'lists' | 'timelines' | 'automations',
   id: string,
   expectedVersion: unknown,
 ): Promise<number | null> {

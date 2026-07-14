@@ -40,6 +40,9 @@ import SharedTimelinePage from './screens/SharedTimelinePage';
 import SettingsScreen from './screens/SettingsScreen';
 import FolderDashboardScreen from './screens/FolderDashboardScreen';
 import TemplatesScreen from './screens/TemplatesScreen';
+import AutomationsScreen from './screens/AutomationsScreen';
+import AutomationEditorScreen from './screens/AutomationEditorScreen';
+import ArchivedModal from './modals/ArchivedModal';
 import AdminPasswordResetScreen from './screens/AdminPasswordResetScreen';
 
 // Sign out on any 401 (expired / revoked JWT) so the user is redirected to
@@ -72,13 +75,14 @@ function AppLayout() {
   const location = useLocation();
   const { lists, timelines, listsLoading, loadError, sidebarWidth, setSidebarWidth, loadFromApi, setLists, updateList, moveTaskToList } = useAppStore();
   const prevWorkspaceRef = useRef<string | null | undefined>(undefined);
-  const [modal, setModal] = useState<'add' | 'completed' | 'trash' | null>(null);
+  const [modal, setModal] = useState<'add' | 'completed' | 'trash' | 'archived' | null>(null);
   const [addWizardMode, setAddWizardMode] = useState<'list' | 'timeline' | undefined>(undefined);
   const isMobile = useMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { installedApps, loaded: appsLoaded } = useInstalledAppsStore();
   const gpsInstalled = installedApps.includes('gps');
   const filesInstalled = installedApps.includes('files');
+  const automationsInstalled = installedApps.includes('automations');
 
   // "New list" shortcut — jumps straight into list creation instead of the
   // chooser the sidebar's "Add" button opens.
@@ -270,7 +274,7 @@ function AppLayout() {
     arr.filter(l => l.folderId === folderId).forEach((l, i) => updateList(l.id, { position: i }));
   }, [lists, setLists, updateList]);
 
-  const getActive = (): 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' => {
+  const getActive = (): 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' => {
     if (location.pathname.startsWith('/folder/')) return 'folder';
     if (location.pathname.startsWith('/list/')) return 'list';
     if (location.pathname.startsWith('/timeline/')) return 'timeline';
@@ -279,6 +283,7 @@ function AppLayout() {
     if (location.pathname.startsWith('/settings')) return 'settings';
     if (location.pathname.startsWith('/gps')) return 'gps';
     if (location.pathname.startsWith('/templates')) return 'templates';
+    if (location.pathname.startsWith('/automations')) return 'automations';
     return 'dashboard';
   };
 
@@ -336,6 +341,8 @@ function AppLayout() {
               <Route path="/timeline/:timelineId" element={<TimelineScreen />} />
               <Route path="/settings" element={<SettingsScreen />} />
               <Route path="/templates" element={<TemplatesScreen />} />
+              <Route path="/automations" element={!appsLoaded ? null : automationsInstalled ? <AutomationsScreen /> : <Navigate to="/dashboard" replace />} />
+              <Route path="/automations/:id" element={!appsLoaded ? null : automationsInstalled ? <AutomationEditorScreen /> : <Navigate to="/dashboard" replace />} />
               <Route path="/gps" element={!appsLoaded ? null : gpsInstalled ? <GPSScreen /> : <Navigate to="/dashboard" replace />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
@@ -374,6 +381,7 @@ function AppLayout() {
       )}
       {modal === 'completed' && <CompletedModal onClose={() => setModal(null)} />}
       {modal === 'trash' && <TrashModal onClose={() => setModal(null)} />}
+      {modal === 'archived' && <ArchivedModal onClose={() => setModal(null)} />}
       <AIAssistant />
       <KeyboardShortcuts />
 

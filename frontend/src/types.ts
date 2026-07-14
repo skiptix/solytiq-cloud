@@ -80,6 +80,8 @@ export interface List {
   shareSubpages?: boolean;
   version?: number;   // optimistic-concurrency token (bumps on every server-side update)
   viewMode?: 'list' | 'kanban';   // To-Do screen's layout — persisted per list, synced across devices
+  isArchived?: boolean;   // hidden from the normal workspace view; see the Archived modal
+  archivedAt?: string | null;
   linkedProgress?: {
     total: number;
     completed: number;
@@ -343,6 +345,111 @@ export interface TemplateTimelineNode {
   isPublic: boolean;
   layout: string;
   milestones: TemplateMilestoneNode[];
+}
+
+// ---------------------------------------------------------------------------
+// Automation Hub — per-workspace, flow-chart-style automations. V1 graphs are
+// linear (one trigger node feeding one or more chained action nodes, no
+// branching); the shape mirrors what @xyflow/react expects (nodes + edges +
+// canvas position), validated server-side by automationGraph.ts.
+// ---------------------------------------------------------------------------
+
+export interface AutomationParamProperty {
+  type: 'string' | 'number' | 'boolean';
+  label: string;
+  description: string;
+  optional?: boolean;
+  isListId?: boolean;
+  enum?: string[];
+}
+
+export interface AutomationParamSchema {
+  type: 'object';
+  properties: Record<string, AutomationParamProperty>;
+}
+
+export interface TriggerTypeDef {
+  id: string;
+  label: string;
+  description: string;
+  icon: string;
+  paramsSchema: AutomationParamSchema;
+  providesTask: boolean;
+  providesList: boolean;
+}
+
+export interface ActionTypeDef {
+  id: string;
+  label: string;
+  description: string;
+  icon: string;
+  paramsSchema: AutomationParamSchema;
+  requiresTriggerTask: boolean;
+  requiresTriggerList: boolean;
+}
+
+export interface AutomationNode {
+  id: string;
+  kind: 'trigger' | 'action';
+  type: string;
+  position: { x: number; y: number };
+  params: Record<string, unknown>;
+}
+
+export interface AutomationEdge {
+  id: string;
+  source: string;
+  target: string;
+}
+
+export interface AutomationGraph {
+  version: 1;
+  nodes: AutomationNode[];
+  edges: AutomationEdge[];
+}
+
+export interface Automation {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  graph: AutomationGraph;
+  triggerType: string;
+  isOwner: boolean;
+  ownerId: string;
+  ownerName: string | null;
+  version: number;
+  nextFireAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AutomationRunStep {
+  nodeId: string;
+  actionType: string;
+  ok: boolean;
+  summary: string;
+  error?: string;
+}
+
+export interface AutomationRun {
+  id: string;
+  triggerType: string;
+  status: 'running' | 'success' | 'failed';
+  steps: AutomationRunStep[];
+  error: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export interface AutomationNotification {
+  id: string;
+  automationId: string;
+  runId: string;
+  message: string;
+  readAt: string | null;
+  createdAt: string;
 }
 
 export interface AIFile {

@@ -35,8 +35,10 @@ import syncRouter from './routes/sync';
 import searchRouter from './routes/search';
 import templatesRouter from './routes/templates';
 import appsRouter from './routes/apps';
+import automationsRouter from './routes/automations';
 import { isAppInstalled } from './appsRegistry';
 import { startSyncDispatcher, SYNC_CHANNEL } from './syncLog';
+import { sweepScheduledAutomations } from './automationEngine';
 import { getPublicBaseUrl } from './publicUrl';
 import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
@@ -200,6 +202,7 @@ app.use('/api/sync',       syncRouter);
 app.use('/api/search',     searchRouter);
 app.use('/api/templates',  templatesRouter);
 app.use('/api/apps',       appsRouter);
+app.use('/api/automations', automationsRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
@@ -1383,6 +1386,70 @@ async function runMigrations() {
   await pool.query(`CREATE INDEX IF NOT EXISTS templates_user_idx ON templates(user_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS templates_shared_idx ON templates(is_shared) WHERE is_shared = true`);
 
+  // ── Automation Hub ───────────────────────────────────────────────────────
+  // Per-workspace, flow-chart-style automations (e.g. "delete a task once
+  // it's checked" or "archive a list once everything on it is done").
+  // `graph` is the versioned nodes/edges JSON (validated server-side by
+  // automationGraph.ts on every write); trigger_type/trigger_scope are
+  // denormalized out of it purely so the hot path — fired on every task
+  // check/create — can do an indexed lookup instead of a JSONB scan.
+  // Editable only by its creator (or an admin); visible read-only to every
+  // workspace member. See automationEngine.ts for execution + loop
+  // prevention and CLAUDE.md's "Automation Hub" section for the full design.
+  await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS lists_archived_idx ON lists (workspace_id) WHERE is_archived = true`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS automations (
+      id             VARCHAR(100) PRIMARY KEY,
+      workspace_id   VARCHAR(100) NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name           VARCHAR(255) NOT NULL,
+      description    TEXT,
+      enabled        BOOLEAN NOT NULL DEFAULT TRUE,
+      graph          JSONB NOT NULL,
+      trigger_type   VARCHAR(40) NOT NULL,
+      trigger_scope  JSONB NOT NULL DEFAULT '{}'::jsonb,
+      next_fire_at   TIMESTAMPTZ,
+      version        INT NOT NULL DEFAULT 1,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS automations_trigger_lookup_idx ON automations (workspace_id, trigger_type) WHERE enabled = true`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS automations_next_fire_idx ON automations (next_fire_at) WHERE enabled = true AND trigger_type = 'schedule'`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS automations_workspace_idx ON automations (workspace_id)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS automation_runs (
+      id              VARCHAR(100) PRIMARY KEY,
+      automation_id   VARCHAR(100) NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
+      workspace_id    VARCHAR(100) NOT NULL,
+      trigger_type    VARCHAR(40) NOT NULL,
+      trigger_context JSONB NOT NULL,
+      status          VARCHAR(20) NOT NULL DEFAULT 'running',
+      steps           JSONB NOT NULL DEFAULT '[]'::jsonb,
+      error           TEXT,
+      started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      finished_at     TIMESTAMPTZ
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS automation_runs_automation_idx ON automation_runs (automation_id, started_at DESC)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS automation_notifications (
+      id             VARCHAR(100) PRIMARY KEY,
+      user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      automation_id  VARCHAR(100) NOT NULL REFERENCES automations(id) ON DELETE CASCADE,
+      run_id         VARCHAR(100) NOT NULL REFERENCES automation_runs(id) ON DELETE CASCADE,
+      message        TEXT NOT NULL,
+      read_at        TIMESTAMPTZ,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS automation_notifications_user_idx ON automation_notifications (user_id, created_at DESC)`);
+
   // ── Optimistic concurrency ──────────────────────────────────────────────────
   // A `version` that auto-increments on every UPDATE (BEFORE trigger). Clients
   // echo the version they edited; a conditional PUT then 409s instead of
@@ -1395,7 +1462,7 @@ async function runMigrations() {
     BEGIN NEW.version = OLD.version + 1; RETURN NEW; END;
     $$ LANGUAGE plpgsql
   `);
-  for (const table of ['lists', 'timelines']) {
+  for (const table of ['lists', 'timelines', 'automations']) {
     await pool.query(`DROP TRIGGER IF EXISTS bump_version_${table} ON ${table}`);
     await pool.query(
       `CREATE TRIGGER bump_version_${table} BEFORE UPDATE ON ${table}
@@ -1548,6 +1615,13 @@ async function runMigrations() {
       IF (TG_OP = 'DELETE') THEN RETURN OLD; ELSE RETURN NEW; END IF;
     END; $$ LANGUAGE plpgsql
   `);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_automations() RETURNS trigger AS $$
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN PERFORM sync_emit('automation', OLD.id, 'delete', OLD.workspace_id, OLD.user_id); RETURN OLD; END IF;
+      PERFORM sync_emit('automation', NEW.id, 'upsert', NEW.workspace_id, NEW.user_id); RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
 
   // Attach every trigger idempotently (DROP + CREATE so re-runs are safe).
   const syncTriggers: Array<[string, string]> = [
@@ -1557,7 +1631,7 @@ async function runMigrations() {
     ['meetings', 'meetings'], ['shared_files', 'files'],
     ['trash', 'trash'], ['trash_lists', 'trash'], ['trash_folders', 'trash'],
     ['trash_timelines', 'trash'], ['trash_milestones', 'trash'],
-    ['templates', 'templates'],
+    ['templates', 'templates'], ['automations', 'automations'],
   ];
   for (const [table, fn] of syncTriggers) {
     await pool.query(`DROP TRIGGER IF EXISTS synclog_${table} ON ${table}`);
@@ -1640,6 +1714,13 @@ async function start() {
   };
   cleanupAiFiles();
   setInterval(cleanupAiFiles, 6 * 60 * 60 * 1000);
+
+  // Automation Hub: fire any due 'schedule'-trigger automations. 5-minute
+  // granularity is plenty for daily/weekly schedules; event-driven triggers
+  // (task_completed/task_created/list_all_completed) fire inline from
+  // routes/lists.ts and don't go through this sweep.
+  sweepScheduledAutomations();
+  setInterval(sweepScheduledAutomations, 5 * 60 * 1000);
 
   // Delta-sync: prune the outbox daily, and start the realtime dispatcher that
   // fans committed changes out to every affected user's devices.
