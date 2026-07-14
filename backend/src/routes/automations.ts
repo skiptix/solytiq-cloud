@@ -212,10 +212,14 @@ router.post('/:id/test', async (req: Request, res: Response) => {
     const scopedListId = typeof (scope as { listId?: unknown }).listId === 'string' ? (scope as { listId: string }).listId : undefined;
     let ctx: TriggerContext;
     if (triggerType === 'task_completed' || triggerType === 'task_created') {
-      const rows = await query<{ id: string; title: string; list_id: string; checked: boolean; list_name: string }>(
+      const rows = await query<{
+        id: string; title: string; note: string | null; note_markdown: boolean; deadline: string | null;
+        time_val: string | null; priority: string | null; badge: string | null; section_id: string | null;
+        position: number; created_at: string; updated_at: string; list_id: string; checked: boolean; list_name: string;
+      }>(
         scopedListId
-          ? `SELECT t.id, t.title, t.list_id, t.checked, l.name AS list_name FROM tasks t JOIN lists l ON t.list_id = l.id WHERE t.list_id = $1 AND t.source = 'list' ORDER BY t.updated_at DESC LIMIT 1`
-          : `SELECT t.id, t.title, t.list_id, t.checked, l.name AS list_name FROM tasks t JOIN lists l ON t.list_id = l.id WHERE l.workspace_id = $1 AND t.source = 'list' ORDER BY t.updated_at DESC LIMIT 1`,
+          ? `SELECT t.id, t.title, t.note, t.note_markdown, t.deadline, t.time_val, t.priority, t.badge, t.section_id, t.position, t.created_at, t.updated_at, t.list_id, t.checked, l.name AS list_name FROM tasks t JOIN lists l ON t.list_id = l.id WHERE t.list_id = $1 AND t.source = 'list' ORDER BY t.updated_at DESC LIMIT 1`
+          : `SELECT t.id, t.title, t.note, t.note_markdown, t.deadline, t.time_val, t.priority, t.badge, t.section_id, t.position, t.created_at, t.updated_at, t.list_id, t.checked, l.name AS list_name FROM tasks t JOIN lists l ON t.list_id = l.id WHERE l.workspace_id = $1 AND t.source = 'list' ORDER BY t.updated_at DESC LIMIT 1`,
         [scopedListId ?? automation.workspace_id]
       );
       if (rows.rows.length === 0) {
@@ -225,7 +229,12 @@ router.post('/:id/test', async (req: Request, res: Response) => {
       const r = rows.rows[0];
       ctx = {
         workspaceId: automation.workspace_id,
-        task: { id: String(r.id), title: r.title, listId: r.list_id, checked: triggerType === 'task_completed' ? true : r.checked },
+        task: {
+          id: String(r.id), title: r.title, listId: r.list_id, checked: triggerType === 'task_completed' ? true : r.checked,
+          note: r.note, noteMarkdown: r.note_markdown ?? false, deadline: r.deadline, time: r.time_val,
+          priority: r.priority, badge: r.badge, sectionId: r.section_id, position: r.position,
+          createdAt: r.created_at, updatedAt: r.updated_at,
+        },
         list: { id: r.list_id, name: r.list_name },
       };
     } else if (triggerType === 'list_all_completed') {

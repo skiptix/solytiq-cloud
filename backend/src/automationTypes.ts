@@ -64,7 +64,27 @@ export interface AutomationParamSchema {
 
 export interface TriggerContext {
   workspaceId: string;
-  task?: { id: string; title: string; listId: string; checked: boolean };
+  // id/title/listId/checked stay required (every call site already has
+  // these); the rest are optional additions so existing minimal call sites
+  // (tests, older callers) keep compiling — real triggers populate them all,
+  // giving {{trigger.task.x}} the full task record to work with, not just a
+  // sparse stand-in.
+  task?: {
+    id: string;
+    title: string;
+    listId: string;
+    checked: boolean;
+    note?: string | null;
+    noteMarkdown?: boolean;
+    deadline?: string | null;
+    time?: string | null;
+    priority?: string | null;
+    badge?: string | null;
+    sectionId?: string | null;
+    position?: number;
+    createdAt?: string;
+    updatedAt?: string;
+  };
   list?: { id: string; name: string };
 }
 
