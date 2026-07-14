@@ -12,6 +12,22 @@
 // automation (assertListInWorkspace) — defense in depth against a list
 // having moved/been deleted since the automation was saved, on top of the
 // save-time check in automationGraph.ts.
+//
+// DATA FLOW: every action returns an optional `output` (JSON) alongside
+// `ok`/`summary`. automationEngine.ts accumulates these into a per-run
+// `nodeOutputs` map and resolves `{{trigger.x}}`/`{{$json.x}}`/
+// `{{nodes.<id>.x}}` tokens in every node's params before validate()/
+// execute() ever see them (automationExpressions.ts) — actions themselves
+// never need to know about this, they just receive already-resolved params.
+// The one exception is the `code` action's raw `code` param (never
+// substituted) and `ctx.scope`, which exposes the same data as a JS value for
+// its isolated-vm sandbox to consume directly.
+//
+// TRANSACTIONS: `ctx.exec` is a bare, auto-committing query function — fine
+// for a single-statement action. Any action doing more than one dependent
+// write must open its OWN atomic block via `ctx.withTransaction(...)`
+// (per-node/per-run atomicity, not one shared transaction for the whole
+// chain — see automationEngine.ts's header for why).
 // ---------------------------------------------------------------------------
 
 import { v4 as uuidv4 } from 'uuid';
@@ -19,6 +35,9 @@ import { QueryExec, userCanAccessWorkspace } from './workspaceUtil';
 import type { MutationActor } from './automationEngine';
 import { createListTask, deleteTaskRow, setListArchived } from './routes/lists';
 import { softDeleteListTreeExec, softDeleteFolderExec, collectDescendantListIds } from './trashUtil';
+import type { ExpressionScope } from './automationExpressions';
+import { performHttpRequest, clampTimeoutMs } from './httpNode';
+import { runSandboxedCode } from './codeNode';
 
 export interface AutomationParamProperty {
   type: 'string' | 'number' | 'boolean';
@@ -30,6 +49,12 @@ export interface AutomationParamProperty {
   isFolderId?: boolean;
   isWorkspaceId?: boolean;
   enum?: string[];
+  /** Repeatable {key, value} row editor (HTTP node headers/query params). Stored as Array<{key,value}>. */
+  isKeyValue?: boolean;
+  /** Multi-line textarea, still a template string (expression-substituted like any other string param). */
+  isLongText?: boolean;
+  /** Multi-line textarea holding raw source, NOT expression-substituted (the Code action's script). */
+  isCode?: boolean;
 }
 
 export interface AutomationParamSchema {
@@ -57,18 +82,24 @@ export interface TriggerDef {
 
 export interface ActionContext {
   exec: QueryExec;
+  /** Opens a fresh, self-contained transaction for an action that performs more than one dependent write. */
+  withTransaction: <T>(fn: (exec: QueryExec) => Promise<T>) => Promise<T>;
   workspaceId: string;
   automationId: string;
   automationOwnerId: string;
   runId: string;
   actor: MutationActor;
   trigger: TriggerContext;
+  /** {trigger, $json, nodes} — every node output visible to this node, same shape used for {{...}} resolution. */
+  scope: ExpressionScope;
 }
 
 export interface ActionResult {
   ok: boolean;
   summary: string;
   error?: string;
+  /** JSON-serializable result this node hands to later nodes (via {{$json...}}/{{nodes.<id>...}}) and the editor's Output viewer. */
+  output?: unknown;
 }
 
 export interface ActionDef {
@@ -83,13 +114,25 @@ export interface ActionDef {
   execute: (ctx: ActionContext, params: Record<string, unknown>) => Promise<ActionResult>;
 }
 
+/**
+ * Thrown (and caught) internally to force a ROLLBACK when an action inside
+ * ctx.withTransaction reports failure by RETURNING `{ok: false}` rather than
+ * throwing — a plain return would otherwise let the transaction commit
+ * whatever was already written before the failure was noticed.
+ */
+export class ActionRollbackSignal extends Error {
+  constructor(public readonly result: ActionResult) {
+    super('automation action requested rollback');
+  }
+}
+
 // ── small helpers ────────────────────────────────────────────────────────
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined);
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-function ok(summary: string): ActionResult {
-  return { ok: true, summary };
+function ok(summary: string, output?: unknown): ActionResult {
+  return output !== undefined ? { ok: true, summary, output } : { ok: true, summary };
 }
 function fail(error: string): ActionResult {
   return { ok: false, summary: error, error };
@@ -124,6 +167,30 @@ async function resolveTargetSection(exec: QueryExec, listId: string, requestedSe
   const first = await exec('SELECT id FROM sections WHERE list_id = $1 ORDER BY position ASC LIMIT 1', [listId]);
   if (first.rows.length === 0) return { error: 'Target list has no sections' };
   return (first.rows[0] as { id: string }).id;
+}
+
+function isKeyValueArray(v: unknown): boolean {
+  if (v === undefined || v === null) return true;
+  if (!Array.isArray(v)) return false;
+  return v.every((item) => item && typeof item === 'object' && !Array.isArray(item));
+}
+function toKeyValuePairs(v: unknown): Array<{ key: string; value: string }> {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item))
+    .map((item) => ({ key: typeof item.key === 'string' ? item.key : '', value: typeof item.value === 'string' ? item.value : '' }))
+    .filter((item) => item.key.length > 0);
+}
+
+/** Seeds the data-flow scope: the trigger's own JSON "output", built from the same TriggerContext every trigger already produces. */
+export function serializeTriggerOutput(triggerType: string, ctx: TriggerContext): unknown {
+  if (triggerType === 'task_completed' || triggerType === 'task_created') {
+    return { task: ctx.task ?? null, list: ctx.list ?? null };
+  }
+  if (triggerType === 'list_all_completed') {
+    return { list: ctx.list ?? null };
+  }
+  return { workspaceId: ctx.workspaceId, firedAt: new Date().toISOString() };
 }
 
 // ---------------------------------------------------------------------------
@@ -226,8 +293,11 @@ export const ACTION_REGISTRY: ActionDef[] = [
     validate: () => null,
     execute: async (ctx) => {
       if (!ctx.trigger.task) return fail('No task in trigger context');
-      const deleted = await deleteTaskRow(ctx.exec, ctx.trigger.task.listId, ctx.trigger.task.id);
-      return deleted ? ok(`Deleted task "${ctx.trigger.task.title}"`) : fail('Task not found (already deleted?)');
+      const task = ctx.trigger.task;
+      const deleted = await deleteTaskRow(ctx.exec, task.listId, task.id);
+      return deleted
+        ? ok(`Deleted task "${task.title}"`, { taskId: task.id, title: task.title })
+        : fail('Task not found (already deleted?)');
     },
   },
   {
@@ -240,8 +310,9 @@ export const ACTION_REGISTRY: ActionDef[] = [
     validate: () => null,
     execute: async (ctx) => {
       if (!ctx.trigger.list) return fail('No list in trigger context');
-      const updated = await setListArchived(ctx.exec, ctx.trigger.list.id, true);
-      return updated ? ok(`Archived list "${ctx.trigger.list.name}"`) : fail('List not found');
+      const list = ctx.trigger.list;
+      const updated = await setListArchived(ctx.exec, list.id, true);
+      return updated ? ok(`Archived list "${list.name}"`, { listId: list.id, name: list.name }) : fail('List not found');
     },
   },
   {
@@ -260,21 +331,25 @@ export const ACTION_REGISTRY: ActionDef[] = [
     validate: (params) => (str(params.targetListId) ? null : 'targetListId is required'),
     execute: async (ctx, params) => {
       if (!ctx.trigger.task) return fail('No task in trigger context');
+      const task = ctx.trigger.task;
       const targetListId = str(params.targetListId);
       if (!targetListId) return fail('targetListId is required');
-      const wsError = await assertListInWorkspace(ctx.exec, targetListId, ctx.workspaceId);
-      if (wsError) return fail(wsError);
-      const section = await resolveTargetSection(ctx.exec, targetListId, str(params.targetSectionId));
-      if (typeof section !== 'string') return fail(section.error);
 
-      const posRes = await ctx.exec('SELECT MAX(position) AS max FROM tasks WHERE section_id = $1', [section]);
-      const maxPos = (posRes.rows[0] as { max: string | null }).max;
-      const nextPos = maxPos !== null ? parseInt(maxPos, 10) + 1 : 0;
-      await ctx.exec(
-        `UPDATE tasks SET list_id = $1, section_id = $2, workspace_id = $3, position = $4 WHERE id = $5`,
-        [targetListId, section, ctx.workspaceId, nextPos, ctx.trigger.task.id]
-      );
-      return ok(`Moved task "${ctx.trigger.task.title}" to list ${targetListId}`);
+      return ctx.withTransaction(async (exec) => {
+        const wsError = await assertListInWorkspace(exec, targetListId, ctx.workspaceId);
+        if (wsError) return fail(wsError);
+        const section = await resolveTargetSection(exec, targetListId, str(params.targetSectionId));
+        if (typeof section !== 'string') return fail(section.error);
+
+        const posRes = await exec('SELECT MAX(position) AS max FROM tasks WHERE section_id = $1', [section]);
+        const maxPos = (posRes.rows[0] as { max: string | null }).max;
+        const nextPos = maxPos !== null ? parseInt(maxPos, 10) + 1 : 0;
+        await exec(
+          `UPDATE tasks SET list_id = $1, section_id = $2, workspace_id = $3, position = $4 WHERE id = $5`,
+          [targetListId, section, ctx.workspaceId, nextPos, task.id]
+        );
+        return ok(`Moved task "${task.title}" to list ${targetListId}`, { taskId: task.id, targetListId, targetSectionId: section });
+      });
     },
   },
   {
@@ -299,14 +374,17 @@ export const ACTION_REGISTRY: ActionDef[] = [
       const targetListId = str(params.targetListId);
       const title = str(params.title);
       if (!targetListId || !title) return fail('targetListId and title are required');
-      const wsError = await assertListInWorkspace(ctx.exec, targetListId, ctx.workspaceId);
-      if (wsError) return fail(wsError);
-      const section = await resolveTargetSection(ctx.exec, targetListId, str(params.targetSectionId));
-      if (typeof section !== 'string') return fail(section.error);
 
-      const created = await createListTask(ctx.exec, targetListId, section, ctx.automationOwnerId, { title }, ctx.actor);
-      if (!created) return fail('Failed to create task');
-      return ok(`Created task "${title}"`);
+      return ctx.withTransaction(async (exec) => {
+        const wsError = await assertListInWorkspace(exec, targetListId, ctx.workspaceId);
+        if (wsError) return fail(wsError);
+        const section = await resolveTargetSection(exec, targetListId, str(params.targetSectionId));
+        if (typeof section !== 'string') return fail(section.error);
+
+        const created = await createListTask(exec, targetListId, section, ctx.automationOwnerId, { title }, ctx.actor);
+        if (!created) return fail('Failed to create task');
+        return ok(`Created task "${title}"`, { taskId: created.task.id, title, listId: targetListId });
+      });
     },
   },
   {
@@ -326,19 +404,22 @@ export const ACTION_REGISTRY: ActionDef[] = [
       const name = str(params.name);
       if (!name) return fail('name is required');
       const targetFolderId = str(params.targetFolderId);
-      if (targetFolderId) {
-        const err = await assertFolderInWorkspace(ctx.exec, targetFolderId, ctx.workspaceId);
-        if (err) return fail(err);
-      }
-      const listId = `list_${uuidv4()}`;
-      const posRes = await ctx.exec('SELECT MAX(position) AS max FROM lists WHERE user_id = $1', [ctx.automationOwnerId]);
-      const maxPos = (posRes.rows[0] as { max: string | null }).max;
-      const nextPos = maxPos !== null ? parseInt(maxPos, 10) + 1 : 0;
-      await ctx.exec(
-        `INSERT INTO lists (id, user_id, name, folder_id, position, workspace_id) VALUES ($1, $2, $3, $4, $5, $6)`,
-        [listId, ctx.automationOwnerId, name, targetFolderId ?? null, nextPos, ctx.workspaceId]
-      );
-      return ok(`Created list "${name}"`);
+
+      return ctx.withTransaction(async (exec) => {
+        if (targetFolderId) {
+          const err = await assertFolderInWorkspace(exec, targetFolderId, ctx.workspaceId);
+          if (err) return fail(err);
+        }
+        const listId = `list_${uuidv4()}`;
+        const posRes = await exec('SELECT MAX(position) AS max FROM lists WHERE user_id = $1', [ctx.automationOwnerId]);
+        const maxPos = (posRes.rows[0] as { max: string | null }).max;
+        const nextPos = maxPos !== null ? parseInt(maxPos, 10) + 1 : 0;
+        await exec(
+          `INSERT INTO lists (id, user_id, name, folder_id, position, workspace_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [listId, ctx.automationOwnerId, name, targetFolderId ?? null, nextPos, ctx.workspaceId]
+        );
+        return ok(`Created list "${name}"`, { listId, name, folderId: targetFolderId ?? null });
+      });
     },
   },
   {
@@ -356,15 +437,18 @@ export const ACTION_REGISTRY: ActionDef[] = [
     execute: async (ctx, params) => {
       const name = str(params.name);
       if (!name) return fail('name is required');
-      const folderId = `folder_${uuidv4()}`;
-      const posRes = await ctx.exec('SELECT MAX(position) AS max FROM folders WHERE user_id = $1', [ctx.automationOwnerId]);
-      const maxPos = (posRes.rows[0] as { max: string | null }).max;
-      const nextPos = maxPos !== null ? parseInt(maxPos, 10) + 1 : 0;
-      await ctx.exec(
-        `INSERT INTO folders (id, user_id, name, position, workspace_id) VALUES ($1, $2, $3, $4, $5)`,
-        [folderId, ctx.automationOwnerId, name, nextPos, ctx.workspaceId]
-      );
-      return ok(`Created folder "${name}"`);
+
+      return ctx.withTransaction(async (exec) => {
+        const folderId = `folder_${uuidv4()}`;
+        const posRes = await exec('SELECT MAX(position) AS max FROM folders WHERE user_id = $1', [ctx.automationOwnerId]);
+        const maxPos = (posRes.rows[0] as { max: string | null }).max;
+        const nextPos = maxPos !== null ? parseInt(maxPos, 10) + 1 : 0;
+        await exec(
+          `INSERT INTO folders (id, user_id, name, position, workspace_id) VALUES ($1, $2, $3, $4, $5)`,
+          [folderId, ctx.automationOwnerId, name, nextPos, ctx.workspaceId]
+        );
+        return ok(`Created folder "${name}"`, { folderId, name });
+      });
     },
   },
   {
@@ -382,14 +466,18 @@ export const ACTION_REGISTRY: ActionDef[] = [
     validate: () => null,
     execute: async (ctx, params) => {
       if (!ctx.trigger.list) return fail('No list in trigger context');
+      const list = ctx.trigger.list;
       const targetFolderId = str(params.targetFolderId);
-      if (targetFolderId) {
-        const err = await assertFolderInWorkspace(ctx.exec, targetFolderId, ctx.workspaceId);
-        if (err) return fail(err);
-      }
-      const result = await ctx.exec('UPDATE lists SET folder_id = $1 WHERE id = $2', [targetFolderId ?? null, ctx.trigger.list.id]);
-      if ((result.rowCount ?? 0) === 0) return fail('List no longer exists');
-      return ok(`Moved list "${ctx.trigger.list.name}"${targetFolderId ? ' to a folder' : ' out of its folder'}`);
+
+      return ctx.withTransaction(async (exec) => {
+        if (targetFolderId) {
+          const err = await assertFolderInWorkspace(exec, targetFolderId, ctx.workspaceId);
+          if (err) return fail(err);
+        }
+        const result = await exec('UPDATE lists SET folder_id = $1 WHERE id = $2', [targetFolderId ?? null, list.id]);
+        if ((result.rowCount ?? 0) === 0) return fail('List no longer exists');
+        return ok(`Moved list "${list.name}"${targetFolderId ? ' to a folder' : ' out of its folder'}`, { listId: list.id, folderId: targetFolderId ?? null });
+      });
     },
   },
   {
@@ -407,23 +495,28 @@ export const ACTION_REGISTRY: ActionDef[] = [
     validate: (params) => (str(params.targetWorkspaceId) ? null : 'targetWorkspaceId is required'),
     execute: async (ctx, params) => {
       if (!ctx.trigger.list) return fail('No list in trigger context');
+      const list = ctx.trigger.list;
       const targetWorkspaceId = str(params.targetWorkspaceId);
       if (!targetWorkspaceId) return fail('targetWorkspaceId is required');
       if (targetWorkspaceId === ctx.workspaceId) return fail('Target workspace is the same as the current workspace');
+      // Not tied to this run's own transaction — a plain read-committed check
+      // of the creator's CURRENT workspace membership, same as at save time.
       const canAccess = await userCanAccessWorkspace(ctx.automationOwnerId, targetWorkspaceId);
       if (!canAccess) return fail("This automation's creator no longer has access to the target workspace");
 
-      const existing = await ctx.exec('SELECT id FROM lists WHERE id = $1', [ctx.trigger.list.id]);
-      if (existing.rows.length === 0) return fail('List no longer exists');
+      return ctx.withTransaction(async (exec) => {
+        const existing = await exec('SELECT id FROM lists WHERE id = $1', [list.id]);
+        if (existing.rows.length === 0) return fail('List no longer exists');
 
-      // Known V1 limitation: unlike the interactive move (PUT /api/lists/:id/workspace),
-      // this doesn't run the public/private visibility-hierarchy conflict resolution —
-      // that's an interactive, user-facing safety dialog, and automations run headless.
-      const descendantIds = await collectDescendantListIds(ctx.exec, ctx.trigger.list.id);
-      const allListIds = [ctx.trigger.list.id, ...descendantIds];
-      await ctx.exec(`UPDATE lists SET workspace_id = $1, folder_id = NULL WHERE id = ANY($2::varchar[])`, [targetWorkspaceId, allListIds]);
-      await ctx.exec(`UPDATE tasks SET workspace_id = $1 WHERE list_id = ANY($2::varchar[])`, [targetWorkspaceId, allListIds]);
-      return ok(`Moved list "${ctx.trigger.list.name}" to another workspace`);
+        // Known V1 limitation: unlike the interactive move (PUT /api/lists/:id/workspace),
+        // this doesn't run the public/private visibility-hierarchy conflict resolution —
+        // that's an interactive, user-facing safety dialog, and automations run headless.
+        const descendantIds = await collectDescendantListIds(exec, list.id);
+        const allListIds = [list.id, ...descendantIds];
+        await exec(`UPDATE lists SET workspace_id = $1, folder_id = NULL WHERE id = ANY($2::varchar[])`, [targetWorkspaceId, allListIds]);
+        await exec(`UPDATE tasks SET workspace_id = $1 WHERE list_id = ANY($2::varchar[])`, [targetWorkspaceId, allListIds]);
+        return ok(`Moved list "${list.name}" to another workspace`, { listId: list.id, workspaceId: targetWorkspaceId, movedListIds: allListIds });
+      });
     },
   },
   {
@@ -436,10 +529,14 @@ export const ACTION_REGISTRY: ActionDef[] = [
     validate: () => null,
     execute: async (ctx) => {
       if (!ctx.trigger.list) return fail('No list in trigger context');
-      const existing = await ctx.exec('SELECT id FROM lists WHERE id = $1', [ctx.trigger.list.id]);
-      if (existing.rows.length === 0) return fail('List no longer exists');
-      const removedCount = await softDeleteListTreeExec(ctx.exec, ctx.trigger.list.id);
-      return ok(`Deleted list "${ctx.trigger.list.name}"${removedCount > 0 ? ` (+${removedCount} sublist(s))` : ''}`);
+      const list = ctx.trigger.list;
+
+      return ctx.withTransaction(async (exec) => {
+        const existing = await exec('SELECT id FROM lists WHERE id = $1', [list.id]);
+        if (existing.rows.length === 0) return fail('List no longer exists');
+        const removedCount = await softDeleteListTreeExec(exec, list.id);
+        return ok(`Deleted list "${list.name}"${removedCount > 0 ? ` (+${removedCount} sublist(s))` : ''}`, { listId: list.id, name: list.name, removedCount });
+      });
     },
   },
   {
@@ -457,10 +554,13 @@ export const ACTION_REGISTRY: ActionDef[] = [
     execute: async (ctx, params) => {
       const targetFolderId = str(params.targetFolderId);
       if (!targetFolderId) return fail('targetFolderId is required');
-      const err = await assertFolderInWorkspace(ctx.exec, targetFolderId, ctx.workspaceId);
-      if (err) return fail(err);
-      const deleted = await softDeleteFolderExec(ctx.exec, targetFolderId);
-      return deleted ? ok('Deleted folder') : fail('Folder not found');
+
+      return ctx.withTransaction(async (exec) => {
+        const err = await assertFolderInWorkspace(exec, targetFolderId, ctx.workspaceId);
+        if (err) return fail(err);
+        const deleted = await softDeleteFolderExec(exec, targetFolderId);
+        return deleted ? ok('Deleted folder', { folderId: targetFolderId }) : fail('Folder not found');
+      });
     },
   },
   {
@@ -482,7 +582,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
       if (!newTitle) return fail('newTitle is required');
       const result = await ctx.exec('UPDATE tasks SET title = $1 WHERE id = $2', [newTitle, ctx.trigger.task.id]);
       if ((result.rowCount ?? 0) === 0) return fail('Task no longer exists');
-      return ok(`Renamed task to "${newTitle}"`);
+      return ok(`Renamed task to "${newTitle}"`, { taskId: ctx.trigger.task.id, title: newTitle });
     },
   },
   {
@@ -504,7 +604,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
       if (!newName) return fail('newName is required');
       const result = await ctx.exec('UPDATE lists SET name = $1 WHERE id = $2', [newName, ctx.trigger.list.id]);
       if ((result.rowCount ?? 0) === 0) return fail('List no longer exists');
-      return ok(`Renamed list to "${newName}"`);
+      return ok(`Renamed list to "${newName}"`, { listId: ctx.trigger.list.id, name: newName });
     },
   },
   {
@@ -528,11 +628,85 @@ export const ACTION_REGISTRY: ActionDef[] = [
       const targetFolderId = str(params.targetFolderId);
       const newName = str(params.newName);
       if (!targetFolderId || !newName) return fail('targetFolderId and newName are required');
-      const err = await assertFolderInWorkspace(ctx.exec, targetFolderId, ctx.workspaceId);
-      if (err) return fail(err);
-      const result = await ctx.exec('UPDATE folders SET name = $1 WHERE id = $2', [newName, targetFolderId]);
-      if ((result.rowCount ?? 0) === 0) return fail('Folder not found');
-      return ok(`Renamed folder to "${newName}"`);
+
+      return ctx.withTransaction(async (exec) => {
+        const err = await assertFolderInWorkspace(exec, targetFolderId, ctx.workspaceId);
+        if (err) return fail(err);
+        const result = await exec('UPDATE folders SET name = $1 WHERE id = $2', [newName, targetFolderId]);
+        if ((result.rowCount ?? 0) === 0) return fail('Folder not found');
+        return ok(`Renamed folder to "${newName}"`, { folderId: targetFolderId, name: newName });
+      });
+    },
+  },
+  {
+    id: 'http_request',
+    label: 'HTTP request',
+    description: 'Sends an HTTP request to a URL you provide. Blocked from reaching private/internal addresses.',
+    icon: 'http',
+    paramsSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', label: 'URL', description: 'Full URL to request, e.g. https://example.com/webhook. Supports {{...}} references.' },
+        method: { type: 'string', label: 'Method', description: 'HTTP method.', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'] },
+        headers: { type: 'string', label: 'Headers', description: 'Request headers.', optional: true, isKeyValue: true },
+        queryParams: { type: 'string', label: 'Query parameters', description: 'Appended to the URL.', optional: true, isKeyValue: true },
+        bodyType: { type: 'string', label: 'Body type', description: 'What kind of request body to send.', enum: ['none', 'json', 'text'] },
+        body: { type: 'string', label: 'Body', description: 'Request body (used unless body type is "none").', optional: true, isLongText: true },
+        timeoutMs: { type: 'number', label: 'Timeout (ms)', description: 'Gives up after this many milliseconds (clamped to 1000–20000).', optional: true },
+      },
+    },
+    validate: (params) => {
+      if (!str(params.url)) return 'url is required';
+      const method = params.method;
+      if (typeof method !== 'string' || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'].includes(method)) {
+        return 'method must be one of GET, POST, PUT, PATCH, DELETE, HEAD';
+      }
+      const bodyType = params.bodyType;
+      if (bodyType !== undefined && bodyType !== null && !['none', 'json', 'text'].includes(bodyType as string)) {
+        return 'bodyType must be none, json, or text';
+      }
+      if (!isKeyValueArray(params.headers)) return 'headers must be a list of {key, value} pairs';
+      if (!isKeyValueArray(params.queryParams)) return 'queryParams must be a list of {key, value} pairs';
+      return null;
+    },
+    execute: async (_ctx, params) => {
+      const url = str(params.url);
+      if (!url) return fail('url is required');
+      const method = typeof params.method === 'string' ? params.method : 'GET';
+      const bodyType = params.bodyType === 'json' || params.bodyType === 'text' ? params.bodyType : 'none';
+      const headers = toKeyValuePairs(params.headers);
+      const queryParams = toKeyValuePairs(params.queryParams);
+      const body = typeof params.body === 'string' ? params.body : undefined;
+      const timeoutMs = clampTimeoutMs(params.timeoutMs);
+
+      const result = await performHttpRequest({ url, method, headers, queryParams, bodyType, body, timeoutMs });
+      if (!result.ok) return fail(result.error);
+      return ok(`HTTP ${method} ${url} → ${result.output.status}`, result.output);
+    },
+  },
+  {
+    id: 'code',
+    label: 'Code',
+    description: 'Runs custom JavaScript in a sandbox (no network/filesystem access). Use `input` for trigger/prior-node data and end with a return statement.',
+    icon: 'code',
+    paramsSchema: {
+      type: 'object',
+      properties: {
+        code: { type: 'string', label: 'Code', description: 'JavaScript source, e.g. return { title: input.trigger.task.title };', isCode: true },
+      },
+    },
+    validate: (params) => {
+      const code = params.code;
+      if (typeof code !== 'string' || code.trim().length === 0) return 'code is required';
+      if (code.length > 20_000) return 'code must be under 20,000 characters';
+      return null;
+    },
+    execute: async (ctx, params) => {
+      const code = typeof params.code === 'string' ? params.code : '';
+      if (!code.trim()) return fail('code is required');
+      const result = await runSandboxedCode(code, ctx.scope);
+      if (!result.ok) return fail(result.error);
+      return ok('Ran code', result.output);
     },
   },
 ];

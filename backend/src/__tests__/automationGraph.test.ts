@@ -144,6 +144,68 @@ describe('normalizeAutomationGraph', () => {
   });
 });
 
+describe('normalizeAutomationGraph — http_request/code compatibility', () => {
+  it('accepts http_request under the schedule trigger (no task/list required)', () => {
+    const graph: AutomationGraph = {
+      version: 1,
+      nodes: [
+        trigger('schedule', { freq: 'daily', time: '09:00' }),
+        action('a1', 'http_request', { url: 'https://example.com', method: 'GET', bodyType: 'none' }),
+      ],
+      edges: [edge('e1', 't1', 'a1')],
+    };
+    const result = normalizeAutomationGraph(graph);
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepts code under the schedule trigger (no task/list required)', () => {
+    const graph: AutomationGraph = {
+      version: 1,
+      nodes: [trigger('schedule', { freq: 'daily', time: '09:00' }), action('a1', 'code', { code: 'return 1;' })],
+      edges: [edge('e1', 't1', 'a1')],
+    };
+    const result = normalizeAutomationGraph(graph);
+    expect(result.ok).toBe(true);
+  });
+
+  it('chains http_request -> code under a task trigger', () => {
+    const graph: AutomationGraph = {
+      version: 1,
+      nodes: [
+        trigger('task_completed', { listId: 'list_1' }),
+        action('a1', 'http_request', { url: 'https://example.com', method: 'GET', bodyType: 'none' }),
+        action('a2', 'code', { code: 'return input.$json.status;' }),
+      ],
+      edges: [edge('e1', 't1', 'a1'), edge('e2', 'a1', 'a2')],
+    };
+    const result = normalizeAutomationGraph(graph);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.orderedActionIds).toEqual(['a1', 'a2']);
+  });
+
+  it('rejects an http_request missing its required url', () => {
+    const graph: AutomationGraph = {
+      version: 1,
+      nodes: [trigger('schedule', { freq: 'daily', time: '09:00' }), action('a1', 'http_request', { method: 'GET' })],
+      edges: [edge('e1', 't1', 'a1')],
+    };
+    const result = normalizeAutomationGraph(graph);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/url is required/);
+  });
+
+  it('rejects a code node missing its code param', () => {
+    const graph: AutomationGraph = {
+      version: 1,
+      nodes: [trigger('schedule', { freq: 'daily', time: '09:00' }), action('a1', 'code', {})],
+      edges: [edge('e1', 't1', 'a1')],
+    };
+    const result = normalizeAutomationGraph(graph);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/code is required/);
+  });
+});
+
 describe('assertGraphRefsInWorkspace', () => {
   it('passes when every referenced list belongs to the automation\'s workspace', async () => {
     const graph: AutomationGraph = {

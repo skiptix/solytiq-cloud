@@ -1,16 +1,17 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ReactFlow, Background, Controls, Handle, Position, type Node as RFNode, type Edge as RFEdge, type NodeChange, type NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useMobile } from '../hooks/useBreakpoint';
-import type { Automation, AutomationGraph, AutomationNode, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, AutomationParamProperty, List, Folder, Workspace } from '../types';
+import type { Automation, AutomationGraph, AutomationNode, AutomationRun, AutomationRunResult, AutomationRunStep, TriggerTypeDef, ActionTypeDef, AutomationParamProperty, List, Folder, Workspace } from '../types';
 import useAutomationsStore from '../store/useAutomationsStore';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import { ApiError } from '../api/client';
 import Icon from '../components/Icon';
 import TimePicker from '../components/TimePicker';
+import JsonTree from '../components/JsonTree';
 
 // ---------------------------------------------------------------------------
 // Pure graph helpers — shared by the desktop canvas and the mobile step-list
@@ -127,6 +128,178 @@ function validateClientSide(
 }
 
 // ---------------------------------------------------------------------------
+// Data flow — reconstructing what {{trigger.x}}/{{$json.x}}/{{nodes.<id>.x}}
+// would resolve to for a given node, and that node's own output, from the
+// most recent Test result held in screen state (testResult). This is a
+// deliberate V1 scope trim: it does not reach into Run History for older
+// runs, only "the last time you clicked Test in this editing session".
+// ---------------------------------------------------------------------------
+
+interface NodeScope {
+  trigger: unknown;
+  $json: unknown;
+  nodes: Record<string, unknown>;
+}
+
+function computeNodeIO(
+  testResult: { nodeId: string; result?: AutomationRunResult } | null,
+  triggerNodeId: string | undefined,
+  targetNodeId: string
+): { scope: NodeScope | null; output: unknown; hasOutput: boolean } {
+  const steps: AutomationRunStep[] | undefined = testResult?.result?.steps;
+  if (!steps || !triggerNodeId) return { scope: null, output: undefined, hasOutput: false };
+
+  if (targetNodeId === triggerNodeId) {
+    // Nothing precedes the trigger itself — it can still have its OWN recorded output though.
+    const triggerStep = steps.find((s) => s.nodeId === targetNodeId);
+    return { scope: null, output: triggerStep?.output, hasOutput: !!triggerStep };
+  }
+
+  const nodes: Record<string, unknown> = {};
+  let triggerOutput: unknown;
+  let previousOutput: unknown;
+  let targetStep: AutomationRunStep | undefined;
+  for (const step of steps) {
+    if (step.nodeId === targetNodeId) { targetStep = step; break; }
+    nodes[step.nodeId] = step.output;
+    if (step.nodeId === triggerNodeId) triggerOutput = step.output;
+    previousOutput = step.output;
+  }
+  return {
+    scope: { trigger: triggerOutput, $json: previousOutput, nodes },
+    output: targetStep?.output,
+    hasOutput: !!targetStep,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Drag-and-drop data picker: dragging a field out of a JsonTree (Data →
+// Input) drops a reference into any text-producing param field. Normal
+// fields get a {{...}} expression token (text/plain); the Code action's
+// textarea instead gets a plain JS accessor (input.<path>), read from a
+// second, custom MIME payload the same drag also carries.
+// ---------------------------------------------------------------------------
+
+interface DragInsertHandlers {
+  onDrop: (e: React.DragEvent) => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onSelect: () => void;
+  onClick: () => void;
+  onKeyUp: () => void;
+}
+
+// Returns the ref and the handler bag as two SEPARATE values (not one merged
+// object) — a merged {ref, ...handlers} object gets flagged by the
+// react-hooks/refs lint rule as "ref access during render" for every handler
+// property, since it can't prove the handlers don't indirectly read .current.
+function useDragInsert(
+  onChange: (value: string) => void,
+  currentValue: string,
+  disabled: boolean,
+  mode: 'token' | 'code' = 'token'
+): [React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>, DragInsertHandlers] {
+  const ref = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const caretRef = useRef<number>(currentValue.length);
+  const trackCaret = () => {
+    if (ref.current) caretRef.current = ref.current.selectionStart ?? currentValue.length;
+  };
+  const onDrop = (e: React.DragEvent) => {
+    if (disabled) return;
+    e.preventDefault();
+    let insertText: string | null = null;
+    if (mode === 'code') {
+      const raw = e.dataTransfer.getData('application/x-solytiq-field');
+      if (raw) {
+        try {
+          insertText = `input.${(JSON.parse(raw) as { path: string }).path}`;
+        } catch {
+          insertText = null;
+        }
+      }
+    }
+    if (insertText === null) insertText = e.dataTransfer.getData('text/plain');
+    if (!insertText) return;
+    const pos = caretRef.current ?? currentValue.length;
+    onChange(currentValue.slice(0, pos) + insertText + currentValue.slice(pos));
+  };
+  return [
+    ref,
+    {
+      onDrop,
+      onDragOver: (e: React.DragEvent) => e.preventDefault(),
+      onSelect: trackCaret,
+      onClick: trackCaret,
+      onKeyUp: trackCaret,
+    },
+  ];
+}
+
+function KeyValueRow({ row, onChange, onRemove, readOnly }: {
+  row: { key: string; value: string };
+  onChange: (row: { key: string; value: string }) => void;
+  onRemove: () => void;
+  readOnly: boolean;
+}) {
+  const [insertRef, insert] = useDragInsert((v) => onChange({ ...row, value: v }), row.value, readOnly);
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <input disabled={readOnly} value={row.key} onChange={(e) => onChange({ ...row, key: e.target.value })} placeholder="Key"
+        style={{ width: '38%', fontFamily: 'Inter, sans-serif', fontSize: 12.5, border: '1.5px solid #e8e4f0', borderRadius: 7, padding: '6px 8px', outline: 'none' }} />
+      <input ref={insertRef as React.RefObject<HTMLInputElement>} disabled={readOnly} value={row.value}
+        onChange={(e) => onChange({ ...row, value: e.target.value })}
+        onDrop={insert.onDrop} onDragOver={insert.onDragOver} onSelect={insert.onSelect} onClick={insert.onClick} onKeyUp={insert.onKeyUp}
+        placeholder="Value" title="Drag a field from Data → Input to insert a reference"
+        style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 12.5, border: '1.5px solid #e8e4f0', borderRadius: 7, padding: '6px 8px', outline: 'none' }} />
+      {!readOnly && (
+        <button type="button" onClick={onRemove}
+          style={{ width: 22, height: 22, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Icon name="close" size={13} color="#b0acbe" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Collapsible Input/Output JSON viewer, shared by the desktop inspector and mobile StepCard. */
+function NodeDataPanel({ scope, output, hasOutput, nodeId }: { scope: NodeScope | null; output: unknown; hasOutput: boolean; nodeId: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div style={{ marginTop: 14, borderTop: '1px solid #ece8f4', paddingTop: 10 }}>
+      <div onClick={() => setExpanded((s) => !s)} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none' }}>
+        <Icon name={expanded ? 'expand_less' : 'expand_more'} size={15} color="#787584" />
+        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Data</span>
+      </div>
+      {expanded && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#5e4dbb', marginBottom: 4 }}>Input</div>
+            {!scope ? (
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', fontStyle: 'italic' }}>Run Test to see live data.</div>
+            ) : (
+              <div style={{ background: '#FAFAFC', border: '1px solid #ece8f4', borderRadius: 8, padding: 8, maxHeight: 220, overflow: 'auto' }}>
+                <JsonTree data={scope.trigger} rootLabel="trigger" rootPath="trigger" />
+                <JsonTree data={scope.$json} rootLabel="$json (previous step)" rootPath="$json" />
+                <JsonTree data={scope.nodes} rootLabel="nodes (every step so far)" rootPath="nodes" />
+              </div>
+            )}
+          </div>
+          <div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#f59e0b', marginBottom: 4 }}>Output</div>
+            {!hasOutput ? (
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', fontStyle: 'italic' }}>Run Test to see this node's output.</div>
+            ) : (
+              <div style={{ background: '#FFFBF0', border: '1px solid #FEF3E2', borderRadius: 8, padding: 8, maxHeight: 220, overflow: 'auto' }}>
+                <JsonTree data={output} rootLabel="output" rootPath={`nodes.${nodeId}`} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Param form — shared by the desktop inspector panel and the mobile
 // step-card's expanded state.
 // ---------------------------------------------------------------------------
@@ -145,6 +318,8 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
 }) {
   const [showTime, setShowTime] = useState(false);
   const label = `${prop.label}${prop.optional ? ' (optional)' : ''}`;
+  const stringValue = typeof value === 'string' ? value : '';
+  const [insertRef, insert] = useDragInsert((nv) => onChange(nv || undefined), stringValue, readOnly, prop.isCode ? 'code' : 'token');
 
   if (fieldKey === 'time') {
     const v = typeof value === 'string' ? value : '';
@@ -243,6 +418,47 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
     );
   }
 
+  if (prop.isKeyValue) {
+    const rows: Array<{ key: string; value: string }> = Array.isArray(value) ? (value as Array<{ key: string; value: string }>) : [];
+    const setRows = (next: Array<{ key: string; value: string }>) => onChange(next.length > 0 ? next : undefined);
+    return (
+      <div>
+        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {rows.map((row, i) => (
+            <KeyValueRow key={i} row={row} readOnly={readOnly}
+              onChange={(next) => setRows(rows.map((r, j) => (j === i ? next : r)))}
+              onRemove={() => setRows(rows.filter((_, j) => j !== i))}
+            />
+          ))}
+          {!readOnly && (
+            <button type="button" onClick={() => setRows([...rows, { key: '', value: '' }])}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#5e4dbb', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
+              <Icon name="add" size={13} color="#5e4dbb" /> Add
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (prop.isLongText || prop.isCode) {
+    return (
+      <div>
+        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
+        <textarea ref={insertRef as React.RefObject<HTMLTextAreaElement>} disabled={readOnly} value={stringValue} rows={prop.isCode ? 8 : 4} spellCheck={false}
+          onChange={(e) => onChange(e.target.value || undefined)}
+          onDrop={insert.onDrop} onDragOver={insert.onDragOver} onSelect={insert.onSelect} onClick={insert.onClick} onKeyUp={insert.onKeyUp}
+          style={{
+            width: '100%', fontFamily: prop.isCode ? "'SF Mono', Monaco, Consolas, monospace" : 'Inter, sans-serif', fontSize: prop.isCode ? 12 : 12.5,
+            lineHeight: 1.5, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', outline: 'none', resize: 'vertical',
+            background: prop.isCode ? '#1c1b22' : '#fff', color: prop.isCode ? '#e8e4f0' : '#1c1b22',
+          }} />
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 4 }}>{prop.description}</div>
+      </div>
+    );
+  }
+
   if (prop.type === 'number') {
     const v = typeof value === 'number' ? value : '';
     return (
@@ -254,11 +470,12 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
     );
   }
 
-  const v = typeof value === 'string' ? value : '';
   return (
     <div>
       <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
-      <input disabled={readOnly} value={v} onChange={(e) => onChange(e.target.value || undefined)}
+      <input ref={insertRef as React.RefObject<HTMLInputElement>} disabled={readOnly} value={stringValue}
+        onChange={(e) => onChange(e.target.value || undefined)}
+        onDrop={insert.onDrop} onDragOver={insert.onDragOver} onSelect={insert.onSelect} onClick={insert.onClick} onKeyUp={insert.onKeyUp}
         style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none' }} />
       <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 4 }}>{prop.description}</div>
     </div>
@@ -593,6 +810,7 @@ export default function AutomationEditorScreen() {
           onTest={handleTestNode}
           testingNodeId={testingNodeId}
           testDisabled={isNew}
+          testResult={testResult}
         />
       ) : (
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -666,6 +884,10 @@ export default function AutomationEditorScreen() {
                     </div>
                     <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginBottom: 16 }}>{def.description}</div>
                     <ParamsForm def={def} params={selectedNode.params} onChange={(p) => handleSetParams(selectedNode.id, p)} lists={workspaceLists} folders={workspaceFolders} workspaces={otherWorkspaces} readOnly={readOnly} />
+                    {(() => {
+                      const io = computeNodeIO(testResult, triggerNode?.id, selectedNode.id);
+                      return <NodeDataPanel scope={io.scope} output={io.output} hasOutput={io.hasOutput} nodeId={selectedNode.id} />;
+                    })()}
                   </>
                 );
               })()}
@@ -685,7 +907,7 @@ export default function AutomationEditorScreen() {
 // Mobile: vertical step-card editor (same graph, no drag canvas)
 // ---------------------------------------------------------------------------
 
-function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, folders, workspaces, readOnly, selectedNodeId, setSelectedNodeId, onSetTrigger, onAddAction, onRemoveAction, onMoveAction, onSetParams, availableActions, onTest, testingNodeId, testDisabled }: {
+function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, folders, workspaces, readOnly, selectedNodeId, setSelectedNodeId, onSetTrigger, onAddAction, onRemoveAction, onMoveAction, onSetParams, availableActions, onTest, testingNodeId, testDisabled, testResult }: {
   triggerNode: AutomationNode | null;
   orderedActions: AutomationNode[];
   nodeTypes: { triggers: TriggerTypeDef[]; actions: ActionTypeDef[] } | null;
@@ -704,6 +926,7 @@ function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, folders
   onTest: (nodeId: string) => void;
   testingNodeId: string | null;
   testDisabled: boolean;
+  testResult: { nodeId: string; result?: AutomationRunResult; error?: string } | null;
 }) {
   const [showTriggerPicker, setShowTriggerPicker] = useState(!triggerNode);
   const [showAddAction, setShowAddAction] = useState(false);
@@ -723,7 +946,14 @@ function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, folders
         >
           {(() => {
             const def = nodeTypes?.triggers.find((t) => t.id === triggerNode.type);
-            return def ? <ParamsForm def={def} params={triggerNode.params} onChange={(p) => onSetParams(triggerNode.id, p)} lists={lists} folders={folders} workspaces={workspaces} readOnly={readOnly} /> : null;
+            if (!def) return null;
+            const io = computeNodeIO(testResult, triggerNode.id, triggerNode.id);
+            return (
+              <>
+                <ParamsForm def={def} params={triggerNode.params} onChange={(p) => onSetParams(triggerNode.id, p)} lists={lists} folders={folders} workspaces={workspaces} readOnly={readOnly} />
+                <NodeDataPanel scope={io.scope} output={io.output} hasOutput={io.hasOutput} nodeId={triggerNode.id} />
+              </>
+            );
           })()}
         </StepCard>
       ) : (
@@ -765,7 +995,15 @@ function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, folders
                 rightAction={!readOnly ? { icon: 'close', label: '', onClick: () => onRemoveAction(node.id) } : undefined}
                 testAction={!readOnly ? { testing: testingNodeId === node.id, disabled: testDisabled, onClick: () => onTest(node.id) } : undefined}
               >
-                {def ? <ParamsForm def={def} params={node.params} onChange={(p) => onSetParams(node.id, p)} lists={lists} folders={folders} workspaces={workspaces} readOnly={readOnly} /> : null}
+                {def && (() => {
+                  const io = computeNodeIO(testResult, triggerNode?.id, node.id);
+                  return (
+                    <>
+                      <ParamsForm def={def} params={node.params} onChange={(p) => onSetParams(node.id, p)} lists={lists} folders={folders} workspaces={workspaces} readOnly={readOnly} />
+                      <NodeDataPanel scope={io.scope} output={io.output} hasOutput={io.hasOutput} nodeId={node.id} />
+                    </>
+                  );
+                })()}
               </StepCard>
             </div>
           </div>

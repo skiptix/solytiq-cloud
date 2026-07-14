@@ -21,8 +21,20 @@ const workspaceUtilMock = vi.hoisted(() => ({
 }));
 vi.mock('../workspaceUtil', () => workspaceUtilMock);
 
+const httpNodeMock = vi.hoisted(() => ({
+  performHttpRequest: vi.fn(),
+  clampTimeoutMs: (v: unknown) => (typeof v === 'number' ? v : 10_000),
+}));
+vi.mock('../httpNode', () => httpNodeMock);
+
+const codeNodeMock = vi.hoisted(() => ({
+  runSandboxedCode: vi.fn(),
+}));
+vi.mock('../codeNode', () => codeNodeMock);
+
 // vi.mock calls are hoisted above imports, so this static import already sees
-// the mocked ../routes/lists, ../trashUtil, and ../workspaceUtil modules.
+// the mocked ../routes/lists, ../trashUtil, ../workspaceUtil, ../httpNode, and
+// ../codeNode modules.
 import { getActionDef, type ActionContext } from '../automationTypes';
 
 function makeExec(rowsByCall: unknown[][] = []) {
@@ -44,12 +56,17 @@ beforeEach(() => {
 function baseCtx(exec: QueryExec, overrides: Partial<ActionContext> = {}): ActionContext {
   return {
     exec,
+    // Passthrough — these tests exercise each action's own decision logic, not
+    // the transaction-wrapping/rollback-on-failure mechanism itself (that's
+    // automationEngine.test.ts's job, against the real runActionTransaction).
+    withTransaction: (fn) => fn(exec),
     workspaceId: 'ws_1',
     automationId: 'automation_1',
     automationOwnerId: 'owner_1',
     runId: 'run_1',
     actor,
     trigger: { workspaceId: 'ws_1' },
+    scope: { trigger: null, $json: null, nodes: {} },
     ...overrides,
   };
 }
@@ -294,5 +311,119 @@ describe('rename_folder action', () => {
     const def = getActionDef('rename_folder')!;
     const result = await def.execute(baseCtx(exec), { targetFolderId: 'folder_1', newName: 'New name' });
     expect(result.ok).toBe(true);
+    expect(result.output).toEqual({ folderId: 'folder_1', name: 'New name' });
+  });
+});
+
+describe('action outputs (data flow into later nodes)', () => {
+  it('delete_task returns {taskId, title}', async () => {
+    listsMock.deleteTaskRow.mockResolvedValueOnce(true);
+    const { exec } = makeExec();
+    const def = getActionDef('delete_task')!;
+    const ctx = baseCtx(exec, { trigger: { workspaceId: 'ws_1', task: { id: '42', title: 'Milk', listId: 'list_1', checked: true } } });
+    const result = await def.execute(ctx, {});
+    expect(result.output).toEqual({ taskId: '42', title: 'Milk' });
+  });
+
+  it('create_list returns {listId, name, folderId}', async () => {
+    const { exec } = makeExec([[{ max: '2' }], []]);
+    const def = getActionDef('create_list')!;
+    const result = await def.execute(baseCtx(exec), { name: 'New list' });
+    expect(result.output).toMatchObject({ name: 'New list', folderId: null });
+    expect(typeof (result.output as { listId: string }).listId).toBe('string');
+  });
+
+  it('create_task returns the created task id and target list', async () => {
+    listsMock.createListTask.mockResolvedValueOnce({ task: { id: '99' }, workspaceId: 'ws_1' });
+    const { exec } = makeExec([[{ workspace_id: 'ws_1' }], [{ id: 'sec_1' }]]);
+    const def = getActionDef('create_task')!;
+    const result = await def.execute(baseCtx(exec), { targetListId: 'list_2', title: 'Follow up' });
+    expect(result.output).toEqual({ taskId: '99', title: 'Follow up', listId: 'list_2' });
+  });
+});
+
+describe('http_request action', () => {
+  beforeEach(() => {
+    httpNodeMock.performHttpRequest.mockReset();
+  });
+
+  it('fails cleanly when url is missing', async () => {
+    const { exec } = makeExec();
+    const def = getActionDef('http_request')!;
+    const result = await def.execute(baseCtx(exec), { method: 'GET', bodyType: 'none' });
+    expect(result.ok).toBe(false);
+    expect(httpNodeMock.performHttpRequest).not.toHaveBeenCalled();
+  });
+
+  it('delegates to performHttpRequest with normalized params and surfaces its output', async () => {
+    httpNodeMock.performHttpRequest.mockResolvedValueOnce({
+      ok: true,
+      output: { status: 200, statusText: 'OK', headers: {}, body: { hello: 'world' } },
+    });
+    const { exec } = makeExec();
+    const def = getActionDef('http_request')!;
+    const result = await def.execute(baseCtx(exec), {
+      url: 'https://example.com/api',
+      method: 'POST',
+      headers: [{ key: 'X-Test', value: '1' }],
+      queryParams: [],
+      bodyType: 'json',
+      body: '{"a":1}',
+      timeoutMs: 5000,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.output).toEqual({ status: 200, statusText: 'OK', headers: {}, body: { hello: 'world' } });
+    expect(httpNodeMock.performHttpRequest).toHaveBeenCalledWith({
+      url: 'https://example.com/api',
+      method: 'POST',
+      headers: [{ key: 'X-Test', value: '1' }],
+      queryParams: [],
+      bodyType: 'json',
+      body: '{"a":1}',
+      timeoutMs: 5000,
+    });
+  });
+
+  it('surfaces an SSRF-guard (or other) failure from performHttpRequest as a failed result', async () => {
+    httpNodeMock.performHttpRequest.mockResolvedValueOnce({ ok: false, error: 'URL resolves to a private/internal address, which automations are not allowed to reach' });
+    const { exec } = makeExec();
+    const def = getActionDef('http_request')!;
+    const result = await def.execute(baseCtx(exec), { url: 'http://169.254.169.254/', method: 'GET', bodyType: 'none' });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/private\/internal/);
+  });
+});
+
+describe('code action', () => {
+  beforeEach(() => {
+    codeNodeMock.runSandboxedCode.mockReset();
+  });
+
+  it('fails cleanly when code is missing', async () => {
+    const { exec } = makeExec();
+    const def = getActionDef('code')!;
+    const result = await def.execute(baseCtx(exec), {});
+    expect(result.ok).toBe(false);
+    expect(codeNodeMock.runSandboxedCode).not.toHaveBeenCalled();
+  });
+
+  it('passes the code and ctx.scope through to runSandboxedCode and surfaces its output', async () => {
+    codeNodeMock.runSandboxedCode.mockResolvedValueOnce({ ok: true, output: { doubled: 4 } });
+    const { exec } = makeExec();
+    const scope = { trigger: { task: { title: 'x' } }, $json: null, nodes: {} };
+    const def = getActionDef('code')!;
+    const result = await def.execute(baseCtx(exec, { scope }), { code: 'return { doubled: 2 * 2 };' });
+    expect(result.ok).toBe(true);
+    expect(result.output).toEqual({ doubled: 4 });
+    expect(codeNodeMock.runSandboxedCode).toHaveBeenCalledWith('return { doubled: 2 * 2 };', scope);
+  });
+
+  it('surfaces a sandbox error (e.g. timeout) as a failed result', async () => {
+    codeNodeMock.runSandboxedCode.mockResolvedValueOnce({ ok: false, error: 'Code timed out after 5000ms' });
+    const { exec } = makeExec();
+    const def = getActionDef('code')!;
+    const result = await def.execute(baseCtx(exec), { code: 'while(true){}' });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/timed out/);
   });
 });
