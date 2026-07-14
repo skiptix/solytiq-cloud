@@ -108,16 +108,24 @@ interface FolderRowLike {
  * Callers are responsible for the ownership check.
  */
 export async function softDeleteListTree(rootListId: string): Promise<number> {
-  const descendantIds = await collectDescendantListIds(query, rootListId);
+  return withTransaction((client) => softDeleteListTreeExec((text, params) => client.query(text, params), rootListId));
+}
+
+/**
+ * Same as `softDeleteListTree`, but takes an `exec` bound to an ALREADY OPEN
+ * transaction instead of opening its own — for callers (e.g. the Automation
+ * Hub engine) that need this to be one step inside a larger all-or-nothing
+ * transaction, where opening a second, independent transaction would break
+ * atomicity.
+ */
+export async function softDeleteListTreeExec(exec: QueryExec, rootListId: string): Promise<number> {
+  const descendantIds = await collectDescendantListIds(exec, rootListId);
   const allListIds = [rootListId, ...descendantIds];
-  await withTransaction(async (client) => {
-    const exec: QueryExec = (text, params) => client.query(text, params);
-    for (const id of allListIds) {
-      await snapshotListToTrash(exec, id);
-    }
-    await client.query('DELETE FROM tasks WHERE list_id = ANY($1::varchar[])', [allListIds]);
-    await client.query('DELETE FROM lists WHERE id = ANY($1::varchar[])', [allListIds]);
-  });
+  for (const id of allListIds) {
+    await snapshotListToTrash(exec, id);
+  }
+  await exec('DELETE FROM tasks WHERE list_id = ANY($1::varchar[])', [allListIds]);
+  await exec('DELETE FROM lists WHERE id = ANY($1::varchar[])', [allListIds]);
   return descendantIds.length;
 }
 
@@ -319,5 +327,21 @@ export async function snapshotFolderToTrash(exec: QueryExec, folderId: string): 
     `INSERT INTO trash_folders (folder_id, user_id, folder_data) VALUES ($1, $2, $3)`,
     [f.id, f.user_id, JSON.stringify(data)]
   );
+  return true;
+}
+
+/**
+ * Soft-delete a folder: snapshot it to trash, detach (not delete) any lists
+ * directly inside it, then remove the folder row. A folder delete never
+ * deletes its contents — they simply become un-foldered, same as
+ * `DELETE /api/folders/:id`, which this exec-parameterized core now backs
+ * (along with the Automation Hub's delete_folder action, inside the
+ * engine's own shared transaction).
+ */
+export async function softDeleteFolderExec(exec: QueryExec, folderId: string): Promise<boolean> {
+  const ok = await snapshotFolderToTrash(exec, folderId);
+  if (!ok) return false;
+  await exec('UPDATE lists SET folder_id = NULL WHERE folder_id = $1', [folderId]);
+  await exec('DELETE FROM folders WHERE id = $1', [folderId]);
   return true;
 }

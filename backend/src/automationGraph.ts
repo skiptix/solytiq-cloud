@@ -140,27 +140,66 @@ export function normalizeAutomationGraph(raw: unknown): NormalizeResult {
 }
 
 /**
- * Defense in depth against IDOR: any node param naming a list (trigger scope
- * `listId`, or an action's `targetListId`) must belong to the SAME workspace
- * as the automation itself — otherwise a crafted graph could reach into a
- * list the automation's workspace has no business touching. Called at save
- * time (routes/automations.ts); execution time re-checks again via
- * automationTypes.ts's assertListInWorkspace, since a list can move/be
- * deleted after the automation was saved.
+ * Defense in depth against IDOR: any node param naming a list or folder
+ * (trigger scope `listId`, an action's `targetListId`/`targetFolderId`) must
+ * belong to the SAME workspace as the automation itself — otherwise a
+ * crafted graph could reach into a list/folder the automation's workspace
+ * has no business touching. `targetWorkspaceId` (move_list_to_workspace) is
+ * deliberately excluded here — it's meant to name a DIFFERENT workspace, and
+ * is instead checked against the automation creator's own access via
+ * assertWorkspaceAccessibleToCreator. Called at save time
+ * (routes/automations.ts); execution time re-checks again via
+ * automationTypes.ts's assertListInWorkspace/assertFolderInWorkspace, since a
+ * list/folder can move/be deleted after the automation was saved.
  */
-export async function assertGraphListsInWorkspace(exec: QueryExec, graph: AutomationGraph, workspaceId: string): Promise<string | null> {
+export async function assertGraphRefsInWorkspace(exec: QueryExec, graph: AutomationGraph, workspaceId: string): Promise<string | null> {
   const listIds = new Set<string>();
+  const folderIds = new Set<string>();
   for (const n of graph.nodes) {
     for (const key of ['listId', 'targetListId']) {
       const v = n.params?.[key];
       if (typeof v === 'string' && v) listIds.add(v);
     }
+    const folderRef = n.params?.targetFolderId;
+    if (typeof folderRef === 'string' && folderRef) folderIds.add(folderRef);
   }
   for (const listId of listIds) {
     const r = await exec('SELECT workspace_id FROM lists WHERE id = $1', [listId]);
     if (r.rows.length === 0) return `List ${listId} does not exist`;
     if ((r.rows[0] as { workspace_id: string | null }).workspace_id !== workspaceId) {
       return `List ${listId} is not in this automation's workspace`;
+    }
+  }
+  for (const folderId of folderIds) {
+    const r = await exec('SELECT workspace_id FROM folders WHERE id = $1', [folderId]);
+    if (r.rows.length === 0) return `Folder ${folderId} does not exist`;
+    if ((r.rows[0] as { workspace_id: string | null }).workspace_id !== workspaceId) {
+      return `Folder ${folderId} is not in this automation's workspace`;
+    }
+  }
+  return null;
+}
+
+/**
+ * move_list_to_workspace's targetWorkspaceId names a workspace OUTSIDE the
+ * automation's own — validated instead against the automation creator's own
+ * access (same authority the engine executes actions as), both at save time
+ * and (in automationTypes.ts's execute handler) at execution time, since
+ * workspace membership can change after the automation was saved.
+ */
+export async function assertGraphWorkspaceRefsAccessible(
+  graph: AutomationGraph,
+  creatorId: string,
+  userCanAccessWorkspace: (userId: string, workspaceId: string) => Promise<boolean>
+): Promise<string | null> {
+  const workspaceIds = new Set<string>();
+  for (const n of graph.nodes) {
+    const v = n.params?.targetWorkspaceId;
+    if (typeof v === 'string' && v) workspaceIds.add(v);
+  }
+  for (const workspaceId of workspaceIds) {
+    if (!(await userCanAccessWorkspace(creatorId, workspaceId))) {
+      return `You do not have access to the target workspace ${workspaceId}`;
     }
   }
   return null;

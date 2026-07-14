@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Automation, AutomationGraph, AutomationRun, TriggerTypeDef, ActionTypeDef } from '../types';
+import type { Automation, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef } from '../types';
 import {
   apiGetAutomations,
   apiGetAutomation,
@@ -9,6 +9,7 @@ import {
   apiDeleteAutomation,
   apiGetAutomationRuns,
   apiGetAutomationNodeTypes,
+  apiTestAutomationNode,
 } from '../api/client';
 
 interface AutomationsStore {
@@ -26,6 +27,7 @@ interface AutomationsStore {
   setEnabled: (id: string, enabled: boolean) => Promise<void>;
   remove: (id: string) => Promise<void>;
   getRuns: (id: string, limit?: number) => Promise<AutomationRun[]>;
+  testNode: (id: string, nodeId?: string) => Promise<AutomationRunResult>;
 }
 
 const useAutomationsStore = create<AutomationsStore>()((set, get) => ({
@@ -94,6 +96,8 @@ const useAutomationsStore = create<AutomationsStore>()((set, get) => ({
   },
 
   getRuns: async (id, limit) => (await apiGetAutomationRuns(id, limit)).runs,
+
+  testNode: async (id, nodeId) => (await apiTestAutomationNode(id, nodeId)).result,
 }));
 
 export default useAutomationsStore;

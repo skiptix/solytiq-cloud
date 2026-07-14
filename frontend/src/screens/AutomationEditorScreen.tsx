@@ -4,7 +4,7 @@ import { ReactFlow, Background, Controls, Handle, Position, type Node as RFNode,
 import '@xyflow/react/dist/style.css';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useMobile } from '../hooks/useBreakpoint';
-import type { Automation, AutomationGraph, AutomationNode, AutomationRun, TriggerTypeDef, ActionTypeDef, AutomationParamProperty, List } from '../types';
+import type { Automation, AutomationGraph, AutomationNode, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, AutomationParamProperty, List, Folder, Workspace } from '../types';
 import useAutomationsStore from '../store/useAutomationsStore';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
@@ -133,12 +133,14 @@ function validateClientSide(
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-function ParamField({ fieldKey, prop, value, onChange, lists, readOnly }: {
+function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspaces, readOnly }: {
   fieldKey: string;
   prop: AutomationParamProperty;
   value: unknown;
   onChange: (value: unknown) => void;
   lists: List[];
+  folders: Folder[];
+  workspaces: Workspace[];
   readOnly: boolean;
 }) {
   const [showTime, setShowTime] = useState(false);
@@ -196,6 +198,34 @@ function ParamField({ fieldKey, prop, value, onChange, lists, readOnly }: {
     );
   }
 
+  if (prop.isFolderId) {
+    const v = typeof value === 'string' ? value : '';
+    return (
+      <div>
+        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
+        <select disabled={readOnly} value={v} onChange={(e) => onChange(e.target.value || undefined)}
+          style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none', background: '#fff', color: '#1c1b22' }}>
+          <option value="">{prop.optional ? 'No folder' : 'Choose a folder…'}</option>
+          {folders.map((f) => <option key={f.id} value={f.id}>{f.emoji ? `${f.emoji} ` : ''}{f.name}</option>)}
+        </select>
+      </div>
+    );
+  }
+
+  if (prop.isWorkspaceId) {
+    const v = typeof value === 'string' ? value : '';
+    return (
+      <div>
+        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
+        <select disabled={readOnly} value={v} onChange={(e) => onChange(e.target.value || undefined)}
+          style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none', background: '#fff', color: '#1c1b22' }}>
+          <option value="">Choose a workspace…</option>
+          {workspaces.map((w) => <option key={w.id} value={w.id}>{w.emoji ? `${w.emoji} ` : ''}{w.name}</option>)}
+        </select>
+      </div>
+    );
+  }
+
   if (prop.enum) {
     const v = typeof value === 'string' ? value : '';
     return (
@@ -225,27 +255,23 @@ function ParamField({ fieldKey, prop, value, onChange, lists, readOnly }: {
   }
 
   const v = typeof value === 'string' ? value : '';
-  const isMessage = fieldKey === 'message' || fieldKey === 'title';
   return (
     <div>
       <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
-      {isMessage ? (
-        <textarea disabled={readOnly} value={v} onChange={(e) => onChange(e.target.value || undefined)} rows={2} maxLength={500}
-          style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none', resize: 'vertical' }} />
-      ) : (
-        <input disabled={readOnly} value={v} onChange={(e) => onChange(e.target.value || undefined)}
-          style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none' }} />
-      )}
+      <input disabled={readOnly} value={v} onChange={(e) => onChange(e.target.value || undefined)}
+        style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none' }} />
       <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 4 }}>{prop.description}</div>
     </div>
   );
 }
 
-function ParamsForm({ def, params, onChange, lists, readOnly }: {
+function ParamsForm({ def, params, onChange, lists, folders, workspaces, readOnly }: {
   def: TriggerTypeDef | ActionTypeDef;
   params: Record<string, unknown>;
   onChange: (params: Record<string, unknown>) => void;
   lists: List[];
+  folders: Folder[];
+  workspaces: Workspace[];
   readOnly: boolean;
 }) {
   const entries = Object.entries(def.paramsSchema.properties);
@@ -255,7 +281,7 @@ function ParamsForm({ def, params, onChange, lists, readOnly }: {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {entries.map(([key, prop]) => (
-        <ParamField key={key} fieldKey={key} prop={prop} value={params[key]} onChange={(v) => onChange({ [key]: v })} lists={lists} readOnly={readOnly} />
+        <ParamField key={key} fieldKey={key} prop={prop} value={params[key]} onChange={(v) => onChange({ [key]: v })} lists={lists} folders={folders} workspaces={workspaces} readOnly={readOnly} />
       ))}
     </div>
   );
@@ -266,12 +292,16 @@ function ParamsForm({ def, params, onChange, lists, readOnly }: {
 // ---------------------------------------------------------------------------
 
 function FlowNodeCard({ data }: NodeProps) {
-  const d = data as unknown as { label: string; icon: string; kind: 'trigger' | 'action'; selected: boolean; readOnly: boolean; onClick: () => void; onDelete?: () => void };
+  const d = data as unknown as {
+    label: string; icon: string; kind: 'trigger' | 'action'; selected: boolean; readOnly: boolean;
+    onClick: () => void; onDelete?: () => void;
+    onTest?: () => void; testing?: boolean; testDisabled?: boolean;
+  };
   const accent = d.kind === 'trigger' ? '#5e4dbb' : '#f59e0b';
   const bg = d.kind === 'trigger' ? '#F5F3FF' : '#FEF3E2';
   return (
     <div onClick={d.onClick}
-      style={{ width: 220, background: '#fff', borderRadius: 12, border: `2px solid ${d.selected ? accent : '#e8e4f0'}`, boxShadow: d.selected ? `0 6px 18px ${accent}26` : '0 2px 8px rgba(0,0,0,0.06)', padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9, position: 'relative' }}>
+      style={{ width: 220, background: '#fff', borderRadius: 12, border: `2px solid ${d.selected ? accent : '#e8e4f0'}`, boxShadow: d.selected ? `0 6px 18px ${accent}26` : '0 2px 8px rgba(0,0,0,0.06)', padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
       {d.kind === 'action' && <Handle type="target" position={Position.Top} style={{ background: '#c9c4d5', width: 8, height: 8 }} />}
       <div style={{ width: 30, height: 30, borderRadius: 9, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         <Icon name={d.icon} size={15} color={accent} />
@@ -279,6 +309,13 @@ function FlowNodeCard({ data }: NodeProps) {
       <div style={{ flex: 1, minWidth: 0, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {d.label}
       </div>
+      {!d.readOnly && d.onTest && (
+        <button disabled={d.testing || d.testDisabled} title={d.testDisabled ? 'Save first to test' : 'Run this node for real, right now'}
+          onClick={(e) => { e.stopPropagation(); d.onTest!(); }}
+          style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: 'transparent', cursor: d.testing || d.testDisabled ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: d.testDisabled ? 0.35 : 1 }}>
+          <Icon name={d.testing ? 'sync' : 'play_circle'} size={15} color="#5e4dbb" />
+        </button>
+      )}
       {d.kind === 'action' && !d.readOnly && d.onDelete && (
         <button onClick={(e) => { e.stopPropagation(); d.onDelete!(); }}
           style={{ width: 20, height: 20, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -303,8 +340,10 @@ export default function AutomationEditorScreen() {
   const isMobile = useMobile();
   const isNew = id === 'new';
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const allWorkspaces = useWorkspaceStore((s) => s.workspaces);
   const allLists = useAppStore((s) => s.lists);
-  const { nodeTypes, loadNodeTypes, getDetail, create, update, getRuns } = useAutomationsStore();
+  const allFolders = useAppStore((s) => s.folders);
+  const { nodeTypes, loadNodeTypes, getDetail, create, update, getRuns, testNode } = useAutomationsStore();
 
   const [loading, setLoading] = useState(!isNew);
   const [notFound, setNotFound] = useState(false);
@@ -317,6 +356,8 @@ export default function AutomationEditorScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showRuns, setShowRuns] = useState(false);
   const [runs, setRuns] = useState<AutomationRun[] | null>(null);
+  const [testingNodeId, setTestingNodeId] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ nodeId: string; result?: AutomationRunResult; error?: string } | null>(null);
 
   useEffect(() => { loadNodeTypes(); }, [loadNodeTypes]);
 
@@ -338,7 +379,10 @@ export default function AutomationEditorScreen() {
   }, [id, isNew, getDetail]);
 
   const readOnly = !isNew && automation ? !automation.isOwner : false;
-  const workspaceLists = useMemo(() => allLists.filter((l) => l.workspaceId === (automation?.workspaceId ?? currentWorkspaceId)), [allLists, automation, currentWorkspaceId]);
+  const effectiveWorkspaceId = automation?.workspaceId ?? currentWorkspaceId;
+  const workspaceLists = useMemo(() => allLists.filter((l) => l.workspaceId === effectiveWorkspaceId), [allLists, effectiveWorkspaceId]);
+  const workspaceFolders = useMemo(() => allFolders.filter((f) => f.workspaceId === effectiveWorkspaceId), [allFolders, effectiveWorkspaceId]);
+  const otherWorkspaces = useMemo(() => allWorkspaces.filter((w) => w.id !== effectiveWorkspaceId), [allWorkspaces, effectiveWorkspaceId]);
 
   const triggerNode = graph.nodes.find((n) => n.kind === 'trigger') ?? null;
   const orderedActionIds = actionOrder(graph);
@@ -369,6 +413,25 @@ export default function AutomationEditorScreen() {
   const handleMoveAction = (nodeId: string, dir: 'up' | 'down') => applyGraph((g) => moveActionNode(g, nodeId, dir));
   const handleSetParams = (nodeId: string, params: Record<string, unknown>) => applyGraph((g) => updateNodeParams(g, nodeId, params));
 
+  // Runs the trigger (and, for an action node, every action up to and
+  // including it) for REAL against real, auto-picked data — same engine,
+  // same permanent effects, logged in Run History tagged as a test.
+  const handleTestNode = useCallback(async (nodeId: string) => {
+    if (!automation) return;
+    setTestingNodeId(nodeId);
+    setTestResult(null);
+    try {
+      const result = await testNode(automation.id, nodeId);
+      setTestResult({ nodeId, result });
+      setRuns(null); // stale — force a refetch next time Run History opens
+    } catch (err) {
+      const message = err instanceof ApiError ? (err.body as { error?: string })?.error ?? err.message : 'Failed to run the test.';
+      setTestResult({ nodeId, error: message });
+    } finally {
+      setTestingNodeId(null);
+    }
+  }, [automation, testNode]);
+
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     for (const c of changes) {
       if (c.type === 'position' && c.position) {
@@ -392,9 +455,12 @@ export default function AutomationEditorScreen() {
         readOnly,
         onClick: () => setSelectedNodeId(n.id),
         onDelete: n.kind === 'action' ? () => handleRemoveAction(n.id) : undefined,
+        onTest: () => handleTestNode(n.id),
+        testing: testingNodeId === n.id,
+        testDisabled: isNew,
       },
     };
-  }), [graph.nodes, nodeTypes, selectedNodeId, readOnly, handleRemoveAction]);
+  }), [graph.nodes, nodeTypes, selectedNodeId, readOnly, handleRemoveAction, testingNodeId, isNew, handleTestNode]);
 
   const rfEdges: RFEdge[] = useMemo(() => graph.edges.map((e) => ({
     id: e.id, source: e.source, target: e.target, style: { stroke: '#c9c4d5', strokeWidth: 2 },
@@ -490,12 +556,31 @@ export default function AutomationEditorScreen() {
         </div>
       )}
 
+      {testResult && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 24px', background: testResult.error || testResult.result?.status === 'failed' ? '#ffdad6' : '#e8f8f0', fontFamily: 'Inter, sans-serif', fontSize: 12.5 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Icon name={testResult.error || testResult.result?.status === 'failed' ? 'error' : 'check_circle'} size={14} color={testResult.error || testResult.result?.status === 'failed' ? '#ba1a1a' : '#10B981'} />
+            <span style={{ fontWeight: 700 }}>Test {testResult.error || testResult.result?.status === 'failed' ? 'failed' : 'ran'}</span>
+            <button onClick={() => setTestResult(null)} style={{ marginLeft: 'auto', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex' }}>
+              <Icon name="close" size={13} color="#787584" />
+            </button>
+          </div>
+          {testResult.error && <div style={{ color: '#ba1a1a', paddingLeft: 22 }}>{testResult.error}</div>}
+          {testResult.result?.steps.map((s, i) => (
+            <div key={i} style={{ color: s.ok ? '#1c1b22' : '#ba1a1a', paddingLeft: 22 }}>{s.ok ? '✓' : '✗'} {s.summary}</div>
+          ))}
+          {testResult.result?.error && <div style={{ color: '#ba1a1a', paddingLeft: 22 }}>{testResult.result.error}</div>}
+        </div>
+      )}
+
       {isMobile ? (
         <MobileStepList
           triggerNode={triggerNode}
           orderedActions={orderedActions}
           nodeTypes={nodeTypes}
           lists={workspaceLists}
+          folders={workspaceFolders}
+          workspaces={otherWorkspaces}
           readOnly={readOnly}
           selectedNodeId={selectedNodeId}
           setSelectedNodeId={setSelectedNodeId}
@@ -505,6 +590,9 @@ export default function AutomationEditorScreen() {
           onMoveAction={handleMoveAction}
           onSetParams={handleSetParams}
           availableActions={availableActions}
+          onTest={handleTestNode}
+          testingNodeId={testingNodeId}
+          testDisabled={isNew}
         />
       ) : (
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -577,7 +665,7 @@ export default function AutomationEditorScreen() {
                       <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14.5, fontWeight: 700, color: '#1c1b22' }}>{def.label}</div>
                     </div>
                     <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginBottom: 16 }}>{def.description}</div>
-                    <ParamsForm def={def} params={selectedNode.params} onChange={(p) => handleSetParams(selectedNode.id, p)} lists={workspaceLists} readOnly={readOnly} />
+                    <ParamsForm def={def} params={selectedNode.params} onChange={(p) => handleSetParams(selectedNode.id, p)} lists={workspaceLists} folders={workspaceFolders} workspaces={otherWorkspaces} readOnly={readOnly} />
                   </>
                 );
               })()}
@@ -597,11 +685,13 @@ export default function AutomationEditorScreen() {
 // Mobile: vertical step-card editor (same graph, no drag canvas)
 // ---------------------------------------------------------------------------
 
-function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, readOnly, selectedNodeId, setSelectedNodeId, onSetTrigger, onAddAction, onRemoveAction, onMoveAction, onSetParams, availableActions }: {
+function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, folders, workspaces, readOnly, selectedNodeId, setSelectedNodeId, onSetTrigger, onAddAction, onRemoveAction, onMoveAction, onSetParams, availableActions, onTest, testingNodeId, testDisabled }: {
   triggerNode: AutomationNode | null;
   orderedActions: AutomationNode[];
   nodeTypes: { triggers: TriggerTypeDef[]; actions: ActionTypeDef[] } | null;
   lists: List[];
+  folders: Folder[];
+  workspaces: Workspace[];
   readOnly: boolean;
   selectedNodeId: string | null;
   setSelectedNodeId: (id: string | null) => void;
@@ -611,6 +701,9 @@ function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, readOnl
   onMoveAction: (id: string, dir: 'up' | 'down') => void;
   onSetParams: (id: string, params: Record<string, unknown>) => void;
   availableActions: ActionTypeDef[];
+  onTest: (nodeId: string) => void;
+  testingNodeId: string | null;
+  testDisabled: boolean;
 }) {
   const [showTriggerPicker, setShowTriggerPicker] = useState(!triggerNode);
   const [showAddAction, setShowAddAction] = useState(false);
@@ -626,10 +719,11 @@ function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, readOnl
           expanded={selectedNodeId === triggerNode.id}
           onToggle={() => setSelectedNodeId(selectedNodeId === triggerNode.id ? null : triggerNode.id)}
           rightAction={!readOnly ? { icon: 'sync_alt', label: 'Change', onClick: () => setShowTriggerPicker(true) } : undefined}
+          testAction={!readOnly ? { testing: testingNodeId === triggerNode.id, disabled: testDisabled, onClick: () => onTest(triggerNode.id) } : undefined}
         >
           {(() => {
             const def = nodeTypes?.triggers.find((t) => t.id === triggerNode.type);
-            return def ? <ParamsForm def={def} params={triggerNode.params} onChange={(p) => onSetParams(triggerNode.id, p)} lists={lists} readOnly={readOnly} /> : null;
+            return def ? <ParamsForm def={def} params={triggerNode.params} onChange={(p) => onSetParams(triggerNode.id, p)} lists={lists} folders={folders} workspaces={workspaces} readOnly={readOnly} /> : null;
           })()}
         </StepCard>
       ) : (
@@ -669,8 +763,9 @@ function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, readOnl
                 expanded={selectedNodeId === node.id}
                 onToggle={() => setSelectedNodeId(selectedNodeId === node.id ? null : node.id)}
                 rightAction={!readOnly ? { icon: 'close', label: '', onClick: () => onRemoveAction(node.id) } : undefined}
+                testAction={!readOnly ? { testing: testingNodeId === node.id, disabled: testDisabled, onClick: () => onTest(node.id) } : undefined}
               >
-                {def ? <ParamsForm def={def} params={node.params} onChange={(p) => onSetParams(node.id, p)} lists={lists} readOnly={readOnly} /> : null}
+                {def ? <ParamsForm def={def} params={node.params} onChange={(p) => onSetParams(node.id, p)} lists={lists} folders={folders} workspaces={workspaces} readOnly={readOnly} /> : null}
               </StepCard>
             </div>
           </div>
@@ -703,9 +798,10 @@ function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, readOnl
   );
 }
 
-function StepCard({ icon, label, accent, bg, expanded, onToggle, rightAction, children }: {
+function StepCard({ icon, label, accent, bg, expanded, onToggle, rightAction, testAction, children }: {
   icon: string; label: string; accent: string; bg: string; expanded: boolean; onToggle: () => void;
   rightAction?: { icon: string; label: string; onClick: () => void };
+  testAction?: { testing: boolean; disabled: boolean; onClick: () => void };
   children?: React.ReactNode;
 }) {
   return (
@@ -715,6 +811,13 @@ function StepCard({ icon, label, accent, bg, expanded, onToggle, rightAction, ch
           <Icon name={icon} size={16} color={accent} />
         </div>
         <div style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22' }}>{label}</div>
+        {testAction && (
+          <button disabled={testAction.testing || testAction.disabled} title={testAction.disabled ? 'Save first to test' : 'Run this node for real, right now'}
+            onClick={(e) => { e.stopPropagation(); testAction.onClick(); }}
+            style={{ width: 26, height: 26, border: 'none', background: 'transparent', cursor: testAction.testing || testAction.disabled ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: testAction.disabled ? 0.35 : 1 }}>
+            <Icon name={testAction.testing ? 'sync' : 'play_circle'} size={16} color="#5e4dbb" />
+          </button>
+        )}
         {rightAction && (
           <button onClick={(e) => { e.stopPropagation(); rightAction.onClick(); }} style={{ width: 26, height: 26, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon name={rightAction.icon} size={15} color="#b0acbe" />
@@ -750,6 +853,9 @@ function RunHistoryPanel({ runs, onClose }: { runs: AutomationRun[] | null; onCl
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <Icon name={r.status === 'success' ? 'check_circle' : r.status === 'failed' ? 'error' : 'sync'} size={14} color={r.status === 'success' ? '#10B981' : r.status === 'failed' ? '#ba1a1a' : '#787584'} />
                   <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#1c1b22', textTransform: 'capitalize' }}>{r.status}</span>
+                  {r.isTest && (
+                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', padding: '1px 7px', borderRadius: 9999 }}>Test</span>
+                  )}
                   <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginLeft: 'auto' }}>{new Date(r.startedAt).toLocaleString()}</span>
                 </div>
                 {r.steps.map((s, i) => (

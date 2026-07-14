@@ -15,17 +15,20 @@
 // ---------------------------------------------------------------------------
 
 import { v4 as uuidv4 } from 'uuid';
-import { QueryExec } from './workspaceUtil';
+import { QueryExec, userCanAccessWorkspace } from './workspaceUtil';
 import type { MutationActor } from './automationEngine';
 import { createListTask, deleteTaskRow, setListArchived } from './routes/lists';
+import { softDeleteListTreeExec, softDeleteFolderExec, collectDescendantListIds } from './trashUtil';
 
 export interface AutomationParamProperty {
   type: 'string' | 'number' | 'boolean';
   label: string;
   description: string;
   optional?: boolean;
-  /** UI hint: render a list picker instead of a free-text field. */
+  /** UI hints: render a picker instead of a free-text field. */
   isListId?: boolean;
+  isFolderId?: boolean;
+  isWorkspaceId?: boolean;
   enum?: string[];
 }
 
@@ -98,6 +101,16 @@ async function assertListInWorkspace(exec: QueryExec, listId: string, workspaceI
   if (r.rows.length === 0) return 'Target list no longer exists';
   if ((r.rows[0] as { workspace_id: string | null }).workspace_id !== workspaceId) {
     return 'Target list is not in this automation\'s workspace';
+  }
+  return null;
+}
+
+/** Same guard as assertListInWorkspace, for a node param naming a folder. */
+async function assertFolderInWorkspace(exec: QueryExec, folderId: string, workspaceId: string): Promise<string | null> {
+  const r = await exec('SELECT workspace_id FROM folders WHERE id = $1', [folderId]);
+  if (r.rows.length === 0) return 'Target folder no longer exists';
+  if ((r.rows[0] as { workspace_id: string | null }).workspace_id !== workspaceId) {
+    return 'Target folder is not in this automation\'s workspace';
   }
   return null;
 }
@@ -297,30 +310,229 @@ export const ACTION_REGISTRY: ActionDef[] = [
     },
   },
   {
-    id: 'notify',
-    label: 'Notify me',
-    description: "Sends an in-app notification to this automation's creator.",
-    icon: 'notifications',
+    id: 'create_list',
+    label: 'Create list',
+    description: 'Creates a new (empty) list in this workspace.',
+    icon: 'playlist_add_circle',
     paramsSchema: {
       type: 'object',
       properties: {
-        message: { type: 'string', label: 'Message', description: 'Notification text.' },
+        name: { type: 'string', label: 'Name', description: 'Name for the new list.' },
+        targetFolderId: { type: 'string', label: 'Folder', description: 'Folder to create it in. Leave empty for no folder.', optional: true, isFolderId: true },
+      },
+    },
+    validate: (params) => (str(params.name) ? null : 'name is required'),
+    execute: async (ctx, params) => {
+      const name = str(params.name);
+      if (!name) return fail('name is required');
+      const targetFolderId = str(params.targetFolderId);
+      if (targetFolderId) {
+        const err = await assertFolderInWorkspace(ctx.exec, targetFolderId, ctx.workspaceId);
+        if (err) return fail(err);
+      }
+      const listId = `list_${uuidv4()}`;
+      const posRes = await ctx.exec('SELECT MAX(position) AS max FROM lists WHERE user_id = $1', [ctx.automationOwnerId]);
+      const maxPos = (posRes.rows[0] as { max: string | null }).max;
+      const nextPos = maxPos !== null ? parseInt(maxPos, 10) + 1 : 0;
+      await ctx.exec(
+        `INSERT INTO lists (id, user_id, name, folder_id, position, workspace_id) VALUES ($1, $2, $3, $4, $5, $6)`,
+        [listId, ctx.automationOwnerId, name, targetFolderId ?? null, nextPos, ctx.workspaceId]
+      );
+      return ok(`Created list "${name}"`);
+    },
+  },
+  {
+    id: 'create_folder',
+    label: 'Create folder',
+    description: 'Creates a new (empty) folder in this workspace.',
+    icon: 'create_new_folder',
+    paramsSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', label: 'Name', description: 'Name for the new folder.' },
+      },
+    },
+    validate: (params) => (str(params.name) ? null : 'name is required'),
+    execute: async (ctx, params) => {
+      const name = str(params.name);
+      if (!name) return fail('name is required');
+      const folderId = `folder_${uuidv4()}`;
+      const posRes = await ctx.exec('SELECT MAX(position) AS max FROM folders WHERE user_id = $1', [ctx.automationOwnerId]);
+      const maxPos = (posRes.rows[0] as { max: string | null }).max;
+      const nextPos = maxPos !== null ? parseInt(maxPos, 10) + 1 : 0;
+      await ctx.exec(
+        `INSERT INTO folders (id, user_id, name, position, workspace_id) VALUES ($1, $2, $3, $4, $5)`,
+        [folderId, ctx.automationOwnerId, name, nextPos, ctx.workspaceId]
+      );
+      return ok(`Created folder "${name}"`);
+    },
+  },
+  {
+    id: 'move_list',
+    label: 'Move list to folder',
+    description: 'Moves the list that triggered this automation into a different folder (within this workspace).',
+    icon: 'drive_file_move',
+    paramsSchema: {
+      type: 'object',
+      properties: {
+        targetFolderId: { type: 'string', label: 'Folder', description: 'Folder to move the list into. Leave empty to remove it from any folder.', optional: true, isFolderId: true },
+      },
+    },
+    requiresTriggerList: true,
+    validate: () => null,
+    execute: async (ctx, params) => {
+      if (!ctx.trigger.list) return fail('No list in trigger context');
+      const targetFolderId = str(params.targetFolderId);
+      if (targetFolderId) {
+        const err = await assertFolderInWorkspace(ctx.exec, targetFolderId, ctx.workspaceId);
+        if (err) return fail(err);
+      }
+      const result = await ctx.exec('UPDATE lists SET folder_id = $1 WHERE id = $2', [targetFolderId ?? null, ctx.trigger.list.id]);
+      if ((result.rowCount ?? 0) === 0) return fail('List no longer exists');
+      return ok(`Moved list "${ctx.trigger.list.name}"${targetFolderId ? ' to a folder' : ' out of its folder'}`);
+    },
+  },
+  {
+    id: 'move_list_to_workspace',
+    label: 'Move list to workspace',
+    description: "Moves the list that triggered this automation (with its sublists) into a different workspace this automation's creator has access to.",
+    icon: 'move_up',
+    paramsSchema: {
+      type: 'object',
+      properties: {
+        targetWorkspaceId: { type: 'string', label: 'Workspace', description: 'Workspace to move the list into.', isWorkspaceId: true },
+      },
+    },
+    requiresTriggerList: true,
+    validate: (params) => (str(params.targetWorkspaceId) ? null : 'targetWorkspaceId is required'),
+    execute: async (ctx, params) => {
+      if (!ctx.trigger.list) return fail('No list in trigger context');
+      const targetWorkspaceId = str(params.targetWorkspaceId);
+      if (!targetWorkspaceId) return fail('targetWorkspaceId is required');
+      if (targetWorkspaceId === ctx.workspaceId) return fail('Target workspace is the same as the current workspace');
+      const canAccess = await userCanAccessWorkspace(ctx.automationOwnerId, targetWorkspaceId);
+      if (!canAccess) return fail("This automation's creator no longer has access to the target workspace");
+
+      const existing = await ctx.exec('SELECT id FROM lists WHERE id = $1', [ctx.trigger.list.id]);
+      if (existing.rows.length === 0) return fail('List no longer exists');
+
+      // Known V1 limitation: unlike the interactive move (PUT /api/lists/:id/workspace),
+      // this doesn't run the public/private visibility-hierarchy conflict resolution —
+      // that's an interactive, user-facing safety dialog, and automations run headless.
+      const descendantIds = await collectDescendantListIds(ctx.exec, ctx.trigger.list.id);
+      const allListIds = [ctx.trigger.list.id, ...descendantIds];
+      await ctx.exec(`UPDATE lists SET workspace_id = $1, folder_id = NULL WHERE id = ANY($2::varchar[])`, [targetWorkspaceId, allListIds]);
+      await ctx.exec(`UPDATE tasks SET workspace_id = $1 WHERE list_id = ANY($2::varchar[])`, [targetWorkspaceId, allListIds]);
+      return ok(`Moved list "${ctx.trigger.list.name}" to another workspace`);
+    },
+  },
+  {
+    id: 'delete_list',
+    label: 'Delete list',
+    description: 'Deletes the list that triggered this automation (soft-deleted to Trash, recoverable for 30 days).',
+    icon: 'delete_sweep',
+    paramsSchema: { type: 'object', properties: {} },
+    requiresTriggerList: true,
+    validate: () => null,
+    execute: async (ctx) => {
+      if (!ctx.trigger.list) return fail('No list in trigger context');
+      const existing = await ctx.exec('SELECT id FROM lists WHERE id = $1', [ctx.trigger.list.id]);
+      if (existing.rows.length === 0) return fail('List no longer exists');
+      const removedCount = await softDeleteListTreeExec(ctx.exec, ctx.trigger.list.id);
+      return ok(`Deleted list "${ctx.trigger.list.name}"${removedCount > 0 ? ` (+${removedCount} sublist(s))` : ''}`);
+    },
+  },
+  {
+    id: 'delete_folder',
+    label: 'Delete folder',
+    description: 'Deletes a folder (soft-deleted to Trash). Lists inside it are kept, just un-foldered.',
+    icon: 'folder_delete',
+    paramsSchema: {
+      type: 'object',
+      properties: {
+        targetFolderId: { type: 'string', label: 'Folder', description: 'Folder to delete.', isFolderId: true },
+      },
+    },
+    validate: (params) => (str(params.targetFolderId) ? null : 'targetFolderId is required'),
+    execute: async (ctx, params) => {
+      const targetFolderId = str(params.targetFolderId);
+      if (!targetFolderId) return fail('targetFolderId is required');
+      const err = await assertFolderInWorkspace(ctx.exec, targetFolderId, ctx.workspaceId);
+      if (err) return fail(err);
+      const deleted = await softDeleteFolderExec(ctx.exec, targetFolderId);
+      return deleted ? ok('Deleted folder') : fail('Folder not found');
+    },
+  },
+  {
+    id: 'rename_task',
+    label: 'Rename task',
+    description: 'Renames the task that triggered this automation.',
+    icon: 'edit',
+    paramsSchema: {
+      type: 'object',
+      properties: {
+        newTitle: { type: 'string', label: 'New title', description: 'New title for the task.' },
+      },
+    },
+    requiresTriggerTask: true,
+    validate: (params) => (str(params.newTitle) ? null : 'newTitle is required'),
+    execute: async (ctx, params) => {
+      if (!ctx.trigger.task) return fail('No task in trigger context');
+      const newTitle = str(params.newTitle);
+      if (!newTitle) return fail('newTitle is required');
+      const result = await ctx.exec('UPDATE tasks SET title = $1 WHERE id = $2', [newTitle, ctx.trigger.task.id]);
+      if ((result.rowCount ?? 0) === 0) return fail('Task no longer exists');
+      return ok(`Renamed task to "${newTitle}"`);
+    },
+  },
+  {
+    id: 'rename_list',
+    label: 'Rename list',
+    description: 'Renames the list that triggered this automation.',
+    icon: 'edit',
+    paramsSchema: {
+      type: 'object',
+      properties: {
+        newName: { type: 'string', label: 'New name', description: 'New name for the list.' },
+      },
+    },
+    requiresTriggerList: true,
+    validate: (params) => (str(params.newName) ? null : 'newName is required'),
+    execute: async (ctx, params) => {
+      if (!ctx.trigger.list) return fail('No list in trigger context');
+      const newName = str(params.newName);
+      if (!newName) return fail('newName is required');
+      const result = await ctx.exec('UPDATE lists SET name = $1 WHERE id = $2', [newName, ctx.trigger.list.id]);
+      if ((result.rowCount ?? 0) === 0) return fail('List no longer exists');
+      return ok(`Renamed list to "${newName}"`);
+    },
+  },
+  {
+    id: 'rename_folder',
+    label: 'Rename folder',
+    description: 'Renames a folder.',
+    icon: 'edit',
+    paramsSchema: {
+      type: 'object',
+      properties: {
+        targetFolderId: { type: 'string', label: 'Folder', description: 'Folder to rename.', isFolderId: true },
+        newName: { type: 'string', label: 'New name', description: 'New name for the folder.' },
       },
     },
     validate: (params) => {
-      const message = str(params.message);
-      if (!message) return 'message is required';
-      if (message.length > 500) return 'message must be 500 characters or fewer';
+      if (!str(params.targetFolderId)) return 'targetFolderId is required';
+      if (!str(params.newName)) return 'newName is required';
       return null;
     },
     execute: async (ctx, params) => {
-      const message = str(params.message) ?? 'Automation ran';
-      const id = `anotif_${uuidv4()}`;
-      await ctx.exec(
-        `INSERT INTO automation_notifications (id, user_id, automation_id, run_id, message) VALUES ($1, $2, $3, $4, $5)`,
-        [id, ctx.automationOwnerId, ctx.automationId, ctx.runId, message]
-      );
-      return ok('Notification sent');
+      const targetFolderId = str(params.targetFolderId);
+      const newName = str(params.newName);
+      if (!targetFolderId || !newName) return fail('targetFolderId and newName are required');
+      const err = await assertFolderInWorkspace(ctx.exec, targetFolderId, ctx.workspaceId);
+      if (err) return fail(err);
+      const result = await ctx.exec('UPDATE folders SET name = $1 WHERE id = $2', [newName, targetFolderId]);
+      if ((result.rowCount ?? 0) === 0) return fail('Folder not found');
+      return ok(`Renamed folder to "${newName}"`);
     },
   },
 ];

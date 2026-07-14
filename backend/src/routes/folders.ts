@@ -4,7 +4,7 @@ import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, werr } from '../workspaceUtil';
-import { snapshotFolderToTrash, collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
+import { softDeleteFolderExec, collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
 import {
   getPrivateAncestors, buildPromoteConflict, promoteAncestors,
   getPublicDescendants, buildRestrictConflict, restrictDescendants,
@@ -365,12 +365,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     // Atomic: snapshot to trash, detach lists, delete folder — all or nothing.
     // (Shared helper — identical snapshot shape to the workspace cascade delete.)
-    await withTransaction(async (client) => {
-      const exec = (text: string, params?: unknown[]) => client.query(text, params);
-      await snapshotFolderToTrash(exec, id);
-      await client.query('UPDATE lists SET folder_id = NULL WHERE folder_id = $1', [id]);
-      await client.query('DELETE FROM folders WHERE id = $1', [id]);
-    });
+    await withTransaction((client) => softDeleteFolderExec((text: string, params?: unknown[]) => client.query(text, params), id));
 
     wlog(`folder DELETE ✓ id=${id} → trashed by user ${req.userId}`);
     res.json({ ok: true });

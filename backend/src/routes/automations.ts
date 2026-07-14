@@ -16,9 +16,9 @@ import { broadcastToUser } from '../sse';
 import { requireAppInstalled } from '../appsRegistry';
 import { userCanAccessWorkspace, werr, wlog } from '../workspaceUtil';
 import { checkVersionConflict } from '../concurrency';
-import { normalizeAutomationGraph, assertGraphListsInWorkspace } from '../automationGraph';
-import { getAutomationNodeTypeDefs } from '../automationTypes';
-import { computeNextFireAt } from '../automationEngine';
+import { normalizeAutomationGraph, assertGraphRefsInWorkspace, assertGraphWorkspaceRefsAccessible, type AutomationEdge } from '../automationGraph';
+import { getAutomationNodeTypeDefs, type TriggerContext } from '../automationTypes';
+import { computeNextFireAt, runAutomation } from '../automationEngine';
 
 const router = Router();
 router.use(authenticate);
@@ -87,64 +87,6 @@ router.get('/node-types', (_req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// Notifications (the `notify` action's inbox) — always scoped to the
-// requester's own rows. Registered before the /:id routes below: /:id is a
-// single-segment param pattern that would otherwise swallow a literal
-// /notifications request (Express matches in registration order).
-// ---------------------------------------------------------------------------
-
-router.get('/notifications', async (req: Request, res: Response) => {
-  try {
-    const unreadOnly = req.query.unreadOnly === 'true';
-    const result = await query(
-      `SELECT id, automation_id, run_id, message, read_at, created_at
-       FROM automation_notifications
-       WHERE user_id = $1 ${unreadOnly ? 'AND read_at IS NULL' : ''}
-       ORDER BY created_at DESC
-       LIMIT 100`,
-      [req.userId]
-    );
-    res.json({
-      notifications: result.rows.map((r: any) => ({
-        id: r.id,
-        automationId: r.automation_id,
-        runId: r.run_id,
-        message: r.message,
-        readAt: r.read_at,
-        createdAt: r.created_at,
-      })),
-    });
-  } catch (err) {
-    werr('automations GET notifications error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.put('/notifications/read-all', async (req: Request, res: Response) => {
-  try {
-    await query(`UPDATE automation_notifications SET read_at = NOW() WHERE user_id = $1 AND read_at IS NULL`, [req.userId]);
-    res.json({ success: true });
-  } catch (err) {
-    werr('automations PUT notifications read-all error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-router.put('/notifications/:id/read', async (req: Request, res: Response) => {
-  try {
-    const result = await query(
-      `UPDATE automation_notifications SET read_at = NOW() WHERE id = $1 AND user_id = $2 RETURNING id`,
-      [req.params.id, req.userId]
-    );
-    if (result.rowCount === 0) { res.status(404).json({ error: 'Notification not found' }); return; }
-    res.json({ success: true });
-  } catch (err) {
-    werr('automations PUT notification read error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// ---------------------------------------------------------------------------
 // GET /api/automations?workspaceId= — every automation in a workspace the
 // user can access (owner or not — visible read-only to the whole workspace).
 // ---------------------------------------------------------------------------
@@ -203,7 +145,7 @@ router.get('/:id/runs', async (req: Request, res: Response) => {
     params.push(limit);
 
     const result = await query(
-      `SELECT id, trigger_type, status, steps, error, started_at, finished_at
+      `SELECT id, trigger_type, status, steps, error, is_test, started_at, finished_at
        FROM automation_runs
        WHERE automation_id = $1 ${beforeFilter}
        ORDER BY started_at DESC
@@ -217,12 +159,106 @@ router.get('/:id/runs', async (req: Request, res: Response) => {
         status: r.status,
         steps: r.steps,
         error: r.error,
+        isTest: r.is_test,
         startedAt: r.started_at,
         finishedAt: r.finished_at,
       })),
     });
   } catch (err) {
     werr('automations GET runs error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/automations/:id/test — creator or admin only. Runs the trigger
+// (and, optionally, the action chain up to a given node) for REAL against
+// real, auto-picked data: same engine, same permanent effects (e.g. an
+// actual delete/rename), tagged is_test=true so Run History can label it.
+// Node id omitted or equal to the trigger's own id → test just the trigger
+// (zero actions run). Otherwise runs every action from the trigger through
+// the given node, inclusive — lets you test incrementally while building.
+// ---------------------------------------------------------------------------
+
+router.post('/:id/test', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { nodeId } = req.body as { nodeId?: string };
+
+    const existing = await query<{ user_id: string; workspace_id: string; graph: unknown; trigger_type: string; trigger_scope: Record<string, unknown> }>(
+      'SELECT user_id, workspace_id, graph, trigger_type, trigger_scope FROM automations WHERE id = $1',
+      [id]
+    );
+    if (existing.rows.length === 0) { res.status(404).json({ error: 'Automation not found' }); return; }
+    const automation = existing.rows[0];
+    if (automation.user_id !== req.userId && !req.user?.isAdmin) { res.status(403).json({ error: 'Permission denied' }); return; }
+
+    const normalized = normalizeAutomationGraph(automation.graph);
+    if (!normalized.ok) { res.status(400).json({ error: `Saved graph is invalid: ${normalized.error}` }); return; }
+    const { graph, orderedActionIds, triggerType } = normalized.value;
+    const triggerNode = graph.nodes.find((n) => n.kind === 'trigger')!;
+
+    let includedActionIds: string[];
+    if (!nodeId || nodeId === triggerNode.id) {
+      includedActionIds = [];
+    } else {
+      const idx = orderedActionIds.indexOf(nodeId);
+      if (idx === -1) { res.status(400).json({ error: 'Unknown node id' }); return; }
+      includedActionIds = orderedActionIds.slice(0, idx + 1);
+    }
+
+    // Auto-pick real data to simulate the trigger event with.
+    const scope = automation.trigger_scope ?? {};
+    const scopedListId = typeof (scope as { listId?: unknown }).listId === 'string' ? (scope as { listId: string }).listId : undefined;
+    let ctx: TriggerContext;
+    if (triggerType === 'task_completed' || triggerType === 'task_created') {
+      const rows = await query<{ id: string; title: string; list_id: string; checked: boolean; list_name: string }>(
+        scopedListId
+          ? `SELECT t.id, t.title, t.list_id, t.checked, l.name AS list_name FROM tasks t JOIN lists l ON t.list_id = l.id WHERE t.list_id = $1 AND t.source = 'list' ORDER BY t.updated_at DESC LIMIT 1`
+          : `SELECT t.id, t.title, t.list_id, t.checked, l.name AS list_name FROM tasks t JOIN lists l ON t.list_id = l.id WHERE l.workspace_id = $1 AND t.source = 'list' ORDER BY t.updated_at DESC LIMIT 1`,
+        [scopedListId ?? automation.workspace_id]
+      );
+      if (rows.rows.length === 0) {
+        res.status(400).json({ error: scopedListId ? 'No tasks found in the scoped list to test with — add a task first.' : 'No tasks found in this workspace to test with — add a task first.' });
+        return;
+      }
+      const r = rows.rows[0];
+      ctx = {
+        workspaceId: automation.workspace_id,
+        task: { id: String(r.id), title: r.title, listId: r.list_id, checked: triggerType === 'task_completed' ? true : r.checked },
+        list: { id: r.list_id, name: r.list_name },
+      };
+    } else if (triggerType === 'list_all_completed') {
+      if (!scopedListId) { res.status(400).json({ error: 'This automation has no list configured to test with.' }); return; }
+      const listRows = await query<{ name: string }>('SELECT name FROM lists WHERE id = $1', [scopedListId]);
+      if (listRows.rows.length === 0) { res.status(400).json({ error: 'The scoped list no longer exists.' }); return; }
+      ctx = { workspaceId: automation.workspace_id, list: { id: scopedListId, name: listRows.rows[0].name } };
+    } else {
+      ctx = { workspaceId: automation.workspace_id };
+    }
+
+    const nodesById = new Map(graph.nodes.map((n) => [n.id, n]));
+    const truncatedEdges: AutomationEdge[] = [];
+    let prev = triggerNode.id;
+    for (const aid of includedActionIds) {
+      truncatedEdges.push({ id: `test_${prev}_${aid}`, source: prev, target: aid });
+      prev = aid;
+    }
+    const truncatedGraph = {
+      version: 1 as const,
+      nodes: [triggerNode, ...includedActionIds.map((aid) => nodesById.get(aid)!)],
+      edges: truncatedEdges,
+    };
+
+    const result = await runAutomation(
+      { id, workspace_id: automation.workspace_id, user_id: automation.user_id, graph: truncatedGraph },
+      triggerType,
+      ctx,
+      { isTest: true }
+    );
+    res.json({ result });
+  } catch (err) {
+    werr('automations POST test error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -250,8 +286,10 @@ router.post('/', async (req: Request, res: Response) => {
 
     const normalized = normalizeAutomationGraph(graph);
     if (!normalized.ok) { res.status(400).json({ error: normalized.error }); return; }
-    const listError = await assertGraphListsInWorkspace(query, normalized.value.graph, workspaceId);
-    if (listError) { res.status(400).json({ error: listError }); return; }
+    const refError = await assertGraphRefsInWorkspace(query, normalized.value.graph, workspaceId);
+    if (refError) { res.status(400).json({ error: refError }); return; }
+    const wsRefError = await assertGraphWorkspaceRefsAccessible(normalized.value.graph, req.userId!, userCanAccessWorkspace);
+    if (wsRefError) { res.status(400).json({ error: wsRefError }); return; }
 
     const id = `automation_${uuidv4()}`;
     const nextFireAt = normalized.value.triggerType === 'schedule'
@@ -290,6 +328,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     const isOwner = existing.rows[0].user_id === req.userId;
     if (!isOwner && !req.user?.isAdmin) { res.status(403).json({ error: 'Permission denied' }); return; }
     const workspaceId = existing.rows[0].workspace_id;
+    const creatorId = existing.rows[0].user_id;
 
     const { name, description, graph, expectedVersion } = req.body as {
       name?: string;
@@ -306,8 +345,10 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (graph !== undefined) {
       const normalized = normalizeAutomationGraph(graph);
       if (!normalized.ok) { res.status(400).json({ error: normalized.error }); return; }
-      const listError = await assertGraphListsInWorkspace(query, normalized.value.graph, workspaceId);
-      if (listError) { res.status(400).json({ error: listError }); return; }
+      const refError = await assertGraphRefsInWorkspace(query, normalized.value.graph, workspaceId);
+      if (refError) { res.status(400).json({ error: refError }); return; }
+      const wsRefError = await assertGraphWorkspaceRefsAccessible(normalized.value.graph, creatorId, userCanAccessWorkspace);
+      if (wsRefError) { res.status(400).json({ error: wsRefError }); return; }
 
       const nextFireAt = normalized.value.triggerType === 'schedule' ? computeNextFireAt(normalized.value.triggerScope) : null;
       params.push(JSON.stringify(normalized.value.graph), normalized.value.triggerType, JSON.stringify(normalized.value.triggerScope), nextFireAt ? nextFireAt.toISOString() : null);

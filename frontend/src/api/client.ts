@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationGraph, AutomationRun, AutomationNotification, TriggerTypeDef, ActionTypeDef } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -1272,11 +1272,8 @@ export const apiDeleteAutomation = (id: string) =>
 export const apiGetAutomationRuns = (id: string, limit?: number) =>
   apiFetch<{ runs: AutomationRun[] }>(`/automations/${id}/runs${limit ? `?limit=${limit}` : ''}`);
 
-export const apiGetAutomationNotifications = (unreadOnly?: boolean) =>
-  apiFetch<{ notifications: AutomationNotification[] }>(`/automations/notifications${unreadOnly ? '?unreadOnly=true' : ''}`);
-
-export const apiMarkAutomationNotificationRead = (id: string) =>
-  apiFetch<{ success: boolean }>(`/automations/notifications/${id}/read`, { method: 'PUT' });
-
-export const apiMarkAllAutomationNotificationsRead = () =>
-  apiFetch<{ success: boolean }>('/automations/notifications/read-all', { method: 'PUT' });
+/** Manually runs a saved automation's trigger (and, optionally, the action
+ *  chain up to `nodeId`) for real against real, auto-picked data. Omit
+ *  `nodeId` (or pass the trigger node's own id) to test just the trigger. */
+export const apiTestAutomationNode = (id: string, nodeId?: string) =>
+  apiFetch<{ result: AutomationRunResult }>(`/automations/${id}/test`, { method: 'POST', body: JSON.stringify({ nodeId }) });
