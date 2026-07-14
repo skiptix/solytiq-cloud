@@ -1,5 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMobile } from '../hooks/useBreakpoint';
 import type { Task, List } from '../types';
 import useAppStore from '../store/useAppStore';
@@ -66,11 +67,12 @@ function sortTasks(tasks: Task[], sort: string | null): Task[] {
 }
 
 // ── Stat Card ──────────────────────────────────────────────────
-function StatCard({ num, label, sub, icon, iconBg, iconColor, accent }: { num: number; label: string; sub: string; icon: string; iconBg: string; iconColor: string; accent?: string }) {
+function StatCard({ num, label, sub, icon, iconBg, iconColor, accent, onClick }: { num: number; label: string; sub: string; icon: string; iconBg: string; iconColor: string; accent?: string; onClick?: () => void }) {
   const [hov, setHov] = useState(false);
   return (
-    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ background: '#F9FAFB', border: `1px solid ${hov ? '#d8d0eb' : '#E5E7EB'}`, borderRadius: 12, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'all 180ms', minWidth: 0 }}>
+    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={onClick} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }) : undefined}
+      style={{ background: '#F9FAFB', border: `1px solid ${hov ? '#d8d0eb' : '#E5E7EB'}`, borderRadius: 12, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'all 180ms', minWidth: 0, cursor: onClick ? 'pointer' : 'default', boxShadow: hov && onClick ? '0 6px 16px rgba(94,77,187,0.12)' : 'none', transform: hov && onClick ? 'translateY(-2px)' : 'translateY(0)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ width: 34, height: 34, borderRadius: 10, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name={icon} size={17} color={iconColor} />
@@ -214,7 +216,7 @@ export default function DashboardScreen() {
 
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState<string | null>(null);
-  const [detailModal, setDetailModal] = useState<null | { source: 'today' | 'week' | 'todos'; title: string; icon: string; accent: string; accentBg: string }>(null);
+  const [detailModal, setDetailModal] = useState<null | { source: 'open' | 'completed' | 'today' | 'week' | 'todos'; title: string; icon: string; accent: string; accentBg: string }>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
   const [dragOverId, setDragOverId] = useState<number | null>(null);
@@ -230,6 +232,8 @@ export default function DashboardScreen() {
   const dueTodayTasks = allTasks.filter(t => isDueToday(t, timezone) && !t.checked);
   const dueWeekTasks = allTasks.filter(t => isDueThisWeek(t, timezone) && !t.checked);
   const overdueTasks = allTasks.filter(t => isOverdue(t, timezone));
+  const openTasks = allTasks.filter(t => !t.checked);
+  const completedTasks = allTasks.filter(t => t.checked);
 
   const toggle = (id: number) => {
     const t = allTasks.find(t => t.id === id);
@@ -302,10 +306,14 @@ export default function DashboardScreen() {
         <UpcomingTimelineWidget accent="#5e4dbb" />
 
         <section style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 12 }}>
-          <StatCard num={openCount} label="Open Tasks" sub={`${totalCount} total`} icon="inventory_2" iconBg="#F5F3FF" iconColor="#5e4dbb" />
-          <StatCard num={completedCount} label="Completed" sub={completedCount > 0 ? `${pct}%` : 'Get started'} icon="check_circle" iconBg="rgba(16,185,129,0.10)" iconColor="#10B981" accent="#10B981" />
-          <StatCard num={dueTodayTasks.length} label="Due Today" sub={dueTodayTasks.length > 0 ? 'Focus' : 'Clear'} icon="today" iconBg="#fff7ed" iconColor="#ea580c" accent={dueTodayTasks.length > 0 ? '#ea580c' : undefined} />
-          <StatCard num={dueWeekTasks.length} label="Due This Week" sub="Upcoming" icon="calendar_month" iconBg="#eff6ff" iconColor="#1D4ED8" />
+          <StatCard num={openCount} label="Open Tasks" sub={`${totalCount} total`} icon="inventory_2" iconBg="#F5F3FF" iconColor="#5e4dbb"
+            onClick={() => setDetailModal({ source: 'open', title: 'Open Tasks', icon: 'inventory_2', accent: '#5e4dbb', accentBg: '#F5F3FF' })} />
+          <StatCard num={completedCount} label="Completed" sub={completedCount > 0 ? `${pct}%` : 'Get started'} icon="check_circle" iconBg="rgba(16,185,129,0.10)" iconColor="#10B981" accent="#10B981"
+            onClick={() => setDetailModal({ source: 'completed', title: 'Completed', icon: 'check_circle', accent: '#10B981', accentBg: 'rgba(16,185,129,0.10)' })} />
+          <StatCard num={dueTodayTasks.length} label="Due Today" sub={dueTodayTasks.length > 0 ? 'Focus' : 'Clear'} icon="today" iconBg="#fff7ed" iconColor="#ea580c" accent={dueTodayTasks.length > 0 ? '#ea580c' : undefined}
+            onClick={() => setDetailModal({ source: 'today', title: 'Due Today', icon: 'today', accent: '#ea580c', accentBg: '#fff7ed' })} />
+          <StatCard num={dueWeekTasks.length} label="Due This Week" sub="Upcoming" icon="calendar_month" iconBg="#eff6ff" iconColor="#1D4ED8"
+            onClick={() => setDetailModal({ source: 'week', title: 'Due This Week', icon: 'calendar_month', accent: '#1D4ED8', accentBg: '#eff6ff' })} />
         </section>
 
         <section style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 12, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -389,10 +397,17 @@ export default function DashboardScreen() {
         </section>
       </div>
 
-      {detailModal && (
+      {detailModal && createPortal(
         <TasksDetailModal title={detailModal.title} icon={detailModal.icon} accent={detailModal.accent} accentBg={detailModal.accentBg}
-          tasks={detailModal.source === 'today' ? dueTodayTasks : detailModal.source === 'week' ? dueWeekTasks : visibleTasks}
-          onClose={() => setDetailModal(null)} onToggle={toggle} onDelete={deleteTask} onUpdate={updateTask} onRowClick={openTask} />
+          tasks={
+            detailModal.source === 'today' ? dueTodayTasks
+            : detailModal.source === 'week' ? dueWeekTasks
+            : detailModal.source === 'open' ? openTasks
+            : detailModal.source === 'completed' ? completedTasks
+            : visibleTasks
+          }
+          onClose={() => setDetailModal(null)} onToggle={toggle} onDelete={deleteTask} onUpdate={updateTask} onRowClick={openTask} />,
+        document.body
       )}
       {selectedTask && (
         <TaskDialog

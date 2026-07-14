@@ -38,6 +38,14 @@ export const APPS_REGISTRY: AppDef[] = [
     category: 'Sharing',
     accentColor: '#1D4ED8',
   },
+  {
+    id: 'mcp',
+    name: 'Claude MCP',
+    description: 'Let users connect Claude as a custom connector via OAuth, so it can see and manage their Solytiq data.',
+    icon: 'smart_toy',
+    category: 'Integrations',
+    accentColor: '#5e4dbb',
+  },
 ];
 
 export function getAppDef(appId: string): AppDef | undefined {

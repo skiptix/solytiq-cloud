@@ -10,6 +10,8 @@ import {
   instantiateListStructure,
   instantiateTimelineStructure,
   makeTaskIdGenerator,
+  normalizeTemplateListNode,
+  normalizeTemplateTimelineNode,
   todayISODate,
   type TemplateListNode,
   type TemplateTimelineNode,
@@ -209,6 +211,65 @@ router.put('/:id', async (req: Request, res: Response) => {
     broadcastToUser(req.userId!, 'template');
   } catch (err) {
     werr('templates PUT error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/templates/:id/structure — the full captured tree, owner or admin
+// only (unlike the gallery list, which only ever sends `summary` counts).
+// Powers the structure editor.
+// ---------------------------------------------------------------------------
+
+router.get('/:id/structure', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const existing = await query<{ user_id: string; type: 'list' | 'timeline'; structure: TemplateListNode | TemplateTimelineNode }>(
+      'SELECT user_id, type, structure FROM templates WHERE id = $1',
+      [id]
+    );
+    if (existing.rows.length === 0) { res.status(404).json({ error: 'Template not found' }); return; }
+    const row = existing.rows[0];
+    const isOwner = row.user_id === req.userId;
+    if (!isOwner && !req.user?.isAdmin) { res.status(404).json({ error: 'Template not found' }); return; }
+
+    res.json({ type: row.type, structure: row.structure });
+  } catch (err) {
+    werr('templates GET structure error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/templates/:id/structure — replace the captured tree (owner or
+// admin only). Structural edits: add/remove/reorder sections, tasks, and
+// milestones, and edit their fields. The submitted tree is fully re-validated
+// and re-normalized server-side rather than trusted as-is.
+// ---------------------------------------------------------------------------
+
+router.put('/:id/structure', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const existing = await query<{ user_id: string; type: 'list' | 'timeline' }>('SELECT user_id, type FROM templates WHERE id = $1', [id]);
+    if (existing.rows.length === 0) { res.status(404).json({ error: 'Template not found' }); return; }
+    const isOwner = existing.rows[0].user_id === req.userId;
+    if (!isOwner && !req.user?.isAdmin) { res.status(403).json({ error: 'Permission denied' }); return; }
+
+    const { type } = existing.rows[0];
+    const normalized = type === 'list'
+      ? normalizeTemplateListNode(req.body?.structure)
+      : normalizeTemplateTimelineNode(req.body?.structure);
+    if (!normalized) { res.status(400).json({ error: 'Invalid structure' }); return; }
+
+    const result = await query<TemplateRow>(
+      `UPDATE templates SET structure = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+      [JSON.stringify(normalized), id]
+    );
+
+    res.json({ template: sanitize(result.rows[0], req.userId!) });
+    broadcastToUser(req.userId!, 'template');
+  } catch (err) {
+    werr('templates PUT structure error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

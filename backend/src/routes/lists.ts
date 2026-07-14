@@ -312,7 +312,7 @@ router.get('/', async (req: Request, res: Response) => {
 // POST /api/lists
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { id, name, emoji, color, colorBg, subtitle, isPublic, folderId, parentTaskId, depth, workspaceId } = req.body as {
+    const { id, name, emoji, color, colorBg, subtitle, isPublic, folderId, parentTaskId, depth, workspaceId, viewMode } = req.body as {
       id?: string;
       name?: string;
       emoji?: string;
@@ -324,7 +324,9 @@ router.post('/', async (req: Request, res: Response) => {
       parentTaskId?: number;
       depth?: number;
       workspaceId?: string;
+      viewMode?: string;
     };
+    const initialViewMode = viewMode === 'kanban' ? 'kanban' : 'list';
 
     if (!name) {
       res.status(400).json({ error: 'name is required' });
@@ -353,10 +355,10 @@ router.post('/', async (req: Request, res: Response) => {
       : 0;
 
     const result = await query<ListRow>(
-      `INSERT INTO lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, folder_id, position, parent_task_id, depth, workspace_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      `INSERT INTO lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, folder_id, position, parent_task_id, depth, workspace_id, view_mode)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING *`,
-      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false, folderId ?? null, nextPos, parentTaskId ?? null, depth ?? 0, resolvedWs]
+      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false, folderId ?? null, nextPos, parentTaskId ?? null, depth ?? 0, resolvedWs, initialViewMode]
     );
 
     const persisted = result.rows[0];

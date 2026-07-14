@@ -9,12 +9,14 @@ import useSyncStore from '../store/useSyncStore';
 import Icon from '../components/Icon';
 import CreateTemplateModal from '../modals/CreateTemplateModal';
 import UseTemplateModal from '../modals/UseTemplateModal';
+import EditTemplateStructureModal from '../modals/EditTemplateStructureModal';
 
 type Filter = 'all' | 'list' | 'timeline';
 
-function TemplateCardMenu({ template, onRename, onToggleShared, onDelete }: {
+function TemplateCardMenu({ template, onRename, onEditStructure, onToggleShared, onDelete }: {
   template: Template;
   onRename: () => void;
+  onEditStructure: () => void;
   onToggleShared: () => void;
   onDelete: () => void;
 }) {
@@ -41,6 +43,11 @@ function TemplateCardMenu({ template, onRename, onToggleShared, onDelete }: {
             onMouseEnter={(e) => (e.currentTarget.style.background = '#f5f3ff')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
             <Icon name="edit" size={15} color="#787584" /> Rename
           </button>
+          <button onClick={() => { setOpen(false); onEditStructure(); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, color: '#1c1b22', textAlign: 'left' }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#f5f3ff')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+            <Icon name="account_tree" size={15} color="#787584" /> Edit structure
+          </button>
           <button onClick={() => { setOpen(false); onToggleShared(); }}
             style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, color: '#1c1b22', textAlign: 'left' }}
             onMouseEnter={(e) => (e.currentTarget.style.background = '#f5f3ff')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
@@ -59,11 +66,12 @@ function TemplateCardMenu({ template, onRename, onToggleShared, onDelete }: {
   );
 }
 
-function TemplateCard({ template, index, onUse, onRename, onToggleShared, onDelete }: {
+function TemplateCard({ template, index, onUse, onRename, onEditStructure, onToggleShared, onDelete }: {
   template: Template;
   index: number;
   onUse: () => void;
   onRename: () => void;
+  onEditStructure: () => void;
   onToggleShared: () => void;
   onDelete: () => void;
 }) {
@@ -87,7 +95,7 @@ function TemplateCard({ template, index, onUse, onRename, onToggleShared, onDele
           <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#787584' }}>{summary}</div>
         </div>
         {template.isOwner && (
-          <TemplateCardMenu template={template} onRename={onRename} onToggleShared={onToggleShared} onDelete={onDelete} />
+          <TemplateCardMenu template={template} onRename={onRename} onEditStructure={onEditStructure} onToggleShared={onToggleShared} onDelete={onDelete} />
         )}
       </div>
 
@@ -137,6 +145,7 @@ export default function TemplatesScreen() {
   const [confirmDelete, setConfirmDelete] = useState<Template | null>(null);
   const [renameTarget, setRenameTarget] = useState<Template | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [structureTarget, setStructureTarget] = useState<Template | null>(null);
 
   useEffect(() => { load(); }, [load]);
 
@@ -229,6 +238,7 @@ export default function TemplatesScreen() {
               <TemplateCard key={t.id} template={t} index={i}
                 onUse={() => setUseTarget(t)}
                 onRename={() => openRename(t)}
+                onEditStructure={() => setStructureTarget(t)}
                 onToggleShared={() => update(t.id, { isShared: !t.isShared })}
                 onDelete={() => setConfirmDelete(t)} />
             ))}
@@ -237,6 +247,10 @@ export default function TemplatesScreen() {
       </div>
 
       {showCreate && <CreateTemplateModal onClose={() => setShowCreate(false)} />}
+
+      {structureTarget && (
+        <EditTemplateStructureModal template={structureTarget} onClose={() => setStructureTarget(null)} />
+      )}
 
       {useTarget && (
         <UseTemplateModal

@@ -23,8 +23,13 @@ import { buildMcpServer } from '../mcpServer';
 import { authenticateApiToken } from '../apiToken';
 import { getPublicBaseUrl } from '../publicUrl';
 import { query } from '../db';
+import { requireAppInstalled } from '../appsRegistry';
 
 const router = Router();
+
+// Not installed (Settings → System → Discover Apps) → the endpoint doesn't
+// exist at all, same as every other optional app.
+router.use(requireAppInstalled('mcp'));
 
 function jsonRpcError(code: number, message: string) {
   return { jsonrpc: '2.0' as const, error: { code, message }, id: null };

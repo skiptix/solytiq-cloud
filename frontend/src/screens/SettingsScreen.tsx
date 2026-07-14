@@ -821,6 +821,18 @@ export default function SettingsScreen() {
                 {sectionLabel('Claude MCP Integration')}
                 <div style={{ ...card }}>
                   <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {!installedApps.includes('mcp') && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F5F3FF', border: '1px solid #e8e4f0', borderRadius: 10, padding: '10px 14px' }}>
+                        <Icon name="info" size={16} color="#5e4dbb" />
+                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#484552', flex: 1 }}>
+                          Not installed yet — this stays hidden from every user until you install it from <strong>Discover Apps</strong>.
+                        </div>
+                        <button onClick={() => setShowAppsStore(true)}
+                          style={{ flexShrink: 0, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: '#fff', border: '1px solid #ddd6f5', borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>
+                          Install
+                        </button>
+                      </div>
+                    )}
                     {/* Toggle row */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                       <div>

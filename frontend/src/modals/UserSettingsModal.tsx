@@ -73,21 +73,26 @@ type SettingsTab = 'profile' | 'preferences' | 'controls' | 'security' | 'connec
 export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   const isMobile = useMobile();
   const { username, fullName, email, profileImage, isAdmin, totpEnabled, setProfile, setTotpEnabled } = useAuthStore();
-  const { timezone, setTimezone } = useUserPrefsStore();
+  const { timezone, setTimezone, defaultListViewMode, setDefaultListViewMode } = useUserPrefsStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
 
   // Feature flags
   const [twoFAFeatureEnabled, setTwoFAFeatureEnabled] = useState(true);
   const [mcpEnabled, setMcpEnabled] = useState(true);
+  const [mcpInstalled, setMcpInstalled] = useState(false);
   const [mobileEnabled, setMobileEnabled] = useState(true);
   useEffect(() => {
     apiGetFeatureFlags().then(r => {
       setTwoFAFeatureEnabled(r.twoFAEnabled);
       setMcpEnabled(r.mcpEnabled);
+      setMcpInstalled(r.installedApps.includes('mcp'));
       setMobileEnabled(r.mobileEnabled);
     }).catch(() => {});
   }, []);
+  // Claude MCP needs both: installed (Settings → System → Discover Apps) and
+  // not killed instance-wide via the AI tab's "Enable Claude MCP" toggle.
+  const mcpVisible = mcpEnabled && mcpInstalled;
 
   // Profile image upload wizard
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -338,7 +343,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
     { id: 'preferences', label: 'Preferences', icon: 'tune' },
     { id: 'controls',    label: 'Controls',    icon: 'keyboard' },
     { id: 'security',    label: 'Security',    icon: 'shield_lock' },
-    ...(mcpEnabled ? [{ id: 'connections' as SettingsTab, label: 'Connections', icon: 'smart_toy' }] : []),
+    ...(mcpVisible ? [{ id: 'connections' as SettingsTab, label: 'Connections', icon: 'smart_toy' }] : []),
     ...(mobileEnabled ? [{ id: 'mobile' as SettingsTab, label: 'Mobile', icon: 'smartphone' }] : []),
     { id: 'calendar',    label: 'Calendar Sync', icon: 'event_available' },
   ];
@@ -539,6 +544,23 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 8 }}>
                     <Icon name="schedule" size={12} color="#9d8dff" />
                     <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#9d8dff' }}>Current: {timezone}</span>
+                  </div>
+                </div>
+                <div style={{ height: 1, background: '#f1ecf6' }} />
+                <div style={{ padding: '14px 18px' }}>
+                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Default To-Do View</div>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginBottom: 10, lineHeight: 1.5 }}>
+                    Layout new to-dos start in. Existing to-dos keep whatever view they're already set to.
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    {(['list', 'kanban'] as const).map(v => (
+                      <button key={v} onClick={() => setDefaultListViewMode(v)}
+                        style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${defaultListViewMode === v ? '#5e4dbb' : '#E5E7EB'}`, background: defaultListViewMode === v ? '#F5F3FF' : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 150ms' }}>
+                        <Icon name={v === 'list' ? 'format_list_bulleted' : 'view_kanban'} size={16} color={defaultListViewMode === v ? '#5e4dbb' : '#787584'} />
+                        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: defaultListViewMode === v ? '#5e4dbb' : '#787584' }}>{v === 'list' ? 'List' : 'Kanban'}</span>
+                        {defaultListViewMode === v && <Icon name="check" size={14} color="#5e4dbb" />}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -810,7 +832,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
             )}
 
             {/* ── CONNECTIONS (Claude MCP) ── */}
-            {activeTab === 'connections' && mcpEnabled && (
+            {activeTab === 'connections' && mcpVisible && (
             <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
               {sectionLabel('Claude MCP')}
               <ClaudeMcpSection />

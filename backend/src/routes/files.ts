@@ -23,10 +23,9 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 200 * 1024 * 1024 },
-});
+// No per-file size limit — a single upload is bounded only by the uploading
+// user's remaining storage quota (checked below), not an arbitrary file cap.
+const upload = multer({ storage });
 
 const router = Router();
 
