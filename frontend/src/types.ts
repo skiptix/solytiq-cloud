@@ -360,6 +360,8 @@ export interface AutomationParamProperty {
   description: string;
   optional?: boolean;
   isListId?: boolean;
+  isFolderId?: boolean;
+  isWorkspaceId?: boolean;
   enum?: string[];
 }
 
@@ -439,17 +441,18 @@ export interface AutomationRun {
   status: 'running' | 'success' | 'failed';
   steps: AutomationRunStep[];
   error: string | null;
+  isTest: boolean;
   startedAt: string;
   finishedAt: string | null;
 }
 
-export interface AutomationNotification {
-  id: string;
-  automationId: string;
+/** Result of a manual per-node test run (POST /api/automations/:id/test) — a
+ *  real run, same shape as a persisted AutomationRun minus timestamps. */
+export interface AutomationRunResult {
   runId: string;
-  message: string;
-  readAt: string | null;
-  createdAt: string;
+  status: 'success' | 'failed';
+  steps: AutomationRunStep[];
+  error: string | null;
 }
 
 export interface AIFile {

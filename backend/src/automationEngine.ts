@@ -55,6 +55,13 @@ interface RunStep {
   error?: string;
 }
 
+export interface RunResult {
+  runId: string;
+  status: 'success' | 'failed';
+  steps: RunStep[];
+  error: string | null;
+}
+
 function alog(...args: unknown[]): void {
   console.log('⚡', ...args);
 }
@@ -99,19 +106,27 @@ export async function fireTrigger(type: TriggerTypeId, ctx: TriggerContext, acto
  * Executes one automation's action chain for a single trigger event. Never
  * throws — every failure path is recorded on the automation_runs row instead,
  * so this is safe to call fire-and-forget (fireTrigger) or awaited in a loop
- * (the schedule sweep).
+ * (the schedule sweep) or awaited directly for its result (the manual
+ * per-node test endpoint, `is_test=true`, which builds its own truncated
+ * `graph` — only `id`/`workspace_id`/`user_id`/`graph` are ever read here).
  */
-export async function runAutomation(automation: AutomationRow, triggerType: string, ctx: TriggerContext): Promise<void> {
+export async function runAutomation(
+  automation: Pick<AutomationRow, 'id' | 'workspace_id' | 'user_id' | 'graph'>,
+  triggerType: string,
+  ctx: TriggerContext,
+  options: { isTest?: boolean } = {}
+): Promise<RunResult> {
   const runId = `run_${uuidv4()}`;
+  const isTest = options.isTest ?? false;
 
   try {
     await query(
-      `INSERT INTO automation_runs (id, automation_id, workspace_id, trigger_type, trigger_context) VALUES ($1, $2, $3, $4, $5)`,
-      [runId, automation.id, automation.workspace_id, triggerType, JSON.stringify(ctx)]
+      `INSERT INTO automation_runs (id, automation_id, workspace_id, trigger_type, trigger_context, is_test) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [runId, automation.id, automation.workspace_id, triggerType, JSON.stringify(ctx), isTest]
     );
   } catch (err) {
     aerr('failed to create automation_runs row', automation.id, err);
-    return;
+    return { runId, status: 'failed', steps: [], error: 'Failed to create the run record' };
   }
 
   const steps: RunStep[] = [];
@@ -144,7 +159,8 @@ export async function runAutomation(automation: AutomationRow, triggerType: stri
     });
 
     await query(`UPDATE automation_runs SET status = 'success', steps = $1, finished_at = NOW() WHERE id = $2`, [JSON.stringify(steps), runId]);
-    alog(`run ✓ automation=${automation.id} trigger=${triggerType} steps=${steps.length}`);
+    alog(`run ✓ automation=${automation.id} trigger=${triggerType} steps=${steps.length}${isTest ? ' (test)' : ''}`);
+    return { runId, status: 'success', steps, error: null };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     aerr(`run ✗ automation=${automation.id} trigger=${triggerType}:`, message);
@@ -153,6 +169,7 @@ export async function runAutomation(automation: AutomationRow, triggerType: stri
     } catch (err2) {
       aerr('failed to record automation_runs failure', automation.id, err2);
     }
+    return { runId, status: 'failed', steps, error: message };
   }
 }
 

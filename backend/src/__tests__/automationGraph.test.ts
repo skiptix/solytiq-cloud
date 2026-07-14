@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { normalizeAutomationGraph, assertGraphListsInWorkspace, type AutomationGraph, type AutomationNode } from '../automationGraph';
+import { normalizeAutomationGraph, assertGraphRefsInWorkspace, assertGraphWorkspaceRefsAccessible, type AutomationGraph, type AutomationNode } from '../automationGraph';
 import type { QueryExec } from '../workspaceUtil';
 
 function trigger(type: string, params: Record<string, unknown> = {}): AutomationNode {
@@ -28,7 +28,7 @@ describe('normalizeAutomationGraph', () => {
       version: 1,
       nodes: [
         trigger('task_completed', { listId: 'list_1' }),
-        action('a1', 'notify', { message: 'hi' }),
+        action('a1', 'rename_list', { newName: 'x' }),
         action('a2', 'delete_task'),
       ],
       edges: [edge('e1', 't1', 'a1'), edge('e2', 'a1', 'a2')],
@@ -42,7 +42,7 @@ describe('normalizeAutomationGraph', () => {
   });
 
   it('rejects a graph with zero trigger nodes', () => {
-    const graph: AutomationGraph = { version: 1, nodes: [action('a1', 'notify', { message: 'hi' })], edges: [] };
+    const graph: AutomationGraph = { version: 1, nodes: [action('a1', 'rename_list', { newName: 'x' })], edges: [] };
     const result = normalizeAutomationGraph(graph);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/exactly one trigger/);
@@ -51,7 +51,7 @@ describe('normalizeAutomationGraph', () => {
   it('rejects a graph with two trigger nodes', () => {
     const graph: AutomationGraph = {
       version: 1,
-      nodes: [trigger('task_completed'), { ...trigger('task_created'), id: 't2' }, action('a1', 'notify', { message: 'hi' })],
+      nodes: [trigger('task_completed'), { ...trigger('task_created'), id: 't2' }, action('a1', 'rename_list', { newName: 'x' })],
       edges: [edge('e1', 't1', 'a1'), edge('e2', 't2', 'a1')],
     };
     const result = normalizeAutomationGraph(graph);
@@ -64,7 +64,7 @@ describe('normalizeAutomationGraph', () => {
       version: 1,
       nodes: [
         trigger('task_completed', { listId: 'list_1' }),
-        action('a1', 'notify', { message: 'hi' }),
+        action('a1', 'rename_list', { newName: 'x' }),
         action('a2', 'delete_task'),
         action('a3', 'delete_task'),
       ],
@@ -79,7 +79,7 @@ describe('normalizeAutomationGraph', () => {
   it('rejects a cycle', () => {
     const graph: AutomationGraph = {
       version: 1,
-      nodes: [trigger('task_completed', { listId: 'list_1' }), action('a1', 'notify', { message: 'hi' }), action('a2', 'delete_task')],
+      nodes: [trigger('task_completed', { listId: 'list_1' }), action('a1', 'rename_list', { newName: 'x' }), action('a2', 'delete_task')],
       // a1 -> a2 -> a1 forms a cycle; still nodes.length - 1 = 2 edges, so it
       // passes the edge-count check and must be caught by the chain walk.
       edges: [edge('e1', 't1', 'a1'), edge('e2', 'a2', 'a1')],
@@ -91,7 +91,7 @@ describe('normalizeAutomationGraph', () => {
   it('rejects an unknown trigger type', () => {
     const graph: AutomationGraph = {
       version: 1,
-      nodes: [trigger('not_a_real_trigger'), action('a1', 'notify', { message: 'hi' })],
+      nodes: [trigger('not_a_real_trigger'), action('a1', 'rename_list', { newName: 'x' })],
       edges: [edge('e1', 't1', 'a1')],
     };
     const result = normalizeAutomationGraph(graph);
@@ -135,7 +135,7 @@ describe('normalizeAutomationGraph', () => {
   it('rejects a malformed schedule trigger (bad time format)', () => {
     const graph: AutomationGraph = {
       version: 1,
-      nodes: [trigger('schedule', { freq: 'daily', time: '9am' }), action('a1', 'notify', { message: 'hi' })],
+      nodes: [trigger('schedule', { freq: 'daily', time: '9am' }), action('a1', 'rename_list', { newName: 'x' })],
       edges: [edge('e1', 't1', 'a1')],
     };
     const result = normalizeAutomationGraph(graph);
@@ -144,7 +144,7 @@ describe('normalizeAutomationGraph', () => {
   });
 });
 
-describe('assertGraphListsInWorkspace', () => {
+describe('assertGraphRefsInWorkspace', () => {
   it('passes when every referenced list belongs to the automation\'s workspace', async () => {
     const graph: AutomationGraph = {
       version: 1,
@@ -152,7 +152,7 @@ describe('assertGraphListsInWorkspace', () => {
       edges: [edge('e1', 't1', 'a1')],
     };
     const { exec } = makeExec([[{ workspace_id: 'ws_1' }], [{ workspace_id: 'ws_1' }]]);
-    const error = await assertGraphListsInWorkspace(exec, graph, 'ws_1');
+    const error = await assertGraphRefsInWorkspace(exec, graph, 'ws_1');
     expect(error).toBeNull();
   });
 
@@ -163,7 +163,7 @@ describe('assertGraphListsInWorkspace', () => {
       edges: [edge('e1', 't1', 'a1')],
     };
     const { exec } = makeExec([[{ workspace_id: 'ws_1' }], [{ workspace_id: 'ws_OTHER' }]]);
-    const error = await assertGraphListsInWorkspace(exec, graph, 'ws_1');
+    const error = await assertGraphRefsInWorkspace(exec, graph, 'ws_1');
     expect(error).toMatch(/not in this automation's workspace/);
   });
 
@@ -174,7 +174,54 @@ describe('assertGraphListsInWorkspace', () => {
       edges: [edge('e1', 't1', 'a1')],
     };
     const { exec } = makeExec([[]]);
-    const error = await assertGraphListsInWorkspace(exec, graph, 'ws_1');
+    const error = await assertGraphRefsInWorkspace(exec, graph, 'ws_1');
     expect(error).toMatch(/does not exist/);
+  });
+
+  it('rejects a targetFolderId belonging to a different workspace (IDOR guard)', async () => {
+    const graph: AutomationGraph = {
+      version: 1,
+      nodes: [trigger('task_completed', { listId: 'list_1' }), action('a1', 'move_list', { targetFolderId: 'folder_evil' })],
+      edges: [edge('e1', 't1', 'a1')],
+    };
+    const { exec } = makeExec([[{ workspace_id: 'ws_1' }], [{ workspace_id: 'ws_OTHER' }]]);
+    const error = await assertGraphRefsInWorkspace(exec, graph, 'ws_1');
+    expect(error).toMatch(/Folder folder_evil is not in this automation's workspace/);
+  });
+
+  it('passes a valid targetFolderId in the same workspace', async () => {
+    const graph: AutomationGraph = {
+      version: 1,
+      nodes: [trigger('task_completed', { listId: 'list_1' }), action('a1', 'move_list', { targetFolderId: 'folder_1' })],
+      edges: [edge('e1', 't1', 'a1')],
+    };
+    const { exec } = makeExec([[{ workspace_id: 'ws_1' }], [{ workspace_id: 'ws_1' }]]);
+    const error = await assertGraphRefsInWorkspace(exec, graph, 'ws_1');
+    expect(error).toBeNull();
+  });
+});
+
+describe('assertGraphWorkspaceRefsAccessible', () => {
+  it('passes when the creator can access the target workspace', async () => {
+    const graph: AutomationGraph = {
+      version: 1,
+      nodes: [trigger('task_completed', { listId: 'list_1' }), action('a1', 'move_list_to_workspace', { targetWorkspaceId: 'ws_2' })],
+      edges: [edge('e1', 't1', 'a1')],
+    };
+    const canAccess = vi.fn().mockResolvedValue(true);
+    const error = await assertGraphWorkspaceRefsAccessible(graph, 'user_1', canAccess);
+    expect(error).toBeNull();
+    expect(canAccess).toHaveBeenCalledWith('user_1', 'ws_2');
+  });
+
+  it('rejects a targetWorkspaceId the creator cannot access', async () => {
+    const graph: AutomationGraph = {
+      version: 1,
+      nodes: [trigger('task_completed', { listId: 'list_1' }), action('a1', 'move_list_to_workspace', { targetWorkspaceId: 'ws_evil' })],
+      edges: [edge('e1', 't1', 'a1')],
+    };
+    const canAccess = vi.fn().mockResolvedValue(false);
+    const error = await assertGraphWorkspaceRefsAccessible(graph, 'user_1', canAccess);
+    expect(error).toMatch(/do not have access/);
   });
 });

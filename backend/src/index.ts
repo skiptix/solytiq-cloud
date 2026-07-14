@@ -1431,10 +1431,14 @@ async function runMigrations() {
       status          VARCHAR(20) NOT NULL DEFAULT 'running',
       steps           JSONB NOT NULL DEFAULT '[]'::jsonb,
       error           TEXT,
+      is_test         BOOLEAN NOT NULL DEFAULT FALSE,
       started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       finished_at     TIMESTAMPTZ
     )
   `);
+  // Manually triggered from the editor's per-node "Test" button — a real run
+  // (same engine, real side effects) tagged so Run History can label it.
+  await pool.query(`ALTER TABLE automation_runs ADD COLUMN IF NOT EXISTS is_test BOOLEAN NOT NULL DEFAULT FALSE`);
   await pool.query(`CREATE INDEX IF NOT EXISTS automation_runs_automation_idx ON automation_runs (automation_id, started_at DESC)`);
 
   await pool.query(`
