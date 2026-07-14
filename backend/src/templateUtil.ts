@@ -89,6 +89,124 @@ export interface TemplateTimelineNode {
 }
 
 // ---------------------------------------------------------------------------
+// Normalize + validate a client-submitted structure tree before persisting it
+// (PUT /api/templates/:id/structure). Recomputes `position` from array order
+// rather than trusting client-supplied integers, coerces every field to its
+// expected type/default, and returns null on any structural violation (e.g.
+// a missing title) so the caller can 400 instead of writing garbage.
+// ---------------------------------------------------------------------------
+
+const VALID_PRIORITIES = new Set(['High', 'Medium', 'Low']);
+const VALID_MILESTONE_STATUS = new Set(['upcoming', 'in-progress', 'done']);
+
+function normalizeAttachmentRefs(input: unknown): TemplateAttachmentRef[] {
+  if (!Array.isArray(input)) return [];
+  const out: TemplateAttachmentRef[] = [];
+  for (const a of input) {
+    if (a && typeof a === 'object' && typeof (a as Record<string, unknown>).sharedFileId === 'string') {
+      const title = (a as Record<string, unknown>).title;
+      out.push({ sharedFileId: (a as Record<string, unknown>).sharedFileId as string, title: typeof title === 'string' ? title : 'file' });
+    }
+  }
+  return out;
+}
+
+export function normalizeTemplateListNode(input: unknown, depth = 0): TemplateListNode | null {
+  if (depth > MAX_SUBLIST_DEPTH) return null;
+  if (!input || typeof input !== 'object') return null;
+  const n = input as Record<string, unknown>;
+  if (typeof n.name !== 'string' || !n.name.trim()) return null;
+  if (!Array.isArray(n.sections)) return null;
+
+  const sections: TemplateSectionNode[] = [];
+  for (let si = 0; si < n.sections.length; si++) {
+    const s = n.sections[si] as Record<string, unknown>;
+    if (!s || typeof s.label !== 'string' || !s.label.trim()) return null;
+    if (!Array.isArray(s.tasks)) return null;
+
+    const tasks: TemplateTaskNode[] = [];
+    for (let ti = 0; ti < s.tasks.length; ti++) {
+      const t = s.tasks[ti] as Record<string, unknown>;
+      if (!t || typeof t.title !== 'string' || !t.title.trim()) return null;
+
+      let sublist: TemplateListNode | undefined;
+      if (t.sublist != null) {
+        const normSub = normalizeTemplateListNode(t.sublist, depth + 1);
+        if (!normSub) return null;
+        sublist = normSub;
+      }
+
+      tasks.push({
+        title: t.title.trim(),
+        note: typeof t.note === 'string' ? t.note : null,
+        noteMarkdown: t.noteMarkdown === true,
+        priority: typeof t.priority === 'string' && VALID_PRIORITIES.has(t.priority) ? t.priority : null,
+        badge: typeof t.badge === 'string' ? t.badge : null,
+        position: ti,
+        deadlineOffsetDays: typeof t.deadlineOffsetDays === 'number' && Number.isFinite(t.deadlineOffsetDays) ? Math.round(t.deadlineOffsetDays) : null,
+        timeVal: typeof t.timeVal === 'string' ? t.timeVal : null,
+        attachments: normalizeAttachmentRefs(t.attachments),
+        ...(sublist ? { sublist } : {}),
+      });
+    }
+
+    sections.push({
+      label: s.label.trim(),
+      emoji: typeof s.emoji === 'string' ? s.emoji : null,
+      position: si,
+      tasks,
+    });
+  }
+
+  return {
+    version: 1,
+    name: n.name.trim(),
+    emoji: typeof n.emoji === 'string' ? n.emoji : null,
+    color: typeof n.color === 'string' ? n.color : null,
+    colorBg: typeof n.colorBg === 'string' ? n.colorBg : null,
+    isPublic: n.isPublic === true,
+    sections,
+  };
+}
+
+export function normalizeTemplateTimelineNode(input: unknown): TemplateTimelineNode | null {
+  if (!input || typeof input !== 'object') return null;
+  const n = input as Record<string, unknown>;
+  if (typeof n.name !== 'string' || !n.name.trim()) return null;
+  if (!Array.isArray(n.milestones)) return null;
+
+  const milestones: TemplateMilestoneNode[] = [];
+  for (let mi = 0; mi < n.milestones.length; mi++) {
+    const m = n.milestones[mi] as Record<string, unknown>;
+    if (!m || typeof m.title !== 'string' || !m.title.trim()) return null;
+
+    milestones.push({
+      title: m.title.trim(),
+      description: typeof m.description === 'string' ? m.description : null,
+      descriptionMarkdown: m.descriptionMarkdown === true,
+      status: typeof m.status === 'string' && VALID_MILESTONE_STATUS.has(m.status) ? m.status : 'upcoming',
+      emoji: typeof m.emoji === 'string' ? m.emoji : null,
+      color: typeof m.color === 'string' ? m.color : null,
+      position: mi,
+      dateOffsetDays: typeof m.dateOffsetDays === 'number' && Number.isFinite(m.dateOffsetDays) ? Math.round(m.dateOffsetDays) : null,
+      timeVal: typeof m.timeVal === 'string' ? m.timeVal : null,
+      attachments: normalizeAttachmentRefs(m.attachments),
+    });
+  }
+
+  return {
+    version: 1,
+    name: n.name.trim(),
+    emoji: typeof n.emoji === 'string' ? n.emoji : null,
+    color: typeof n.color === 'string' ? n.color : null,
+    colorBg: typeof n.colorBg === 'string' ? n.colorBg : null,
+    isPublic: n.isPublic === true,
+    layout: typeof n.layout === 'string' ? n.layout : 'vertical',
+    milestones,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Date helpers — day-only offsets, independent of time zone drift within a day.
 // ---------------------------------------------------------------------------
 

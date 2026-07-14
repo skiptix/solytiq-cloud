@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -1230,3 +1230,10 @@ export const apiDeleteTemplate = (id: string) =>
 
 export const apiUseTemplate = (id: string, data: { name?: string; isPublic?: boolean; workspaceId?: string; folderId?: string }) =>
   apiFetch<{ list?: List; timeline?: Timeline }>(`/templates/${id}/use`, { method: 'POST', body: JSON.stringify(data) });
+
+// Full structure (owner/admin only) — powers the structure editor.
+export const apiGetTemplateStructure = (id: string) =>
+  apiFetch<{ type: 'list' | 'timeline'; structure: TemplateListNode | TemplateTimelineNode }>(`/templates/${id}/structure`);
+
+export const apiUpdateTemplateStructure = (id: string, structure: TemplateListNode | TemplateTimelineNode) =>
+  apiFetch<{ template: Template }>(`/templates/${id}/structure`, { method: 'PUT', body: JSON.stringify({ structure }) });

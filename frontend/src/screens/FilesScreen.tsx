@@ -151,7 +151,7 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true, initialFile
           >
             <Icon name="cloud_upload" size={36} color={dragOver ? '#5e4dbb' : '#9ca3af'} />
             <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22', textAlign: 'center' }}>Choose files or drag & drop them here.</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#9ca3af', textAlign: 'center' }}>JPEG, PNG, PDF, MP4 and more, up to 200 MB.</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#9ca3af', textAlign: 'center' }}>JPEG, PNG, PDF, MP4 and more — no per-file limit.</div>
             <button
               onClick={e => { e.stopPropagation(); inputRef.current?.click(); }}
               style={{ marginTop: 4, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', background: 'transparent', border: '1.5px solid #E5E7EB', borderRadius: 99, padding: '7px 20px', cursor: 'pointer' }}
@@ -737,7 +737,7 @@ export default function FilesScreen() {
           >
             <Icon name="cloud_upload" size={40} color={pageDragOver ? '#5e4dbb' : '#d1d5db'} />
             <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22' }}>Drop files here or click to upload</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>JPEG, PNG, PDF, MP4 and more · up to 50 MB per file</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>JPEG, PNG, PDF, MP4 and more · no per-file limit, just your storage quota</div>
           </div>
         </div>
 

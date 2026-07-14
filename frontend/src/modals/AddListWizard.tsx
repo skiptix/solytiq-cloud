@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { List } from '../types';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
+import useUserPrefsStore from '../store/useUserPrefsStore';
 import { apiCreateList, apiCreateSection } from '../api/client';
 import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
@@ -32,6 +33,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
 
   const { setLists, loadFromApi } = useAppStore();
   const currentWorkspaceId = useWorkspaceStore(s => s.currentWorkspaceId);
+  const defaultListViewMode = useUserPrefsStore(s => s.defaultListViewMode);
   const selectedColor = COLORS[colorIdx];
 
   const addSection = () => {
@@ -46,7 +48,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
     setCreateError('');
     try {
       const listId = `list_${Date.now()}`;
-      const res = await apiCreateList({ id: listId, name: name.trim(), emoji, isPublic, color: selectedColor.color, colorBg: selectedColor.bg, subtitle: subtitle.trim() || undefined, workspaceId: currentWorkspaceId ?? undefined });
+      const res = await apiCreateList({ id: listId, name: name.trim(), emoji, isPublic, color: selectedColor.color, colorBg: selectedColor.bg, subtitle: subtitle.trim() || undefined, workspaceId: currentWorkspaceId ?? undefined, viewMode: defaultListViewMode });
       const createdList = res.list;
       // Add an optimistic placeholder so the list appears immediately
       setLists(prev => [...prev, { ...createdList, sections: [] }]);

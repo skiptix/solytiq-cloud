@@ -282,6 +282,69 @@ export interface Template {
   summary: { sectionCount?: number; taskCount?: number; milestoneCount?: number };
 }
 
+// Full captured tree — only fetched when editing a template's structure
+// (GET/PUT /api/templates/:id/structure), never included in the gallery list.
+// Dates are day-offsets relative to "today", not absolute — see backend
+// templateUtil.ts.
+export interface TemplateAttachmentRef {
+  sharedFileId: string;
+  title: string;
+}
+
+export interface TemplateTaskNode {
+  title: string;
+  note: string | null;
+  noteMarkdown?: boolean;
+  priority: string | null;
+  badge: string | null;
+  position: number;
+  deadlineOffsetDays: number | null;
+  timeVal: string | null;
+  attachments: TemplateAttachmentRef[];
+  sublist?: TemplateListNode;
+}
+
+export interface TemplateSectionNode {
+  label: string;
+  emoji: string | null;
+  position: number;
+  tasks: TemplateTaskNode[];
+}
+
+export interface TemplateListNode {
+  version: 1;
+  name: string;
+  emoji: string | null;
+  color: string | null;
+  colorBg: string | null;
+  isPublic: boolean;
+  sections: TemplateSectionNode[];
+}
+
+export interface TemplateMilestoneNode {
+  title: string;
+  description: string | null;
+  descriptionMarkdown?: boolean;
+  status: string;
+  emoji: string | null;
+  color: string | null;
+  position: number;
+  dateOffsetDays: number | null;
+  timeVal: string | null;
+  attachments: TemplateAttachmentRef[];
+}
+
+export interface TemplateTimelineNode {
+  version: 1;
+  name: string;
+  emoji: string | null;
+  color: string | null;
+  colorBg: string | null;
+  isPublic: boolean;
+  layout: string;
+  milestones: TemplateMilestoneNode[];
+}
+
 export interface AIFile {
   id: string;
   filename: string;
