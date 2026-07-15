@@ -38,6 +38,7 @@ import GPSEditScreen from './screens/GPSEditScreen';
 import SharePage from './screens/SharePage';
 import SharedListPage from './screens/SharedListPage';
 import SharedTimelinePage from './screens/SharedTimelinePage';
+import SharedMarkdownListPage from './screens/SharedMarkdownListPage';
 import SettingsScreen from './screens/SettingsScreen';
 import FolderDashboardScreen from './screens/FolderDashboardScreen';
 import TemplatesScreen from './screens/TemplatesScreen';
@@ -457,6 +458,7 @@ export default function App() {
     <Routes>
       <Route path="/share/list/:token" element={<SharedListPage />} />
       <Route path="/share/timeline/:token" element={<SharedTimelinePage />} />
+      <Route path="/share/markdown-list/:token" element={<SharedMarkdownListPage />} />
       <Route path="/share/:token" element={<SharePage />} />
       <Route path="/oauth/consent" element={loggedIn ? <OAuthConsentScreen /> : <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />} />
       <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : <LoginScreen />} />

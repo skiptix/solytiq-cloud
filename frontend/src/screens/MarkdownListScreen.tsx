@@ -8,7 +8,20 @@ import type {
 import useMarkdownListsStore from '../store/useMarkdownListsStore';
 import { useMobile } from '../hooks/useBreakpoint';
 import Icon from '../components/Icon';
-import { apiUploadMarkdownImage, markdownImageUrl } from '../api/client';
+import { renderInline } from '../components/MarkdownView';
+import { toggleWrap, formatMarkerForKeyDown } from '../utils/textFormatting';
+import { apiUploadMarkdownImage, markdownImageUrl, type ShareInfo } from '../api/client';
+import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSettingsModal';
+
+// Matches TaskItem.tsx's hand-drawn checkmark so a `/todo` block's checkbox
+// looks identical to a task row in the To-Do screen.
+function Checkmark() {
+  return (
+    <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
+      <path d="M1 4.5L4 7.5L10 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 // ── Slash commands ───────────────────────────────────────────────────────────
 interface SlashCommand {
@@ -138,7 +151,11 @@ export default function MarkdownListScreen() {
   const [mdId, setMdId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [emoji, setEmoji] = useState<string | undefined>(undefined);
+  const [color, setColor] = useState<string | undefined>(undefined);
   const [subtitle, setSubtitle] = useState<string | undefined>(undefined);
+  const [isPublic, setIsPublic] = useState(false);
+  const [shareInfo, setShareInfo] = useState<{ enabled?: boolean; token?: string | null; hasPassword?: boolean; expiresAt?: string | null }>({});
+  const [showSettings, setShowSettings] = useState(false);
   const [todoListId, setTodoListId] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<MarkdownBlock[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,6 +170,11 @@ export default function MarkdownListScreen() {
   const [linkEditingBlockId, setLinkEditingBlockId] = useState<string | null>(null);
   const [linkDraft, setLinkDraft] = useState({ url: '', title: '', description: '' });
   const [dragBlockId, setDragBlockId] = useState<string | null>(null);
+  const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
+  // Which block currently shows a raw, editable textarea. Every other
+  // text-bearing block shows its formatted (bold/italic/strikethrough)
+  // rendering instead — click it to switch into edit mode.
+  const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
 
   const blockRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -167,9 +189,18 @@ export default function MarkdownListScreen() {
       setMdId(md.id);
       setName(md.name);
       setEmoji(md.emoji);
+      setColor(md.color);
       setSubtitle(md.subtitle ?? undefined);
+      setIsPublic(Boolean(md.isPublic));
+      setShareInfo({ enabled: md.shareEnabled, token: md.shareToken, hasPassword: md.shareHasPassword, expiresAt: md.shareExpiresAt });
       setTodoListId(md.todoListId ?? null);
-      setBlocks(md.content.blocks.length > 0 ? md.content.blocks : [makeEmptyBlock('paragraph')]);
+      const initialBlocks = md.content.blocks.length > 0 ? md.content.blocks : [makeEmptyBlock('paragraph')];
+      setBlocks(initialBlocks);
+      // A brand-new, still-empty document opens ready to type into; an
+      // existing document opens fully in its formatted, read-at-a-glance form.
+      if (initialBlocks.length === 1 && hasText(initialBlocks[0]) && initialBlocks[0].text === '') {
+        setFocusedBlockId(initialBlocks[0].id);
+      }
       setLoading(false);
     }).catch(() => {
       if (!cancelled) { setNotFound(true); setLoading(false); }
@@ -224,17 +255,31 @@ export default function MarkdownListScreen() {
     });
   }, [scheduleSave]);
 
-  // Focuses a block's textarea immediately (no requestAnimationFrame — that
-  // left a race window where a fast typist's next keystroke could land on the
-  // still-focused PREVIOUS block before the browser painted the new one).
-  // Safe to call right after a plain (non-flushSync) state update for blocks
-  // that already existed before the update (e.g. the block being focused
-  // after a deletion) since their DOM node/ref is untouched by the change.
-  // For NEWLY CREATED blocks, the caller must flush the state update via
-  // flushSync first so the new textarea's ref is already populated.
+  // Switches a block into edit mode (raw textarea, vs. its formatted preview)
+  // and focuses it, synchronously. `flushSync` matters twice over here: for a
+  // block that's currently showing its formatted preview, setting
+  // `focusedBlockId` doesn't render the textarea until React commits — without
+  // flushSync the ref wouldn't exist yet when `.focus()` runs below. And for a
+  // NEWLY CREATED block, the caller must have already flushSync'd its own
+  // insertion into `blocks` first (see addBlockAfter) so this block exists in
+  // the tree at all before this function's own flush tries to focus it —
+  // otherwise a fast typist's next keystroke could land on the still-focused
+  // PREVIOUS block before the browser paints the new one.
   const focusBlock = (blockId: string, atEnd = true) => {
+    flushSync(() => setFocusedBlockId(blockId));
     const el = blockRefs.current[blockId];
     if (el) { el.focus(); if (atEnd) { const len = el.value.length; el.setSelectionRange(len, len); } }
+  };
+
+  const applyFormatToBlock = (block: TextBlock, marker: '**' | '*' | '~~', el: HTMLTextAreaElement) => {
+    const { next, selStart, selEnd } = toggleWrap(block.text, el.selectionStart ?? 0, el.selectionEnd ?? 0, marker);
+    updateBlockText(block.id, next);
+    requestAnimationFrame(() => {
+      const now = blockRefs.current[block.id];
+      if (!now) return;
+      now.focus();
+      now.setSelectionRange(selStart, selEnd);
+    });
   };
 
   const addBlockAfter = (afterId: string, block: MarkdownBlock) => {
@@ -344,6 +389,8 @@ export default function MarkdownListScreen() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>, block: MarkdownBlock, index: number) => {
+    const formatMarker = formatMarkerForKeyDown(e);
+    if (formatMarker && hasText(block)) { e.preventDefault(); applyFormatToBlock(block, formatMarker, e.currentTarget); return; }
     if (slashMenu?.blockId === block.id) {
       if (e.key === 'Escape') { e.preventDefault(); setSlashMenu(null); return; }
       if (e.key === 'Enter') {
@@ -389,6 +436,18 @@ export default function MarkdownListScreen() {
     if (!mdId) return;
     void remove(mdId);
     navigate('/dashboard');
+  };
+
+  const handleSettingsChange = (updates: ItemSettingsUpdates) => {
+    if (!mdId) return;
+    if (updates.emoji !== undefined) setEmoji(updates.emoji);
+    if (updates.color !== undefined) setColor(updates.color);
+    if (updates.isPublic !== undefined) setIsPublic(updates.isPublic);
+    // Markdown lists don't expose the Folder tab (no folder-nesting UI yet),
+    // so `folderId` never actually arrives here in practice — the cast just
+    // satisfies ItemSettingsUpdates' shared shape (folderId: string | null)
+    // against the store's Partial<MarkdownList> (folderId?: string).
+    void update(mdId, updates as Parameters<typeof update>[1]);
   };
 
   if (loading) {
@@ -447,6 +506,10 @@ export default function MarkdownListScreen() {
                       <Icon name="check_circle" size={16} color="#787584" /> View Todo list
                     </button>
                   )}
+                  <button onClick={() => { setMenuOpen(false); setShowSettings(true); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, color: '#1c1b22', textAlign: 'left' }}>
+                    <Icon name="tune" size={16} color="#787584" /> More settings…
+                  </button>
                   <button onClick={() => { setMenuOpen(false); setShowDeleteDialog(true); }}
                     style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, color: '#ba1a1a', textAlign: 'left' }}>
                     <Icon name="delete" size={16} color="#ba1a1a" /> Delete
@@ -459,32 +522,48 @@ export default function MarkdownListScreen() {
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: saveState === 'error' ? '#ba1a1a' : '#b0acbe', marginBottom: 24, height: 14 }}>{saveLabel}</div>
 
         {/* Blocks */}
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {blocks.map((block, index) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {blocks.map((block, index) => {
+            const hovered = hoveredBlockId === block.id;
+            return (
             <div key={block.id}
-              draggable
-              onDragStart={() => setDragBlockId(block.id)}
+              onMouseEnter={() => setHoveredBlockId(block.id)}
+              onMouseLeave={() => setHoveredBlockId(prev => prev === block.id ? null : prev)}
               onDragOver={e => e.preventDefault()}
               onDrop={e => { e.preventDefault(); if (dragBlockId && dragBlockId !== block.id) moveBlock(dragBlockId, block.id); setDragBlockId(null); }}
-              style={{ position: 'relative', display: 'flex', alignItems: block.type === 'todo' ? 'flex-start' : 'stretch', gap: 6, padding: '3px 0', borderRadius: 6 }}
-              className="md-block-row">
-              <span className="md-block-handle" style={{ cursor: 'grab', flexShrink: 0, width: 15, overflow: 'hidden', display: 'flex', alignItems: 'center', paddingTop: 8, opacity: 0, transition: 'opacity 120ms' }}>
+              style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+              <span
+                draggable
+                onDragStart={() => setDragBlockId(block.id)}
+                title="Drag to reorder"
+                style={{ cursor: 'grab', flexShrink: 0, width: 15, overflow: 'hidden', display: 'flex', alignItems: 'center', paddingTop: 12, opacity: hovered ? 1 : 0, transition: 'opacity 120ms' }}>
                 <Icon name="drag_indicator" size={15} color="#c9c4d5" />
               </span>
 
-              <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+              <div style={{
+                flex: 1, minWidth: 0, position: 'relative',
+                background: block.type === 'divider' ? 'transparent' : '#F9FAFB',
+                border: block.type === 'divider' ? 'none' : '1px solid #E5E7EB',
+                borderRadius: 10,
+                padding: block.type === 'divider' ? '4px 14px' : block.type === 'image' ? 8 : '4px 14px',
+                // Only clip for images (rounds off the photo's corners inside
+                // the card) — everything else may host an absolutely
+                // positioned popover (the slash-command menu) that must be
+                // free to overflow the card's bounds.
+                overflow: block.type === 'image' ? 'hidden' : 'visible',
+              }}>
                 {block.type === 'divider' ? (
-                  <hr style={{ border: 'none', borderTop: '1.5px solid #e8e4f0', margin: '14px 0' }} />
+                  <hr style={{ border: 'none', borderTop: '1.5px solid #e8e4f0', margin: '10px 0' }} />
                 ) : block.type === 'image' ? (
-                  <div style={{ margin: '8px 0' }}>
-                    <img src={markdownImageUrl(mdId, block.imageId)} alt={block.caption ?? ''} style={{ maxWidth: '100%', borderRadius: 12, display: 'block' }} />
+                  <div>
+                    <img src={markdownImageUrl(mdId, block.imageId)} alt={block.caption ?? ''} style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }} />
                     <input value={block.caption ?? ''} placeholder="Add a caption…"
                       onChange={e => updateBlocks(prev => prev.map(b => b.id === block.id ? { ...b, caption: e.target.value } as MarkdownBlock : b))}
-                      style={{ marginTop: 6, width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontStyle: 'italic', color: '#787584', border: 'none', outline: 'none', background: 'transparent' }} />
+                      style={{ marginTop: 6, padding: '0 4px 4px', width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontStyle: 'italic', color: '#787584', border: 'none', outline: 'none', background: 'transparent' }} />
                   </div>
                 ) : block.type === 'link' ? (
                   <a href={block.url} target="_blank" rel="noopener noreferrer"
-                    style={{ display: 'flex', flexDirection: 'column', gap: 3, textDecoration: 'none', border: '1px solid #e8e4f0', borderRadius: 10, padding: '12px 14px', margin: '8px 0', background: '#faf9fc' }}>
+                    style={{ display: 'flex', flexDirection: 'column', gap: 3, textDecoration: 'none', padding: '8px 2px' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#5e4dbb' }}>
                       <Icon name="link" size={14} color="#5e4dbb" /> {block.title || block.url}
                     </span>
@@ -496,18 +575,31 @@ export default function MarkdownListScreen() {
                     {block.type === 'bulleted-list-item' && <span style={{ paddingTop: 9, color: '#787584', fontSize: 16, lineHeight: 1, flexShrink: 0 }}>•</span>}
                     {block.type === 'numbered-list-item' && <span style={{ paddingTop: 8, color: '#787584', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, flexShrink: 0, minWidth: 16 }}>{numberByBlockId[block.id]}.</span>}
                     {block.type === 'todo' && (
-                      <input type="checkbox" checked={block.checked} onChange={() => toggleTodo(block)}
-                        style={{ marginTop: 10, width: 16, height: 16, flexShrink: 0, cursor: 'pointer', accentColor: '#5e4dbb' }} />
+                      <div onClick={() => toggleTodo(block)}
+                        style={{ marginTop: 8, width: 20, height: 20, minWidth: 20, borderRadius: 5, border: '1.5px solid', borderColor: block.checked ? '#5e4dbb' : '#c9c4d5', background: block.checked ? '#5e4dbb' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', flexShrink: 0 }}>
+                        {block.checked && <Checkmark />}
+                      </div>
                     )}
-                    {block.type === 'quote' && <span style={{ width: 3, alignSelf: 'stretch', background: '#c9c4d5', borderRadius: 2, flexShrink: 0, marginTop: 2 }} />}
-                    <AutoTextarea
-                      innerRef={el => { blockRefs.current[block.id] = el; }}
-                      value={hasText(block) ? block.text : ''}
-                      placeholder={index === 0 && blocks.length === 1 ? "Type '/' for commands, or just start writing…" : ''}
-                      onChange={v => handleTextChange(block, v)}
-                      onKeyDown={e => handleKeyDown(e, block, index)}
-                      style={headingStyleFor(block, isMobile)}
-                    />
+                    {block.type === 'quote' && <span style={{ width: 3, alignSelf: 'stretch', background: '#c9c4d5', borderRadius: 2, flexShrink: 0, marginTop: 8, marginBottom: 8 }} />}
+                    {hasText(block) && (focusedBlockId === block.id ? (
+                      <AutoTextarea
+                        innerRef={el => { blockRefs.current[block.id] = el; }}
+                        value={block.text}
+                        placeholder={index === 0 && blocks.length === 1 ? "Type '/' for commands, or just start writing…" : ''}
+                        onChange={v => handleTextChange(block, v)}
+                        onKeyDown={e => handleKeyDown(e, block, index)}
+                        onBlur={() => setFocusedBlockId(prev => (prev === block.id ? null : prev))}
+                        style={headingStyleFor(block, isMobile)}
+                      />
+                    ) : (
+                      <div
+                        onClick={() => focusBlock(block.id, true)}
+                        style={{ ...headingStyleFor(block, isMobile), cursor: 'text', whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: '1.6em' }}>
+                        {block.text
+                          ? renderInline(block.text, block.id)
+                          : <span style={{ color: '#b0acbe' }}>{index === 0 && blocks.length === 1 ? "Type '/' for commands, or just start writing…" : ' '}</span>}
+                      </div>
+                    ))}
                   </div>
                 )}
 
@@ -546,12 +638,13 @@ export default function MarkdownListScreen() {
                 )}
               </div>
 
-              <button className="md-block-delete" onClick={() => deleteBlock(block.id)} title="Delete block"
-                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, marginTop: 6, borderRadius: 5, border: 'none', background: 'transparent', cursor: 'pointer', opacity: 0, transition: 'opacity 120ms' }}>
+              <button onClick={() => deleteBlock(block.id)} title="Delete block"
+                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, marginTop: 12, borderRadius: 5, border: 'none', background: 'transparent', cursor: 'pointer', opacity: hovered ? 1 : 0, transition: 'opacity 120ms' }}>
                 <Icon name="close" size={13} color="#b0acbe" />
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <button onClick={() => { const b = makeEmptyBlock('paragraph'); addBlockAfter(blocks[blocks.length - 1]?.id ?? '', b); }}
@@ -561,6 +654,22 @@ export default function MarkdownListScreen() {
           <Icon name="add" size={16} color="#787584" /> Add block
         </button>
       </div>
+
+      {showSettings && mdId && (
+        <ItemSettingsModal
+          kind="markdownList"
+          name={name}
+          emoji={emoji}
+          color={color}
+          isPublic={isPublic}
+          itemId={mdId}
+          share={shareInfo}
+          onShareUpdated={(s: ShareInfo) => setShareInfo({ enabled: s.enabled, token: s.token, hasPassword: s.hasPassword, expiresAt: s.expiresAt })}
+          onVisibilityApplied={(p: boolean) => setIsPublic(p)}
+          onChange={handleSettingsChange}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
 
       {uploadTargetBlockId && (
         <ImageUploadModal
@@ -589,10 +698,6 @@ export default function MarkdownListScreen() {
         </div>,
         document.body
       )}
-
-      <style>{`
-        .md-block-row:hover .md-block-handle, .md-block-row:hover .md-block-delete { opacity: 1; }
-      `}</style>
     </div>
   );
 }
@@ -607,6 +712,8 @@ function headingStyleFor(block: MarkdownBlock, isMobile: boolean): React.CSSProp
     return { ...base, fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 700, fontSize: sizes[block.level], padding: '10px 0 4px' };
   }
   if (block.type === 'quote') return { ...base, fontStyle: 'italic', color: '#484552' };
+  // Matches TaskItem.tsx's checked-title treatment: opacity + strikethrough together.
+  if (block.type === 'todo' && block.checked) return { ...base, opacity: 0.4, textDecoration: 'line-through' };
   return base;
 }
 
@@ -616,10 +723,11 @@ interface AutoTextareaProps {
   placeholder?: string;
   onChange: (v: string) => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onBlur?: () => void;
   style: React.CSSProperties;
   innerRef: (el: HTMLTextAreaElement | null) => void;
 }
-function AutoTextarea({ value, placeholder, onChange, onKeyDown, style, innerRef }: AutoTextareaProps) {
+function AutoTextarea({ value, placeholder, onChange, onKeyDown, onBlur, style, innerRef }: AutoTextareaProps) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const resize = () => { const el = ref.current; if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; } };
   useEffect(resize, [value]);
@@ -629,9 +737,11 @@ function AutoTextarea({ value, placeholder, onChange, onKeyDown, style, innerRef
       value={value}
       placeholder={placeholder}
       rows={1}
+      autoFocus
       onChange={e => onChange(e.target.value)}
       onKeyDown={onKeyDown}
       onFocus={resize}
+      onBlur={onBlur}
       style={style}
     />
   );

@@ -301,6 +301,9 @@ export interface ShareInfo {
 export const apiUpdateListShare = (id: string, data: ShareUpdate) =>
   apiFetch<{ share: ShareInfo }>(`/lists/${id}/share`, { method: 'PUT', body: JSON.stringify(data) });
 
+export const apiUpdateMarkdownListShare = (id: string, data: ShareUpdate) =>
+  apiFetch<{ share: ShareInfo }>(`/markdown-lists/${id}/share`, { method: 'PUT', body: JSON.stringify(data) });
+
 export const apiCreateSection = (listId: string, data: { id?: string; label: string; emoji?: string }) =>
   apiFetch<{ section: { id: string; label: string; emoji?: string; tasks: Task[] } }>(
     `/lists/${listId}/sections`, { method: 'POST', body: JSON.stringify(data) }
@@ -1289,7 +1292,7 @@ export const apiGetMarkdownList = (id: string) =>
 export const apiCreateMarkdownList = (data: { id?: string; name: string; emoji?: string; color?: string; colorBg?: string; subtitle?: string; isPublic?: boolean; folderId?: string; workspaceId?: string }) =>
   apiFetch<{ markdownList: MarkdownList }>('/markdown-lists', { method: 'POST', body: JSON.stringify(data) });
 
-export const apiUpdateMarkdownList = (id: string, data: Partial<Pick<MarkdownList, 'name' | 'emoji' | 'color' | 'colorBg' | 'subtitle' | 'isPublic' | 'folderId' | 'position'>> & { content?: MarkdownListContent; expectedVersion?: number }) =>
+export const apiUpdateMarkdownList = (id: string, data: Partial<Pick<MarkdownList, 'name' | 'emoji' | 'color' | 'colorBg' | 'subtitle' | 'isPublic' | 'folderId' | 'position'>> & { content?: MarkdownListContent; expectedVersion?: number; cascade?: boolean }) =>
   apiFetch<{ markdownList: MarkdownList }>(`/markdown-lists/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiDeleteMarkdownList = (id: string) =>

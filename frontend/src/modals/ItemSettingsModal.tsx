@@ -7,8 +7,8 @@ import CalendarPicker from '../components/CalendarPicker';
 import CreatorBubble from '../components/CreatorBubble';
 import { useMobile } from '../hooks/useBreakpoint';
 import {
-  apiUpdateListShare, apiUpdateTimelineShare,
-  apiUpdateList, apiUpdateTimeline, apiUpdateFolder,
+  apiUpdateListShare, apiUpdateTimelineShare, apiUpdateMarkdownListShare,
+  apiUpdateList, apiUpdateTimeline, apiUpdateFolder, apiUpdateMarkdownList,
   asVisibilityConflict, type VisibilityConflict,
   type ShareInfo, type ShareUpdate,
 } from '../api/client';
@@ -16,11 +16,16 @@ import VisibilityConflictModal from '../components/VisibilityConflictModal';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useAuthStore from '../store/useAuthStore';
 import useAppStore from '../store/useAppStore';
+import useMarkdownListsStore from '../store/useMarkdownListsStore';
 
 const FOLDER_COLORS = [
   '#5e4dbb', '#1D4ED8', '#15803d', '#ea580c',
   '#db2777', '#ba1a1a', '#0d9488', '#6b7280',
 ];
+
+const KIND_DISPLAY_NAME: Record<'list' | 'folder' | 'timeline' | 'markdownList', string> = {
+  list: 'to-do', folder: 'folder', timeline: 'timeline', markdownList: 'markdown list',
+};
 
 const LIST_COLORS = [
   { color: '#5e4dbb', bg: '#F5F3FF' },
@@ -40,7 +45,7 @@ export interface ItemSettingsUpdates {
 }
 
 interface ItemSettingsModalProps {
-  kind: 'list' | 'folder' | 'timeline';
+  kind: 'list' | 'folder' | 'timeline' | 'markdownList';
   name: string;
   emoji?: string;
   color?: string;
@@ -76,9 +81,18 @@ const card: React.CSSProperties = {
   overflow: 'hidden',
 };
 
+// URL path segment for the public share route — distinct from the modal's
+// `kind` prop value (e.g. `markdownList` -&gt; `/share/markdown-list/:token`).
+const SHARE_URL_SEGMENT: Record<'list' | 'timeline' | 'markdownList', string> = {
+  list: 'list', timeline: 'timeline', markdownList: 'markdown-list',
+};
+const SHARE_UPDATE_FN: Record<'list' | 'timeline' | 'markdownList', (id: string, data: ShareUpdate) => Promise<{ share: ShareInfo }>> = {
+  list: apiUpdateListShare, timeline: apiUpdateTimelineShare, markdownList: apiUpdateMarkdownListShare,
+};
+
 // ── Share via link ────────────────────────────────────────────────────────────
 function ShareSection({ kind, itemId, share, onShareUpdated }: {
-  kind: 'list' | 'timeline';
+  kind: 'list' | 'timeline' | 'markdownList';
   itemId: string;
   share?: ItemSettingsModalProps['share'];
   onShareUpdated?: (share: ShareInfo) => void;
@@ -94,12 +108,12 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
   const [showPwField, setShowPwField] = useState(false);
   const [showExpiryCal, setShowExpiryCal] = useState(false);
 
-  const shareUrl = token ? `${window.location.origin}/share/${kind}/${token}` : '';
+  const shareUrl = token ? `${window.location.origin}/share/${SHARE_URL_SEGMENT[kind]}/${token}` : '';
 
   const apply = async (update: ShareUpdate) => {
     setSaving(true);
     try {
-      const fn = kind === 'list' ? apiUpdateListShare : apiUpdateTimelineShare;
+      const fn = SHARE_UPDATE_FN[kind];
       const { share: next } = await fn(itemId, update);
       setEnabled(next.enabled);
       setToken(next.token);
@@ -263,7 +277,7 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
 
 // ── Workspace visibility ──────────────────────────────────────────────────────
 function AccessibilitySection({ kind, itemId, initialPublic, onApplied }: {
-  kind: 'list' | 'folder' | 'timeline';
+  kind: 'list' | 'folder' | 'timeline' | 'markdownList';
   itemId: string;
   initialPublic?: boolean;
   onApplied?: (isPublic: boolean) => void;
@@ -274,7 +288,7 @@ function AccessibilitySection({ kind, itemId, initialPublic, onApplied }: {
   const [pending, setPending]   = useState(false);
   const loadWorkspaces = useWorkspaceStore(s => s.loadWorkspaces);
 
-  const updateFn = kind === 'list' ? apiUpdateList : kind === 'timeline' ? apiUpdateTimeline : apiUpdateFolder;
+  const updateFn = kind === 'list' ? apiUpdateList : kind === 'timeline' ? apiUpdateTimeline : kind === 'markdownList' ? apiUpdateMarkdownList : apiUpdateFolder;
 
   const apply = async (value: boolean, cascade = false) => {
     setBusy(true);
@@ -334,14 +348,20 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
   const accent = color ?? '#5e4dbb';
   const { isAdmin } = useAuthStore();
   const { lists, timelines } = useAppStore();
+  const { markdownLists } = useMarkdownListsStore();
   const [copiedAdminId, setCopiedAdminId] = useState(false);
 
-  const hasFolders = kind !== 'folder' && folders && folders.length > 0;
+  // Markdown lists have no folder-nesting UI yet (they always render at the
+  // workspace root in the Sidebar) — hide the Folder tab rather than show a
+  // picker that silently has no effect.
+  const hasFolders = kind !== 'folder' && kind !== 'markdownList' && folders && folders.length > 0;
   const hasShare   = kind !== 'folder' && !!itemId;
   const currentList = kind === 'list' && itemId ? lists.find(l => l.id === itemId) : undefined;
   const currentTimeline = kind === 'timeline' && itemId ? timelines.find(t => t.id === itemId) : undefined;
+  const currentMarkdownList = kind === 'markdownList' && itemId ? markdownLists.find(m => m.id === itemId) : undefined;
   const listItems = currentList?.sections.flatMap(s => s.tasks) ?? [];
   const milestones = currentTimeline?.milestones ?? [];
+  const mdBlocks = currentMarkdownList?.content.blocks ?? [];
   const copyAdminId = () => {
     if (!itemId) return;
     navigator.clipboard.writeText(itemId).then(() => {
@@ -374,13 +394,13 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
             <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {emoji
                 ? <span style={{ fontSize: 18 }}>{emoji}</span>
-                : <Icon name={kind === 'folder' ? 'folder' : kind === 'timeline' ? 'timeline' : 'format_list_bulleted'} size={18} color={accent} />
+                : <Icon name={kind === 'folder' ? 'folder' : kind === 'timeline' ? 'timeline' : kind === 'markdownList' ? 'notes' : 'format_list_bulleted'} size={18} color={accent} />
               }
             </div>
             <div>
               <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 200 : 420 }}>{name}</div>
               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', marginTop: 1 }}>
-                {kind === 'folder' ? 'Folder settings' : kind === 'timeline' ? 'Timeline settings' : 'To-Do settings'}
+                {kind === 'folder' ? 'Folder settings' : kind === 'timeline' ? 'Timeline settings' : kind === 'markdownList' ? 'Markdown List settings' : 'To-Do settings'}
               </div>
             </div>
           </div>
@@ -491,7 +511,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                   </div>
                 )}
               <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', marginTop: 10, lineHeight: 1.5, paddingLeft: 2 }}>
-                Controls who can see this {kind} inside your workspace. Does not affect public share links.
+                Controls who can see this {KIND_DISPLAY_NAME[kind]} inside your workspace. Does not affect public share links.
               </div>
             </div>
           )}
@@ -531,7 +551,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
           {/* ── ADMIN ── */}
           {activeTab === 'admin' && isAdmin && itemId && kind !== 'folder' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18, animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
-              {sectionLabel(`${kind === 'timeline' ? 'Timeline' : 'To-Do'} ID`)}
+              {sectionLabel(`${kind === 'timeline' ? 'Timeline' : kind === 'markdownList' ? 'Markdown List' : 'To-Do'} ID`)}
               <div style={{ background: '#F5F3FF', border: '1px solid #e8e4f0', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <code style={{ flex: 1, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#484552', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemId}</code>
                 <button onClick={copyAdminId} style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: copiedAdminId ? '#10B981' : '#5e4dbb', background: '#fff', border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', flexShrink: 0 }}>
@@ -547,6 +567,11 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                   ['Items', listItems.length, 'checklist'],
                   ['Completed', listItems.filter(t => t.checked).length, 'task_alt'],
                   ['Private', currentList?.isPublic ? 'No' : 'Yes', currentList?.isPublic ? 'public' : 'lock'],
+                ] : kind === 'markdownList' ? [
+                  ['Blocks', mdBlocks.length, 'view_agenda'],
+                  ['Todos', mdBlocks.filter(b => b.type === 'todo').length, 'checklist'],
+                  ['Images', mdBlocks.filter(b => b.type === 'image').length, 'image'],
+                  ['Private', currentMarkdownList?.isPublic ? 'No' : 'Yes', currentMarkdownList?.isPublic ? 'public' : 'lock'],
                 ] : [
                   ['Milestones', milestones.length, 'flag'],
                   ['Done', milestones.filter(m => m.status === 'done').length, 'task_alt'],
@@ -566,7 +591,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
           {/* ── SHARE ── */}
           {activeTab === 'share' && hasShare && itemId && (
             <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
-              <ShareSection kind={kind as 'list' | 'timeline'} itemId={itemId} share={share} onShareUpdated={onShareUpdated} />
+              <ShareSection kind={kind as 'list' | 'timeline' | 'markdownList'} itemId={itemId} share={share} onShareUpdated={onShareUpdated} />
             </div>
           )}
         </div>

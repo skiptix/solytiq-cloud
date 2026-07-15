@@ -575,6 +575,11 @@ export interface MarkdownList {
   /** The auto-managed Todo list mirroring every `/todo` block, once one exists. */
   todoListId?: string | null;
   version?: number;
+  // Public read-only link sharing (distinct from the workspace `isPublic` flag).
+  shareEnabled?: boolean;
+  shareToken?: string | null;
+  shareHasPassword?: boolean;
+  shareExpiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

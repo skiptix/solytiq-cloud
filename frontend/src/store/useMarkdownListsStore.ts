@@ -19,6 +19,10 @@ interface MarkdownListsStore {
   create: (data: { name: string; emoji?: string; color?: string; colorBg?: string; subtitle?: string; isPublic?: boolean; folderId?: string; workspaceId?: string }) => Promise<MarkdownList>;
   update: (id: string, data: Partial<Pick<MarkdownList, 'name' | 'emoji' | 'color' | 'colorBg' | 'subtitle' | 'isPublic' | 'folderId' | 'position'>> & { content?: MarkdownListContent; expectedVersion?: number }) => Promise<MarkdownList>;
   remove: (id: string) => Promise<void>;
+  /** Local-only patch, no network call — for syncing state after a caller
+   *  (e.g. ItemSettingsModal's ShareSection/AccessibilitySection) already
+   *  made its own API call and just needs the store to reflect the result. */
+  patch: (id: string, updates: Partial<MarkdownList>) => void;
 }
 
 const useMarkdownListsStore = create<MarkdownListsStore>()((set, get) => ({
@@ -62,6 +66,10 @@ const useMarkdownListsStore = create<MarkdownListsStore>()((set, get) => ({
     } catch {
       set({ markdownLists: prev });
     }
+  },
+
+  patch: (id, updates) => {
+    set((s) => ({ markdownLists: s.markdownLists.map((m) => (m.id === id ? { ...m, ...updates } : m)) }));
   },
 }));
 

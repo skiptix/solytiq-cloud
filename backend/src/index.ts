@@ -36,7 +36,7 @@ import searchRouter from './routes/search';
 import templatesRouter from './routes/templates';
 import appsRouter from './routes/apps';
 import automationsRouter from './routes/automations';
-import markdownListsRouter from './routes/markdownLists';
+import markdownListsRouter, { MARKDOWN_IMAGE_DIR } from './routes/markdownLists';
 import { isAppInstalled } from './appsRegistry';
 import { startSyncDispatcher, SYNC_CHANNEL } from './syncLog';
 import { sweepScheduledAutomations } from './automationEngine';
@@ -568,6 +568,128 @@ app.get('/api/share/timeline/:token/content', async (req, res) => {
     });
   } catch (err) {
     console.error('share timeline content error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+interface ShareMarkdownListRow {
+  id: string; name: string; emoji: string | null; color: string | null; color_bg: string | null;
+  subtitle: string | null; share_enabled: boolean; share_password_hash: string | null;
+  share_expires_at: string | null; created_at: string; todo_list_id: string | null;
+  shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null;
+}
+
+async function resolveShareMarkdownList(token: string): Promise<ShareMarkdownListRow | null> {
+  const result = await dbQuery<ShareMarkdownListRow>(
+    `SELECT m.id, m.name, m.emoji, m.color, m.color_bg, m.subtitle, m.share_enabled,
+            m.share_password_hash, m.share_expires_at, m.created_at, m.todo_list_id,
+            u.full_name AS shared_by_name, u.username AS shared_by_username, u.profile_image AS shared_by_image
+     FROM markdown_lists m JOIN users u ON m.user_id = u.id
+     WHERE m.share_token = $1`,
+    [token]
+  );
+  return result.rows[0] ?? null;
+}
+
+// GET /api/share/markdown-list/:token — markdown list metadata (no content)
+app.get('/api/share/markdown-list/:token', async (req, res) => {
+  try {
+    const md = await resolveShareMarkdownList(req.params.token);
+    if (!md || !md.share_enabled) { res.status(404).json({ error: 'Markdown list not found' }); return; }
+    res.json({
+      name: md.name,
+      emoji: md.emoji,
+      color: md.color,
+      colorBg: md.color_bg,
+      subtitle: md.subtitle,
+      ...shareOwnerMeta(md),
+    });
+  } catch (err) {
+    console.error('share markdown-list info error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/share/markdown-list/:token/content — blocks (password-gated)
+app.get('/api/share/markdown-list/:token/content', async (req, res) => {
+  try {
+    const pw = (req.query.password ?? '') as string;
+    const md = await resolveShareMarkdownList(req.params.token);
+    if (!md || !md.share_enabled) { res.status(404).json({ error: 'Markdown list not found' }); return; }
+    if (md.share_expires_at && new Date(md.share_expires_at) < new Date()) { res.status(410).json({ error: 'Share link has expired' }); return; }
+    if (md.share_password_hash) {
+      if (!pw) { res.status(401).json({ error: 'Password required', passwordRequired: true }); return; }
+      const valid = await comparePassword(pw, md.share_password_hash);
+      if (!valid) { res.status(401).json({ error: 'Invalid password' }); return; }
+    }
+
+    const contentRes = await dbQuery<{ content: { version: 1; blocks: Array<Record<string, unknown>> } }>(
+      `SELECT content FROM markdown_lists WHERE id = $1`,
+      [md.id]
+    );
+    let blocks = contentRes.rows[0]?.content?.blocks ?? [];
+
+    // Overlay live checked state from the linked Todo list — same
+    // read-through rule as the authenticated path; the JSONB copy is never
+    // trusted for `checked`.
+    if (md.todo_list_id) {
+      const tasksRes = await dbQuery<{ id: string; checked: boolean }>(
+        `SELECT id, checked FROM tasks WHERE list_id = $1 AND source = 'list'`,
+        [md.todo_list_id]
+      );
+      const checkedByTaskId: Record<string, boolean> = {};
+      for (const t of tasksRes.rows) checkedByTaskId[String(t.id)] = t.checked;
+      blocks = blocks.map((b) => (b.type === 'todo' && typeof b.taskId === 'string' && b.taskId in checkedByTaskId)
+        ? { ...b, checked: checkedByTaskId[b.taskId as string] }
+        : b);
+    }
+    // Strip taskId — an internal reference to a private Todo list the
+    // anonymous visitor has no access to; not needed by the read-only page.
+    blocks = blocks.map((b) => { const { taskId: _taskId, ...rest } = b; return rest; });
+
+    res.json({
+      markdownList: { name: md.name, emoji: md.emoji, color: md.color, colorBg: md.color_bg, subtitle: md.subtitle },
+      content: { version: 1, blocks },
+    });
+  } catch (err) {
+    console.error('share markdown-list content error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/share/markdown-list/:token/images/:imageId — inline image serve
+// for the public share page. Same password/expiry gate as the content route
+// above; an anonymous visitor has no JWT, so this can't reuse the
+// auth-gated `/api/markdown-lists/:id/images/:imageId` route.
+app.get('/api/share/markdown-list/:token/images/:imageId', async (req, res) => {
+  try {
+    const pw = (req.query.password ?? '') as string;
+    const md = await resolveShareMarkdownList(req.params.token);
+    if (!md || !md.share_enabled) { res.status(404).json({ error: 'Not found' }); return; }
+    if (md.share_expires_at && new Date(md.share_expires_at) < new Date()) { res.status(410).json({ error: 'Share link has expired' }); return; }
+    if (md.share_password_hash) {
+      if (!pw) { res.status(401).json({ error: 'Password required', passwordRequired: true }); return; }
+      const valid = await comparePassword(pw, md.share_password_hash);
+      if (!valid) { res.status(401).json({ error: 'Invalid password' }); return; }
+    }
+
+    const imgRes = await dbQuery<{ file_path: string; mime_type: string }>(
+      'SELECT file_path, mime_type FROM markdown_list_images WHERE id = $1 AND markdown_list_id = $2',
+      [req.params.imageId, md.id]
+    );
+    if (imgRes.rows.length === 0) { res.status(404).json({ error: 'Not found' }); return; }
+    const img = imgRes.rows[0];
+    const filePath = path.join(path.resolve(MARKDOWN_IMAGE_DIR), path.basename(img.file_path));
+    if (!require('fs').existsSync(filePath)) { res.status(404).json({ error: 'Not found on disk' }); return; }
+
+    res.setHeader('Content-Type', img.mime_type);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.sendFile(filePath);
+  } catch (err) {
+    console.error('share markdown-list image error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1489,6 +1611,15 @@ async function runMigrations() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS markdown_lists_user_idx ON markdown_lists(user_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS markdown_lists_workspace_idx ON markdown_lists(workspace_id)`);
+
+  // Public read-only link sharing — same shape/semantics as lists/timelines
+  // (an opaque token minted on first enable, optional bcrypt password,
+  // optional expiry). No `share_subpages` — markdown lists have no nesting.
+  await pool.query(`ALTER TABLE markdown_lists ADD COLUMN IF NOT EXISTS share_token VARCHAR(64)`);
+  await pool.query(`ALTER TABLE markdown_lists ADD COLUMN IF NOT EXISTS share_enabled BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE markdown_lists ADD COLUMN IF NOT EXISTS share_password_hash VARCHAR(255)`);
+  await pool.query(`ALTER TABLE markdown_lists ADD COLUMN IF NOT EXISTS share_expires_at TIMESTAMPTZ`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS markdown_lists_share_token_idx ON markdown_lists(share_token) WHERE share_token IS NOT NULL`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS trash_markdown_lists (

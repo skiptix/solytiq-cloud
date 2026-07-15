@@ -2,11 +2,11 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import crypto from 'crypto';
+import crypto, { randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
-import { verifyToken } from '../auth';
+import { verifyToken, hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr, QueryExec } from '../workspaceUtil';
 import { checkVersionConflict } from '../concurrency';
@@ -28,7 +28,7 @@ const router = Router();
 // UPLOAD_DIR files.ts uses), own table, own auth-gated serve route below.
 // ---------------------------------------------------------------------------
 
-const MARKDOWN_IMAGE_DIR = path.join(UPLOAD_DIR, 'markdown-images');
+export const MARKDOWN_IMAGE_DIR = path.join(UPLOAD_DIR, 'markdown-images');
 if (!fs.existsSync(MARKDOWN_IMAGE_DIR)) fs.mkdirSync(MARKDOWN_IMAGE_DIR, { recursive: true });
 
 const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
@@ -65,6 +65,10 @@ interface MarkdownListRow {
   content: MarkdownListContent;
   todo_list_id: string | null;
   version: number;
+  share_token: string | null;
+  share_enabled: boolean;
+  share_password_hash: string | null;
+  share_expires_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -107,6 +111,10 @@ function sanitize(row: MarkdownListRow) {
     content: normalizeContent(row.content),
     todoListId: row.todo_list_id,
     version: row.version ?? 1,
+    shareEnabled: row.share_enabled ?? false,
+    shareToken: row.share_token ?? null,
+    shareHasPassword: row.share_password_hash != null,
+    shareExpiresAt: row.share_expires_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -447,6 +455,64 @@ router.delete('/:id', authenticate, async (req: Request, res: Response) => {
     if (row.todo_list_id) broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     werr('markdown-lists DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/markdown-lists/:id/share — manage the public read-only share
+// link. Body: { enabled?, password?: string|null, expiresAt?: string|null }
+// (password/expiresAt: omit = unchanged, null = clear, value = set). Mirrors
+// PUT /api/lists/:listId/share minus the subpage cascade (markdown lists
+// have no nesting concept).
+router.put('/:id/share', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { enabled, password, expiresAt } = req.body as {
+      enabled?: boolean; password?: string | null; expiresAt?: string | null;
+    };
+
+    const existing = await query<MarkdownListRow>('SELECT * FROM markdown_lists WHERE id = $1', [id]);
+    if (existing.rows.length === 0) { res.status(404).json({ error: 'Markdown list not found' }); return; }
+    const row = existing.rows[0];
+    const isOwner = row.user_id === req.userId;
+    if (!isOwner && !req.user?.isAdmin) { res.status(403).json({ error: 'Permission denied' }); return; }
+
+    const updatePw = 'password' in req.body;
+    const updateExp = 'expiresAt' in req.body;
+    const updateEnabled = 'enabled' in req.body;
+
+    const willBeEnabled = updateEnabled ? Boolean(enabled) : row.share_enabled;
+    let token = row.share_token;
+    if (willBeEnabled && !token) token = randomBytes(24).toString('hex');
+
+    let pwHash: string | null = null;
+    if (updatePw && typeof password === 'string' && password.length > 0) {
+      pwHash = await hashPassword(password);
+    }
+
+    const result = await query<MarkdownListRow>(
+      `UPDATE markdown_lists
+       SET share_enabled       = COALESCE($2, share_enabled),
+           share_token         = $3,
+           share_password_hash = CASE WHEN $4 THEN $5 ELSE share_password_hash END,
+           share_expires_at    = CASE WHEN $6 THEN $7 ELSE share_expires_at END
+       WHERE id = $1
+       RETURNING *`,
+      [id, updateEnabled ? enabled : null, token, updatePw, pwHash, updateExp, expiresAt ?? null]
+    );
+    const saved = result.rows[0];
+
+    res.json({
+      share: {
+        enabled: saved.share_enabled,
+        token: saved.share_token,
+        hasPassword: saved.share_password_hash != null,
+        expiresAt: saved.share_expires_at ?? null,
+      },
+    });
+    broadcastToUser(req.userId!, 'markdownLists');
+  } catch (err) {
+    werr('markdown-lists share PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
