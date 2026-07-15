@@ -209,8 +209,8 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
           folderId={list.folderId}
           itemId={list.id}
           creatorId={list.userId}
-          share={{ enabled: list.shareEnabled, token: list.shareToken, hasPassword: list.shareHasPassword, expiresAt: list.shareExpiresAt, subpages: list.shareSubpages }}
-          onShareUpdated={(s: ShareInfo) => setLists(prev => prev.map(l => l.id === list.id ? { ...l, shareEnabled: s.enabled, shareToken: s.token, shareHasPassword: s.hasPassword, shareExpiresAt: s.expiresAt, shareSubpages: s.subpages ?? l.shareSubpages } : l))}
+          share={{ enabled: list.shareEnabled, token: list.shareToken, hasPassword: list.shareHasPassword, expiresAt: list.shareExpiresAt, subpages: list.shareSubpages, viewMode: list.shareViewMode ?? list.viewMode ?? 'list' }}
+          onShareUpdated={(s: ShareInfo) => setLists(prev => prev.map(l => l.id === list.id ? { ...l, shareEnabled: s.enabled, shareToken: s.token, shareHasPassword: s.hasPassword, shareExpiresAt: s.expiresAt, shareSubpages: s.subpages ?? l.shareSubpages, shareViewMode: s.viewMode ?? l.shareViewMode } : l))}
           onVisibilityApplied={(p: boolean) => setLists(prev => prev.map(l => l.id === list.id ? { ...l, isPublic: p } : l))}
           onChange={handleSettingsChange}
           onClose={() => setShowSettings(false)}

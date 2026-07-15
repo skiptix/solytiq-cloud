@@ -81,6 +81,7 @@ export interface List {
   shareHasPassword?: boolean;
   shareExpiresAt?: string | null;
   shareSubpages?: boolean;
+  shareViewMode?: 'list' | 'kanban' | 'timeline' | null;   // which layout the public share page renders — null falls back to viewMode
   version?: number;   // optimistic-concurrency token (bumps on every server-side update)
   viewMode?: 'list' | 'kanban' | 'timeline';   // To-Do screen's layout — persisted per list, synced across devices
   isArchived?: boolean;   // hidden from the normal workspace view; see the Archived modal

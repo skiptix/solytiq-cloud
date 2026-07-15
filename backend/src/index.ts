@@ -360,6 +360,7 @@ interface ShareListRow {
   id: string; name: string; emoji: string | null; color: string | null; color_bg: string | null;
   subtitle: string | null; share_enabled: boolean; share_password_hash: string | null;
   share_expires_at: string | null; share_subpages: boolean; created_at: string;
+  view_mode: string; share_view_mode: string | null;
   shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null;
 }
 interface ShareTimelineRow {
@@ -373,12 +374,21 @@ async function resolveShareList(token: string): Promise<ShareListRow | null> {
   const result = await dbQuery<ShareListRow>(
     `SELECT l.id, l.name, l.emoji, l.color, l.color_bg, l.subtitle, l.share_enabled,
             l.share_password_hash, l.share_expires_at, l.share_subpages, l.created_at,
+            l.view_mode, l.share_view_mode,
             u.full_name AS shared_by_name, u.username AS shared_by_username, u.profile_image AS shared_by_image
      FROM lists l JOIN users u ON l.user_id = u.id
      WHERE l.share_token = $1`,
     [token]
   );
   return result.rows[0] ?? null;
+}
+
+// Which List/Kanban/Timeline layout the public page renders for a shared list —
+// the owner's explicit `share_view_mode` override, falling back to whatever
+// layout they currently have the list set to in-app.
+function resolveListViewMode(row: { view_mode: string; share_view_mode: string | null }): 'list' | 'kanban' | 'timeline' {
+  const v = row.share_view_mode || row.view_mode;
+  return v === 'kanban' || v === 'timeline' ? v : 'list';
 }
 
 async function resolveShareTimeline(token: string): Promise<ShareTimelineRow | null> {
@@ -416,6 +426,7 @@ app.get('/api/share/list/:token', async (req, res) => {
       color: list.color,
       colorBg: list.color_bg,
       subtitle: list.subtitle,
+      viewMode: resolveListViewMode(list),
       ...shareOwnerMeta(list),
     });
   } catch (err) {
@@ -445,8 +456,9 @@ app.get('/api/share/list/:token/content', async (req, res) => {
       id: string; title: string; checked: boolean; note: string | null; note_markdown: boolean; deadline: string | null;
       time_val: string | null; priority: string | null; badge: string | null; section_id: string | null;
       position: number; linked_list_id: string | null; linked_list_type: string | null;
+      created_at: string; completed_at: string | null;
     }>(
-      `SELECT id, title, checked, note, note_markdown, deadline, time_val, priority, badge, section_id, position, linked_list_id, linked_list_type
+      `SELECT id, title, checked, note, note_markdown, deadline, time_val, priority, badge, section_id, position, linked_list_id, linked_list_type, created_at, completed_at
        FROM tasks WHERE list_id = $1 AND source = 'list' ORDER BY position ASC, created_at ASC`,
       [list.id]
     );
@@ -497,11 +509,13 @@ app.get('/api/share/list/:token/content', async (req, res) => {
           linkedListType: t.linked_list_type,
           linkedShareToken: t.linked_list_id ? (linkedInfo[t.linked_list_id]?.token ?? null) : null,
           linkedProgress: t.linked_list_id ? { total: linkedInfo[t.linked_list_id]?.total ?? 0, completed: linkedInfo[t.linked_list_id]?.completed ?? 0 } : null,
+          createdAt: t.created_at,
+          completedAt: t.completed_at ?? null,
         })),
     }));
 
     res.json({
-      list: { name: list.name, emoji: list.emoji, color: list.color, colorBg: list.color_bg, subtitle: list.subtitle },
+      list: { name: list.name, emoji: list.emoji, color: list.color, colorBg: list.color_bg, subtitle: list.subtitle, viewMode: resolveListViewMode(list) },
       sections,
     });
   } catch (err) {
@@ -1867,6 +1881,12 @@ async function runMigrations() {
   // Per-list layout preference — the To-Do screen's List/Kanban/Timeline tab switcher.
   // Persisted (not just local UI state) so it's the same on every device.
   await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS view_mode VARCHAR(20) NOT NULL DEFAULT 'list'`);
+
+  // Independent override for which layout the *public share page* renders —
+  // lets an owner share a Kanban/Timeline view of a list they're currently
+  // browsing as a plain List (or vice versa). NULL falls back to the list's
+  // own `view_mode` at read time (see resolveListViewMode in the share routes).
+  await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS share_view_mode VARCHAR(20)`);
 
   // Tracks exactly when a task was checked, independent of updated_at (which
   // also moves on unrelated edits made after completion) — the Timeline view's
