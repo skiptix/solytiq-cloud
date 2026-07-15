@@ -466,6 +466,119 @@ export interface AutomationRunResult {
   error: string | null;
 }
 
+// ─── Markdown Lists ─────────────────────────────────────────────────────────
+// A block-based document type authored via `/` slash commands (headings,
+// paragraphs, bulleted/numbered list items, quotes, dividers, images, links,
+// and checkable todo items) — a top-level entity parallel to List/Timeline,
+// not a mode of List. `content` is a versioned ordered block array. Every
+// `/todo` block optionally mirrors a real task in an auto-managed Todo list
+// (`todoListId`) — see backend/src/routes/markdownLists.ts — so its `checked`
+// state stays in sync with that list and the block can be checked off from
+// either surface.
+export type MarkdownBlockType =
+  | 'heading'
+  | 'paragraph'
+  | 'bulleted-list-item'
+  | 'numbered-list-item'
+  | 'todo'
+  | 'quote'
+  | 'divider'
+  | 'image'
+  | 'link';
+
+interface MarkdownBlockBase {
+  id: string;
+  type: MarkdownBlockType;
+}
+
+export interface MarkdownHeadingBlock extends MarkdownBlockBase {
+  type: 'heading';
+  level: 1 | 2 | 3;
+  text: string;
+}
+
+export interface MarkdownParagraphBlock extends MarkdownBlockBase {
+  type: 'paragraph';
+  text: string;
+}
+
+export interface MarkdownBulletListItemBlock extends MarkdownBlockBase {
+  type: 'bulleted-list-item';
+  text: string;
+}
+
+export interface MarkdownNumberedListItemBlock extends MarkdownBlockBase {
+  type: 'numbered-list-item';
+  text: string;
+}
+
+export interface MarkdownTodoBlock extends MarkdownBlockBase {
+  type: 'todo';
+  text: string;
+  checked: boolean;
+  /** The mirrored task's id in the auto-managed Todo list, once one exists. */
+  taskId: string | null;
+}
+
+export interface MarkdownQuoteBlock extends MarkdownBlockBase {
+  type: 'quote';
+  text: string;
+}
+
+export interface MarkdownDividerBlock extends MarkdownBlockBase {
+  type: 'divider';
+}
+
+export interface MarkdownImageBlock extends MarkdownBlockBase {
+  type: 'image';
+  /** Resolved against `/api/markdown-lists/:markdownListId/images/:imageId` — see api/client.ts's `markdownImageUrl`. */
+  imageId: string;
+  caption?: string;
+}
+
+export interface MarkdownLinkBlock extends MarkdownBlockBase {
+  type: 'link';
+  url: string;
+  title?: string;
+  description?: string;
+}
+
+export type MarkdownBlock =
+  | MarkdownHeadingBlock
+  | MarkdownParagraphBlock
+  | MarkdownBulletListItemBlock
+  | MarkdownNumberedListItemBlock
+  | MarkdownTodoBlock
+  | MarkdownQuoteBlock
+  | MarkdownDividerBlock
+  | MarkdownImageBlock
+  | MarkdownLinkBlock;
+
+export interface MarkdownListContent {
+  version: 1;
+  blocks: MarkdownBlock[];
+}
+
+export interface MarkdownList {
+  id: string;
+  userId?: string;
+  name: string;
+  emoji?: string;
+  color?: string;
+  colorBg?: string;
+  subtitle?: string;
+  isPublic?: boolean;
+  folderId?: string;
+  workspaceId?: string;
+  position?: number;
+  content: MarkdownListContent;
+  /** The auto-managed Todo list mirroring every `/todo` block, once one exists. */
+  todoListId?: string | null;
+  version?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AIFile {
   id: string;
   filename: string;

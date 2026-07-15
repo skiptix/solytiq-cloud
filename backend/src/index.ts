@@ -36,6 +36,7 @@ import searchRouter from './routes/search';
 import templatesRouter from './routes/templates';
 import appsRouter from './routes/apps';
 import automationsRouter from './routes/automations';
+import markdownListsRouter from './routes/markdownLists';
 import { isAppInstalled } from './appsRegistry';
 import { startSyncDispatcher, SYNC_CHANNEL } from './syncLog';
 import { sweepScheduledAutomations } from './automationEngine';
@@ -203,6 +204,7 @@ app.use('/api/search',     searchRouter);
 app.use('/api/templates',  templatesRouter);
 app.use('/api/apps',       appsRouter);
 app.use('/api/automations', automationsRouter);
+app.use('/api/markdown-lists', markdownListsRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
@@ -1454,6 +1456,69 @@ async function runMigrations() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS automation_notifications_user_idx ON automation_notifications (user_id, created_at DESC)`);
 
+  // ── Markdown Lists ───────────────────────────────────────────────────────
+  // A block-based document type ("Markdown List"): headings, paragraphs,
+  // bulleted/numbered list items, quotes, dividers, images, links and todo
+  // items authored via `/` slash commands — parallel to `lists`/`timelines`,
+  // not a mode of List. `content` is a versioned JSONB block array (see
+  // MarkdownListContent in frontend/src/types.ts). `todo_list_id` points at
+  // an auto-managed regular `lists` row that mirrors every `/todo` block as
+  // a real task — created lazily on the first todo block and kept in sync on
+  // every content save (see routes/markdownLists.ts) — so the Todo summary
+  // can be browsed/checked off like any other To-Do list and folded out
+  // under the Markdown List in the Sidebar.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS markdown_lists (
+      id           VARCHAR(100) PRIMARY KEY,
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name         VARCHAR(255) NOT NULL,
+      emoji        VARCHAR(10),
+      color        VARCHAR(50),
+      color_bg     VARCHAR(50),
+      subtitle     VARCHAR(500),
+      is_public    BOOLEAN NOT NULL DEFAULT false,
+      folder_id    VARCHAR(100) REFERENCES folders(id) ON DELETE SET NULL,
+      workspace_id VARCHAR(100) REFERENCES workspaces(id) ON DELETE SET NULL,
+      position     INTEGER NOT NULL DEFAULT 0,
+      content      JSONB NOT NULL DEFAULT '{"version":1,"blocks":[]}'::jsonb,
+      todo_list_id VARCHAR(100) REFERENCES lists(id) ON DELETE SET NULL,
+      version      INTEGER NOT NULL DEFAULT 1,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS markdown_lists_user_idx ON markdown_lists(user_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS markdown_lists_workspace_idx ON markdown_lists(workspace_id)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS trash_markdown_lists (
+      id                 SERIAL PRIMARY KEY,
+      markdown_list_id   VARCHAR(100) NOT NULL,
+      user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      markdown_list_data JSONB NOT NULL,
+      deleted_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at         TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
+    )
+  `);
+
+  // Dedicated inline-image store for /image blocks — deliberately separate
+  // from shared_files: doesn't count against the user's storage quota and
+  // isn't reachable via /api/share/:token (served auth-gated, see
+  // routes/markdownLists.ts).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS markdown_list_images (
+      id               VARCHAR(100) PRIMARY KEY,
+      user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      markdown_list_id VARCHAR(100) NOT NULL REFERENCES markdown_lists(id) ON DELETE CASCADE,
+      original_name    VARCHAR(500),
+      mime_type        VARCHAR(100) NOT NULL DEFAULT 'application/octet-stream',
+      file_size        BIGINT NOT NULL DEFAULT 0,
+      file_path        VARCHAR(500) NOT NULL,
+      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS markdown_list_images_list_idx ON markdown_list_images(markdown_list_id)`);
+
   // ── Optimistic concurrency ──────────────────────────────────────────────────
   // A `version` that auto-increments on every UPDATE (BEFORE trigger). Clients
   // echo the version they edited; a conditional PUT then 409s instead of
@@ -1466,7 +1531,7 @@ async function runMigrations() {
     BEGIN NEW.version = OLD.version + 1; RETURN NEW; END;
     $$ LANGUAGE plpgsql
   `);
-  for (const table of ['lists', 'timelines', 'automations']) {
+  for (const table of ['lists', 'timelines', 'automations', 'markdown_lists']) {
     await pool.query(`DROP TRIGGER IF EXISTS bump_version_${table} ON ${table}`);
     await pool.query(
       `CREATE TRIGGER bump_version_${table} BEFORE UPDATE ON ${table}
@@ -1626,6 +1691,13 @@ async function runMigrations() {
       PERFORM sync_emit('automation', NEW.id, 'upsert', NEW.workspace_id, NEW.user_id); RETURN NEW;
     END; $$ LANGUAGE plpgsql
   `);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_markdown_lists() RETURNS trigger AS $$
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN PERFORM sync_emit('markdownList', OLD.id, 'delete', OLD.workspace_id, OLD.user_id); RETURN OLD; END IF;
+      PERFORM sync_emit('markdownList', NEW.id, 'upsert', NEW.workspace_id, NEW.user_id); RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
 
   // Attach every trigger idempotently (DROP + CREATE so re-runs are safe).
   const syncTriggers: Array<[string, string]> = [
@@ -1634,8 +1706,8 @@ async function runMigrations() {
     ['workspaces', 'workspaces'], ['workspace_members', 'members'],
     ['meetings', 'meetings'], ['shared_files', 'files'],
     ['trash', 'trash'], ['trash_lists', 'trash'], ['trash_folders', 'trash'],
-    ['trash_timelines', 'trash'], ['trash_milestones', 'trash'],
-    ['templates', 'templates'], ['automations', 'automations'],
+    ['trash_timelines', 'trash'], ['trash_milestones', 'trash'], ['trash_markdown_lists', 'trash'],
+    ['templates', 'templates'], ['automations', 'automations'], ['markdown_lists', 'markdown_lists'],
   ];
   for (const [table, fn] of syncTriggers) {
     await pool.query(`DROP TRIGGER IF EXISTS synclog_${table} ON ${table}`);

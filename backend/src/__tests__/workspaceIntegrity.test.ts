@@ -20,6 +20,7 @@ describe('rehomeUserContentToPersonal', () => {
       [{}, {}],                // UPDATE folders   → 2 rows
       [{}],                    // UPDATE lists     → 1 row
       [],                      // UPDATE timelines → 0 rows
+      [],                      // UPDATE markdown_lists → 0 rows
       [],                      // detach cross-workspace folder refs (lists)
       [],                      // detach cross-workspace folder refs (timelines)
       [{}],                    // UPDATE dash tasks → 1 row

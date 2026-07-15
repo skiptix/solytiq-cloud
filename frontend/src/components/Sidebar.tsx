@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import type { List, Folder, Timeline, GpsFile } from '../types';
+import type { List, Folder, Timeline, GpsFile, MarkdownList } from '../types';
 import Icon from './Icon';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useInstalledAppsStore from '../store/useInstalledAppsStore';
+import useMarkdownListsStore from '../store/useMarkdownListsStore';
 import WorkspaceWizard from '../modals/WorkspaceWizard';
 import WorkspaceSettingsModal from '../modals/WorkspaceSettingsModal';
 import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSettingsModal';
@@ -463,7 +464,7 @@ interface FolderRowProps {
   folder: Folder;
   lists: List[];
   timelines: Timeline[];
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList';
   activeListId?: string;
   activeTimelineId?: string;
   activeFolderId?: string;
@@ -758,7 +759,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
 interface StandaloneListWithSublistsProps {
   list: List;
   sublists: List[];
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList';
   activeListId?: string;
   collapsed: boolean;
   dragOverId: string | null;
@@ -823,6 +824,167 @@ function StandaloneListWithSublists({ list, sublists, active, activeListId, coll
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── MarkdownListRow ─────────────────────────────────────────────────────────
+interface MarkdownListRowProps {
+  markdownList: MarkdownList;
+  isActive: boolean;
+  collapsed: boolean;
+  onNavigate: (path: string) => void;
+}
+function MarkdownListRow({ markdownList, isActive, collapsed, onNavigate }: MarkdownListRowProps) {
+  const [hov, setHov] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const { update, remove } = useMarkdownListsStore();
+
+  const openMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const rect = menuBtnRef.current?.getBoundingClientRect();
+    if (rect) setMenuPos({ top: rect.bottom + 4, left: rect.left });
+    setMenuOpen(o => !o);
+  };
+  const openContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuPos({ top: e.clientY, left: e.clientX });
+    setMenuOpen(true);
+  };
+  const handleRename = (v: string) => {
+    const trimmed = v.trim();
+    if (trimmed && trimmed !== markdownList.name) void update(markdownList.id, { name: trimmed });
+    setEditingName(false);
+  };
+  const handleDelete = () => {
+    void remove(markdownList.id);
+    setShowDeleteDialog(false);
+    onNavigate('/dashboard');
+  };
+
+  const menuItems: ContextMenuEntry[] = [
+    { key: 'rename', label: 'Edit name', icon: 'edit', onClick: () => setEditingName(true) },
+    { key: 'div1', divider: true },
+    { key: 'delete', label: 'Delete markdown list', icon: 'delete', danger: true, onClick: () => setShowDeleteDialog(true) },
+  ];
+
+  return (
+    <>
+      <div onContextMenu={openContextMenu} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+        style={{ display: 'flex', alignItems: 'center', borderRadius: 8 }}>
+        <button title={collapsed ? markdownList.name : undefined}
+          onClick={() => onNavigate(`/markdown-list/${markdownList.id}`)}
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: hov ? (markdownList.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? (markdownList.color ?? '#5e4dbb') : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+          {markdownList.emoji
+            ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{markdownList.emoji}</span>
+            : <Icon name="notes" size={19} color={isActive ? (markdownList.color ?? '#5e4dbb') : '#787584'} />
+          }
+          {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{markdownList.name}</span>}
+        </button>
+        {!collapsed && (
+          <button ref={menuBtnRef} onClick={openMenu} title="Markdown list options"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? '#ebe6f0' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms', marginRight: 4, flexShrink: 0 }}>
+            <Icon name="more_vert" size={15} color="#9d8dff" />
+          </button>
+        )}
+      </div>
+
+      {menuOpen && menuPos && (
+        <ContextMenu x={menuPos.left} y={menuPos.top} items={menuItems} onClose={() => setMenuOpen(false)} />
+      )}
+
+      {editingName && (
+        <RenameDialog value={markdownList.name} onSave={handleRename} onCancel={() => setEditingName(false)} />
+      )}
+
+      {showDeleteDialog && createPortal(
+        <div
+          onClick={() => setShowDeleteDialog(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <Icon name="delete" size={20} color="#ba1a1a" />
+            </div>
+            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Delete markdown list?</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.5, marginBottom: 24 }}>
+              "<span style={{ color: '#1c1b22', fontWeight: 500 }}>{markdownList.name}</span>" and its Todo list will be moved to Trash.
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleDelete} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// ── MarkdownListWithTodo ──────────────────────────────────────────────────────
+// Mirrors StandaloneListWithSublists' fold-out chevron pattern: the
+// auto-managed Todo list (one real `lists` row per `/todo` block in the doc)
+// is revealed/collapsed under its owning Markdown List rather than shown
+// separately at root.
+interface MarkdownListWithTodoProps {
+  markdownList: MarkdownList;
+  todoList: List | undefined;
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList';
+  activeListId?: string;
+  activeMarkdownListId?: string;
+  collapsed: boolean;
+  dragOverId: string | null;
+  dragOverTaskListId: string | null;
+  recentlyDroppedListId: string | null;
+  folders: Folder[];
+  onNavigate: (path: string) => void;
+  onListDragStart: (listId: string, e: React.DragEvent) => void;
+  onListDragOver: (listId: string, e: React.DragEvent) => void;
+  onListDragLeave: () => void;
+  onListDrop: (listId: string, e: React.DragEvent) => void;
+}
+function MarkdownListWithTodo({ markdownList, todoList, active, activeListId, activeMarkdownListId, collapsed, dragOverId, dragOverTaskListId, recentlyDroppedListId, folders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop }: MarkdownListWithTodoProps) {
+  const [subExpanded, setSubExpanded] = useState(true);
+  const isActive = active === 'markdownList' && activeMarkdownListId === markdownList.id;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        {!collapsed && todoList && (
+          <button onClick={() => setSubExpanded(e => !e)}
+            style={{ display: 'flex', alignItems: 'center', padding: '0 2px', border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}>
+            <Icon name={subExpanded ? 'expand_more' : 'chevron_right'} size={14} color="#b0acbe" />
+          </button>
+        )}
+        <div style={{ flex: 1 }}>
+          <MarkdownListRow markdownList={markdownList} isActive={isActive} collapsed={collapsed} onNavigate={onNavigate} />
+        </div>
+      </div>
+      {!collapsed && subExpanded && todoList && (
+        <div style={{ paddingLeft: 12, borderLeft: '2px solid #e8e4f0', marginLeft: 10 }}>
+          <ListItemRow
+            list={todoList}
+            isActive={active === 'list' && activeListId === todoList.id}
+            collapsed={collapsed}
+            dragOverId={dragOverId}
+            folders={folders}
+            isTaskDropTarget={dragOverTaskListId === todoList.id}
+            wasRecentlyDropped={recentlyDroppedListId === todoList.id}
+            onNavigate={onNavigate}
+            onDragStart={e => onListDragStart(todoList.id, e)}
+            onDragOver={e => onListDragOver(todoList.id, e)}
+            onDragLeave={onListDragLeave}
+            onDrop={e => onListDrop(todoList.id, e)}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -960,11 +1122,12 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList';
   activeListId?: string;
   activeTimelineId?: string;
   activeFolderId?: string;
   activeGpsFileId?: string;
+  activeMarkdownListId?: string;
   lists: List[];
   width: number;
   onNavigate: (path: string) => void;
@@ -981,7 +1144,9 @@ function fmtDistShort(m?: number | null) {
   return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`;
 }
 
-export default function Sidebar({ active, activeListId, activeTimelineId, activeFolderId, activeGpsFileId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList, isMobile, drawerOpen }: SidebarProps) {
+export default function Sidebar({ active, activeListId, activeTimelineId, activeFolderId, activeGpsFileId, activeMarkdownListId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList, isMobile, drawerOpen }: SidebarProps) {
+  const markdownLists = useMarkdownListsStore(s => s.markdownLists);
+  const mdTodoListIds = new Set(markdownLists.map(m => m.todoListId).filter((x): x is string => !!x));
   const collapsed = isMobile ? false : width <= 72;
   const [addHov, setAddHov] = useState(false);
   const [folderHov, setFolderHov] = useState(false);
@@ -1155,7 +1320,10 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   // standalone — filtering it into a folder that isn't on screen would make it
   // silently disappear from the sidebar even though the API returned it.
   const loadedFolderIds = new Set(folders.map(f => f.id));
-  const standaloneListItems = lists.filter(l => !l.folderId || !loadedFolderIds.has(l.folderId));
+  // A Markdown List's auto-managed Todo list is a real `lists` row, but it's
+  // rendered nested under its owning Markdown List (MarkdownListWithTodo)
+  // rather than again as its own standalone entry.
+  const standaloneListItems = lists.filter(l => (!l.folderId || !loadedFolderIds.has(l.folderId)) && !mdTodoListIds.has(l.id));
   const standaloneTimelines = timelines.filter(t => !t.folderId || !loadedFolderIds.has(t.folderId));
 
   // ── GPS sidebar mode ───────────────────────────────────────────────────────
@@ -1303,7 +1471,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.45.1
+              v1.46.0
             </div>
           )}
         </div>
@@ -1568,6 +1736,34 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           );
         })}
 
+        {/* Markdown Lists (root level — not yet foldered, see CLAUDE.md) */}
+        {markdownLists.map((md) => (
+          <MarkdownListWithTodo
+            key={md.id}
+            markdownList={md}
+            todoList={md.todoListId ? lists.find(l => l.id === md.todoListId) : undefined}
+            active={active}
+            activeListId={activeListId}
+            activeMarkdownListId={activeMarkdownListId}
+            collapsed={collapsed}
+            dragOverId={dragOverId}
+            dragOverTaskListId={dragOverTaskListId}
+            recentlyDroppedListId={recentlyDroppedListId}
+            folders={folders}
+            onNavigate={onNavigate}
+            onListDragStart={(listId, e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('listId', listId); }}
+            onListDragOver={(listId, e) => {
+              if (e.dataTransfer.types.includes('dashtaskid') || e.dataTransfer.types.includes('listtaskid')) {
+                e.preventDefault();
+                setDragOverTaskListId(listId);
+                setDragOverId(null);
+              }
+            }}
+            onListDragLeave={() => { setDragOverId(null); setDragOverTaskListId(null); }}
+            onListDrop={(listId, e) => handleListDrop(listId, e)}
+          />
+        ))}
+
         {/* Standalone timelines (root level) */}
         {standaloneTimelines.map(timeline => (
           <TimelineItemRow
@@ -1592,7 +1788,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="archive" label="Archived" active={false} onClick={() => onOpenModal('archived')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.45.1
+            v1.46.0
           </div>
         )}
       </div>

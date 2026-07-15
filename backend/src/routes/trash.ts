@@ -344,6 +344,7 @@ router.delete('/empty', async (req: Request, res: Response) => {
       query('DELETE FROM trash_folders WHERE user_id = $1', [req.userId]),
       query('DELETE FROM trash_timelines WHERE user_id = $1', [req.userId]),
       query('DELETE FROM trash_milestones WHERE user_id = $1', [req.userId]),
+      query('DELETE FROM trash_markdown_lists WHERE user_id = $1', [req.userId]),
     ]);
     res.json({ success: true });
     broadcastToUser(req.userId!, 'trash');
@@ -904,6 +905,109 @@ router.delete('/milestones/:trashId', async (req: Request, res: Response) => {
     broadcastToUser(req.userId!, 'trash');
   } catch (err) {
     console.error('trash milestones delete error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Markdown list trash routes
+// ---------------------------------------------------------------------------
+
+interface TrashMarkdownListRow {
+  id: number;
+  markdown_list_id: string;
+  user_id: string;
+  markdown_list_data: Record<string, unknown>;
+  deleted_at: string;
+  expires_at: string;
+}
+
+function sanitizeTrashMarkdownList(row: TrashMarkdownListRow) {
+  return {
+    id:              row.id,
+    markdownListId:  row.markdown_list_id,
+    userId:          row.user_id,
+    markdownListData: row.markdown_list_data,
+    deletedAt:       row.deleted_at,
+    expiresAt:       row.expires_at,
+  };
+}
+
+// GET /api/trash/markdown-lists
+router.get('/markdown-lists', async (req: Request, res: Response) => {
+  try {
+    const result = await query<TrashMarkdownListRow>(
+      `SELECT * FROM trash_markdown_lists WHERE user_id = $1 AND expires_at > NOW() ORDER BY deleted_at DESC`,
+      [req.userId]
+    );
+    res.json({ trash: result.rows.map(sanitizeTrashMarkdownList) });
+  } catch (err) {
+    console.error('trash markdown-lists GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/trash/markdown-lists/:trashId/restore — recreates the markdown
+// list from its JSONB snapshot. The auto-managed Todo list (if it had one) is
+// NOT restored alongside it — that list went to trash_lists via the normal
+// list-delete path when the markdown list was deleted, and is separately
+// restorable from the Lists tab. Restoring here simply drops the stale
+// todoListId/taskId references so every `/todo` block is treated as unlinked;
+// the next content save lazily recreates a fresh Todo list for them.
+router.post('/markdown-lists/:trashId/restore', async (req: Request, res: Response) => {
+  try {
+    const trashId = parseInt(req.params.trashId, 10);
+    if (isNaN(trashId)) { res.status(400).json({ error: 'Invalid trash id' }); return; }
+
+    const trashRes = await query<TrashMarkdownListRow>(
+      'SELECT * FROM trash_markdown_lists WHERE id = $1 AND user_id = $2 AND expires_at > NOW()',
+      [trashId, req.userId]
+    );
+    if (trashRes.rows.length === 0) { res.status(404).json({ error: 'Trash item not found or expired' }); return; }
+    const d = trashRes.rows[0].markdown_list_data as {
+      id: string; name: string; emoji: string | null; color: string | null; colorBg: string | null;
+      subtitle: string | null; isPublic: boolean; folderId?: string; workspaceId?: string;
+      position: number; content: { version: 1; blocks: Array<Record<string, unknown>> };
+    };
+
+    const workspaceId = await resolveRestoreWorkspace(req.userId!, d.workspaceId);
+    const folderId = await validateRestoreFolder(req.userId!, workspaceId, d.folderId);
+
+    const blocks = (d.content?.blocks ?? []).map((b) =>
+      b.type === 'todo' ? { ...b, taskId: null } : b
+    );
+
+    await withTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO markdown_lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, folder_id, workspace_id, position, content, todo_list_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULL)
+         ON CONFLICT (id) DO NOTHING`,
+        [d.id, req.userId, d.name, d.emoji, d.color, d.colorBg, d.subtitle, d.isPublic, folderId, workspaceId, d.position,
+          JSON.stringify({ version: 1, blocks })]
+      );
+      await client.query('DELETE FROM trash_markdown_lists WHERE id = $1', [trashId]);
+    });
+
+    res.json({ success: true });
+    broadcastToUser(req.userId!, 'trash');
+    broadcastToUser(req.userId!, 'markdownLists');
+  } catch (err) {
+    console.error('trash markdown-lists restore error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/trash/markdown-lists/:trashId
+router.delete('/markdown-lists/:trashId', async (req: Request, res: Response) => {
+  try {
+    const trashId = parseInt(req.params.trashId, 10);
+    if (isNaN(trashId)) { res.status(400).json({ error: 'Invalid trash id' }); return; }
+    const result = await query('DELETE FROM trash_markdown_lists WHERE id = $1 AND user_id = $2', [trashId, req.userId]);
+    if (result.rowCount === 0) { res.status(404).json({ error: 'Trash item not found' }); return; }
+    res.json({ success: true });
+    broadcastToUser(req.userId!, 'trash');
+  } catch (err) {
+    console.error('trash markdown-lists delete error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

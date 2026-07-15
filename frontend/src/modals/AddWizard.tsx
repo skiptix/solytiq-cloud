@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import type { List, Timeline } from '../types';
+import type { List, Timeline, MarkdownList } from '../types';
 import Icon from '../components/Icon';
 import AddListWizard from './AddListWizard';
 import AddTimelineWizard from './AddTimelineWizard';
+import AddMarkdownListWizard from './AddMarkdownListWizard';
 import TemplateSelectStep from './TemplateSelectStep';
 
 interface AddWizardProps {
   onClose: () => void;
   onCreatedList: (list: List) => void;
   onCreatedTimeline: (timeline: Timeline) => void;
+  onCreatedMarkdownList: (markdownList: MarkdownList) => void;
   /** Skip the chooser and open a specific creation wizard directly (e.g. the "New list" shortcut). */
   initialMode?: 'list' | 'timeline';
 }
@@ -30,11 +32,19 @@ const OPTIONS = [
     color: '#1D4ED8',
     bg: '#eff6ff',
   },
+  {
+    key: 'markdownList' as const,
+    icon: 'notes',
+    title: 'Markdown List',
+    desc: 'Craft a document with / commands — headings, images, links, and checkable todos.',
+    color: '#0f766e',
+    bg: '#ecfdf5',
+  },
 ];
 
-type Mode = 'choose' | 'list-templates' | 'timeline-templates' | 'list' | 'timeline';
+type Mode = 'choose' | 'list-templates' | 'timeline-templates' | 'list' | 'timeline' | 'markdownList';
 
-export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, initialMode }: AddWizardProps) {
+export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, onCreatedMarkdownList, initialMode }: AddWizardProps) {
   const [mode, setMode] = useState<Mode>(
     initialMode === 'list' ? 'list-templates' : initialMode === 'timeline' ? 'timeline-templates' : 'choose'
   );
@@ -60,6 +70,10 @@ export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, i
   if (mode === 'timeline') {
     return <AddTimelineWizard onClose={() => setMode('timeline-templates')} onCreated={onCreatedTimeline} />;
   }
+  if (mode === 'markdownList') {
+    // No template step yet — Markdown Lists aren't a supported template type.
+    return <AddMarkdownListWizard onClose={() => setMode('choose')} onCreated={onCreatedMarkdownList} />;
+  }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
@@ -79,7 +93,7 @@ export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, i
         <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {OPTIONS.map(opt => (
             <button key={opt.key}
-              onClick={() => setMode(`${opt.key}-templates`)}
+              onClick={() => setMode(opt.key === 'markdownList' ? 'markdownList' : `${opt.key}-templates`)}
               style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 18px', borderRadius: 14, border: '1.5px solid #ece8f4', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all 160ms', width: '100%' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = opt.color; e.currentTarget.style.background = opt.bg; e.currentTarget.style.transform = 'translateY(-1px)'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = '#ece8f4'; e.currentTarget.style.background = '#fff'; e.currentTarget.style.transform = 'translateY(0)'; }}>
