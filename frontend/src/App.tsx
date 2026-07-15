@@ -7,6 +7,7 @@ import useSyncStore from './store/useSyncStore';
 import useMembersStore from './store/useMembersStore';
 import useWorkspaceStore from './store/useWorkspaceStore';
 import useInstalledAppsStore from './store/useInstalledAppsStore';
+import useMarkdownListsStore from './store/useMarkdownListsStore';
 import { apiCheckSetupRequired, connectSSE, disconnectSSE, setUnauthorizedHandler } from './api/client';
 
 // Delta-sync engine is on by default; set VITE_SYNC_ENGINE=0 to fall back to the
@@ -42,6 +43,7 @@ import FolderDashboardScreen from './screens/FolderDashboardScreen';
 import TemplatesScreen from './screens/TemplatesScreen';
 import AutomationsScreen from './screens/AutomationsScreen';
 import AutomationEditorScreen from './screens/AutomationEditorScreen';
+import MarkdownListScreen from './screens/MarkdownListScreen';
 import ArchivedModal from './modals/ArchivedModal';
 import AdminPasswordResetScreen from './screens/AdminPasswordResetScreen';
 
@@ -216,6 +218,10 @@ function AppLayout() {
     } else {
       loadFromApi(currentWorkspaceId);
     }
+    // Markdown Lists aren't part of the app-store snapshot/delta pipeline (a
+    // SIGNAL sync entity, like templates/automations) — load them for the
+    // Sidebar directly, scoped to the same workspace.
+    void useMarkdownListsStore.getState().load(currentWorkspaceId);
 
     // Navigate to dashboard only when the user explicitly switches between two
     // real workspaces (not on initial load, and not on null → first workspace).
@@ -224,6 +230,16 @@ function AppLayout() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspaceId]);
+
+  // Refetch Markdown Lists when a sync frame signals a change (create/update/
+  // delete on any device) — same pattern TemplatesScreen/AutomationsScreen use
+  // for their own SIGNAL entity.
+  const markdownListRev = useSyncStore(s => s.entityRevisions.markdownList ?? 0);
+  useEffect(() => {
+    if (markdownListRev === 0) return;
+    void useMarkdownListsStore.getState().load(currentWorkspaceId ?? undefined);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markdownListRev]);
 
   // Self-heal after a load failure. The automatic recovery paths above
   // (workspace switch, SSE, tab visibility, the browser 'online' event) only
@@ -274,7 +290,7 @@ function AppLayout() {
     arr.filter(l => l.folderId === folderId).forEach((l, i) => updateList(l.id, { position: i }));
   }, [lists, setLists, updateList]);
 
-  const getActive = (): 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' => {
+  const getActive = (): 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' => {
     if (location.pathname.startsWith('/folder/')) return 'folder';
     if (location.pathname.startsWith('/list/')) return 'list';
     if (location.pathname.startsWith('/timeline/')) return 'timeline';
@@ -284,6 +300,7 @@ function AppLayout() {
     if (location.pathname.startsWith('/gps')) return 'gps';
     if (location.pathname.startsWith('/templates')) return 'templates';
     if (location.pathname.startsWith('/automations')) return 'automations';
+    if (location.pathname.startsWith('/markdown-list/')) return 'markdownList';
     return 'dashboard';
   };
 
@@ -291,6 +308,7 @@ function AppLayout() {
   const activeTimelineId = location.pathname.startsWith('/timeline/') ? location.pathname.split('/timeline/')[1] : undefined;
   const activeFolderId = location.pathname.startsWith('/folder/') ? location.pathname.split('/folder/')[1] : undefined;
   const activeGpsFileId = location.pathname.startsWith('/gps') ? new URLSearchParams(location.search).get('file') ?? undefined : undefined;
+  const activeMarkdownListId = location.pathname.startsWith('/markdown-list/') ? location.pathname.split('/markdown-list/')[1] : undefined;
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -312,6 +330,7 @@ function AppLayout() {
         activeTimelineId={activeTimelineId}
         activeFolderId={activeFolderId}
         activeGpsFileId={activeGpsFileId}
+        activeMarkdownListId={activeMarkdownListId}
         lists={lists}
         width={sidebarWidth}
         onNavigate={navigate}
@@ -344,6 +363,7 @@ function AppLayout() {
               <Route path="/automations" element={!appsLoaded ? null : automationsInstalled ? <AutomationsScreen /> : <Navigate to="/dashboard" replace />} />
               <Route path="/automations/:id" element={!appsLoaded ? null : automationsInstalled ? <AutomationEditorScreen /> : <Navigate to="/dashboard" replace />} />
               <Route path="/gps" element={!appsLoaded ? null : gpsInstalled ? <GPSScreen /> : <Navigate to="/dashboard" replace />} />
+              <Route path="/markdown-list/:id" element={<MarkdownListScreen />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </div>
@@ -377,6 +397,7 @@ function AppLayout() {
           onClose={() => setModal(null)}
           onCreatedList={(_list: List) => { setModal(null); navigate(`/list/${_list.id}`); }}
           onCreatedTimeline={(_t: Timeline) => { setModal(null); navigate(`/timeline/${_t.id}`); }}
+          onCreatedMarkdownList={(_md) => { setModal(null); navigate(`/markdown-list/${_md.id}`); }}
         />
       )}
       {modal === 'completed' && <CompletedModal onClose={() => setModal(null)} />}

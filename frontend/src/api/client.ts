@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -1277,3 +1277,65 @@ export const apiGetAutomationRuns = (id: string, limit?: number) =>
  *  `nodeId` (or pass the trigger node's own id) to test just the trigger. */
 export const apiTestAutomationNode = (id: string, nodeId?: string) =>
   apiFetch<{ result: AutomationRunResult }>(`/automations/${id}/test`, { method: 'POST', body: JSON.stringify({ nodeId }) });
+
+// ── Markdown Lists ────────────────────────────────────────────────────────
+
+export const apiGetMarkdownLists = (workspaceId?: string) =>
+  apiFetch<{ markdownLists: MarkdownList[] }>(`/markdown-lists${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`);
+
+export const apiGetMarkdownList = (id: string) =>
+  apiFetch<{ markdownList: MarkdownList }>(`/markdown-lists/${id}`);
+
+export const apiCreateMarkdownList = (data: { id?: string; name: string; emoji?: string; color?: string; colorBg?: string; subtitle?: string; isPublic?: boolean; folderId?: string; workspaceId?: string }) =>
+  apiFetch<{ markdownList: MarkdownList }>('/markdown-lists', { method: 'POST', body: JSON.stringify(data) });
+
+export const apiUpdateMarkdownList = (id: string, data: Partial<Pick<MarkdownList, 'name' | 'emoji' | 'color' | 'colorBg' | 'subtitle' | 'isPublic' | 'folderId' | 'position'>> & { content?: MarkdownListContent; expectedVersion?: number }) =>
+  apiFetch<{ markdownList: MarkdownList }>(`/markdown-lists/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const apiDeleteMarkdownList = (id: string) =>
+  apiFetch<{ success: boolean }>(`/markdown-lists/${id}`, { method: 'DELETE' });
+
+/** Resolves an `/image` block's `imageId` to a fetchable URL, with the auth
+ *  token attached as a query param — `<img>` tags can't set an Authorization
+ *  header, so the server accepts `?token=` on this one route (see
+ *  routes/markdownLists.ts). */
+export const markdownImageUrl = (markdownListId: string, imageId: string): string => {
+  const token = getToken();
+  const base = `${BASE_URL}/markdown-lists/${markdownListId}/images/${imageId}`;
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+};
+
+export function apiUploadMarkdownImage(
+  markdownListId: string,
+  file: File,
+  onProgress?: (pct: number) => void,
+): Promise<{ id: string; name: string; mimeType: string; size: number; url: string }> {
+  return new Promise((resolve, reject) => {
+    const token = getToken();
+    const form = new FormData();
+    form.append('image', file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${BASE_URL}/markdown-lists/${markdownListId}/images`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100)); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve((JSON.parse(xhr.responseText) as { image: { id: string; name: string; mimeType: string; size: number; url: string } }).image);
+      } else {
+        reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(form);
+  });
+}
+
+// ── Markdown List trash ──────────────────────────────────────────────────
+
+export const apiGetTrashMarkdownLists = () =>
+  apiFetch<{ trash: Array<{ id: number; markdownListId: string; markdownListData: MarkdownList; deletedAt: string; expiresAt: string }> }>('/trash/markdown-lists');
+export const apiRestoreTrashMarkdownList = (trashId: number) =>
+  apiFetch<{ success: boolean }>(`/trash/markdown-lists/${trashId}/restore`, { method: 'POST' });
+export const apiDeleteTrashMarkdownList = (trashId: number) =>
+  apiFetch<{ success: boolean }>(`/trash/markdown-lists/${trashId}`, { method: 'DELETE' });
