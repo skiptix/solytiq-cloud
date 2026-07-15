@@ -1,5 +1,5 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { useParams } from 'react-router-dom';
 import Icon from '../components/Icon';
 import { renderInline } from '../components/MarkdownView';
@@ -120,6 +120,17 @@ export default function SharedMarkdownListPage() {
     }
   }
 
+  // Blocks are grouped into outlined sections, same rule as the editor: a
+  // `/divider` block closes the current section and opens a new one.
+  const sections: SharedBlock[][] = [[]];
+  const sectionDividers: SharedBlock[] = [];
+  if (content) {
+    for (const b of content.content.blocks) {
+      if (b.type === 'divider') { sectionDividers.push(b); sections.push([]); }
+      else sections[sections.length - 1].push(b);
+    }
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: '#f8f7fc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: state === 'ready' ? 'flex-start' : 'center', padding: '72px 24px 24px' }}>
       {/* Logo */}
@@ -215,12 +226,23 @@ export default function SharedMarkdownListPage() {
             </div>
 
             {/* Blocks */}
-            <div style={{ padding: '24px 32px 32px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ padding: '24px 32px 32px', display: 'flex', flexDirection: 'column', gap: 12 }}>
               {content.content.blocks.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#b0acbe' }}>This markdown list is empty.</div>
               )}
-              {content.content.blocks.map(block => (
-                <SharedBlockView key={block.id} block={block} accent={accent} number={numberByBlockId[block.id]} token={token} password={password} />
+              {sections.map((sectionBlocks, i) => (
+                <Fragment key={`section-${i}`}>
+                  {sectionBlocks.length > 0 && (
+                    <div style={{ border: '1px solid #E5E7EB', borderRadius: 12, background: '#F9FAFB', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {sectionBlocks.map(block => (
+                        <SharedBlockView key={block.id} block={block} accent={accent} number={numberByBlockId[block.id]} token={token} password={password} />
+                      ))}
+                    </div>
+                  )}
+                  {sectionDividers[i] && (
+                    <SharedBlockView key={sectionDividers[i].id} block={sectionDividers[i]} accent={accent} token={token} password={password} />
+                  )}
+                </Fragment>
               ))}
             </div>
           </>
@@ -240,15 +262,14 @@ export default function SharedMarkdownListPage() {
   );
 }
 
-// Read-only rendering of a single block — mirrors the editor's card outline
-// and TaskItem-style checkbox (see MarkdownListScreen.tsx) but with no
+// Read-only rendering of a single block — sections of blocks share one
+// outline (see MarkdownListScreen.tsx), split wherever a `/divider` block
+// appears, and this component just renders the block's own content with no
 // interactivity beyond the outbound link.
 function SharedBlockView({ block, accent, number, token, password }: { block: SharedBlock; accent: string; number?: number; token?: string; password: string }) {
   const cardStyle: React.CSSProperties = {
-    background: block.type === 'divider' ? 'transparent' : '#F9FAFB',
-    border: block.type === 'divider' ? 'none' : '1px solid #E5E7EB',
-    borderRadius: 10,
-    padding: block.type === 'divider' ? '4px 14px' : block.type === 'image' ? 8 : '10px 14px',
+    borderRadius: block.type === 'image' ? 8 : 0,
+    padding: block.type === 'divider' ? '4px 14px' : block.type === 'image' ? 8 : '6px 4px',
     overflow: block.type === 'image' ? 'hidden' : 'visible',
   };
 

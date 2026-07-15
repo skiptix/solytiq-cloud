@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { createPortal, flushSync } from 'react-dom';
 import type {
@@ -473,6 +473,139 @@ export default function MarkdownListScreen() {
     else runCount = 0;
   }
 
+  const blockIndexById: Record<string, number> = {};
+  blocks.forEach((b, i) => { blockIndexById[b.id] = i; });
+
+  // Blocks are grouped into outlined sections; a `/divider` block closes the
+  // current section and opens a new one, so a divider is what splits the
+  // outline rather than each block carrying its own.
+  const sections: MarkdownBlock[][] = [[]];
+  const sectionDividers: MarkdownBlock[] = [];
+  for (const b of blocks) {
+    if (b.type === 'divider') { sectionDividers.push(b); sections.push([]); }
+    else sections[sections.length - 1].push(b);
+  }
+
+  const renderBlock = (block: MarkdownBlock, index: number) => {
+    const hovered = hoveredBlockId === block.id;
+    return (
+      <div key={block.id}
+        onMouseEnter={() => setHoveredBlockId(block.id)}
+        onMouseLeave={() => setHoveredBlockId(prev => prev === block.id ? null : prev)}
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => { e.preventDefault(); if (dragBlockId && dragBlockId !== block.id) moveBlock(dragBlockId, block.id); setDragBlockId(null); }}
+        style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+        <span
+          draggable
+          onDragStart={() => setDragBlockId(block.id)}
+          title="Drag to reorder"
+          style={{ cursor: 'grab', flexShrink: 0, width: 15, overflow: 'hidden', display: 'flex', alignItems: 'center', paddingTop: 12, opacity: hovered ? 1 : 0, transition: 'opacity 120ms' }}>
+          <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+        </span>
+
+        <div style={{
+          flex: 1, minWidth: 0, position: 'relative',
+          borderRadius: block.type === 'image' ? 8 : 0,
+          padding: block.type === 'divider' ? '4px 14px' : block.type === 'image' ? 8 : '4px 6px',
+          // Only clip for images (rounds off the photo's corners) —
+          // everything else may host an absolutely positioned popover (the
+          // slash-command menu) that must be free to overflow.
+          overflow: block.type === 'image' ? 'hidden' : 'visible',
+        }}>
+          {block.type === 'divider' ? (
+            <hr style={{ border: 'none', borderTop: '1.5px solid #e8e4f0', margin: '10px 0' }} />
+          ) : block.type === 'image' ? (
+            <div>
+              <img src={markdownImageUrl(mdId, block.imageId)} alt={block.caption ?? ''} style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }} />
+              <input value={block.caption ?? ''} placeholder="Add a caption…"
+                onChange={e => updateBlocks(prev => prev.map(b => b.id === block.id ? { ...b, caption: e.target.value } as MarkdownBlock : b))}
+                style={{ marginTop: 6, padding: '0 4px 4px', width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontStyle: 'italic', color: '#787584', border: 'none', outline: 'none', background: 'transparent' }} />
+            </div>
+          ) : block.type === 'link' ? (
+            <a href={block.url} target="_blank" rel="noopener noreferrer"
+              style={{ display: 'flex', flexDirection: 'column', gap: 3, textDecoration: 'none', padding: '8px 2px' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#5e4dbb' }}>
+                <Icon name="link" size={14} color="#5e4dbb" /> {block.title || block.url}
+              </span>
+              {block.description && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>{block.description}</span>}
+              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{block.url}</span>
+            </a>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              {block.type === 'bulleted-list-item' && <span style={{ paddingTop: 9, color: '#787584', fontSize: 16, lineHeight: 1, flexShrink: 0 }}>•</span>}
+              {block.type === 'numbered-list-item' && <span style={{ paddingTop: 8, color: '#787584', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, flexShrink: 0, minWidth: 16 }}>{numberByBlockId[block.id]}.</span>}
+              {block.type === 'todo' && (
+                <div onClick={() => toggleTodo(block)}
+                  style={{ marginTop: 8, width: 20, height: 20, minWidth: 20, borderRadius: 5, border: '1.5px solid', borderColor: block.checked ? '#5e4dbb' : '#c9c4d5', background: block.checked ? '#5e4dbb' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', flexShrink: 0 }}>
+                  {block.checked && <Checkmark />}
+                </div>
+              )}
+              {block.type === 'quote' && <span style={{ width: 3, alignSelf: 'stretch', background: '#c9c4d5', borderRadius: 2, flexShrink: 0, marginTop: 8, marginBottom: 8 }} />}
+              {hasText(block) && (focusedBlockId === block.id ? (
+                <AutoTextarea
+                  innerRef={el => { blockRefs.current[block.id] = el; }}
+                  value={block.text}
+                  placeholder={index === 0 && blocks.length === 1 ? "Type '/' for commands, or just start writing…" : ''}
+                  onChange={v => handleTextChange(block, v)}
+                  onKeyDown={e => handleKeyDown(e, block, index)}
+                  onBlur={() => setFocusedBlockId(prev => (prev === block.id ? null : prev))}
+                  style={headingStyleFor(block, isMobile)}
+                />
+              ) : (
+                <div
+                  onClick={() => focusBlock(block.id, true)}
+                  style={{ ...headingStyleFor(block, isMobile), cursor: 'text', whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: '1.6em' }}>
+                  {block.text
+                    ? renderInline(block.text, block.id)
+                    : <span style={{ color: '#b0acbe' }}>{index === 0 && blocks.length === 1 ? "Type '/' for commands, or just start writing…" : ' '}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {slashMenu?.blockId === block.id && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#fff', borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.16)', border: '1px solid #e8e4f0', minWidth: 220, maxHeight: 260, overflowY: 'auto', zIndex: 210, animation: 'menuIn 140ms ease both' }}>
+            {filteredCommands(slashMenu.query).length === 0 && (
+              <div style={{ padding: '10px 14px', fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#b0acbe' }}>No matching command</div>
+            )}
+            {filteredCommands(slashMenu.query).map(cmd => (
+              <button key={cmd.cmd} onMouseDown={e => { e.preventDefault(); applyCommand(block.id, cmd); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                <Icon name={cmd.icon} size={16} color="#5e4dbb" />
+                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, color: '#1c1b22' }}>{cmd.label}</span>
+                <span style={{ marginLeft: 'auto', fontFamily: 'monospace', fontSize: 11, color: '#b0acbe' }}>/{cmd.cmd}</span>
+              </button>
+            ))}
+            </div>
+          )}
+
+          {linkEditingBlockId === block.id && (
+            <div style={{ marginTop: 6, padding: 14, border: '1.5px solid #e8e4f0', borderRadius: 12, background: '#faf9fc', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input autoFocus value={linkDraft.url} onChange={e => setLinkDraft(d => ({ ...d, url: e.target.value }))} placeholder="https://…"
+                style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', outline: 'none' }} />
+              <input value={linkDraft.title} onChange={e => setLinkDraft(d => ({ ...d, title: e.target.value }))} placeholder="Title (optional)"
+                style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', outline: 'none' }} />
+              <input value={linkDraft.description} onChange={e => setLinkDraft(d => ({ ...d, description: e.target.value }))} placeholder="Description (optional)"
+                style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', outline: 'none' }} />
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button onClick={() => setLinkEditingBlockId(null)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 7, padding: '7px 14px', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={saveLinkBlock} disabled={!linkDraft.url.trim()}
+                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#fff', background: linkDraft.url.trim() ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 7, padding: '7px 14px', cursor: linkDraft.url.trim() ? 'pointer' : 'not-allowed' }}>Save link</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <button onClick={() => deleteBlock(block.id)} title="Delete block"
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, marginTop: 12, borderRadius: 5, border: 'none', background: 'transparent', cursor: 'pointer', opacity: hovered ? 1 : 0, transition: 'opacity 120ms' }}>
+          <Icon name="close" size={13} color="#b0acbe" />
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center', padding: isMobile ? '20px 16px 80px' : '40px 24px 120px' }}>
       <div style={{ width: '100%', maxWidth: 760 }}>
@@ -522,129 +655,17 @@ export default function MarkdownListScreen() {
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: saveState === 'error' ? '#ba1a1a' : '#b0acbe', marginBottom: 24, height: 14 }}>{saveLabel}</div>
 
         {/* Blocks */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {blocks.map((block, index) => {
-            const hovered = hoveredBlockId === block.id;
-            return (
-            <div key={block.id}
-              onMouseEnter={() => setHoveredBlockId(block.id)}
-              onMouseLeave={() => setHoveredBlockId(prev => prev === block.id ? null : prev)}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => { e.preventDefault(); if (dragBlockId && dragBlockId !== block.id) moveBlock(dragBlockId, block.id); setDragBlockId(null); }}
-              style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-              <span
-                draggable
-                onDragStart={() => setDragBlockId(block.id)}
-                title="Drag to reorder"
-                style={{ cursor: 'grab', flexShrink: 0, width: 15, overflow: 'hidden', display: 'flex', alignItems: 'center', paddingTop: 12, opacity: hovered ? 1 : 0, transition: 'opacity 120ms' }}>
-                <Icon name="drag_indicator" size={15} color="#c9c4d5" />
-              </span>
-
-              <div style={{
-                flex: 1, minWidth: 0, position: 'relative',
-                background: block.type === 'divider' ? 'transparent' : '#F9FAFB',
-                border: block.type === 'divider' ? 'none' : '1px solid #E5E7EB',
-                borderRadius: 10,
-                padding: block.type === 'divider' ? '4px 14px' : block.type === 'image' ? 8 : '4px 14px',
-                // Only clip for images (rounds off the photo's corners inside
-                // the card) — everything else may host an absolutely
-                // positioned popover (the slash-command menu) that must be
-                // free to overflow the card's bounds.
-                overflow: block.type === 'image' ? 'hidden' : 'visible',
-              }}>
-                {block.type === 'divider' ? (
-                  <hr style={{ border: 'none', borderTop: '1.5px solid #e8e4f0', margin: '10px 0' }} />
-                ) : block.type === 'image' ? (
-                  <div>
-                    <img src={markdownImageUrl(mdId, block.imageId)} alt={block.caption ?? ''} style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }} />
-                    <input value={block.caption ?? ''} placeholder="Add a caption…"
-                      onChange={e => updateBlocks(prev => prev.map(b => b.id === block.id ? { ...b, caption: e.target.value } as MarkdownBlock : b))}
-                      style={{ marginTop: 6, padding: '0 4px 4px', width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontStyle: 'italic', color: '#787584', border: 'none', outline: 'none', background: 'transparent' }} />
-                  </div>
-                ) : block.type === 'link' ? (
-                  <a href={block.url} target="_blank" rel="noopener noreferrer"
-                    style={{ display: 'flex', flexDirection: 'column', gap: 3, textDecoration: 'none', padding: '8px 2px' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#5e4dbb' }}>
-                      <Icon name="link" size={14} color="#5e4dbb" /> {block.title || block.url}
-                    </span>
-                    {block.description && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>{block.description}</span>}
-                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{block.url}</span>
-                  </a>
-                ) : (
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                    {block.type === 'bulleted-list-item' && <span style={{ paddingTop: 9, color: '#787584', fontSize: 16, lineHeight: 1, flexShrink: 0 }}>•</span>}
-                    {block.type === 'numbered-list-item' && <span style={{ paddingTop: 8, color: '#787584', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, flexShrink: 0, minWidth: 16 }}>{numberByBlockId[block.id]}.</span>}
-                    {block.type === 'todo' && (
-                      <div onClick={() => toggleTodo(block)}
-                        style={{ marginTop: 8, width: 20, height: 20, minWidth: 20, borderRadius: 5, border: '1.5px solid', borderColor: block.checked ? '#5e4dbb' : '#c9c4d5', background: block.checked ? '#5e4dbb' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', flexShrink: 0 }}>
-                        {block.checked && <Checkmark />}
-                      </div>
-                    )}
-                    {block.type === 'quote' && <span style={{ width: 3, alignSelf: 'stretch', background: '#c9c4d5', borderRadius: 2, flexShrink: 0, marginTop: 8, marginBottom: 8 }} />}
-                    {hasText(block) && (focusedBlockId === block.id ? (
-                      <AutoTextarea
-                        innerRef={el => { blockRefs.current[block.id] = el; }}
-                        value={block.text}
-                        placeholder={index === 0 && blocks.length === 1 ? "Type '/' for commands, or just start writing…" : ''}
-                        onChange={v => handleTextChange(block, v)}
-                        onKeyDown={e => handleKeyDown(e, block, index)}
-                        onBlur={() => setFocusedBlockId(prev => (prev === block.id ? null : prev))}
-                        style={headingStyleFor(block, isMobile)}
-                      />
-                    ) : (
-                      <div
-                        onClick={() => focusBlock(block.id, true)}
-                        style={{ ...headingStyleFor(block, isMobile), cursor: 'text', whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: '1.6em' }}>
-                        {block.text
-                          ? renderInline(block.text, block.id)
-                          : <span style={{ color: '#b0acbe' }}>{index === 0 && blocks.length === 1 ? "Type '/' for commands, or just start writing…" : ' '}</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {slashMenu?.blockId === block.id && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#fff', borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.16)', border: '1px solid #e8e4f0', minWidth: 220, maxHeight: 260, overflowY: 'auto', zIndex: 210, animation: 'menuIn 140ms ease both' }}>
-                    {filteredCommands(slashMenu.query).length === 0 && (
-                      <div style={{ padding: '10px 14px', fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#b0acbe' }}>No matching command</div>
-                    )}
-                    {filteredCommands(slashMenu.query).map(cmd => (
-                      <button key={cmd.cmd} onMouseDown={e => { e.preventDefault(); applyCommand(block.id, cmd); }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                        <Icon name={cmd.icon} size={16} color="#5e4dbb" />
-                        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, color: '#1c1b22' }}>{cmd.label}</span>
-                        <span style={{ marginLeft: 'auto', fontFamily: 'monospace', fontSize: 11, color: '#b0acbe' }}>/{cmd.cmd}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {linkEditingBlockId === block.id && (
-                  <div style={{ marginTop: 6, padding: 14, border: '1.5px solid #e8e4f0', borderRadius: 12, background: '#faf9fc', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <input autoFocus value={linkDraft.url} onChange={e => setLinkDraft(d => ({ ...d, url: e.target.value }))} placeholder="https://…"
-                      style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', outline: 'none' }} />
-                    <input value={linkDraft.title} onChange={e => setLinkDraft(d => ({ ...d, title: e.target.value }))} placeholder="Title (optional)"
-                      style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', outline: 'none' }} />
-                    <input value={linkDraft.description} onChange={e => setLinkDraft(d => ({ ...d, description: e.target.value }))} placeholder="Description (optional)"
-                      style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', outline: 'none' }} />
-                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                      <button onClick={() => setLinkEditingBlockId(null)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 7, padding: '7px 14px', cursor: 'pointer' }}>Cancel</button>
-                      <button onClick={saveLinkBlock} disabled={!linkDraft.url.trim()}
-                        style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#fff', background: linkDraft.url.trim() ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 7, padding: '7px 14px', cursor: linkDraft.url.trim() ? 'pointer' : 'not-allowed' }}>Save link</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <button onClick={() => deleteBlock(block.id)} title="Delete block"
-                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, marginTop: 12, borderRadius: 5, border: 'none', background: 'transparent', cursor: 'pointer', opacity: hovered ? 1 : 0, transition: 'opacity 120ms' }}>
-                <Icon name="close" size={13} color="#b0acbe" />
-              </button>
-            </div>
-            );
-          })}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {sections.map((sectionBlocks, i) => (
+            <Fragment key={`section-${i}`}>
+              {sectionBlocks.length > 0 && (
+                <div style={{ border: '1px solid #E5E7EB', borderRadius: 12, background: '#F9FAFB', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {sectionBlocks.map(block => renderBlock(block, blockIndexById[block.id]))}
+                </div>
+              )}
+              {sectionDividers[i] && renderBlock(sectionDividers[i], blockIndexById[sectionDividers[i].id])}
+            </Fragment>
+          ))}
         </div>
 
         <button onClick={() => { const b = makeEmptyBlock('paragraph'); addBlockAfter(blocks[blocks.length - 1]?.id ?? '', b); }}
