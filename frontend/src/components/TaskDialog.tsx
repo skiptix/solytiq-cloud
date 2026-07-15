@@ -210,6 +210,26 @@ function friendlyDate(iso?: string) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+/** "hh:mm - dd.mm.yyyy" in local time. */
+function formatDateTime(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  return `${hh}:${mi} - ${dd}.${mo}.${d.getFullYear()}`;
+}
+
+/** Elapsed span as total-hours:minutes, e.g. "76:23" for 3d 4h 23m. */
+function formatDuration(ms: number): string {
+  const totalMinutes = Math.max(0, Math.round(ms / 60000));
+  const hh = Math.floor(totalMinutes / 60);
+  const mi = totalMinutes % 60;
+  return `${String(hh).padStart(2, '0')}:${String(mi).padStart(2, '0')}`;
+}
+
 function Checkmark() {
   return (
     <svg width="12" height="9" viewBox="0 0 12 9" fill="none">
@@ -573,7 +593,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
                 </div>
               </PropRow>
 
-              <PropRow icon="label" label="Tag" last={!task._listName && !showOwner}>
+              <PropRow icon="label" label="Tag">
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {TAGS.map(t => {
                     const c = BADGE_COLORS[t];
@@ -594,6 +614,10 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
                     );
                   })}
                 </div>
+              </PropRow>
+
+              <PropRow icon="history" label="Timeline" last={!task._listName && !showOwner}>
+                <TaskMiniTimeline createdAt={task.createdAt} completedAt={task.completedAt} checked={task.checked} />
               </PropRow>
 
               {task._listName && (
@@ -879,6 +903,50 @@ function PropRow({ icon, label, children, last = false, first = false }: { icon:
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
         {children}
       </div>
+    </div>
+  );
+}
+
+/** Compact single-row "created → done" visual, auto-filled and read-only —
+ *  used inside the Timeline PropRow. Reflects the persisted task, not the
+ *  dialog's buffered (unsaved) checked/edit state. */
+function TaskMiniTimeline({ createdAt, completedAt, checked }: { createdAt?: string; completedAt?: string | null; checked: boolean }) {
+  const isMobile = useMobile();
+  const durationMs = checked && createdAt && completedAt
+    ? new Date(completedAt).getTime() - new Date(createdAt).getTime()
+    : null;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 12, width: '100%', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#5e4dbb', flexShrink: 0 }} />
+          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#9d8dff', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Created</span>
+        </div>
+        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#484552', paddingLeft: 12 }}>{formatDateTime(createdAt)}</span>
+      </div>
+
+      <div style={{
+        flex: isMobile ? '0 0 100%' : 1, order: isMobile ? 3 : 0, minWidth: 24, height: 3, borderRadius: 2,
+        background: checked ? '#5e4dbb' : 'repeating-linear-gradient(90deg, #d4cfe8 0 4px, transparent 4px 8px)',
+      }} />
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ width: 7, height: 7, borderRadius: '50%', background: checked ? '#10B981' : 'transparent', border: checked ? 'none' : '1.5px solid #c9c4d5', flexShrink: 0 }} />
+          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: checked ? '#10B981' : '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Done</span>
+        </div>
+        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: checked ? '#484552' : '#b0acbe', paddingLeft: 12 }}>
+          {checked ? formatDateTime(completedAt) : 'In progress'}
+        </span>
+      </div>
+
+      {durationMs !== null && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, marginLeft: isMobile ? 0 : 'auto', background: '#F5F3FF', borderRadius: 999, padding: '3px 9px' }}>
+          <Icon name="schedule" size={11} color="#5e4dbb" />
+          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600, color: '#5e4dbb' }}>{formatDuration(durationMs)}</span>
+        </div>
+      )}
     </div>
   );
 }

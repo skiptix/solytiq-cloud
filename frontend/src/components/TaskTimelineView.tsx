@@ -37,6 +37,17 @@ function dayFromDateOnly(iso: string): Date {
   const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
   return new Date(y, m - 1, d);
 }
+/** "hh:mm - dd.mm.yyyy" in local time, for tooltips. */
+function formatDateTime(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  return `${hh}:${mi} - ${dd}.${mo}.${d.getFullYear()}`;
+}
 
 const ZOOM_PX_PER_DAY: Record<Zoom, { desktop: number; mobile: number }> = {
   day:   { desktop: 40, mobile: 30 },
@@ -118,8 +129,22 @@ function buildMinorTicks(start: Date, totalDays: number, zoom: Zoom, today: Date
 
 export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick }: TaskTimelineViewProps) {
   const [zoom, setZoom] = useState<Zoom>('day');
+  const [containerWidth, setContainerWidth] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const barColor = list.color ?? '#5e4dbb';
+
+  // Measure the visible chart width so a short date range can stretch its
+  // columns to fill it exactly, rather than leaving dead space on the right.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect.width;
+      if (w) setContainerWidth(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const rows: TimelineRow[] = useMemo(() => list.sections.flatMap(s => [
     { kind: 'section', id: s.id, label: s.label, emoji: s.emoji } as const,
@@ -150,7 +175,13 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
     return { start, totalDays: Math.max(1, daysBetween(start, end)) };
   }, [allTasks, today]);
 
-  const pxPerDay = ZOOM_PX_PER_DAY[zoom][isMobile ? 'mobile' : 'desktop'];
+  // The zoom level sets a *minimum* pixel-per-day (its usual detail level);
+  // when that would render narrower than the visible chart area, stretch it
+  // up so the grid always fills the full width instead of leaving a gap.
+  const basePxPerDay = ZOOM_PX_PER_DAY[zoom][isMobile ? 'mobile' : 'desktop'];
+  const pxPerDay = range && containerWidth > 0
+    ? Math.max(basePxPerDay, containerWidth / range.totalDays)
+    : basePxPerDay;
   const totalWidth = range ? range.totalDays * pxPerDay : 0;
   const todayOffsetPx = range ? daysBetween(range.start, today) * pxPerDay : 0;
 
@@ -232,8 +263,10 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
                   style={{
                     width: 16, height: 16, minWidth: 16, borderRadius: 4, border: '1.5px solid',
                     borderColor: row.task.checked ? barColor : '#c9c4d5', background: row.task.checked ? barColor : 'transparent',
-                    cursor: 'pointer', flexShrink: 0,
-                  }} />
+                    cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                  {row.task.checked && <Icon name="check" size={11} color="#fff" />}
+                </div>
                 <span style={{
                   fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22',
                   opacity: row.task.checked ? 0.45 : 1, textDecoration: row.task.checked ? 'line-through' : 'none',
@@ -247,7 +280,7 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
 
           {/* Right chart — horizontally scrollable */}
           <div ref={scrollRef} style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden' }}>
-            <div style={{ width: totalWidth, position: 'relative' }}>
+            <div style={{ width: totalWidth, minWidth: '100%', position: 'relative' }}>
               {/* Ruler */}
               <div style={{ borderBottom: '1px solid #E5E7EB', background: '#fff' }}>
                 <div style={{ display: 'flex', height: MAJOR_H, borderBottom: '1px solid #f1ecf6' }}>
@@ -300,11 +333,17 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
                     deadlineOverdue = !t.checked && dlDay < today;
                   }
 
+                  const tooltip = [
+                    t.title,
+                    `Created: ${formatDateTime(t.createdAt)}`,
+                    t.checked ? `Completed: ${formatDateTime(t.completedAt)}` : null,
+                  ].filter(Boolean).join('\n');
+
                   return (
                     <div key={row.id} style={{ height: ROW_HEIGHT, position: 'relative', borderBottom: '1px solid #f1ecf6' }}>
                       <div
                         onClick={() => onRowClick(t)}
-                        title={t.title}
+                        title={tooltip}
                         style={{
                           position: 'absolute', left: barLeft, width: barWidth, top: '50%', transform: 'translateY(-50%)',
                           height: BAR_HEIGHT, borderRadius: BAR_HEIGHT / 2, cursor: 'pointer',
