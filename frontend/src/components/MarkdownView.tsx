@@ -12,7 +12,7 @@ import type { ReactNode, CSSProperties } from 'react';
 
 const INLINE_TOKEN = /(`[^`]+`)|(\*\*(?:[^*]|\*(?!\*))+\*\*)|(\*[^*\n]+\*)|(_[^_\n]+_)|(~~[^~\n]+~~)|(\[[^\]\n]+\]\(https?:\/\/[^\s)]+\))/;
 
-function renderInline(text: string, keyPrefix: string): ReactNode[] {
+export function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const out: ReactNode[] = [];
   let rest = text;
   let i = 0;

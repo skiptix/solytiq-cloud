@@ -1,0 +1,306 @@
+import { usePageTitle } from "../hooks/usePageTitle";
+import { useState, useEffect, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
+import Icon from '../components/Icon';
+import { renderInline } from '../components/MarkdownView';
+
+const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
+
+interface MarkdownListMeta {
+  name: string;
+  emoji: string | null;
+  color: string | null;
+  colorBg: string | null;
+  subtitle: string | null;
+  hasPassword: boolean;
+  expiresAt: string | null;
+  isExpired: boolean;
+  createdAt: string;
+  sharedBy: string | null;
+  sharedByImage: string | null;
+}
+
+interface SharedBlock {
+  id: string;
+  type: string;
+  text?: string;
+  level?: 1 | 2 | 3;
+  checked?: boolean;
+  imageId?: string;
+  caption?: string;
+  url?: string;
+  title?: string;
+  description?: string;
+}
+
+interface MarkdownListContentResponse {
+  markdownList: { name: string; emoji: string | null; color: string | null; colorBg: string | null; subtitle: string | null };
+  content: { version: 1; blocks: SharedBlock[] };
+}
+
+type PageState = 'loading' | 'password' | 'ready' | 'expired' | 'notfound' | 'error';
+
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+function sharedByInitials(name: string): string {
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+export default function SharedMarkdownListPage() {
+  const { token } = useParams<{ token: string }>();
+  const [state, setState] = useState<PageState>('loading');
+  const [meta, setMeta] = useState<MarkdownListMeta | null>(null);
+  const [content, setContent] = useState<MarkdownListContentResponse | null>(null);
+  const [password, setPassword] = useState('');
+  const [pwError, setPwError] = useState(false);
+  const [loadingContent, setLoadingContent] = useState(false);
+
+  const fetchContent = useCallback(async (pw: string | undefined) => {
+    setLoadingContent(true);
+    setPwError(false);
+    try {
+      const url = `${BASE_URL}/share/markdown-list/${token}/content${pw ? `?password=${encodeURIComponent(pw)}` : ''}`;
+      const res = await fetch(url);
+      if (res.status === 401) { setPwError(true); setState('password'); return; }
+      if (res.status === 410) { setState('expired'); return; }
+      if (res.status === 404) { setState('notfound'); return; }
+      if (!res.ok) { setState('error'); return; }
+      const data: MarkdownListContentResponse = await res.json();
+      setContent(data);
+      setState('ready');
+    } catch {
+      setState('error');
+    } finally {
+      setLoadingContent(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) { setState('notfound'); return; }
+    setState('loading');
+    setContent(null);
+    setPassword('');
+    setPwError(false);
+    fetch(`${BASE_URL}/share/markdown-list/${token}`)
+      .then(async res => {
+        if (res.status === 404) { setState('notfound'); return; }
+        if (!res.ok) { setState('error'); return; }
+        const data: MarkdownListMeta = await res.json();
+        setMeta(data);
+        if (data.isExpired) { setState('expired'); return; }
+        if (data.hasPassword) { setState('password'); return; }
+        fetchContent(undefined);
+      })
+      .catch(() => setState('error'));
+  }, [token, fetchContent]);
+
+  const accent = content?.markdownList.color ?? meta?.color ?? '#5e4dbb';
+  const colorBg = content?.markdownList.colorBg ?? meta?.colorBg ?? '#F9FAFB';
+
+  let pageTitle = 'Loading markdown list...';
+  if (state === 'notfound') {
+    pageTitle = 'Markdown list not found';
+  } else if (meta) {
+    const prefix = meta.emoji ? `${meta.emoji} ` : '';
+    pageTitle = `${prefix}${meta.name}`;
+  }
+  usePageTitle(pageTitle);
+
+  const cardMaxWidth = state === 'ready' ? 720 : 460;
+
+  // Numbering for contiguous numbered-list-item runs, same rule as the editor.
+  const numberByBlockId: Record<string, number> = {};
+  if (content) {
+    let run = 0;
+    for (const b of content.content.blocks) {
+      if (b.type === 'numbered-list-item') { run += 1; numberByBlockId[b.id] = run; }
+      else run = 0;
+    }
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#f8f7fc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: state === 'ready' ? 'flex-start' : 'center', padding: '72px 24px 24px' }}>
+      {/* Logo */}
+      <div style={{ position: 'fixed', top: 20, left: 24, display: 'flex', alignItems: 'center', gap: 9, zIndex: 5 }}>
+        <img src="/solytiq-cloud.png" alt="Solytiq" style={{ width: 36, height: 36, borderRadius: 9, objectFit: 'cover', flexShrink: 0 }} />
+        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 800, color: '#1c1b22', letterSpacing: '-0.02em' }}>solytiq</span>
+      </div>
+
+      {/* Shared-by bubble */}
+      {meta?.sharedBy && (
+        <div style={{ position: 'fixed', top: 20, right: 24, display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid #E5E7EB', borderRadius: 99, padding: '6px 12px 6px 6px', boxShadow: '0 2px 8px rgba(94,77,187,0.07)', zIndex: 5 }}>
+          <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'linear-gradient(135deg, #9d8dff 0%, #5e4dbb 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+            {meta.sharedByImage
+              ? <img src={meta.sharedByImage} alt={meta.sharedBy} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 9, fontWeight: 700, color: '#fff', letterSpacing: '0.02em' }}>{sharedByInitials(meta.sharedBy)}</span>
+            }
+          </div>
+          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>Shared by <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 600, color: '#1c1b22' }}>{meta.sharedBy}</span></span>
+        </div>
+      )}
+
+      <div style={{ background: '#fff', borderRadius: 20, boxShadow: '0 8px 40px rgba(94,77,187,0.10)', padding: state === 'ready' ? 0 : '40px 40px 36px', width: '100%', maxWidth: cardMaxWidth, display: 'flex', flexDirection: 'column', alignItems: state === 'ready' ? 'stretch' : 'center', overflow: 'hidden', transition: 'max-width 300ms ease' }}>
+
+        {/* Loading */}
+        {state === 'loading' && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px 0' }}>
+            <div style={{ width: 36, height: 36, border: '3px solid #e8e4f0', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#b0acbe' }}>Loading…</div>
+          </div>
+        )}
+
+        {/* Error states */}
+        {(state === 'notfound' || state === 'expired' || state === 'error') && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '12px 0 8px', textAlign: 'center' }}>
+            <div style={{ width: 56, height: 56, borderRadius: 16, background: state === 'expired' ? '#fef3c7' : '#fff5f5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name={state === 'expired' ? 'schedule' : 'error_outline'} size={28} color={state === 'expired' ? '#d97706' : '#ba1a1a'} />
+            </div>
+            <div>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 18, fontWeight: 700, color: '#1c1b22', marginBottom: 6 }}>
+                {state === 'notfound' ? 'Markdown list not found' : state === 'expired' ? 'Link expired' : 'Something went wrong'}
+              </div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#787584', lineHeight: 1.5 }}>
+                {state === 'notfound' ? "This share link doesn't exist or has been removed." :
+                 state === 'expired'  ? 'This share link has expired and is no longer available.' :
+                                        'Unable to load this markdown list. Please try again.'}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Password */}
+        {state === 'password' && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' }}>
+            <div style={{ width: 56, height: 56, borderRadius: 16, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="lock" size={28} color="#5e4dbb" />
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', marginBottom: 4 }}>{meta?.name ?? 'Protected markdown list'}</div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#787584' }}>This markdown list is password protected.</div>
+            </div>
+            <div style={{ width: '100%' }}>
+              <input
+                type="password"
+                value={password}
+                onChange={e => { setPassword(e.target.value); setPwError(false); }}
+                onKeyDown={e => { if (e.key === 'Enter') fetchContent(password); }}
+                placeholder="Enter password to view"
+                style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', background: '#F9FAFB', border: `1.5px solid ${pwError ? '#ba1a1a' : '#E5E7EB'}`, borderRadius: 10, padding: '11px 14px', outline: 'none', boxSizing: 'border-box' }}
+                autoFocus
+              />
+              {pwError && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a', marginTop: 5 }}>Incorrect password, please try again.</div>}
+            </div>
+            <button
+              onClick={() => fetchContent(password)}
+              disabled={loadingContent || !password}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#fff', background: loadingContent || !password ? '#9d8dff' : '#5e4dbb', border: 'none', borderRadius: 12, padding: '13px', cursor: loadingContent || !password ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}>
+              {loadingContent ? <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> : <Icon name="visibility" size={18} color="#fff" />}
+              View markdown list
+            </button>
+          </div>
+        )}
+
+        {/* Ready — markdown content */}
+        {state === 'ready' && content && (
+          <>
+            {/* Hero */}
+            <div style={{ background: colorBg, padding: '28px 32px 24px', borderBottom: '1px solid #f0ecf8' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {content.markdownList.emoji && <span style={{ fontSize: 26 }}>{content.markdownList.emoji}</span>}
+                <h1 style={{ margin: 0, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 24, fontWeight: 800, color: '#1c1b22', letterSpacing: '-0.02em' }}>{content.markdownList.name}</h1>
+              </div>
+              {content.markdownList.subtitle && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#787584', marginTop: 6 }}>{content.markdownList.subtitle}</div>}
+            </div>
+
+            {/* Blocks */}
+            <div style={{ padding: '24px 32px 32px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {content.content.blocks.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#b0acbe' }}>This markdown list is empty.</div>
+              )}
+              {content.content.blocks.map(block => (
+                <SharedBlockView key={block.id} block={block} accent={accent} number={numberByBlockId[block.id]} token={token} password={password} />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {meta?.expiresAt && state === 'ready' && (
+        <div style={{ marginTop: 16, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#d97706', background: '#fef3c7', borderRadius: 99, padding: '4px 12px' }}>Link expires {fmtDate(meta.expiresAt)}</div>
+      )}
+
+      <div style={{ marginTop: 24, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>
+        Shared via <span style={{ color: '#5e4dbb', fontWeight: 600 }}>Solytiq</span>
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+// Read-only rendering of a single block — mirrors the editor's card outline
+// and TaskItem-style checkbox (see MarkdownListScreen.tsx) but with no
+// interactivity beyond the outbound link.
+function SharedBlockView({ block, accent, number, token, password }: { block: SharedBlock; accent: string; number?: number; token?: string; password: string }) {
+  const cardStyle: React.CSSProperties = {
+    background: block.type === 'divider' ? 'transparent' : '#F9FAFB',
+    border: block.type === 'divider' ? 'none' : '1px solid #E5E7EB',
+    borderRadius: 10,
+    padding: block.type === 'divider' ? '4px 14px' : block.type === 'image' ? 8 : '10px 14px',
+    overflow: block.type === 'image' ? 'hidden' : 'visible',
+  };
+
+  if (block.type === 'divider') {
+    return <div style={cardStyle}><hr style={{ border: 'none', borderTop: '1.5px solid #e8e4f0', margin: '10px 0' }} /></div>;
+  }
+  if (block.type === 'image') {
+    return (
+      <div style={cardStyle}>
+        <img src={`${BASE_URL}/share/markdown-list/${token}/images/${block.imageId}${password ? `?password=${encodeURIComponent(password)}` : ''}`} alt={block.caption ?? ''} style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }} />
+        {block.caption && <div style={{ marginTop: 6, padding: '0 4px 4px', fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontStyle: 'italic', color: '#787584' }}>{block.caption}</div>}
+      </div>
+    );
+  }
+  if (block.type === 'link') {
+    return (
+      <div style={cardStyle}>
+        <a href={block.url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', flexDirection: 'column', gap: 3, textDecoration: 'none' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#5e4dbb' }}>
+            <Icon name="link" size={14} color="#5e4dbb" /> {block.title || block.url}
+          </span>
+          {block.description && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>{block.description}</span>}
+          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{block.url}</span>
+        </a>
+      </div>
+    );
+  }
+
+  const text = block.text ?? '';
+  let textStyle: React.CSSProperties = { fontFamily: 'Inter, sans-serif', fontSize: 15, color: '#1c1b22', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' };
+  if (block.type === 'heading') {
+    const sizes = { 1: 26, 2: 21, 3: 17 } as const;
+    textStyle = { ...textStyle, fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 700, fontSize: sizes[block.level ?? 3] };
+  } else if (block.type === 'quote') {
+    textStyle = { ...textStyle, fontStyle: 'italic', color: '#484552' };
+  } else if (block.type === 'todo' && block.checked) {
+    textStyle = { ...textStyle, opacity: 0.4, textDecoration: 'line-through' };
+  }
+
+  return (
+    <div style={cardStyle}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        {block.type === 'bulleted-list-item' && <span style={{ paddingTop: 2, color: '#787584', fontSize: 16, lineHeight: 1, flexShrink: 0 }}>•</span>}
+        {block.type === 'numbered-list-item' && <span style={{ color: '#787584', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, flexShrink: 0, minWidth: 16 }}>{number}.</span>}
+        {block.type === 'todo' && (
+          <div style={{ width: 20, height: 20, minWidth: 20, borderRadius: 5, border: '1.5px solid', borderColor: block.checked ? accent : '#c9c4d5', background: block.checked ? accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {block.checked && <Icon name="check" size={13} color="#fff" />}
+          </div>
+        )}
+        {block.type === 'quote' && <span style={{ width: 3, alignSelf: 'stretch', background: '#c9c4d5', borderRadius: 2, flexShrink: 0 }} />}
+        <div style={{ flex: 1, minWidth: 0, ...textStyle }}>{text ? renderInline(text, block.id) : ' '}</div>
+      </div>
+    </div>
+  );
+}

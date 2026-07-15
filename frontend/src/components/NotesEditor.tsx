@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import Icon from './Icon';
 import CopyButton from './CopyButton';
 import MarkdownView from './MarkdownView';
+import { toggleWrap, formatMarkerForKeyDown, type FormatMarker as Marker } from '../utils/textFormatting';
 
 // ── Shared Notes editor ─────────────────────────────────────────────────────
 // Used by the item dialog (TaskDialog) and the milestone editor so both get
@@ -12,25 +13,6 @@ import MarkdownView from './MarkdownView';
 //   • Notes are always treated as Markdown. A Write / Preview switch lets the
 //     user flip between the raw source and the rendered (MarkdownView) form;
 //     it opens on Preview by default.
-
-type Marker = '**' | '*' | '~~';
-
-function toggleWrap(value: string, start: number, end: number, marker: Marker): { next: string; selStart: number; selEnd: number } {
-  const sel = value.slice(start, end);
-  const before = value.slice(0, start);
-  const after = value.slice(end);
-  const mLen = marker.length;
-  // Selection already includes the markers → strip them.
-  if (sel.length >= mLen * 2 && sel.startsWith(marker) && sel.endsWith(marker)) {
-    const inner = sel.slice(mLen, sel.length - mLen);
-    return { next: before + inner + after, selStart: start, selEnd: start + inner.length };
-  }
-  // Markers sit just outside the selection → strip them.
-  if (before.endsWith(marker) && after.startsWith(marker)) {
-    return { next: before.slice(0, -mLen) + sel + after.slice(mLen), selStart: start - mLen, selEnd: end - mLen };
-  }
-  return { next: before + marker + sel + marker + after, selStart: start + mLen, selEnd: end + mLen };
-}
 
 interface NotesEditorProps {
   value: string;
@@ -67,11 +49,8 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!(e.metaKey || e.ctrlKey)) return;
-    const k = e.key.toLowerCase();
-    if (k === 'b' && !e.shiftKey) { e.preventDefault(); applyFormat('**'); }
-    else if (k === 'i' && !e.shiftKey) { e.preventDefault(); applyFormat('*'); }
-    else if (e.shiftKey && (k === 'x' || k === 's')) { e.preventDefault(); applyFormat('~~'); }
+    const marker = formatMarkerForKeyDown(e);
+    if (marker) { e.preventDefault(); applyFormat(marker); }
   };
 
   const showPreview = tab === 'preview';

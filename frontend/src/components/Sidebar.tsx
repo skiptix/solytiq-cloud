@@ -840,9 +840,10 @@ function MarkdownListRow({ markdownList, isActive, collapsed, onNavigate }: Mark
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [editingName, setEditingName] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
-  const { update, remove } = useMarkdownListsStore();
+  const { update, remove, patch } = useMarkdownListsStore();
 
   const openMenu = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -869,6 +870,7 @@ function MarkdownListRow({ markdownList, isActive, collapsed, onNavigate }: Mark
 
   const menuItems: ContextMenuEntry[] = [
     { key: 'rename', label: 'Edit name', icon: 'edit', onClick: () => setEditingName(true) },
+    { key: 'settings', label: 'More settings…', icon: 'tune', onClick: () => setShowSettings(true) },
     { key: 'div1', divider: true },
     { key: 'delete', label: 'Delete markdown list', icon: 'delete', danger: true, onClick: () => setShowDeleteDialog(true) },
   ];
@@ -900,6 +902,22 @@ function MarkdownListRow({ markdownList, isActive, collapsed, onNavigate }: Mark
 
       {editingName && (
         <RenameDialog value={markdownList.name} onSave={handleRename} onCancel={() => setEditingName(false)} />
+      )}
+
+      {showSettings && (
+        <ItemSettingsModal
+          kind="markdownList"
+          name={markdownList.name}
+          emoji={markdownList.emoji}
+          color={markdownList.color}
+          isPublic={markdownList.isPublic}
+          itemId={markdownList.id}
+          share={{ enabled: markdownList.shareEnabled, token: markdownList.shareToken, hasPassword: markdownList.shareHasPassword, expiresAt: markdownList.shareExpiresAt }}
+          onShareUpdated={(s: ShareInfo) => patch(markdownList.id, { shareEnabled: s.enabled, shareToken: s.token, shareHasPassword: s.hasPassword, shareExpiresAt: s.expiresAt })}
+          onVisibilityApplied={(p: boolean) => patch(markdownList.id, { isPublic: p })}
+          onChange={(updates: ItemSettingsUpdates) => void update(markdownList.id, updates as Parameters<typeof update>[1])}
+          onClose={() => setShowSettings(false)}
+        />
       )}
 
       {showDeleteDialog && createPortal(
@@ -1471,7 +1489,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.46.0
+              v1.47.0
             </div>
           )}
         </div>
@@ -1788,7 +1806,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="archive" label="Archived" active={false} onClick={() => onOpenModal('archived')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.46.0
+            v1.47.0
           </div>
         )}
       </div>
