@@ -35,6 +35,9 @@
 - 📅 **CalDAV Server** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing meetings.
 - 🗑️ **Trash & Restore** — Comprehensive protection against accidental deletions with a 30-day recovery window.
 - 📋 **Templates** — Capture any list or timeline as a reusable template, keeping relative dates and recursive sublist structures intact.
+- ⚙️ **Automation Hub** — Create flow-chart style automations per workspace (e.g., auto-archive lists) with sandboxed code execution.
+- 🧩 **App Directory** — Admin-installable plugin system for enabling optional features like GPS, Files, MCP, and Automations.
+- 🗂️ **Multiple List Views** — Toggle between classic List, Kanban board, and Timeline views for any list.
 
 ---
 
@@ -70,6 +73,7 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 - **File Handling:** Multer (with disk storage)
 - **AI Integration:** [OpenRouter API](https://openrouter.ai/) + [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/sdk) (MCP server + OAuth 2.1)
 - **Data Parsing:** GPX & FIT file processing (`fast-xml-parser`, `fit-file-parser`), and PDF/spreadsheet data extraction (`pdf-parse`, `xlsx`)
+- **Sandboxed Execution:** `isolated-vm` for secure execution of user-supplied JavaScript in the Automation Hub
 
 ---
 
@@ -138,6 +142,7 @@ When running the frontend separately, point it at the backend with `VITE_API_URL
 | `PORT` | No | Public host port / backend listen port | `3001` (backend) / `80` (Docker) |
 | `OPENROUTER_API_KEY` | No | Enables the AI assistant via OpenRouter | — |
 | `OPENROUTER_MODEL` | No | AI Model (e.g., `openai/gpt-4o-mini`) | `openai/gpt-4o-mini` |
+| `NUKE_SKIP_RESTART` | No | Set to `true` to stop the admin Nuke action from calling `process.exit(0)` at the end | — |
 
 The backend refuses to start in `NODE_ENV=production` if `JWT_SECRET` is the default placeholder.
 
@@ -160,6 +165,9 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
+- **Automation Hub** — Workspace-scoped automations (enforced as linear chains) executed securely using `isolated-vm` for code actions.
+- **App Directory** — `appsRegistry.ts` acts as a plugin system for admin-installable optional features like GPS, Files, MCP, and Automations.
+- **Multiple List Views** — `lists.view_mode` stores the active view (List, Kanban, or Timeline) per list, maintaining seamless feature parity across representations.
 - **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
 - **MCP Server** — Model Context Protocol server over Streamable HTTP. It exposes the shared tool registry to external agents (e.g. the Claude MCP connector) with bearer tokens minted via an OAuth 2.1 connector flow.
 - **Shared AI Tool Registry** — `backend/src/aiTools.ts` uses JSON-Schema specs and secure, user-scoped SQL handlers to prevent prompt injection.
@@ -287,8 +295,8 @@ curl -X POST "https://<your-host>/api/admin-read/items" \
 ## ⌨️ Keyboard Shortcuts
 
 - **`frontend/src/shortcuts/registry.ts`** is the single source of truth for every global keyboard shortcut.
-- **User overrides** are persisted to `users.keyboard_shortcuts` and managed via Account Settings → Controls.
-- A global listener in `frontend/src/components/KeyboardShortcuts.tsx` handles execution and cross-component signaling.
+- **User overrides** are persisted in the database (`users.keyboard_shortcuts`) and instantly synced across devices via a local Zustand cache. Overrides are managed via Account Settings → Controls.
+- A global listener in `frontend/src/components/KeyboardShortcuts.tsx` handles execution and cross-component signaling using `window` CustomEvents.
 
 ## 🔗 n8n Community Node
 
