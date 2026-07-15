@@ -69,6 +69,7 @@ interface TaskRow {
   position: number;
   created_at: string;
   updated_at: string;
+  completed_at: string | null;
   linked_list_id: string | null;
   linked_list_type: string | null;
   attachment_count?: string;
@@ -96,6 +97,7 @@ function sanitizeTask(task: TaskRow) {
     position:       task.position,
     createdAt:      task.created_at,
     updatedAt:      task.updated_at,
+    completedAt:    task.completed_at ?? null,
     _source:        task.source,
     _listId:        task.list_id,
     linkedListId:    task.linked_list_id ?? null,
@@ -141,7 +143,7 @@ function sanitizeList(
     shareExpiresAt:   list.share_expires_at ?? null,
     shareSubpages:    list.share_subpages ?? false,
     version:      list.version ?? 1,
-    viewMode:     (list.view_mode === 'kanban' ? 'kanban' : 'list') as 'list' | 'kanban',
+    viewMode:     (list.view_mode === 'kanban' || list.view_mode === 'timeline' ? list.view_mode : 'list') as 'list' | 'kanban' | 'timeline',
     isArchived:   list.is_archived ?? false,
     archivedAt:   list.archived_at ?? null,
     sections,
@@ -367,7 +369,7 @@ router.post('/', async (req: Request, res: Response) => {
       workspaceId?: string;
       viewMode?: string;
     };
-    const initialViewMode = viewMode === 'kanban' ? 'kanban' : 'list';
+    const initialViewMode = viewMode === 'kanban' || viewMode === 'timeline' ? viewMode : 'list';
 
     if (!name) {
       res.status(400).json({ error: 'name is required' });
@@ -571,7 +573,7 @@ router.put('/:listId', async (req: Request, res: Response) => {
       cascade?: boolean;
       viewMode?: string;
     };
-    const validViewMode = viewMode === 'list' || viewMode === 'kanban' ? viewMode : null;
+    const validViewMode = viewMode === 'list' || viewMode === 'kanban' || viewMode === 'timeline' ? viewMode : null;
 
     const existing = await query<ListRow>('SELECT user_id, workspace_id, folder_id, name FROM lists WHERE id = $1', [listId]);
     if (existing.rows.length === 0) {
@@ -1084,6 +1086,7 @@ export async function updateListTaskFields(
          note           = COALESCE($2, note),
          note_markdown  = COALESCE($14, note_markdown),
          checked        = COALESCE($3, checked),
+         completed_at   = CASE WHEN $3::boolean IS NULL THEN completed_at WHEN $3::boolean THEN NOW() ELSE NULL END,
          deadline       = COALESCE($4, deadline),
          time_val       = COALESCE($5, time_val),
          priority       = COALESCE($6, priority),
