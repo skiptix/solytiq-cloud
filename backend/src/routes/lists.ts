@@ -38,6 +38,7 @@ interface ListRow {
   share_password_hash: string | null;
   share_expires_at: string | null;
   share_subpages: boolean;
+  share_view_mode: string | null;
   version?: number;
   view_mode: string;
   is_archived?: boolean;
@@ -142,6 +143,7 @@ function sanitizeList(
     shareHasPassword: list.share_password_hash != null,
     shareExpiresAt:   list.share_expires_at ?? null,
     shareSubpages:    list.share_subpages ?? false,
+    shareViewMode:    (list.share_view_mode === 'kanban' || list.share_view_mode === 'timeline' || list.share_view_mode === 'list') ? list.share_view_mode : null,
     version:      list.version ?? 1,
     viewMode:     (list.view_mode === 'kanban' || list.view_mode === 'timeline' ? list.view_mode : 'list') as 'list' | 'kanban' | 'timeline',
     isArchived:   list.is_archived ?? false,
@@ -459,19 +461,23 @@ async function collectDescendantListIds(rootId: string): Promise<string[]> {
 }
 
 // PUT /api/lists/:listId/share — manage the public read-only share link.
-// Body: { enabled?, password?: string|null, expiresAt?: string|null, subpages? }
+// Body: { enabled?, password?: string|null, expiresAt?: string|null, subpages?, viewMode? }
 //  - password/expiresAt: omit = unchanged, null = clear, value = set.
 //  - subpages: when enabled together with sharing, cascades the share state
 //    (token + password + expiry) onto every nested sublist so the public page
 //    can deep-link to them; turning it off disables sharing on those sublists.
+//  - viewMode: 'list'|'kanban'|'timeline' — which layout the public page renders.
+//    Independent of the list's own `view_mode`; omit to leave unchanged (read-time
+//    falls back to the list's current view_mode until this is explicitly set).
 router.put('/:listId/share', async (req: Request, res: Response) => {
   try {
     const { listId } = req.params;
-    const { enabled, password, expiresAt, subpages } = req.body as {
+    const { enabled, password, expiresAt, subpages, viewMode } = req.body as {
       enabled?: boolean;
       password?: string | null;
       expiresAt?: string | null;
       subpages?: boolean;
+      viewMode?: 'list' | 'kanban' | 'timeline';
     };
 
     const existing = await query<ListRow>('SELECT * FROM lists WHERE id = $1', [listId]);
@@ -486,6 +492,10 @@ router.put('/:listId/share', async (req: Request, res: Response) => {
     const updateExp = 'expiresAt' in req.body;
     const updateSub = 'subpages'  in req.body;
     const updateEnabled = 'enabled' in req.body;
+    const updateView = 'viewMode' in req.body;
+    if (updateView && viewMode !== 'list' && viewMode !== 'kanban' && viewMode !== 'timeline') {
+      res.status(400).json({ error: 'Invalid view mode' }); return;
+    }
 
     const willBeEnabled = updateEnabled ? Boolean(enabled) : row.share_enabled;
     // Generate an opaque token the first time sharing is turned on.
@@ -503,10 +513,11 @@ router.put('/:listId/share', async (req: Request, res: Response) => {
            share_token         = $3,
            share_password_hash = CASE WHEN $4 THEN $5 ELSE share_password_hash END,
            share_expires_at    = CASE WHEN $6 THEN $7 ELSE share_expires_at END,
-           share_subpages      = COALESCE($8, share_subpages)
+           share_subpages      = COALESCE($8, share_subpages),
+           share_view_mode     = CASE WHEN $9 THEN $10 ELSE share_view_mode END
        WHERE id = $1
        RETURNING *`,
-      [listId, updateEnabled ? enabled : null, token, updatePw, pwHash, updateExp, expiresAt ?? null, updateSub ? subpages : null]
+      [listId, updateEnabled ? enabled : null, token, updatePw, pwHash, updateExp, expiresAt ?? null, updateSub ? subpages : null, updateView, updateView ? viewMode : null]
     );
 
     const saved = result.rows[0];
@@ -548,6 +559,7 @@ router.put('/:listId/share', async (req: Request, res: Response) => {
         hasPassword: saved.share_password_hash != null,
         expiresAt: saved.share_expires_at ?? null,
         subpages: saved.share_subpages,
+        viewMode: saved.share_view_mode ?? null,
       },
     });
     broadcastToUser(req.userId!, 'lists');

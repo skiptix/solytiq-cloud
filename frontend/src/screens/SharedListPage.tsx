@@ -2,13 +2,14 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Icon from '../components/Icon';
-import MarkdownView, { markdownToPlainText } from '../components/MarkdownView';
+import MarkdownView from '../components/MarkdownView';
+import { useMobile } from '../hooks/useBreakpoint';
+import {
+  fmtDate, SharedTaskRow, SharedKanbanView, SharedTaskTimelineView,
+  type SharedTask, type SharedSection,
+} from '../components/SharedListViews';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
-
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-}
 
 interface ListMeta {
   name: string;
@@ -24,30 +25,8 @@ interface ListMeta {
   sharedByImage: string | null;
 }
 
-interface SharedTask {
-  id: string;
-  title: string;
-  checked: boolean;
-  note: string | null;
-  noteMarkdown?: boolean;
-  deadline: string | null;
-  time: string | null;
-  priority: string | null;
-  badge: string | null;
-  linkedListType: 'sublist' | 'link' | null;
-  linkedShareToken: string | null;
-  linkedProgress: { total: number; completed: number } | null;
-}
-
-interface SharedSection {
-  id: string;
-  label: string;
-  emoji: string | null;
-  tasks: SharedTask[];
-}
-
 interface ListContent {
-  list: { name: string; emoji: string | null; color: string | null; colorBg: string | null; subtitle: string | null };
+  list: { name: string; emoji: string | null; color: string | null; colorBg: string | null; subtitle: string | null; viewMode: 'list' | 'kanban' | 'timeline' };
   sections: SharedSection[];
 }
 
@@ -60,6 +39,7 @@ function sharedByInitials(name: string): string {
 export default function SharedListPage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
+  const isMobile = useMobile();
   const [state, setState] = useState<PageState>('loading');
   const [meta, setMeta] = useState<ListMeta | null>(null);
   const [content, setContent] = useState<ListContent | null>(null);
@@ -110,6 +90,11 @@ export default function SharedListPage() {
   const accent = content?.list.color ?? meta?.color ?? '#5e4dbb';
   const colorBg = content?.list.colorBg ?? meta?.colorBg ?? '#F9FAFB';
 
+  const handleTaskClick = (task: SharedTask) => {
+    if (task.linkedShareToken) navigate(`/share/list/${task.linkedShareToken}`);
+    else setPreviewTask(task);
+  };
+
   const allTasks = content?.sections.flatMap(s => s.tasks) ?? [];
   const total = allTasks.length;
   const completed = allTasks.filter(t => t.checked || (t.linkedProgress && t.linkedProgress.total > 0 && t.linkedProgress.completed === t.linkedProgress.total)).length;
@@ -124,7 +109,8 @@ export default function SharedListPage() {
   }
   usePageTitle(pageTitle);
 
-  const cardMaxWidth = state === 'ready' ? 720 : 460;
+  const readyMaxWidth = content?.list.viewMode === 'timeline' ? 1100 : content?.list.viewMode === 'kanban' ? 960 : 720;
+  const cardMaxWidth = state === 'ready' ? readyMaxWidth : 460;
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8f7fc', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: state === 'ready' ? 'flex-start' : 'center', padding: '72px 24px 24px' }}>
@@ -229,73 +215,36 @@ export default function SharedListPage() {
               </div>
             </div>
 
-            {/* Sections */}
-            <div style={{ padding: '24px 32px 32px', display: 'flex', flexDirection: 'column', gap: 22 }}>
-              {content.sections.length === 0 && (
+            {/* Content — layout follows the owner's "Shared view" setting */}
+            <div style={{ padding: '24px 32px 32px' }}>
+              {content.sections.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#b0acbe' }}>This to-do is empty.</div>
-              )}
-              {content.sections.map(section => (
-                <div key={section.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 2px' }}>
-                    {section.emoji && <span style={{ fontSize: 14 }}>{section.emoji}</span>}
-                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5e5e5e' }}>{section.label}</span>
-                    <div style={{ flex: 1, height: 1, background: '#E5E7EB' }} />
-                  </div>
-                  <div style={{ background: '#F9FAFB', borderRadius: 12, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
-                    {section.tasks.length === 0 ? (
-                      <div style={{ padding: '14px 16px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', textAlign: 'center' }}>No items.</div>
-                    ) : (
-                      <div style={{ padding: 4 }}>
-                        {section.tasks.map(task => {
-                          const isLinked = !!task.linkedListType;
-                          const lp = task.linkedProgress;
-                          const linkedComplete = !!(lp && lp.total > 0 && lp.completed === lp.total);
-                          const navigable = !!task.linkedShareToken;
-                          const done = task.checked || linkedComplete;
-                          return (
-                            <div
-                              key={task.id}
-                              onClick={() => { if (navigable) navigate(`/share/list/${task.linkedShareToken}`); else setPreviewTask(task); }}
-                              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 8, cursor: 'pointer', transition: 'background 150ms' }}
-                              onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
-                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                            >
-                              {isLinked ? (
-                                <div style={{ width: 20, height: 20, minWidth: 20, borderRadius: '50%', border: `2px solid ${accent}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
-                                  {linkedComplete
-                                    ? <Icon name="check" size={12} color={accent} />
-                                    : <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 8, fontWeight: 700, color: accent }}>{lp ? `${lp.completed}/${lp.total}` : ''}</span>}
-                                </div>
-                              ) : (
-                                <div style={{ width: 20, height: 20, minWidth: 20, borderRadius: 5, border: '1.5px solid', borderColor: task.checked ? accent : '#c9c4d5', background: task.checked ? accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  {task.checked && <Icon name="check" size={13} color="#fff" />}
-                                </div>
-                              )}
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: isLinked ? accent : '#1c1b22', lineHeight: 1.4, opacity: done ? 0.45 : 1, textDecoration: done ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</span>
-                                  {task.badge && <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', padding: '2px 7px', borderRadius: 9999, flexShrink: 0 }}>{task.badge}</span>}
-                                </div>
-                                {task.note && (() => {
-                                  const plain = markdownToPlainText(task.note);
-                                  return (
-                                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                      {plain.length > 40 ? `${plain.slice(0, 40).trimEnd()}…` : plain}
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-                              {task.deadline && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', flexShrink: 0 }}>{fmtDate(task.deadline)}</span>}
-                              {navigable && <Icon name="chevron_right" size={18} color="#b0acbe" />}
-                              {isLinked && !navigable && <Icon name="lock" size={14} color="#d1d5db" />}
-                            </div>
-                          );
-                        })}
+              ) : content.list.viewMode === 'kanban' ? (
+                <SharedKanbanView sections={content.sections} accent={accent} onTaskClick={handleTaskClick} />
+              ) : content.list.viewMode === 'timeline' ? (
+                <SharedTaskTimelineView sections={content.sections} accent={accent} isMobile={isMobile} onTaskClick={handleTaskClick} />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+                  {content.sections.map(section => (
+                    <div key={section.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 2px' }}>
+                        {section.emoji && <span style={{ fontSize: 14 }}>{section.emoji}</span>}
+                        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5e5e5e' }}>{section.label}</span>
+                        <div style={{ flex: 1, height: 1, background: '#E5E7EB' }} />
                       </div>
-                    )}
-                  </div>
+                      <div style={{ background: '#F9FAFB', borderRadius: 12, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
+                        {section.tasks.length === 0 ? (
+                          <div style={{ padding: '14px 16px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', textAlign: 'center' }}>No items.</div>
+                        ) : (
+                          <div style={{ padding: 4 }}>
+                            {section.tasks.map(task => <SharedTaskRow key={task.id} task={task} accent={accent} onClick={handleTaskClick} />)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           </>
         )}

@@ -61,6 +61,7 @@ interface ItemSettingsModalProps {
     hasPassword?: boolean;
     expiresAt?: string | null;
     subpages?: boolean;
+    viewMode?: 'list' | 'kanban' | 'timeline' | null;
   };
   onShareUpdated?: (share: ShareInfo) => void;
   onVisibilityApplied?: (isPublic: boolean) => void;
@@ -102,6 +103,9 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
   const [hasPassword, setHasPassword] = useState(Boolean(share?.hasPassword));
   const [expiresAt, setExpiresAt]     = useState<string>(share?.expiresAt ? share.expiresAt.slice(0, 10) : '');
   const [subpages, setSubpages]       = useState(Boolean(share?.subpages));
+  const [viewMode, setViewMode]       = useState<'list' | 'kanban' | 'timeline'>(
+    share?.viewMode === 'kanban' || share?.viewMode === 'timeline' ? share.viewMode : 'list'
+  );
   const [pwInput, setPwInput]         = useState('');
   const [saving, setSaving]           = useState(false);
   const [copied, setCopied]           = useState(false);
@@ -120,6 +124,7 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
       setHasPassword(next.hasPassword);
       setExpiresAt(next.expiresAt ? next.expiresAt.slice(0, 10) : '');
       if (next.subpages !== undefined) setSubpages(next.subpages);
+      if (next.viewMode) setViewMode(next.viewMode);
       onShareUpdated?.(next);
     } catch (err) {
       console.error('share update failed', err);
@@ -178,6 +183,36 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', lineHeight: 1.4, marginTop: 6, paddingLeft: 2 }}>
                 <span style={{ marginTop: 1, flexShrink: 0, display: 'flex' }}><Icon name="visibility" size={13} color="#b0acbe" /></span>
                 Anyone with this link can view a read-only copy. No sign-in required.
+              </div>
+            </div>
+          )}
+
+          {/* Shared view (lists only) — which layout the public page renders */}
+          {kind === 'list' && (
+            <div>
+              {sectionLabel('Shared view')}
+              <div style={card}>
+                <div style={{ padding: '4px', display: 'flex', gap: 4 }}>
+                  {([
+                    { label: 'List', icon: 'format_list_bulleted', val: 'list' },
+                    { label: 'Kanban', icon: 'view_kanban', val: 'kanban' },
+                    { label: 'Timeline', icon: 'view_timeline', val: 'timeline' },
+                  ] as const).map(opt => {
+                    const selected = viewMode === opt.val;
+                    return (
+                      <button key={opt.val}
+                        disabled={saving}
+                        onClick={() => { if (viewMode !== opt.val) apply({ viewMode: opt.val }); }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 8px', borderRadius: 10, border: 'none', background: selected ? '#5e4dbb' : 'transparent', cursor: saving ? 'wait' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: selected ? 600 : 500, color: selected ? '#fff' : '#5e4dbb', transition: 'all 120ms' }}>
+                        <Icon name={opt.icon} size={14} color={selected ? '#fff' : '#5e4dbb'} />
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', marginTop: 6, lineHeight: 1.4, paddingLeft: 2 }}>
+                Choose which layout visitors see on the public page — independent of your own view.
               </div>
             </div>
           )}

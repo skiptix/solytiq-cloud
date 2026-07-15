@@ -289,6 +289,7 @@ export interface ShareUpdate {
   password?: string | null;   // omit = unchanged, null = clear, value = set
   expiresAt?: string | null;  // omit = unchanged, null = clear, value = set
   subpages?: boolean;         // lists only
+  viewMode?: 'list' | 'kanban' | 'timeline';   // lists only — which layout the public page renders
 }
 export interface ShareInfo {
   enabled: boolean;
@@ -296,6 +297,7 @@ export interface ShareInfo {
   hasPassword: boolean;
   expiresAt: string | null;
   subpages?: boolean;
+  viewMode?: 'list' | 'kanban' | 'timeline' | null;
 }
 
 export const apiUpdateListShare = (id: string, data: ShareUpdate) =>
