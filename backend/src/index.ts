@@ -1864,9 +1864,16 @@ async function runMigrations() {
     )
   `);
 
-  // Per-list layout preference — the To-Do screen's List/Kanban tab switcher.
+  // Per-list layout preference — the To-Do screen's List/Kanban/Timeline tab switcher.
   // Persisted (not just local UI state) so it's the same on every device.
   await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS view_mode VARCHAR(20) NOT NULL DEFAULT 'list'`);
+
+  // Tracks exactly when a task was checked, independent of updated_at (which
+  // also moves on unrelated edits made after completion) — the Timeline view's
+  // bars need a stable, accurate completion point. Back-fill existing checked
+  // tasks with their best-known approximation once, idempotently.
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`);
+  await pool.query(`UPDATE tasks SET completed_at = updated_at WHERE checked = true AND completed_at IS NULL`);
 
   console.log('Database migrations applied.');
 }

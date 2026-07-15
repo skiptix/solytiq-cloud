@@ -17,6 +17,9 @@ export interface Task {
   linkedListId?: string | null;
   linkedListType?: 'sublist' | 'link' | null;
   attachmentCount?: number;
+  createdAt?: string;
+  /** Set the moment `checked` flips true; cleared when unchecked. Drives the Timeline view's bar end. */
+  completedAt?: string | null;
 }
 
 export type MeetingRecurrenceFreq = 'daily' | 'weekly' | 'monthly' | 'yearly';
@@ -79,7 +82,7 @@ export interface List {
   shareExpiresAt?: string | null;
   shareSubpages?: boolean;
   version?: number;   // optimistic-concurrency token (bumps on every server-side update)
-  viewMode?: 'list' | 'kanban';   // To-Do screen's layout — persisted per list, synced across devices
+  viewMode?: 'list' | 'kanban' | 'timeline';   // To-Do screen's layout — persisted per list, synced across devices
   isArchived?: boolean;   // hidden from the normal workspace view; see the Archived modal
   archivedAt?: string | null;
   linkedProgress?: {

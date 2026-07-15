@@ -27,6 +27,7 @@ interface TaskRow {
   position: number;
   created_at: string;
   updated_at: string;
+  completed_at: string | null;
   linked_list_id: string | null;
   linked_list_type: string | null;
   attachment_count?: string;
@@ -51,6 +52,7 @@ function sanitizeTask(task: TaskRow) {
     position:       task.position,
     createdAt:      task.created_at,
     updatedAt:      task.updated_at,
+    completedAt:    task.completed_at ?? null,
     _source:        task.source,
     _listId:        task.list_id,
     linkedListId:    task.linked_list_id ?? null,
@@ -249,6 +251,7 @@ router.put('/:id', async (req: Request, res: Response) => {
            note           = COALESCE($2, note),
            note_markdown  = COALESCE($14, note_markdown),
            checked        = COALESCE($3, checked),
+           completed_at   = CASE WHEN $3::boolean IS NULL THEN completed_at WHEN $3::boolean THEN NOW() ELSE NULL END,
            deadline       = COALESCE($4, deadline),
            time_val       = COALESCE($5, time_val),
            priority       = COALESCE($6, priority),
