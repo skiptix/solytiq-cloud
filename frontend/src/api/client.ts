@@ -475,8 +475,13 @@ export const apiDeleteFolder = (id: string) =>
   apiFetch<{ ok: boolean }>(`/folders/${id}`, { method: 'DELETE' });
 
 // Trash
+// The backend serializes each trashed task with `taskData` (not `task`) and
+// includes `expiresAt`/`userId` — reflect that real shape here so the mapping
+// in useAppStore.loadFromApi reads the right field. (A stale `TrashedTask[]`
+// annotation used to hide a `tr.task.id` deref that threw whenever the trash
+// was non-empty, surfacing the "Couldn't refresh your data." banner.)
 export const apiGetTrash = () =>
-  apiFetch<{ trash: TrashedTask[] }>('/trash');
+  apiFetch<{ trash: Array<{ id: number; taskId: string; userId: string; taskData: Task; meta: TrashedTask['meta'] | null; deletedAt: string; expiresAt: string }> }>('/trash');
 
 export const apiAddToTrash = (taskId: number, taskData: Task, meta: { src: string; listId?: string; listName?: string }) =>
   apiFetch<{ trash: TrashedTask }>('/trash/add', { method: 'POST', body: JSON.stringify({ taskId, taskData, meta }) });
