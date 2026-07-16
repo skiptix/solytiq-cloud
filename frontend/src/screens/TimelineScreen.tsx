@@ -353,6 +353,15 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
               value={description ?? ''}
               onChange={setDescription}
               minHeight={90}
+              aiContext={{
+                kind: 'milestone',
+                title,
+                fields: {
+                  Date: date || undefined,
+                  Time: time || undefined,
+                  Status: statusOf(status).label,
+                },
+              }}
             />
           </div>
 

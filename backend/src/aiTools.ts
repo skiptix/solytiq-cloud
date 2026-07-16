@@ -23,6 +23,7 @@ import { resolveWorkspaceForUser } from './workspaceUtil';
 import { softDeleteListTree, snapshotTimelineToTrash } from './trashUtil';
 import { extractTextFromBuffer, MAX_TEXT_CHARS } from './fileText';
 import { UPLOAD_DIR } from './routes/files';
+import { mutateMarkdownListBlocks, type MarkdownBlockLike } from './routes/markdownLists';
 import { parseRecurrenceRule, computeRecurrenceDates } from './recurrence';
 import { resolveInviteeIds, setMeetingAttendees } from './meetingAttendees';
 import { hashPassword } from './auth';
@@ -75,6 +76,44 @@ function ok(result: string, summary?: string): ToolResult {
 }
 function fail(result: string): ToolResult {
   return { ok: false, result: result.startsWith('Error') ? result : `Error: ${result}` };
+}
+
+// ── markdown list block helpers ────────────────────────────────────────────
+
+const MARKDOWN_BLOCK_TYPES = new Set(['heading', 'paragraph', 'bulleted-list-item', 'numbered-list-item', 'todo', 'quote', 'divider', 'link']);
+
+function genBlockId(): string {
+  return `blk_${uuidv4()}`;
+}
+
+function describeMarkdownBlock(b: MarkdownBlockLike): string {
+  switch (b.type) {
+    case 'heading': return `[heading h${b.level}] ${(b.text as string) || '(empty)'}`;
+    case 'todo': return `[todo${b.checked ? ' x' : ' '}] ${(b.text as string) || '(empty)'}`;
+    case 'divider': return '[divider] ───';
+    case 'link': return `[link] ${(b.title as string) || (b.url as string)} (${b.url})${b.description ? ` — ${b.description}` : ''}`;
+    case 'image': return `[image] ${b.caption ? `caption: "${b.caption}"` : '(no caption)'}`;
+    default: return `[${b.type}] ${(b.text as string) || '(empty)'}`;
+  }
+}
+
+/** Splices `block` into `blocks` per a shared start/end/after position contract used by add + move. */
+function insertAtPosition(
+  blocks: MarkdownBlockLike[],
+  block: MarkdownBlockLike,
+  position: string | undefined,
+  afterBlockId: string | undefined
+): MarkdownBlockLike[] | { error: string } {
+  if (position === 'start') return [block, ...blocks];
+  if (position === 'after') {
+    if (!afterBlockId) return { error: 'after_block_id is required when position is "after"' };
+    const idx = blocks.findIndex((b) => b.id === afterBlockId);
+    if (idx === -1) return { error: `block ${afterBlockId} not found` };
+    const next = [...blocks];
+    next.splice(idx + 1, 0, block);
+    return next;
+  }
+  return [...blocks, block]; // 'end', or unspecified
 }
 
 // ── tool definitions ───────────────────────────────────────────────────────
@@ -782,6 +821,201 @@ export const aiTools: AiTool[] = [
       if (!r.rows.length) return fail('milestone not found');
       broadcastToUser(userId, 'timelines');
       return ok(`Deleted milestone "${r.rows[0].title}"`, `Deleted milestone "${r.rows[0].title}"`);
+    },
+  },
+
+  // ───────────────────────────── markdown lists ─────────────────────────────
+  {
+    name: 'list_markdown_lists',
+    description: "List all of the user's Markdown pages (freeform documents built from '/' command blocks — headings, paragraphs, lists, to-dos, quotes, dividers, links, images), across every workspace.",
+    parameters: { type: 'object', properties: {} },
+    handler: async (userId) => {
+      const rows = await query<{ id: string; name: string; emoji: string | null; workspace_id: string | null; workspace_name: string | null }>(
+        `SELECT m.id, m.name, m.emoji, m.workspace_id, w.name AS workspace_name
+         FROM markdown_lists m LEFT JOIN workspaces w ON w.id = m.workspace_id
+         WHERE m.user_id = $1 ORDER BY m.position ASC`,
+        [userId]
+      );
+      if (!rows.rows.length) return ok('You have no Markdown pages yet.');
+      return ok(rows.rows.map((m) => `• ${m.emoji ?? ''} "${m.name}" (markdown_list_id: ${m.id}; workspace: "${m.workspace_name ?? 'unknown'}" [workspace_id: ${m.workspace_id}])`).join('\n'));
+    },
+  },
+  {
+    name: 'get_markdown_list',
+    description: "Get a Markdown page's full block-by-block content, with each block's id and type — use the ids with add/update/remove/move_markdown_block. Valid block types (matching the document's own '/' commands): heading (level 1-3), paragraph, bulleted-list-item, numbered-list-item, todo (mirrors to an auto-managed Todo list), quote, divider, link (url/title/description), and image (read/reorder/caption-edit only — cannot be created by AI, it requires a real file upload from the UI).",
+    parameters: {
+      type: 'object',
+      properties: { markdown_list_id: { type: 'string' } },
+      required: ['markdown_list_id'],
+    },
+    handler: async (userId, args) => {
+      const id = str(args.markdown_list_id);
+      if (!id) return fail('markdown_list_id is required');
+      const r = await query<{ name: string; emoji: string | null; content: unknown }>(
+        `SELECT name, emoji, content FROM markdown_lists WHERE id = $1 AND user_id = $2`,
+        [id, userId]
+      );
+      if (!r.rows.length) return fail('markdown list not found');
+      const blocks = ((r.rows[0].content as { blocks?: MarkdownBlockLike[] } | null)?.blocks ?? []);
+      if (!blocks.length) return ok(`${r.rows[0].emoji ?? ''} "${r.rows[0].name}" (markdown_list_id: ${id}) — empty document.`);
+      const lines = [
+        `${r.rows[0].emoji ?? ''} "${r.rows[0].name}" (markdown_list_id: ${id})`,
+        ...blocks.map((b, i) => `  ${i + 1}. (block_id: ${b.id}) ${describeMarkdownBlock(b)}`),
+      ];
+      return ok(lines.join('\n'));
+    },
+  },
+  {
+    name: 'add_markdown_block',
+    description: "Insert a new block into a Markdown page — the same thing a '/' slash command does in the editor. type maps to: heading → /h1,/h2,/h3 (set level), paragraph → plain text, bulleted-list-item → /bullet, numbered-list-item → /number, todo → /todo (checked todos mirror live to this page's auto-managed Todo list), quote → /quote, divider → /divider (no text), link → /link (needs url). Image blocks cannot be created this way — they require a real file upload from the UI. Call get_markdown_list first to see existing block ids for positioning.",
+    parameters: {
+      type: 'object',
+      properties: {
+        markdown_list_id: { type: 'string' },
+        type: { type: 'string', enum: ['heading', 'paragraph', 'bulleted-list-item', 'numbered-list-item', 'todo', 'quote', 'divider', 'link'] },
+        text: { type: 'string', description: 'Text content — required for heading/paragraph/bulleted-list-item/numbered-list-item/todo/quote.' },
+        level: { type: 'number', enum: [1, 2, 3], description: 'Heading level — required when type is "heading".' },
+        checked: { type: 'boolean', description: 'Initial checked state for a todo block (default false).' },
+        url: { type: 'string', description: 'Required when type is "link".' },
+        title: { type: 'string', description: 'Optional link title.' },
+        description: { type: 'string', description: 'Optional link description.' },
+        position: { type: 'string', enum: ['start', 'end', 'after'], description: "Where to insert — 'start' (top of doc), 'end' (bottom, default), or 'after' (needs after_block_id)." },
+        after_block_id: { type: 'string', description: 'Required when position is "after" — the block to insert immediately after.' },
+      },
+      required: ['markdown_list_id', 'type'],
+    },
+    handler: async (userId, args) => {
+      const id = str(args.markdown_list_id);
+      const type = str(args.type);
+      if (!id || !type) return fail('markdown_list_id and type are required');
+      if (!MARKDOWN_BLOCK_TYPES.has(type)) return fail(`type must be one of: ${[...MARKDOWN_BLOCK_TYPES].join(', ')} (image blocks cannot be created by AI)`);
+      if (type === 'heading' && ![1, 2, 3].includes(Number(args.level))) return fail('level (1, 2, or 3) is required when type is "heading"');
+      if (type === 'link' && !str(args.url)) return fail('url is required when type is "link"');
+
+      const blockId = genBlockId();
+      let block: MarkdownBlockLike;
+      if (type === 'divider') block = { id: blockId, type: 'divider' };
+      else if (type === 'heading') block = { id: blockId, type: 'heading', level: Number(args.level), text: str(args.text) ?? '' };
+      else if (type === 'todo') block = { id: blockId, type: 'todo', text: str(args.text) ?? '', checked: args.checked === true, taskId: null };
+      else if (type === 'link') block = { id: blockId, type: 'link', url: str(args.url)!, title: str(args.title) ?? null, description: str(args.description) ?? null };
+      else block = { id: blockId, type, text: str(args.text) ?? '' };
+
+      const position = str(args.position);
+      const afterBlockId = str(args.after_block_id);
+      const result = await mutateMarkdownListBlocks(userId, id, (blocks) => insertAtPosition(blocks, block, position, afterBlockId));
+      if (!result.ok) return fail(result.error);
+      return ok(`Added ${type} block (block_id: ${blockId}) to "${result.markdownList.name}"`, `Added a ${type} block`);
+    },
+  },
+  {
+    name: 'update_markdown_block',
+    description: "Edit an existing block in a Markdown page. Pass only the fields relevant to that block's type (text for heading/paragraph/bulleted-list-item/numbered-list-item/todo/quote; level for heading; checked for todo; url/title/description for link; caption for image). Call get_markdown_list first to find the block_id.",
+    parameters: {
+      type: 'object',
+      properties: {
+        markdown_list_id: { type: 'string' },
+        block_id: { type: 'string' },
+        text: { type: 'string' },
+        level: { type: 'number', enum: [1, 2, 3] },
+        checked: { type: 'boolean' },
+        url: { type: 'string' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        caption: { type: 'string', description: 'Caption for an image block.' },
+      },
+      required: ['markdown_list_id', 'block_id'],
+    },
+    handler: async (userId, args) => {
+      const id = str(args.markdown_list_id);
+      const blockId = str(args.block_id);
+      if (!id || !blockId) return fail('markdown_list_id and block_id are required');
+      let updatedType = '';
+      const result = await mutateMarkdownListBlocks(userId, id, (blocks) => {
+        const idx = blocks.findIndex((b) => b.id === blockId);
+        if (idx === -1) return { error: `block ${blockId} not found` };
+        const b = blocks[idx];
+        updatedType = String(b.type);
+        const next = [...blocks];
+        switch (b.type) {
+          case 'heading':
+            next[idx] = { ...b, text: args.text !== undefined ? (str(args.text) ?? '') : b.text, level: args.level !== undefined ? Number(args.level) : b.level };
+            break;
+          case 'todo':
+            next[idx] = { ...b, text: args.text !== undefined ? (str(args.text) ?? '') : b.text, checked: args.checked !== undefined ? Boolean(args.checked) : b.checked };
+            break;
+          case 'link':
+            next[idx] = {
+              ...b,
+              url: args.url !== undefined ? (str(args.url) ?? b.url) : b.url,
+              title: args.title !== undefined ? (str(args.title) ?? null) : b.title,
+              description: args.description !== undefined ? (str(args.description) ?? null) : b.description,
+            };
+            break;
+          case 'image':
+            next[idx] = { ...b, caption: args.caption !== undefined ? (str(args.caption) ?? null) : b.caption };
+            break;
+          case 'divider':
+            break;
+          default:
+            if (args.text !== undefined) next[idx] = { ...b, text: str(args.text) ?? '' };
+        }
+        return next;
+      });
+      if (!result.ok) return fail(result.error);
+      return ok(`Updated ${updatedType} block in "${result.markdownList.name}"`, 'Updated a block');
+    },
+  },
+  {
+    name: 'remove_markdown_block',
+    description: "Delete a block from a Markdown page. A document is never left completely empty by this — if it would remove the last remaining block, an empty paragraph block is kept in its place (mirroring the editor's own behavior).",
+    parameters: {
+      type: 'object',
+      properties: { markdown_list_id: { type: 'string' }, block_id: { type: 'string' } },
+      required: ['markdown_list_id', 'block_id'],
+    },
+    handler: async (userId, args) => {
+      const id = str(args.markdown_list_id);
+      const blockId = str(args.block_id);
+      if (!id || !blockId) return fail('markdown_list_id and block_id are required');
+      const result = await mutateMarkdownListBlocks(userId, id, (blocks) => {
+        if (!blocks.some((b) => b.id === blockId)) return { error: `block ${blockId} not found` };
+        const next = blocks.filter((b) => b.id !== blockId);
+        return next.length > 0 ? next : [{ id: genBlockId(), type: 'paragraph', text: '' }];
+      });
+      if (!result.ok) return fail(result.error);
+      return ok(`Removed block from "${result.markdownList.name}"`, 'Removed a block');
+    },
+  },
+  {
+    name: 'move_markdown_block',
+    description: 'Reorder a block within a Markdown page — the same effect as dragging it in the editor.',
+    parameters: {
+      type: 'object',
+      properties: {
+        markdown_list_id: { type: 'string' },
+        block_id: { type: 'string', description: 'The block to move.' },
+        position: { type: 'string', enum: ['start', 'end', 'after'], description: "'start' = top of doc, 'end' = bottom of doc, 'after' = right after another block (needs after_block_id)." },
+        after_block_id: { type: 'string', description: 'Required when position is "after" — the block to place it right after. Must not be the block being moved.' },
+      },
+      required: ['markdown_list_id', 'block_id', 'position'],
+    },
+    handler: async (userId, args) => {
+      const id = str(args.markdown_list_id);
+      const blockId = str(args.block_id);
+      const position = str(args.position);
+      const afterBlockId = str(args.after_block_id);
+      if (!id || !blockId || !position) return fail('markdown_list_id, block_id and position are required');
+      if (position === 'after' && !afterBlockId) return fail('after_block_id is required when position is "after"');
+      if (afterBlockId && afterBlockId === blockId) return fail('after_block_id cannot be the block being moved');
+      const result = await mutateMarkdownListBlocks(userId, id, (blocks) => {
+        const fromIdx = blocks.findIndex((b) => b.id === blockId);
+        if (fromIdx === -1) return { error: `block ${blockId} not found` };
+        const without = [...blocks];
+        const [moved] = without.splice(fromIdx, 1);
+        return insertAtPosition(without, moved, position, afterBlockId);
+      });
+      if (!result.ok) return fail(result.error);
+      return ok(`Moved block in "${result.markdownList.name}"`, 'Reordered a block');
     },
   },
 

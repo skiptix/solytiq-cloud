@@ -275,6 +275,56 @@ async function pruneUnreferencedImages(exec: QueryExec, markdownListId: string, 
 }
 
 // ---------------------------------------------------------------------------
+// Programmatic block mutation — shared by the AI tool registry (aiTools.ts:
+// add/update/remove/move_markdown_block). Runs the exact same lock →
+// reconcile-todos → prune-images → persist sequence as the PUT route's
+// content branch above, just entered from a plain block-mutator function
+// instead of an incoming `content` body, and scoped to content only (no
+// metadata fields, no expectedVersion — AI edits don't carry the frontend's
+// optimistic-concurrency state).
+// ---------------------------------------------------------------------------
+
+export async function mutateMarkdownListBlocks(
+  userId: string,
+  markdownListId: string,
+  mutate: (blocks: MarkdownBlockLike[]) => MarkdownBlockLike[] | { error: string }
+): Promise<{ ok: true; markdownList: ReturnType<typeof sanitize> } | { ok: false; error: string }> {
+  const existing = await query<MarkdownListRow>('SELECT * FROM markdown_lists WHERE id = $1', [markdownListId]);
+  if (existing.rows.length === 0) return { ok: false, error: 'markdown list not found' };
+  if (existing.rows[0].user_id !== userId) return { ok: false, error: 'permission denied' };
+
+  let mutationError: string | null = null;
+  const { result } = await withTransaction(async (client) => {
+    const exec: QueryExec = (text, params) => client.query(text, params);
+    const lockedRes = await exec('SELECT * FROM markdown_lists WHERE id = $1 FOR UPDATE', [markdownListId]);
+    const locked = lockedRes.rows[0] as unknown as MarkdownListRow;
+    const currentBlocks = normalizeContent(locked.content).blocks;
+    const mutated = mutate(currentBlocks);
+    if (!Array.isArray(mutated)) {
+      mutationError = mutated.error;
+      return { result: lockedRes };
+    }
+    await pruneUnreferencedImages(exec, markdownListId, mutated);
+    const reconciled = await reconcileTodoBlocks(exec, userId, {
+      id: locked.id, name: locked.name, workspaceId: locked.workspace_id, todoListId: locked.todo_list_id,
+    }, mutated);
+    const contentJson = JSON.stringify({ version: 1, blocks: reconciled.blocks });
+    const updateRes = await exec(
+      `UPDATE markdown_lists SET content = $1, todo_list_id = $2, updated_at = NOW() WHERE id = $3 RETURNING *`,
+      [contentJson, reconciled.todoListId, markdownListId]
+    );
+    return { result: updateRes };
+  });
+
+  if (mutationError) return { ok: false, error: mutationError };
+
+  const [hydrated] = await hydrateTodoChecked([result.rows[0] as unknown as MarkdownListRow]);
+  broadcastToUser(userId, 'markdownLists');
+  broadcastToUser(userId, 'lists');
+  return { ok: true, markdownList: hydrated };
+}
+
+// ---------------------------------------------------------------------------
 // CRUD
 // ---------------------------------------------------------------------------
 
