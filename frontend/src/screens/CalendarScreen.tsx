@@ -33,12 +33,12 @@ const DAYS_MINI = ['M','T','W','T','F','S','S'];
 
 /** JS weekday (0 = Sun) → Monday-first index (0 = Mon … 6 = Sun). */
 function monIndex(jsDay: number): number { return (jsDay + 6) % 7; }
-const PRIORITY_COLORS: Record<string, string> = { High: '#ea580c', Medium: '#f59e0b', Low: '#787584' };
+const PRIORITY_COLORS: Record<string, string> = { High: 'var(--color-orange)', Medium: 'var(--color-warning-alt)', Low: 'var(--color-text-tertiary)' };
 
 // Curated, saturated palette for meetings — readable as chip text and on-brand.
-const MEETING_COLORS = ['#5e4dbb', '#3b82f6', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#8b5cf6'];
-const DEFAULT_MEETING_COLOR = '#3b82f6';
-const DEFAULT_MILESTONE_COLOR = '#0ea5e9';
+const MEETING_COLORS = ['var(--color-primary)', 'var(--color-blue-mid-4)', 'var(--color-blue-mid-6)', 'var(--color-success)', 'var(--color-warning-alt)', 'var(--color-red-mid-2)', 'var(--color-pink-mid-2)', 'var(--color-purple-mid-3)'];
+const DEFAULT_MEETING_COLOR = 'var(--color-blue-mid-4)';
+const DEFAULT_MILESTONE_COLOR = 'var(--color-blue-mid-6)';
 
 const HOUR_H = 48;                 // px per hour in the Week time-grid
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -62,7 +62,7 @@ function toIso(d: Date): string {
 
 /** Light translucent tint of a hex color, for chip backgrounds. */
 function tint(hex: string | null | undefined, alpha = 0.14): string {
-  if (!hex || !/^#?[0-9a-fA-F]{6}$/.test(hex.replace('#', ''))) return '#F5F3FF';
+  if (!hex || !/^#?[0-9a-fA-F]{6}$/.test(hex.replace('#', ''))) return 'var(--color-surface-tint)';
   const h = hex.replace('#', '');
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
@@ -172,10 +172,10 @@ function MemberAvatar({ userId, size = 20 }: { userId: string; size?: number }) 
   useEffect(() => { if (member?.hasImage) ensureAvatar(userId); }, [userId, member?.hasImage, ensureAvatar]);
   if (!member) return null;
   return (
-    <div style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', background: 'linear-gradient(135deg, #9d8dff 0%, #5e4dbb 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', background: 'linear-gradient(135deg, var(--color-accent-purple-light) 0%, var(--color-primary) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {avatar
         ? <img src={avatar} alt={member.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        : <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: size * 0.4, fontWeight: 700, color: '#fff' }}>{memberInitials(member.fullName, member.username)}</span>}
+        : <span style={{ fontFamily: 'var(--font-heading)', fontSize: size * 0.4, fontWeight: 700, color: 'var(--color-white)' }}>{memberInitials(member.fullName, member.username)}</span>}
     </div>
   );
 }
@@ -289,11 +289,11 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
     : repeatPreset === 'custom' ? `Every ${customDays} day${customDays === 1 ? '' : 's'}, ${repeatCount}x`
     : `${repeatLabel}, ${repeatCount}x`;
 
-  const labelStyle = { fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600 as const, color: '#484552', marginBottom: 6, display: 'block' };
+  const labelStyle = { fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600 as const, color: 'var(--color-text-secondary)', marginBottom: 6, display: 'block' };
   const triggerStyle = (active: boolean) => ({
     display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 12px', borderRadius: 8,
-    border: `1.5px solid ${active ? '#5e4dbb' : '#E5E7EB'}`, background: active ? '#F5F3FF' : '#fff',
-    cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', textAlign: 'left' as const, boxSizing: 'border-box' as const,
+    border: `1.5px solid ${active ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: active ? 'var(--color-surface-tint)' : 'var(--color-white)',
+    cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', textAlign: 'left' as const, boxSizing: 'border-box' as const,
   });
 
   // Portaled to <body> — CalendarScreen is a routed screen, and its
@@ -307,9 +307,9 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
     // from this backdrop but still bubble through the React tree to this handler.
     // Checking e.target === e.currentTarget makes sure only an actual backdrop
     // click (not a portaled descendant's) closes the modal.
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 480, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(94,77,187,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <div style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 480, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
         onClick={e => e.stopPropagation()}>
         {/* Accent stripe + header */}
         <div style={{ height: 5, background: color, flexShrink: 0 }} />
@@ -318,12 +318,12 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
             <div style={{ width: 34, height: 34, borderRadius: 10, background: tint(color, 0.16), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Icon name="event" size={19} color={color} />
             </div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22' }}>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)' }}>
               {initial ? 'Edit Meeting' : 'New Meeting'}
             </div>
           </div>
-          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: '#f1ecf6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="close" size={16} color="#787584" />
+          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: 'var(--color-surface-tint-2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="close" size={16} color="var(--color-text-tertiary)" />
           </button>
         </div>
 
@@ -334,16 +334,16 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
             <input autoFocus value={title} onChange={e => setTitle(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && canSave) handleSave(); }}
               placeholder="Meeting title"
-              style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', background: 'transparent', border: 'none', borderBottom: '1.5px solid #E5E7EB', padding: '7px 0', outline: 'none', boxSizing: 'border-box' }}
-              onFocus={e => (e.target.style.borderBottomColor = '#5e4dbb')}
-              onBlur={e => (e.target.style.borderBottomColor = '#E5E7EB')} />
+              style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', borderBottom: '1.5px solid var(--color-border-alt)', padding: '7px 0', outline: 'none', boxSizing: 'border-box' }}
+              onFocus={e => (e.target.style.borderBottomColor = 'var(--color-primary)')}
+              onBlur={e => (e.target.style.borderBottomColor = 'var(--color-border-alt)')} />
           </div>
 
           {/* Date */}
           <div>
             <label style={labelStyle}>Date</label>
             <button ref={dateBtnRef} onClick={() => openPopover('date', dateBtnRef)} style={triggerStyle(popover === 'date')}>
-              <Icon name="calendar_today" size={15} color={date ? '#5e4dbb' : '#b0acbe'} />
+              <Icon name="calendar_today" size={15} color={date ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
               <span style={{ flex: 1 }}>{friendlyDate}</span>
             </button>
           </div>
@@ -351,10 +351,10 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
           {/* All-day toggle */}
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}
             onClick={() => setAllDay(v => !v)}>
-            <div style={{ width: 38, height: 22, borderRadius: 9999, background: allDay ? '#5e4dbb' : '#d8d3e6', position: 'relative', transition: 'background 180ms', flexShrink: 0 }}>
-              <div style={{ position: 'absolute', top: 2, left: allDay ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left 180ms', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+            <div style={{ width: 38, height: 22, borderRadius: 9999, background: allDay ? 'var(--color-primary)' : 'var(--color-purple-tint-4)', position: 'relative', transition: 'background 180ms', flexShrink: 0 }}>
+              <div style={{ position: 'absolute', top: 2, left: allDay ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', transition: 'left 180ms', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.2)' }} />
             </div>
-            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#484552' }}>All-day</span>
+            <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>All-day</span>
           </label>
 
           {/* Times */}
@@ -363,14 +363,14 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
               <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Starts</label>
                 <button ref={startBtnRef} onClick={() => openPopover('start', startBtnRef)} style={triggerStyle(popover === 'start')}>
-                  <Icon name="schedule" size={15} color={startTime ? '#5e4dbb' : '#b0acbe'} />
+                  <Icon name="schedule" size={15} color={startTime ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
                   <span style={{ flex: 1 }}>{startTime || '--:--'}</span>
                 </button>
               </div>
               <div style={{ flex: 1 }}>
                 <label style={labelStyle}>Ends</label>
                 <button ref={endBtnRef} onClick={() => openPopover('end', endBtnRef, 'right')} style={triggerStyle(popover === 'end')}>
-                  <Icon name="schedule" size={15} color={endTime ? '#5e4dbb' : '#b0acbe'} />
+                  <Icon name="schedule" size={15} color={endTime ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
                   <span style={{ flex: 1 }}>{endTime || '--:--'}</span>
                 </button>
               </div>
@@ -382,15 +382,15 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
             <div>
               <label style={labelStyle}>Repeat</label>
               <button ref={repeatBtnRef} onClick={() => openPopover('repeat', repeatBtnRef)} style={triggerStyle(popover === 'repeat')}>
-                <Icon name="repeat" size={15} color={repeatPreset !== 'none' ? '#5e4dbb' : '#b0acbe'} />
+                <Icon name="repeat" size={15} color={repeatPreset !== 'none' ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
                 <span style={{ flex: 1 }}>{repeatSummary}</span>
               </button>
             </div>
           )}
           {initial && isRecurringSeries && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F5F3FF', borderRadius: 8, padding: '8px 12px' }}>
-              <Icon name="repeat" size={15} color="#5e4dbb" />
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#5e4dbb' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--color-surface-tint)', borderRadius: 8, padding: '8px 12px' }}>
+              <Icon name="repeat" size={15} color="var(--color-primary)" />
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-primary)' }}>
                 Part of a repeating series ({seriesCount} events)
               </span>
             </div>
@@ -400,20 +400,20 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
           <div>
             <label style={labelStyle}>Invite</label>
             <button ref={inviteBtnRef} onClick={() => openPopover('invite', inviteBtnRef)} style={triggerStyle(popover === 'invite')}>
-              <Icon name="person_add" size={15} color={inviteeIds.length > 0 ? '#5e4dbb' : '#b0acbe'} />
+              <Icon name="person_add" size={15} color={inviteeIds.length > 0 ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
               <span style={{ flex: 1 }}>{inviteeIds.length > 0 ? `${inviteeIds.length} invited` : 'Invite others'}</span>
             </button>
             {inviteeIds.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                 {inviteeIds.map(id => (
-                  <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#F5F3FF', borderRadius: 9999, padding: '3px 8px 3px 3px' }}>
+                  <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--color-surface-tint)', borderRadius: 9999, padding: '3px 8px 3px 3px' }}>
                     <MemberAvatar userId={id} size={18} />
-                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#5e4dbb', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-primary)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {allMembers[id]?.fullName || allMembers[id]?.username || '…'}
                     </span>
                     <button onClick={() => setInviteeIds(ids => ids.filter(x => x !== id))}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center' }}>
-                      <Icon name="close" size={11} color="#9d8dff" />
+                      <Icon name="close" size={11} color="var(--color-accent-purple-light)" />
                     </button>
                   </div>
                 ))}
@@ -424,10 +424,10 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
           {/* Location */}
           <div>
             <label style={labelStyle}>Location</label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1.5px solid #E5E7EB', borderRadius: 8, padding: '9px 12px' }}>
-              <Icon name="location_on" size={15} color="#b0acbe" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: '1.5px solid var(--color-border-alt)', borderRadius: 8, padding: '9px 12px' }}>
+              <Icon name="location_on" size={15} color="var(--color-text-quaternary)" />
               <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Add a location"
-                style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none' }} />
+                style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', outline: 'none' }} />
             </div>
           </div>
 
@@ -437,8 +437,8 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {MEETING_COLORS.map(c => (
                 <button key={c} onClick={() => setColor(c)}
-                  style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: color === c ? '2.5px solid #1c1b22' : '2.5px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
-                  {color === c && <Icon name="check" size={14} color="#fff" />}
+                  style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: color === c ? '2.5px solid var(--color-text-primary)' : '2.5px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
+                  {color === c && <Icon name="check" size={14} color="var(--color-white)" />}
                 </button>
               ))}
             </div>
@@ -449,46 +449,46 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
         </div>
 
         {/* Footer */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 24px 20px', borderTop: '1px solid #F5F3FF', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 24px 20px', borderTop: '1px solid var(--color-surface-tint)', flexShrink: 0 }}>
           {initial && onDelete && (
             <button onClick={() => setShowDelete(true)}
-              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#ba1a1a', background: '#fff5f5', border: '1px solid #ffdad6', borderRadius: 8, padding: '9px 16px', cursor: 'pointer', marginRight: 'auto' }}>
+              style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: '1px solid var(--color-error-bg)', borderRadius: 8, padding: '9px 16px', cursor: 'pointer', marginRight: 'auto' }}>
               Delete
             </button>
           )}
-          <button onClick={onClose} style={{ marginLeft: initial && onDelete ? 0 : 'auto', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>Cancel</button>
+          <button onClick={onClose} style={{ marginLeft: initial && onDelete ? 0 : 'auto', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>Cancel</button>
           <button onClick={handleSave} disabled={!canSave}
-            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: canSave ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 8, padding: '9px 22px', cursor: canSave ? 'pointer' : 'not-allowed', transition: 'all 180ms' }}>
+            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: canSave ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '9px 22px', cursor: canSave ? 'pointer' : 'not-allowed', transition: 'all 180ms' }}>
             {initial ? 'Save' : 'Add Meeting'}
           </button>
         </div>
 
         {showDelete && initial && onDelete && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.25)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 160ms ease both' }}
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-black-rgb), 0.25)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 160ms ease both' }}
             onClick={() => setShowDelete(false)}>
-            <div style={{ background: '#fff', borderRadius: 14, padding: '22px 24px', maxWidth: 340, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+            <div style={{ background: 'var(--color-white)', borderRadius: 14, padding: '22px 24px', maxWidth: 340, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both' }}
               onClick={e => e.stopPropagation()}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 6 }}>Delete this meeting?</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: isRecurringSeries ? 12 : 18 }}>This can't be undone.</div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 6 }}>Delete this meeting?</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: isRecurringSeries ? 12 : 18 }}>This can't be undone.</div>
               {isRecurringSeries && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => setDeleteWholeSeries(false)}>
-                    <div style={{ width: 16, height: 16, borderRadius: '50%', border: `1.5px solid ${!deleteWholeSeries ? '#5e4dbb' : '#cbc6d8'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {!deleteWholeSeries && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#5e4dbb' }} />}
+                    <div style={{ width: 16, height: 16, borderRadius: '50%', border: `1.5px solid ${!deleteWholeSeries ? 'var(--color-primary)' : 'var(--color-purple-tint-7)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {!deleteWholeSeries && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-primary)' }} />}
                     </div>
-                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22' }}>Just this event</span>
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)' }}>Just this event</span>
                   </label>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => setDeleteWholeSeries(true)}>
-                    <div style={{ width: 16, height: 16, borderRadius: '50%', border: `1.5px solid ${deleteWholeSeries ? '#5e4dbb' : '#cbc6d8'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {deleteWholeSeries && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#5e4dbb' }} />}
+                    <div style={{ width: 16, height: 16, borderRadius: '50%', border: `1.5px solid ${deleteWholeSeries ? 'var(--color-primary)' : 'var(--color-purple-tint-7)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {deleteWholeSeries && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-primary)' }} />}
                     </div>
-                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22' }}>All {seriesCount} events in the series</span>
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)' }}>All {seriesCount} events in the series</span>
                   </label>
                 </div>
               )}
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button onClick={() => setShowDelete(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Cancel</button>
-                <button onClick={() => { onDelete(initial.id, { series: deleteWholeSeries }); }} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Delete</button>
+                <button onClick={() => setShowDelete(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => { onDelete(initial.id, { series: deleteWholeSeries }); }} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Delete</button>
               </div>
             </div>
           </div>
@@ -570,36 +570,36 @@ function InvitePopover({ candidates, search, onSearchChange, selectedIds, onTogg
     : candidates;
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '10px', width: Math.min(260, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#faf9ff', borderRadius: 8, padding: '6px 10px', border: '1px solid #e8e4f0', marginBottom: 8 }}>
-        <Icon name="search" size={13} color="#787584" />
+    <div style={{ background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: '10px', width: Math.min(260, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--color-surface-tint-3)', borderRadius: 8, padding: '6px 10px', border: '1px solid var(--color-border)', marginBottom: 8 }}>
+        <Icon name="search" size={13} color="var(--color-text-tertiary)" />
         <input autoFocus value={search} onChange={e => onSearchChange(e.target.value)} placeholder="Search people…"
-          style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22', flex: 1 }} />
+          style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)', flex: 1 }} />
       </div>
 
       <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
         {filtered.length === 0 && (
-          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', padding: '8px 4px', textAlign: 'center' }}>No matches</div>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', padding: '8px 4px', textAlign: 'center' }}>No matches</div>
         )}
         {filtered.map(m => {
           const active = selectedIds.includes(m.id);
           return (
             <button key={m.id} onClick={() => onToggle(m.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 8, border: 'none', background: active ? '#F5F3FF' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 120ms' }}
-              onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#faf8ff'; }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 8, border: 'none', background: active ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 120ms' }}
+              onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--color-purple-pale-5)'; }}
               onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}>
               <MemberAvatar userId={m.id} size={22} />
-              <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: active ? 600 : 400, color: active ? '#5e4dbb' : '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: active ? 600 : 400, color: active ? 'var(--color-primary)' : 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {m.fullName || m.username}
               </span>
-              {active && <Icon name="check" size={15} color="#5e4dbb" />}
+              {active && <Icon name="check" size={15} color="var(--color-primary)" />}
             </button>
           );
         })}
       </div>
 
       <button onClick={onDone}
-        style={{ width: '100%', marginTop: 10, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 7, padding: '8px 0', cursor: 'pointer' }}>
+        style={{ width: '100%', marginTop: 10, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 7, padding: '8px 0', cursor: 'pointer' }}>
         Done
       </button>
     </div>
@@ -625,52 +625,52 @@ function RepeatPopover({ preset, onPresetChange, customDays, onCustomDaysChange,
   const stepper = (value: number, onChange: (n: number) => void, min: number, max: number) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <button onClick={() => onChange(Math.max(min, value - 1))}
-        style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name="remove" size={14} color="#5e4dbb" />
+        style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid var(--color-border-alt)', background: 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Icon name="remove" size={14} color="var(--color-primary)" />
       </button>
-      <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22', minWidth: 26, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+      <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)', minWidth: 26, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{value}</span>
       <button onClick={() => onChange(Math.min(max, value + 1))}
-        style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid #E5E7EB', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name="add" size={14} color="#5e4dbb" />
+        style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid var(--color-border-alt)', background: 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Icon name="add" size={14} color="var(--color-primary)" />
       </button>
     </div>
   );
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '10px', width: Math.min(240, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+    <div style={{ background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: '10px', width: Math.min(240, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {REPEAT_PRESETS.map(p => {
           const active = preset === p.value;
           return (
             <button key={p.value} onClick={() => onPresetChange(p.value)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, border: 'none', background: active ? '#F5F3FF' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 120ms' }}
-              onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#faf8ff'; }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, border: 'none', background: active ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 120ms' }}
+              onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--color-purple-pale-5)'; }}
               onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}>
-              <div style={{ width: 16, height: 16, borderRadius: '50%', border: `1.5px solid ${active ? '#5e4dbb' : '#cbc6d8'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                {active && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#5e4dbb' }} />}
+              <div style={{ width: 16, height: 16, borderRadius: '50%', border: `1.5px solid ${active ? 'var(--color-primary)' : 'var(--color-purple-tint-7)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {active && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-primary)' }} />}
               </div>
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: active ? 600 : 400, color: active ? '#5e4dbb' : '#1c1b22' }}>{p.label}</span>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: active ? 600 : 400, color: active ? 'var(--color-primary)' : 'var(--color-text-primary)' }}>{p.label}</span>
             </button>
           );
         })}
       </div>
 
       {preset === 'custom' && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 10px 4px', borderTop: '1px solid #f0ecf8', marginTop: 6 }}>
-          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#484552' }}>Every {customDays} day{customDays === 1 ? '' : 's'}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 10px 4px', borderTop: '1px solid var(--color-divider)', marginTop: 6 }}>
+          <span style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-secondary)' }}>Every {customDays} day{customDays === 1 ? '' : 's'}</span>
           {stepper(customDays, onCustomDaysChange, 1, 365)}
         </div>
       )}
 
       {preset !== 'none' && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 10px 4px', borderTop: '1px solid #f0ecf8', marginTop: preset === 'custom' ? 0 : 6 }}>
-          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#484552' }}>Ends after</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 10px 4px', borderTop: '1px solid var(--color-divider)', marginTop: preset === 'custom' ? 0 : 6 }}>
+          <span style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-secondary)' }}>Ends after</span>
           {stepper(count, onCountChange, 2, 104)}
         </div>
       )}
 
       <button onClick={onDone}
-        style={{ width: '100%', marginTop: 10, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 7, padding: '8px 0', cursor: 'pointer' }}>
+        style={{ width: '100%', marginTop: 10, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 7, padding: '8px 0', cursor: 'pointer' }}>
         Done
       </button>
     </div>
@@ -700,9 +700,9 @@ function MeetingViewModal({ meeting, onClose, onLeave }: { meeting: Meeting; onC
   const others = (meeting.attendeeIds ?? []).filter(id => id !== currentUserId && allMembers[id]);
 
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 440, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(94,77,187,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', position: 'relative' }}
+      <div style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 440, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', position: 'relative' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ height: 5, background: color, flexShrink: 0 }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 12px', flexShrink: 0 }}>
@@ -710,12 +710,12 @@ function MeetingViewModal({ meeting, onClose, onLeave }: { meeting: Meeting; onC
             <div style={{ width: 34, height: 34, borderRadius: 10, background: tint(color, 0.16), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Icon name="event" size={19} color={color} />
             </div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {meeting.title}
             </div>
           </div>
-          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: '#f1ecf6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Icon name="close" size={16} color="#787584" />
+          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', background: 'var(--color-surface-tint-2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="close" size={16} color="var(--color-text-tertiary)" />
           </button>
         </div>
 
@@ -723,47 +723,47 @@ function MeetingViewModal({ meeting, onClose, onLeave }: { meeting: Meeting; onC
           {organizer && (
             <div style={rowStyle}>
               <MemberAvatar userId={meeting.organizerId!} size={22} />
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#484552' }}>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-secondary)' }}>
                 Organized by <strong>{organizer.fullName || organizer.username}</strong>
               </span>
             </div>
           )}
 
           <div style={rowStyle}>
-            <Icon name="calendar_today" size={15} color="#b0acbe" />
-            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22' }}>{friendlyDate}</span>
+            <Icon name="calendar_today" size={15} color="var(--color-text-quaternary)" />
+            <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)' }}>{friendlyDate}</span>
           </div>
 
           {!meeting.allDay && (meeting.startTime || meeting.endTime) && (
             <div style={rowStyle}>
-              <Icon name="schedule" size={15} color="#b0acbe" />
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22' }}>
+              <Icon name="schedule" size={15} color="var(--color-text-quaternary)" />
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)' }}>
                 {meeting.startTime || '--:--'}{meeting.endTime ? ` – ${meeting.endTime}` : ''}
               </span>
             </div>
           )}
           {meeting.allDay && (
             <div style={rowStyle}>
-              <Icon name="schedule" size={15} color="#b0acbe" />
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22' }}>All day</span>
+              <Icon name="schedule" size={15} color="var(--color-text-quaternary)" />
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)' }}>All day</span>
             </div>
           )}
 
           {meeting.location && (
             <div style={rowStyle}>
-              <Icon name="location_on" size={15} color="#b0acbe" />
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22' }}>{meeting.location}</span>
+              <Icon name="location_on" size={15} color="var(--color-text-quaternary)" />
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)' }}>{meeting.location}</span>
             </div>
           )}
 
           {others.length > 0 && (
             <div style={rowStyle}>
-              <Icon name="group" size={15} color="#b0acbe" />
+              <Icon name="group" size={15} color="var(--color-text-quaternary)" />
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {others.map(id => (
-                  <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#F5F3FF', borderRadius: 9999, padding: '2px 8px 2px 2px' }}>
+                  <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--color-surface-tint)', borderRadius: 9999, padding: '2px 8px 2px 2px' }}>
                     <MemberAvatar userId={id} size={16} />
-                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#5e4dbb' }}>{allMembers[id]?.fullName || allMembers[id]?.username}</span>
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-primary)' }}>{allMembers[id]?.fullName || allMembers[id]?.username}</span>
                   </div>
                 ))}
               </div>
@@ -772,31 +772,31 @@ function MeetingViewModal({ meeting, onClose, onLeave }: { meeting: Meeting; onC
 
           {meeting.description && meeting.description.trim() && (
             <>
-              <div style={{ height: 1, background: '#F0EEF8', margin: '10px 0' }} />
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Notes</div>
+              <div style={{ height: 1, background: 'var(--color-purple-pale-23)', margin: '10px 0' }} />
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-border-strong)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Notes</div>
               <MarkdownView source={meeting.description} />
             </>
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 24px 20px', borderTop: '1px solid #F5F3FF', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 24px 20px', borderTop: '1px solid var(--color-surface-tint)', flexShrink: 0 }}>
           <button onClick={() => setConfirmLeave(true)}
-            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#ba1a1a', background: '#fff5f5', border: '1px solid #ffdad6', borderRadius: 8, padding: '9px 16px', cursor: 'pointer', marginRight: 'auto' }}>
+            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: '1px solid var(--color-error-bg)', borderRadius: 8, padding: '9px 16px', cursor: 'pointer', marginRight: 'auto' }}>
             Remove from my calendar
           </button>
-          <button onClick={onClose} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>Close</button>
+          <button onClick={onClose} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>Close</button>
         </div>
 
         {confirmLeave && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.25)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 160ms ease both' }}
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-black-rgb), 0.25)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 160ms ease both' }}
             onClick={() => setConfirmLeave(false)}>
-            <div style={{ background: '#fff', borderRadius: 14, padding: '22px 24px', maxWidth: 320, boxShadow: '0 8px 32px rgba(0,0,0,0.18)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+            <div style={{ background: 'var(--color-white)', borderRadius: 14, padding: '22px 24px', maxWidth: 320, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both' }}
               onClick={e => e.stopPropagation()}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 6 }}>Remove this meeting?</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: 18 }}>It'll disappear from your calendar. {organizer ? (organizer.fullName || organizer.username) : 'The organizer'} keeps it on theirs.</div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 6 }}>Remove this meeting?</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: 18 }}>It'll disappear from your calendar. {organizer ? (organizer.fullName || organizer.username) : 'The organizer'} keeps it on theirs.</div>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button onClick={() => setConfirmLeave(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Cancel</button>
-                <button onClick={onLeave} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Remove</button>
+                <button onClick={() => setConfirmLeave(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={onLeave} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Remove</button>
               </div>
             </div>
           </div>
@@ -814,31 +814,31 @@ function DayAddChooser({ date, onTask, onMeeting, onClose }: { date: string; onT
   const friendly = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const opt = (icon: string, title: string, sub: string, onClick: () => void) => (
     <button onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 12, border: '1.5px solid #E5E7EB', background: '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms', width: '100%' }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = '#5e4dbb'; e.currentTarget.style.background = '#F5F3FF'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.background = '#fff'; }}>
-      <div style={{ width: 38, height: 38, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <Icon name={icon} size={20} color="#5e4dbb" />
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 12, border: '1.5px solid var(--color-border-alt)', background: 'var(--color-white)', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms', width: '100%' }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border-alt)'; e.currentTarget.style.background = 'var(--color-white)'; }}>
+      <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Icon name={icon} size={20} color="var(--color-primary)" />
       </div>
       <div>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22' }}>{title}</div>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 1 }}>{sub}</div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>{title}</div>
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 1 }}>{sub}</div>
       </div>
     </button>
   );
   // Portaled to <body> — see the comment on MeetingModal's return for why.
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
       onClick={onClose}>
-      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 380, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px 8px' }}>
           <div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>Add to calendar</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{friendly}</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>Add to calendar</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>{friendly}</div>
           </div>
-          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: '#f1ecf6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="close" size={15} color="#787584" />
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'var(--color-surface-tint-2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="close" size={15} color="var(--color-text-tertiary)" />
           </button>
         </div>
         <div style={{ padding: '8px 22px 22px', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -878,57 +878,57 @@ function AddToDateModal({ date, lists, onAdd, onClose }: AddToDateModalProps) {
 
   // Portaled to <body> — see the comment on MeetingModal's return for why.
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={onClose}>
-      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 420, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <div style={{ background: 'var(--color-white)', borderRadius: 14, width: '100%', maxWidth: 420, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
         onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 14px', borderBottom: '1px solid #F5F3FF' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 14px', borderBottom: '1px solid var(--color-surface-tint)' }}>
           <div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>Add Task</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{friendly}</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>Add Task</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>{friendly}</div>
           </div>
           <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="close" size={16} color="#787584" />
+            <Icon name="close" size={16} color="var(--color-text-tertiary)" />
           </button>
         </div>
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div>
-            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', marginBottom: 5, display: 'block' }}>Task Name</label>
+            <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 5, display: 'block' }}>Task Name</label>
             <input autoFocus value={title} onChange={e => setTitle(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && canSubmit) handleAdd(); }}
               placeholder="What needs to be done?"
-              style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', background: 'transparent', border: 'none', borderBottom: '1.5px solid #E5E7EB', padding: '7px 0', outline: 'none', boxSizing: 'border-box', transition: 'border-color 200ms' }}
-              onFocus={e => (e.target.style.borderBottomColor = '#5e4dbb')}
-              onBlur={e => (e.target.style.borderBottomColor = '#E5E7EB')} />
+              style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', borderBottom: '1.5px solid var(--color-border-alt)', padding: '7px 0', outline: 'none', boxSizing: 'border-box', transition: 'border-color 200ms' }}
+              onFocus={e => (e.target.style.borderBottomColor = 'var(--color-primary)')}
+              onBlur={e => (e.target.style.borderBottomColor = 'var(--color-border-alt)')} />
           </div>
           <div>
-            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', marginBottom: 8, display: 'block' }}>Add to</label>
+            <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 8, display: 'block' }}>Add to</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
               <button onClick={() => setDest('dash')}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${dest === 'dash' ? '#5e4dbb' : '#E5E7EB'}`, background: dest === 'dash' ? '#F5F3FF' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}>
-                <div style={{ width: 20, height: 20, borderRadius: '50%', background: dest === 'dash' ? '#5e4dbb' : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {dest === 'dash' && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${dest === 'dash' ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: dest === 'dash' ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}>
+                <div style={{ width: 20, height: 20, borderRadius: '50%', background: dest === 'dash' ? 'var(--color-primary)' : 'var(--color-border-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {dest === 'dash' && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-white)' }} />}
                 </div>
-                <Icon name="today" size={15} color={dest === 'dash' ? '#5e4dbb' : '#787584'} />
-                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: dest === 'dash' ? '#5e4dbb' : '#484552' }}>Dashboard</span>
+                <Icon name="today" size={15} color={dest === 'dash' ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: dest === 'dash' ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>Dashboard</span>
               </button>
               {lists.map(list => (
                 <button key={list.id} onClick={() => setDest(list.id)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${dest === list.id ? '#5e4dbb' : '#E5E7EB'}`, background: dest === list.id ? '#F5F3FF' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}>
-                  <div style={{ width: 20, height: 20, borderRadius: '50%', background: dest === list.id ? '#5e4dbb' : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    {dest === list.id && <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${dest === list.id ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: dest === list.id ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}>
+                  <div style={{ width: 20, height: 20, borderRadius: '50%', background: dest === list.id ? 'var(--color-primary)' : 'var(--color-border-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {dest === list.id && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-white)' }} />}
                   </div>
-                  {list.emoji ? <span style={{ fontSize: 15, lineHeight: 1 }}>{list.emoji}</span> : <Icon name="format_list_bulleted" size={15} color={dest === list.id ? '#5e4dbb' : '#787584'} />}
-                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: dest === list.id ? '#5e4dbb' : '#484552', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>
+                  {list.emoji ? <span style={{ fontSize: 15, lineHeight: 1 }}>{list.emoji}</span> : <Icon name="format_list_bulleted" size={15} color={dest === list.id ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />}
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: dest === list.id ? 'var(--color-primary)' : 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>
                 </button>
               ))}
             </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '14px 24px 20px', borderTop: '1px solid #F5F3FF' }}>
-          <button onClick={onClose} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>Cancel</button>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '14px 24px 20px', borderTop: '1px solid var(--color-surface-tint)' }}>
+          <button onClick={onClose} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>Cancel</button>
           <button onClick={handleAdd} disabled={!canSubmit}
-            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: canSubmit ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 8, padding: '9px 20px', cursor: canSubmit ? 'pointer' : 'not-allowed', transition: 'all 180ms' }}>
+            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: canSubmit ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '9px 20px', cursor: canSubmit ? 'pointer' : 'not-allowed', transition: 'all 180ms' }}>
             Add Task
           </button>
         </div>
@@ -956,7 +956,7 @@ function ChipCompact({ chip, onOpenMenu }: { chip: Chip; onOpenMenu?: (e: React.
         : chip.emoji
           ? <span style={{ fontSize: 10, lineHeight: 1, flexShrink: 0 }}>{chip.emoji}</span>
           : <div style={{ width: 5, height: 5, borderRadius: '50%', background: chip.accent, flexShrink: 0 }} />}
-      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: chip.accent, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, fontWeight: 500 }}>{chip.label}</span>
+      <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: chip.accent, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, fontWeight: 500 }}>{chip.label}</span>
     </div>
   );
 }
@@ -974,10 +974,10 @@ function ChipCard({ chip, onOpenMenu }: { chip: Chip; onOpenMenu?: (e: React.Mou
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           {chip.priorityColor && <div style={{ width: 6, height: 6, borderRadius: '50%', background: chip.priorityColor, flexShrink: 0 }} />}
           {chip.emoji && <span style={{ fontSize: 12, lineHeight: 1, flexShrink: 0 }}>{chip.emoji}</span>}
-          <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: chip.accent, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chip.label}</span>
+          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: chip.accent, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chip.label}</span>
         </div>
         {(chip.allDay || chip.time || chip.subtitle) && (
-          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#787584', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-tertiary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {chip.allDay ? 'All day' : chip.time ? chip.time : ''}{chip.subtitle ? `${chip.allDay || chip.time ? ' · ' : ''}${chip.subtitle}` : ''}
           </div>
         )}
@@ -999,17 +999,17 @@ function DayItemsModal({ date, chips, onClose, onOpenMenu }: { date: string; chi
   }, [onClose]);
   // Portaled to <body> — see the comment on MeetingModal's return for why.
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
       onClick={onClose}>
-      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 380, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px 12px', flexShrink: 0 }}>
           <div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>{friendly}</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{chips.length} {chips.length === 1 ? 'item' : 'items'}</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>{friendly}</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>{chips.length} {chips.length === 1 ? 'item' : 'items'}</div>
           </div>
-          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: '#f1ecf6', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Icon name="close" size={15} color="#787584" />
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: 'var(--color-surface-tint-2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="close" size={15} color="var(--color-text-tertiary)" />
           </button>
         </div>
         <div style={{ padding: '4px 16px 18px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -1170,7 +1170,7 @@ export default function CalendarScreen() {
       const s = parseMin(t.time);
       push(t.deadline, {
         key: `t-${t._listId}-${t.id}`, kind: 'task', date: t.deadline, time: t.time ?? null,
-        label: t.title, accent: '#5e4dbb', bg: '#F5F3FF',
+        label: t.title, accent: 'var(--color-primary)', bg: 'var(--color-surface-tint)',
         priorityColor: t.priority ? PRIORITY_COLORS[t.priority] : undefined,
         subtitle: t._listName && t._listName !== 'Dashboard' ? t._listName : null,
         startMin: s ?? undefined, endMin: s != null ? s + 30 : undefined,
@@ -1423,7 +1423,7 @@ export default function CalendarScreen() {
       <div style={{ flex: 1, overflow: 'auto', padding: '0 16px 16px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 1 }}>
           {WEEK_HEADER.map(d => (
-            <div key={d} style={{ textAlign: 'center', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#b0acbe', padding: '10px 0' }}>{d}</div>
+            <div key={d} style={{ textAlign: 'center', fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-text-quaternary)', padding: '10px 0' }}>{d}</div>
           ))}
           {cells.map((cell, i) => {
             const iso = toIso(cell.date);
@@ -1436,13 +1436,13 @@ export default function CalendarScreen() {
                 onDragOver={e => { if (cell.current) e.preventDefault(); }}
                 onDrop={e => { if (cell.current) handleDayDrop(iso, e); }}
                 onClick={() => { if (cell.current) setDayChooser(iso); }}
-                style={{ minHeight: isMobile ? 76 : 100, border: isToday ? '1.5px solid #c8bfff' : '1px solid #f1ecf6', background: isToday ? '#faf8ff' : cell.current ? '#fff' : '#fafafa', borderRadius: 6, padding: 4, transition: 'background 150ms', cursor: cell.current ? 'pointer' : 'default', position: 'relative', minWidth: 0, overflow: 'hidden' }}
+                style={{ minHeight: isMobile ? 76 : 100, border: isToday ? '1.5px solid var(--color-purple-tint-1)' : '1px solid var(--color-surface-tint-2)', background: isToday ? 'var(--color-purple-pale-5)' : cell.current ? 'var(--color-white)' : 'var(--color-surface-neutral)', borderRadius: 6, padding: 4, transition: 'background 150ms', cursor: cell.current ? 'pointer' : 'default', position: 'relative', minWidth: 0, overflow: 'hidden' }}
                 className="cal-cell">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, padding: '0 2px' }}>
-                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? '#5e4dbb' : cell.current ? '#1c1b22' : '#c9c4d5' }}>{cell.date.getDate()}</div>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? 'var(--color-primary)' : cell.current ? 'var(--color-text-primary)' : 'var(--color-border-strong)' }}>{cell.date.getDate()}</div>
                   {cell.current && (
-                    <div className="cal-add-btn" style={{ width: 16, height: 16, borderRadius: '50%', background: '#5e4dbb', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 150ms', flexShrink: 0 }}>
-                      <Icon name="add" size={11} color="#fff" />
+                    <div className="cal-add-btn" style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 150ms', flexShrink: 0 }}>
+                      <Icon name="add" size={11} color="var(--color-white)" />
                     </div>
                   )}
                 </div>
@@ -1450,9 +1450,9 @@ export default function CalendarScreen() {
                   {visible.map(c => <ChipCompact key={c.key} chip={c} onOpenMenu={openChipMenu} />)}
                   {overflow > 0 && (
                     <button onClick={e => { e.stopPropagation(); setDayItemsIso(iso); }}
-                      style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#787584', background: 'transparent', border: 'none', textAlign: 'left', padding: '1px 5px', borderRadius: 4, cursor: 'pointer', transition: 'all 120ms' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#f1ecf6'; e.currentTarget.style.color = '#5e4dbb'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#787584'; }}>
+                      style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'transparent', border: 'none', textAlign: 'left', padding: '1px 5px', borderRadius: 4, cursor: 'pointer', transition: 'all 120ms' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; e.currentTarget.style.color = 'var(--color-primary)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; }}>
                       +{overflow} more
                     </button>
                   )}
@@ -1484,24 +1484,24 @@ export default function CalendarScreen() {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Day headers */}
-        <div style={{ display: 'grid', gridTemplateColumns: gridCols, borderBottom: '1px solid #f1ecf6', flexShrink: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: gridCols, borderBottom: '1px solid var(--color-surface-tint-2)', flexShrink: 0 }}>
           <div />
           {dayData.map(({ d, iso, isToday }) => (
-            <div key={iso} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 4px', borderLeft: '1px solid #f4f1f9' }}>
-              <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10.5, fontWeight: 700, color: '#b0acbe', textTransform: 'uppercase' }}>{DAYS_SHORT[d.getDay()]}</span>
-              <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: isToday ? '#fff' : '#1c1b22', background: isToday ? '#5e4dbb' : 'transparent', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{d.getDate()}</span>
+            <div key={iso} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 4px', borderLeft: '1px solid var(--color-purple-pale-19)' }}>
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 700, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' }}>{DAYS_SHORT[d.getDay()]}</span>
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: isToday ? 'var(--color-white)' : 'var(--color-text-primary)', background: isToday ? 'var(--color-primary)' : 'transparent', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{d.getDate()}</span>
             </div>
           ))}
         </div>
 
         {/* All-day / untimed row */}
-        <div style={{ display: 'grid', gridTemplateColumns: gridCols, borderBottom: '1px solid #e8e4f0', flexShrink: 0, maxHeight: 132, overflowY: 'auto' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', padding: '6px 6px 0', fontFamily: 'Inter, sans-serif', fontSize: 9, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' }}>all-day</div>
+        <div style={{ display: 'grid', gridTemplateColumns: gridCols, borderBottom: '1px solid var(--color-border)', flexShrink: 0, maxHeight: 132, overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', padding: '6px 6px 0', fontFamily: 'var(--font-body)', fontSize: 9, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' }}>all-day</div>
           {dayData.map(({ iso, untimed }) => (
             <div key={iso}
               onDragOver={e => e.preventDefault()}
               onDrop={e => handleDayDrop(iso, e)}
-              style={{ borderLeft: '1px solid #f4f1f9', padding: 4, display: 'flex', flexDirection: 'column', gap: 3, minHeight: 30 }}>
+              style={{ borderLeft: '1px solid var(--color-purple-pale-19)', padding: 4, display: 'flex', flexDirection: 'column', gap: 3, minHeight: 30 }}>
               {untimed.map(c => <ChipCard key={c.key} chip={c} onOpenMenu={openChipMenu} />)}
             </div>
           ))}
@@ -1513,7 +1513,7 @@ export default function CalendarScreen() {
             {/* Hour gutter */}
             <div style={{ position: 'relative', height: 24 * HOUR_H }}>
               {HOURS.map(h => h === 0 ? null : (
-                <div key={h} style={{ position: 'absolute', top: h * HOUR_H - 6, right: 6, fontFamily: 'Inter, sans-serif', fontSize: 9.5, color: '#b0acbe' }}>
+                <div key={h} style={{ position: 'absolute', top: h * HOUR_H - 6, right: 6, fontFamily: 'var(--font-body)', fontSize: 9.5, color: 'var(--color-text-quaternary)' }}>
                   {String(h).padStart(2, '0')}:00
                 </div>
               ))}
@@ -1524,21 +1524,21 @@ export default function CalendarScreen() {
                 onMouseDown={e => beginWeekSelect(iso, e)}
                 onDragOver={e => e.preventDefault()}
                 onDrop={e => handleDayDrop(iso, e)}
-                style={{ position: 'relative', height: 24 * HOUR_H, borderLeft: '1px solid #f4f1f9', background: isToday ? '#fbfaff' : '#fff', cursor: 'pointer' }}>
+                style={{ position: 'relative', height: 24 * HOUR_H, borderLeft: '1px solid var(--color-purple-pale-19)', background: isToday ? 'var(--color-purple-pale-3)' : 'var(--color-white)', cursor: 'pointer' }}>
                 {HOURS.map(h => (
-                  <div key={h} style={{ position: 'absolute', top: h * HOUR_H, left: 0, right: 0, borderTop: '1px solid #f4f1f9' }} />
+                  <div key={h} style={{ position: 'absolute', top: h * HOUR_H, left: 0, right: 0, borderTop: '1px solid var(--color-purple-pale-19)' }} />
                 ))}
                 {weekSel && weekSel.iso === iso && (() => {
                   const lo = Math.min(weekSel.aMin, weekSel.bMin), hi = Math.max(weekSel.aMin, weekSel.bMin);
                   return (
-                    <div style={{ position: 'absolute', top: (lo / 60) * HOUR_H, height: Math.max(((hi - lo) / 60) * HOUR_H, 2), left: 2, right: 2, background: 'rgba(94,77,187,0.16)', border: '1.5px solid #5e4dbb', borderRadius: 5, zIndex: 4, pointerEvents: 'none', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '2px 0' }}>
-                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 9.5, fontWeight: 600, color: '#5e4dbb' }}>{minToStr(lo)} – {minToStr(hi)}</span>
+                    <div style={{ position: 'absolute', top: (lo / 60) * HOUR_H, height: Math.max(((hi - lo) / 60) * HOUR_H, 2), left: 2, right: 2, background: 'rgba(var(--color-primary-rgb), 0.16)', border: '1.5px solid var(--color-primary)', borderRadius: 5, zIndex: 4, pointerEvents: 'none', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '2px 0' }}>
+                      <span style={{ fontFamily: 'var(--font-body)', fontSize: 9.5, fontWeight: 600, color: 'var(--color-primary)' }}>{minToStr(lo)} – {minToStr(hi)}</span>
                     </div>
                   );
                 })()}
                 {isToday && (
-                  <div style={{ position: 'absolute', top: (nowMin / 60) * HOUR_H, left: 0, right: 0, height: 2, background: '#ef4444', zIndex: 3 }}>
-                    <div style={{ position: 'absolute', left: -3, top: -3, width: 7, height: 7, borderRadius: '50%', background: '#ef4444' }} />
+                  <div style={{ position: 'absolute', top: (nowMin / 60) * HOUR_H, left: 0, right: 0, height: 2, background: 'var(--color-red-mid-2)', zIndex: 3 }}>
+                    <div style={{ position: 'absolute', left: -3, top: -3, width: 7, height: 7, borderRadius: '50%', background: 'var(--color-red-mid-2)' }} />
                   </div>
                 )}
                 {timed.map(c => {
@@ -1559,9 +1559,9 @@ export default function CalendarScreen() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         {c.priorityColor && <div style={{ width: 5, height: 5, borderRadius: '50%', background: c.priorityColor, flexShrink: 0 }} />}
                         {c.emoji && <span style={{ fontSize: 10, lineHeight: 1, flexShrink: 0 }}>{c.emoji}</span>}
-                        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: c.accent, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</span>
+                        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: c.accent, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</span>
                       </div>
-                      {height > 30 && c.time && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 9.5, color: '#787584' }}>{c.time}</div>}
+                      {height > 30 && c.time && <div style={{ fontFamily: 'var(--font-body)', fontSize: 9.5, color: 'var(--color-text-tertiary)' }}>{c.time}</div>}
                     </div>
                   );
                 })}
@@ -1585,13 +1585,13 @@ export default function CalendarScreen() {
             for (let i = 0; i < firstDay; i++) cells.push(null);
             for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(y, mo, d));
             return (
-              <div key={mo} style={{ border: '1px solid #f1ecf6', borderRadius: 12, padding: 10, background: '#fff' }}>
+              <div key={mo} style={{ border: '1px solid var(--color-surface-tint-2)', borderRadius: 12, padding: 10, background: 'var(--color-white)' }}>
                 <button onClick={() => { setAnchor(new Date(y, mo, 1)); setView('month'); }}
-                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#5e4dbb', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 0 8px', textAlign: 'left' }}>
+                  style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 0 8px', textAlign: 'left' }}>
                   {monthName}
                 </button>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
-                  {DAYS_MINI.map((d, i) => <div key={i} style={{ textAlign: 'center', fontFamily: 'Inter, sans-serif', fontSize: 9, fontWeight: 600, color: '#c9c4d5' }}>{d}</div>)}
+                  {DAYS_MINI.map((d, i) => <div key={i} style={{ textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 9, fontWeight: 600, color: 'var(--color-border-strong)' }}>{d}</div>)}
                   {cells.map((d, i) => {
                     if (!d) return <div key={i} />;
                     const iso = toIso(d);
@@ -1600,12 +1600,12 @@ export default function CalendarScreen() {
                     const dots = chips.slice(0, 3);
                     return (
                       <button key={i} onClick={() => { setAnchor(d); setView('month'); }}
-                        style={{ aspectRatio: '1', border: 'none', background: isToday ? '#5e4dbb' : 'transparent', borderRadius: 6, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, padding: 0, transition: 'background 120ms' }}
-                        onMouseEnter={e => { if (!isToday) e.currentTarget.style.background = '#F5F3FF'; }}
+                        style={{ aspectRatio: '1', border: 'none', background: isToday ? 'var(--color-primary)' : 'transparent', borderRadius: 6, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, padding: 0, transition: 'background 120ms' }}
+                        onMouseEnter={e => { if (!isToday) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
                         onMouseLeave={e => { if (!isToday) e.currentTarget.style.background = 'transparent'; }}>
-                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, fontWeight: isToday ? 700 : 400, color: isToday ? '#fff' : '#484552' }}>{d.getDate()}</span>
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, fontWeight: isToday ? 700 : 400, color: isToday ? 'var(--color-white)' : 'var(--color-text-secondary)' }}>{d.getDate()}</span>
                         <div style={{ display: 'flex', gap: 1.5, height: 4, alignItems: 'center' }}>
-                          {dots.map(c => <div key={c.key} style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: isToday ? 'rgba(255,255,255,0.85)' : c.accent }} />)}
+                          {dots.map(c => <div key={c.key} style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: isToday ? 'rgba(var(--color-white-rgb), 0.85)' : c.accent }} />)}
                         </div>
                       </button>
                     );
@@ -1622,7 +1622,7 @@ export default function CalendarScreen() {
   // ── View switcher segmented control ────────────────────────────
   const viewBtn = (v: typeof view, label: string) => (
     <button key={v} onClick={() => setView(v)}
-      style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: view === v ? '#5e4dbb' : '#787584', background: view === v ? '#fff' : 'transparent', border: 'none', borderRadius: 7, padding: '6px 14px', cursor: 'pointer', boxShadow: view === v ? '0 1px 4px rgba(94,77,187,0.18)' : 'none', transition: 'all 150ms' }}>
+      style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: view === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: view === v ? 'var(--color-white)' : 'transparent', border: 'none', borderRadius: 7, padding: '6px 14px', cursor: 'pointer', boxShadow: view === v ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none', transition: 'all 150ms' }}>
       {label}
     </button>
   );
@@ -1631,26 +1631,26 @@ export default function CalendarScreen() {
     <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Toolbar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isMobile ? '12px 14px' : '14px 24px', borderBottom: '1px solid #E5E7EB', flexShrink: 0, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isMobile ? '12px 14px' : '14px 24px', borderBottom: '1px solid var(--color-border-alt)', flexShrink: 0, flexWrap: 'wrap' }}>
           {/* Navigation */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={() => go(-1)} style={{ background: 'none', border: '1px solid #e8e4f0', borderRadius: 8, cursor: 'pointer', padding: '6px 9px', display: 'flex', alignItems: 'center' }}>
-              <Icon name="chevron_left" size={18} color="#787584" />
+            <button onClick={() => go(-1)} style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 8, cursor: 'pointer', padding: '6px 9px', display: 'flex', alignItems: 'center' }}>
+              <Icon name="chevron_left" size={18} color="var(--color-text-tertiary)" />
             </button>
-            <button onClick={() => go(1)} style={{ background: 'none', border: '1px solid #e8e4f0', borderRadius: 8, cursor: 'pointer', padding: '6px 9px', display: 'flex', alignItems: 'center' }}>
-              <Icon name="chevron_right" size={18} color="#787584" />
+            <button onClick={() => go(1)} style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 8, cursor: 'pointer', padding: '6px 9px', display: 'flex', alignItems: 'center' }}>
+              <Icon name="chevron_right" size={18} color="var(--color-text-tertiary)" />
             </button>
             <button onClick={() => setAnchor(new Date())}
-              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer' }}>
+              style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer' }}>
               Today
             </button>
           </div>
-          <h2 style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: isMobile ? 15 : 18, fontWeight: 700, color: '#1c1b22', margin: 0 }}>{periodLabel}</h2>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: isMobile ? 15 : 18, fontWeight: 700, color: 'var(--color-text-primary)', margin: 0 }}>{periodLabel}</h2>
 
           {/* Right cluster */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
             {/* View switcher */}
-            <div style={{ display: 'flex', gap: 2, background: '#f1ecf6', borderRadius: 9, padding: 3 }}>
+            <div style={{ display: 'flex', gap: 2, background: 'var(--color-surface-tint-2)', borderRadius: 9, padding: 3 }}>
               {viewBtn('week', 'Week')}
               {viewBtn('month', 'Month')}
               {viewBtn('year', 'Year')}
@@ -1659,34 +1659,34 @@ export default function CalendarScreen() {
             {/* Workspace filter */}
             <div ref={filterRef} style={{ position: 'relative' }}>
               <button onClick={() => setShowFilter(v => !v)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: hiddenWs.size > 0 ? '#5e4dbb' : '#787584', background: hiddenWs.size > 0 ? '#F5F3FF' : 'transparent', border: `1px solid ${hiddenWs.size > 0 ? '#c4b8f0' : '#e8e4f0'}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
-                <Icon name="filter_list" size={16} color={hiddenWs.size > 0 ? '#5e4dbb' : '#787584'} />
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: hiddenWs.size > 0 ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: hiddenWs.size > 0 ? 'var(--color-surface-tint)' : 'transparent', border: `1px solid ${hiddenWs.size > 0 ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
+                <Icon name="filter_list" size={16} color={hiddenWs.size > 0 ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                 {!isMobile && 'Workspaces'}
-                {hiddenWs.size > 0 && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 700, color: '#fff', background: '#5e4dbb', borderRadius: 9999, padding: '1px 6px' }}>{Math.max(workspaces.length - hiddenWs.size, 0)}/{workspaces.length}</span>}
+                {hiddenWs.size > 0 && <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, color: 'var(--color-white)', background: 'var(--color-primary)', borderRadius: 9999, padding: '1px 6px' }}>{Math.max(workspaces.length - hiddenWs.size, 0)}/{workspaces.length}</span>}
               </button>
               {showFilter && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 250, maxHeight: 360, overflowY: 'auto', background: '#fff', borderRadius: 14, border: '1px solid #E5E7EB', boxShadow: '0 8px 32px rgba(94,77,187,0.14)', zIndex: 400, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 250, maxHeight: 360, overflowY: 'auto', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border-alt)', boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.14)', zIndex: 400, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px 8px' }}>
-                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b0acbe' }}>Workspaces</span>
+                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-quaternary)' }}>Workspaces</span>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => setHiddenWs(new Set())} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#5e4dbb', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>All</button>
-                      <button onClick={() => setHiddenWs(new Set(workspaces.map(w => w.id)))} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>None</button>
+                      <button onClick={() => setHiddenWs(new Set())} style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>All</button>
+                      <button onClick={() => setHiddenWs(new Set(workspaces.map(w => w.id)))} style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>None</button>
                     </div>
                   </div>
                   <div style={{ padding: '0 8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {workspaces.length === 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', padding: '8px 8px 4px' }}>No workspaces</div>}
+                    {workspaces.length === 0 && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', padding: '8px 8px 4px' }}>No workspaces</div>}
                     {workspaces.map(w => {
                       const on = !hiddenWs.has(w.id);
                       return (
                         <button key={w.id} onClick={() => toggleWs(w.id)}
                           style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 120ms' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = '#F5F3FF')}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
                           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                          <div style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? '#5e4dbb' : '#cbc6d8'}`, background: on ? '#5e4dbb' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 120ms' }}>
-                            {on && <Icon name="check" size={13} color="#fff" />}
+                          <div style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? 'var(--color-primary)' : 'var(--color-purple-tint-7)'}`, background: on ? 'var(--color-primary)' : 'var(--color-white)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 120ms' }}>
+                            {on && <Icon name="check" size={13} color="var(--color-white)" />}
                           </div>
                           {w.emoji && <span style={{ fontSize: 15, lineHeight: 1 }}>{w.emoji}</span>}
-                          <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</span>
+                          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</span>
                         </button>
                       );
                     })}
@@ -1700,41 +1700,41 @@ export default function CalendarScreen() {
               <div ref={unschedRef} style={{ position: 'relative' }}>
                 <button onClick={() => { if (isMobile) setMobileSidebarOpen(true); else setShowUnscheduled(v => !v); }}
                   title="Unscheduled tasks"
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: showUnscheduled ? '#5e4dbb' : '#787584', background: showUnscheduled ? '#F5F3FF' : 'transparent', border: `1px solid ${showUnscheduled ? '#c4b8f0' : '#e8e4f0'}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
-                  <Icon name="bolt" size={16} color={showUnscheduled ? '#5e4dbb' : '#787584'} />
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: showUnscheduled ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: showUnscheduled ? 'var(--color-surface-tint)' : 'transparent', border: `1px solid ${showUnscheduled ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
+                  <Icon name="bolt" size={16} color={showUnscheduled ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                   {!isMobile && 'Unscheduled'}
-                  {unscheduled.length > 0 && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 700, color: '#fff', background: '#5e4dbb', borderRadius: 9999, padding: '1px 6px' }}>{unscheduled.length}</span>}
+                  {unscheduled.length > 0 && <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, color: 'var(--color-white)', background: 'var(--color-primary)', borderRadius: 9999, padding: '1px 6px' }}>{unscheduled.length}</span>}
                 </button>
                 {!isMobile && showUnscheduled && (
-                  <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 280, maxHeight: '60vh', display: 'flex', flexDirection: 'column', background: '#fff', borderRadius: 14, border: '1px solid #E5E7EB', boxShadow: '0 8px 32px rgba(94,77,187,0.14)', zIndex: 400, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
-                    <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid #f0ecf8', flexShrink: 0 }}>
+                  <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 280, maxHeight: '60vh', display: 'flex', flexDirection: 'column', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border-alt)', boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.14)', zIndex: 400, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+                    <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid var(--color-divider)', flexShrink: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                        <Icon name="bolt" size={15} color="#5e4dbb" />
-                        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b0acbe' }}>Unscheduled</span>
+                        <Icon name="bolt" size={15} color="var(--color-primary)" />
+                        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-quaternary)' }}>Unscheduled</span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#faf9ff', borderRadius: 8, padding: '6px 10px', border: '1px solid #e8e4f0' }}>
-                        <Icon name="search" size={13} color="#787584" />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--color-surface-tint-3)', borderRadius: 8, padding: '6px 10px', border: '1px solid var(--color-border)' }}>
+                        <Icon name="search" size={13} color="var(--color-text-tertiary)" />
                         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
-                          style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#1c1b22', flex: 1 }} />
+                          style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-primary)', flex: 1 }} />
                       </div>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe', marginTop: 7 }}>Drag a task onto a day to schedule it.</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-quaternary)', marginTop: 7 }}>Drag a task onto a day to schedule it.</div>
                     </div>
                     <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
                       {filteredUnscheduled.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '20px 8px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>All tasks scheduled!</div>
+                        <div style={{ textAlign: 'center', padding: '20px 8px', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>All tasks scheduled!</div>
                       ) : (
                         filteredUnscheduled.map(t => (
                           <div key={`${t._listId}-${t.id}`} draggable
                             onDragStart={e => { e.dataTransfer.setData('text/plain', String(t.id)); e.dataTransfer.effectAllowed = 'move'; setDragTaskId(t.id); }}
                             onDragEnd={() => setDragTaskId(null)}
                             onClick={() => setSelectedTask(t)}
-                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: '#fff', border: '1px solid #e8e4f0', marginBottom: 4, cursor: 'grab', transition: 'all 150ms', opacity: dragTaskId === t.id ? 0.4 : 1 }}
-                            onMouseEnter={e => (e.currentTarget.style.borderColor = '#9d8dff')}
-                            onMouseLeave={e => (e.currentTarget.style.borderColor = '#e8e4f0')}>
-                            <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'var(--color-white)', border: '1px solid var(--color-border)', marginBottom: 4, cursor: 'grab', transition: 'all 150ms', opacity: dragTaskId === t.id ? 0.4 : 1 }}
+                            onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-accent-purple-light)')}
+                            onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-border)')}>
+                            <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
                             <div style={{ minWidth: 0 }}>
-                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
-                              {t._listName && t._listName !== 'Dashboard' && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: '#787584' }}>{t._listName}</div>}
+                              <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
+                              {t._listName && t._listName !== 'Dashboard' && <div style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--color-text-tertiary)' }}>{t._listName}</div>}
                             </div>
                           </div>
                         ))
@@ -1747,10 +1747,10 @@ export default function CalendarScreen() {
 
             {/* New meeting */}
             <button onClick={() => setCreatingMeeting({ date: view === 'year' ? todayIso : toIso(anchor) })}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(94,77,187,0.25)', transition: 'background 150ms' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#4d3da8')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#5e4dbb')}>
-              <Icon name="add" size={16} color="#fff" />
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(var(--color-primary-rgb), 0.25)', transition: 'background 150ms' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-mid-11)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-primary)')}>
+              <Icon name="add" size={16} color="var(--color-white)" />
               {isMobile ? 'Meeting' : 'New Meeting'}
             </button>
           </div>
@@ -1763,36 +1763,36 @@ export default function CalendarScreen() {
       {/* Unscheduled tasks — mobile bottom sheet (opened from the ⚡ toolbar button) */}
       {isMobile && showPanel && mobileSidebarOpen && (
         <>
-          <div onClick={() => setMobileSidebarOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(2px)', animation: 'backdropIn 180ms ease both' }} />
-          <div className="safe-bottom" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201, background: '#f7f2fc', borderRadius: '16px 16px 0 0', maxHeight: '65vh', display: 'flex', flexDirection: 'column', animation: 'slideUp 260ms cubic-bezier(0.22,1,0.36,1) both', boxShadow: '0 -4px 24px rgba(0,0,0,0.12)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 16px 10px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
+          <div onClick={() => setMobileSidebarOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(2px)', animation: 'backdropIn 180ms ease both' }} />
+          <div className="safe-bottom" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201, background: 'var(--color-purple-pale-13)', borderRadius: '16px 16px 0 0', maxHeight: '65vh', display: 'flex', flexDirection: 'column', animation: 'slideUp 260ms cubic-bezier(0.22,1,0.36,1) both', boxShadow: '0 -4px 24px rgba(var(--color-black-rgb), 0.12)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 16px 10px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Icon name="bolt" size={15} color="#5e4dbb" />
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#b0acbe' }}>Unscheduled</div>
+                <Icon name="bolt" size={15} color="var(--color-primary)" />
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-quaternary)' }}>Unscheduled</div>
               </div>
-              <button onClick={() => setMobileSidebarOpen(false)} style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name="close" size={15} color="#484552" />
+              <button onClick={() => setMobileSidebarOpen(false)} style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="close" size={15} color="var(--color-text-secondary)" />
               </button>
             </div>
-            <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', borderRadius: 8, padding: '6px 10px', border: '1px solid #e8e4f0' }}>
-                <Icon name="search" size={13} color="#787584" />
+            <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--color-white)', borderRadius: 8, padding: '6px 10px', border: '1px solid var(--color-border)' }}>
+                <Icon name="search" size={13} color="var(--color-text-tertiary)" />
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
-                  style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#1c1b22', flex: 1 }} />
+                  style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-primary)', flex: 1 }} />
               </div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 7 }}>Tap a task to schedule it.</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', marginTop: 7 }}>Tap a task to schedule it.</div>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
               {filteredUnscheduled.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px 8px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>All tasks scheduled!</div>
+                <div style={{ textAlign: 'center', padding: '24px 8px', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>All tasks scheduled!</div>
               ) : filteredUnscheduled.map(t => (
                 <div key={`${t._listId}-${t.id}`} onClick={() => setMobileScheduleTask(t)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, background: '#fff', border: '1px solid #e8e4f0', marginBottom: 6, cursor: 'pointer' }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, background: 'var(--color-white)', border: '1px solid var(--color-border)', marginBottom: 6, cursor: 'pointer' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
-                    {t._listName && t._listName !== 'Dashboard' && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584' }}>{t._listName}</div>}
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
+                    {t._listName && t._listName !== 'Dashboard' && <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)' }}>{t._listName}</div>}
                   </div>
-                  <Icon name="event_available" size={17} color="#5e4dbb" />
+                  <Icon name="event_available" size={17} color="var(--color-primary)" />
                 </div>
               ))}
             </div>
@@ -1803,11 +1803,11 @@ export default function CalendarScreen() {
       {/* Mobile: pick a date to schedule a tapped task — portaled to <body>,
           see the comment on MeetingModal's return for why. */}
       {mobileScheduleTask && createPortal(
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
           onClick={() => setMobileScheduleTask(null)}>
           <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-            <div style={{ background: '#fff', borderRadius: 12, padding: '10px 16px', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', maxWidth: 280 }}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Schedule “{mobileScheduleTask.title}”</div>
+            <div style={{ background: 'var(--color-white)', borderRadius: 12, padding: '10px 16px', boxShadow: '0 4px 16px rgba(var(--color-black-rgb), 0.12)', maxWidth: 280 }}>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Schedule “{mobileScheduleTask.title}”</div>
             </div>
             <CalendarPicker value={mobileScheduleTask.deadline}
               onChange={d => { assignDeadline(mobileScheduleTask.id, d); setMobileScheduleTask(null); }} />

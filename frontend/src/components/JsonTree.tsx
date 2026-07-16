@@ -39,21 +39,21 @@ function JsonTreeNode({ label, value, path, depth }: { label: string; value: unk
         draggable
         onDragStart={handleDragStart}
         title={`Drag to insert {{${path}}}`}
-        style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 4px', borderRadius: 5, cursor: 'grab', fontFamily: "'SF Mono', Monaco, Consolas, monospace", fontSize: 11.5, minWidth: 0 }}
+        style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 4px', borderRadius: 5, cursor: 'grab', fontFamily: "var(--font-mono-alt)", fontSize: 11.5, minWidth: 0 }}
       >
         {isObject && entries.length > 0 ? (
           <span onClick={(e) => { e.stopPropagation(); setExpanded((x) => !x); }} style={{ display: 'flex', cursor: 'pointer', flexShrink: 0 }}>
-            <Icon name={expanded ? 'expand_more' : 'chevron_right'} size={13} color="#b0acbe" />
+            <Icon name={expanded ? 'expand_more' : 'chevron_right'} size={13} color="var(--color-text-quaternary)" />
           </span>
         ) : (
           <span style={{ width: 13, flexShrink: 0 }} />
         )}
-        <span style={{ color: '#5e4dbb', fontWeight: 600, flexShrink: 0 }}>{label}</span>
+        <span style={{ color: 'var(--color-primary)', fontWeight: 600, flexShrink: 0 }}>{label}</span>
         {!isObject && (
-          <span style={{ color: '#484552', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>: {formatPrimitive(value)}</span>
+          <span style={{ color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>: {formatPrimitive(value)}</span>
         )}
         {isObject && (
-          <span style={{ color: '#b0acbe' }}>{isArray ? `Array(${entries.length})` : `{${entries.length}}`}</span>
+          <span style={{ color: 'var(--color-text-quaternary)' }}>{isArray ? `Array(${entries.length})` : `{${entries.length}}`}</span>
         )}
       </div>
       {isObject && expanded && entries.map(([key, v]) => (
@@ -65,7 +65,7 @@ function JsonTreeNode({ label, value, path, depth }: { label: string; value: unk
 
 export default function JsonTree({ data, rootLabel, rootPath }: { data: unknown; rootLabel: string; rootPath: string }) {
   if (data === undefined) {
-    return <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', fontStyle: 'italic', padding: '2px 0' }}>No data.</div>;
+    return <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', fontStyle: 'italic', padding: '2px 0' }}>No data.</div>;
   }
   return <JsonTreeNode label={rootLabel} value={data} path={rootPath} depth={0} />;
 }

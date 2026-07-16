@@ -108,20 +108,20 @@ export default function NukeScreen() {
 
   if (error) {
     return (
-      <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #fdf8ff 0%, #f5f0ff 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, padding: 24 }}>
-        <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width={28} height={28} viewBox="0 0 24 24" fill="#ba1a1a"><path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"/></svg>
+      <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, var(--color-page-bg) 0%, var(--color-purple-pale-12) 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, padding: 24 }}>
+        <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width={28} height={28} viewBox="0 0 24 24" fill="var(--color-error)"><path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z"/></svg>
         </div>
 
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 20, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Something went wrong</div>
-          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#787584' }}>{error}</div>
+          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Something went wrong</div>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)' }}>{error}</div>
         </div>
 
         <button
           type="button"
           onClick={() => navigate('/settings', { replace: true })}
-          style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 10, padding: '12px 28px', cursor: 'pointer' }}
+          style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 10, padding: '12px 28px', cursor: 'pointer' }}
         >
           Back to Settings
         </button>
@@ -130,18 +130,18 @@ export default function NukeScreen() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #fff8f8 0%, #fff0f0 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0, padding: 24 }}>
+    <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, var(--color-red-pale-1) 0%, var(--color-red-pale-4) 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0, padding: 24 }}>
 
       {/* Ring */}
       <div style={{ position: 'relative', width: 180, height: 180, marginBottom: 32 }}>
         <svg width={180} height={180} viewBox="0 0 180 180" style={{ transform: 'rotate(-90deg)' }}>
-          <circle cx={90} cy={90} r={R} fill="none" stroke="#ffdad6" strokeWidth={10} />
+          <circle cx={90} cy={90} r={R} fill="none" stroke="var(--color-error-bg)" strokeWidth={10} />
           <circle
             cx={90}
             cy={90}
             r={R}
             fill="none"
-            stroke={pct === 100 ? '#10B981' : '#ba1a1a'}
+            stroke={pct === 100 ? 'var(--color-success)' : 'var(--color-error)'}
             strokeWidth={10}
             strokeLinecap="round"
             strokeDasharray={CIRC}
@@ -151,19 +151,19 @@ export default function NukeScreen() {
         </svg>
 
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-          <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 32, fontWeight: 800, color: pct === 100 ? '#10B981' : '#ba1a1a', letterSpacing: '-0.03em', transition: 'color 400ms ease' }}>
+          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 32, fontWeight: 800, color: pct === 100 ? 'var(--color-success)' : 'var(--color-error)', letterSpacing: '-0.03em', transition: 'color 400ms ease' }}>
             {pct}%
           </span>
         </div>
       </div>
 
       {/* Title */}
-      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.015em', marginBottom: 10 }}>
+      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.015em', marginBottom: 10 }}>
         {pct === 100 ? 'Wipe complete' : 'Nuking everything…'}
       </div>
 
       {/* Status message */}
-      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#787584', marginBottom: 40, minHeight: 20, transition: 'opacity 200ms' }}>
+      <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)', marginBottom: 40, minHeight: 20, transition: 'opacity 200ms' }}>
         {pct === 100 ? 'Redirecting to setup…' : currentStep.label}
       </div>
 
@@ -180,8 +180,8 @@ export default function NukeScreen() {
                 height: 22,
                 borderRadius: '50%',
                 flexShrink: 0,
-                background: done ? '#ba1a1a' : active ? '#ffdad6' : '#f1ecf6',
-                border: `2px solid ${done ? '#ba1a1a' : active ? '#ba1a1a' : '#e8e4f0'}`,
+                background: done ? 'var(--color-error)' : active ? 'var(--color-error-bg)' : 'var(--color-surface-tint-2)',
+                border: `2px solid ${done ? 'var(--color-error)' : active ? 'var(--color-error)' : 'var(--color-border)'}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -189,15 +189,15 @@ export default function NukeScreen() {
               }}>
                 {done && (
                   <svg width={11} height={11} viewBox="0 0 12 12" fill="none">
-                    <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M2 6l3 3 5-5" stroke="var(--color-white)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 )}
               </div>
 
               <span style={{
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: 'var(--font-body)',
                 fontSize: 13,
-                color: done ? '#1c1b22' : active ? '#ba1a1a' : '#b0acbe',
+                color: done ? 'var(--color-text-primary)' : active ? 'var(--color-error)' : 'var(--color-text-quaternary)',
                 fontWeight: active ? 600 : 400,
                 transition: 'color 300ms ease',
               }}>

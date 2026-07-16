@@ -244,16 +244,16 @@ function KeyValueRow({ row, onChange, onRemove, readOnly }: {
   return (
     <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
       <input disabled={readOnly} value={row.key} onChange={(e) => onChange({ ...row, key: e.target.value })} placeholder="Key"
-        style={{ width: '38%', fontFamily: 'Inter, sans-serif', fontSize: 12.5, border: '1.5px solid #e8e4f0', borderRadius: 7, padding: '6px 8px', outline: 'none' }} />
+        style={{ width: '38%', fontFamily: 'var(--font-body)', fontSize: 12.5, border: '1.5px solid var(--color-border)', borderRadius: 7, padding: '6px 8px', outline: 'none' }} />
       <input ref={insertRef as React.RefObject<HTMLInputElement>} disabled={readOnly} value={row.value}
         onChange={(e) => onChange({ ...row, value: e.target.value })}
         onDrop={insert.onDrop} onDragOver={insert.onDragOver} onSelect={insert.onSelect} onClick={insert.onClick} onKeyUp={insert.onKeyUp}
         placeholder="Value" title="Drag a field from Data → Input to insert a reference"
-        style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 12.5, border: '1.5px solid #e8e4f0', borderRadius: 7, padding: '6px 8px', outline: 'none' }} />
+        style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 12.5, border: '1.5px solid var(--color-border)', borderRadius: 7, padding: '6px 8px', outline: 'none' }} />
       {!readOnly && (
         <button type="button" onClick={onRemove}
           style={{ width: 22, height: 22, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Icon name="close" size={13} color="#b0acbe" />
+          <Icon name="close" size={13} color="var(--color-text-quaternary)" />
         </button>
       )}
     </div>
@@ -264,19 +264,19 @@ function KeyValueRow({ row, onChange, onRemove, readOnly }: {
 function NodeDataPanel({ scope, output, hasOutput, nodeId }: { scope: NodeScope | null; output: unknown; hasOutput: boolean; nodeId: string }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div style={{ marginTop: 14, borderTop: '1px solid #ece8f4', paddingTop: 10 }}>
+    <div style={{ marginTop: 14, borderTop: '1px solid var(--color-purple-pale-34)', paddingTop: 10 }}>
       <div onClick={() => setExpanded((s) => !s)} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', userSelect: 'none' }}>
-        <Icon name={expanded ? 'expand_less' : 'expand_more'} size={15} color="#787584" />
-        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Data</span>
+        <Icon name={expanded ? 'expand_less' : 'expand_more'} size={15} color="var(--color-text-tertiary)" />
+        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Data</span>
       </div>
       {expanded && (
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#5e4dbb', marginBottom: 4 }}>Input</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-primary)', marginBottom: 4 }}>Input</div>
             {!scope ? (
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', fontStyle: 'italic' }}>Run Test to see live data.</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', fontStyle: 'italic' }}>Run Test to see live data.</div>
             ) : (
-              <div style={{ background: '#FAFAFC', border: '1px solid #ece8f4', borderRadius: 8, padding: 8, maxHeight: 220, overflow: 'auto' }}>
+              <div style={{ background: 'var(--color-purple-pale-6)', border: '1px solid var(--color-purple-pale-34)', borderRadius: 8, padding: 8, maxHeight: 220, overflow: 'auto' }}>
                 <JsonTree data={scope.trigger} rootLabel="trigger" rootPath="trigger" />
                 <JsonTree data={scope.$json} rootLabel="$json (previous step)" rootPath="$json" />
                 <JsonTree data={scope.nodes} rootLabel="nodes (every step so far)" rootPath="nodes" />
@@ -284,11 +284,11 @@ function NodeDataPanel({ scope, output, hasOutput, nodeId }: { scope: NodeScope 
             )}
           </div>
           <div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#f59e0b', marginBottom: 4 }}>Output</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-warning-alt)', marginBottom: 4 }}>Output</div>
             {!hasOutput ? (
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', fontStyle: 'italic' }}>Run Test to see this node's output.</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', fontStyle: 'italic' }}>Run Test to see this node's output.</div>
             ) : (
-              <div style={{ background: '#FFFBF0', border: '1px solid #FEF3E2', borderRadius: 8, padding: 8, maxHeight: 220, overflow: 'auto' }}>
+              <div style={{ background: 'var(--color-orange-pale-2)', border: '1px solid var(--color-orange-pale-5)', borderRadius: 8, padding: 8, maxHeight: 220, overflow: 'auto' }}>
                 <JsonTree data={output} rootLabel="output" rootPath={`nodes.${nodeId}`} />
               </div>
             )}
@@ -325,11 +325,11 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
     const v = typeof value === 'string' ? value : '';
     return (
       <div>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 5 }}>{label}</div>
         <div style={{ position: 'relative' }}>
           <button type="button" disabled={readOnly} onClick={() => setShowTime((s) => !s)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 10px', borderRadius: 8, border: `1px solid ${v ? '#c4b5fd' : '#e8e4f0'}`, background: v ? '#F5F3FF' : '#fff', cursor: readOnly ? 'default' : 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: v ? '#5e4dbb' : '#b0acbe' }}>
-            <Icon name="schedule" size={13} color={v ? '#5e4dbb' : '#b0acbe'} />
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 10px', borderRadius: 8, border: `1px solid ${v ? 'var(--color-accent-purple-soft-alt)' : 'var(--color-border)'}`, background: v ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: readOnly ? 'default' : 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: v ? 'var(--color-primary)' : 'var(--color-text-quaternary)' }}>
+            <Icon name="schedule" size={13} color={v ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
             {v || 'Set a time…'}
           </button>
           {showTime && !readOnly && (
@@ -346,11 +346,11 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
     const v = typeof value === 'number' ? value : undefined;
     return (
       <div>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 5 }}>{label}</div>
         <div style={{ display: 'flex', gap: 4 }}>
           {DAY_LABELS.map((d, i) => (
             <button key={d} type="button" disabled={readOnly} onClick={() => onChange(i)}
-              style={{ flex: 1, padding: '6px 0', borderRadius: 7, border: 'none', cursor: readOnly ? 'default' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, background: v === i ? '#5e4dbb' : '#f1ecf6', color: v === i ? '#fff' : '#787584' }}>
+              style={{ flex: 1, padding: '6px 0', borderRadius: 7, border: 'none', cursor: readOnly ? 'default' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, background: v === i ? 'var(--color-primary)' : 'var(--color-surface-tint-2)', color: v === i ? 'var(--color-white)' : 'var(--color-text-tertiary)' }}>
               {d}
             </button>
           ))}
@@ -363,9 +363,9 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
     const v = typeof value === 'string' ? value : '';
     return (
       <div>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 5 }}>{label}</div>
         <select disabled={readOnly} value={v} onChange={(e) => onChange(e.target.value || undefined)}
-          style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none', background: '#fff', color: '#1c1b22' }}>
+          style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '7px 10px', outline: 'none', background: 'var(--color-white)', color: 'var(--color-text-primary)' }}>
           <option value="">{prop.optional ? 'Any list in this workspace' : 'Choose a list…'}</option>
           {lists.map((l) => <option key={l.id} value={l.id}>{l.emoji ? `${l.emoji} ` : ''}{l.name}</option>)}
         </select>
@@ -377,9 +377,9 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
     const v = typeof value === 'string' ? value : '';
     return (
       <div>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 5 }}>{label}</div>
         <select disabled={readOnly} value={v} onChange={(e) => onChange(e.target.value || undefined)}
-          style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none', background: '#fff', color: '#1c1b22' }}>
+          style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '7px 10px', outline: 'none', background: 'var(--color-white)', color: 'var(--color-text-primary)' }}>
           <option value="">{prop.optional ? 'No folder' : 'Choose a folder…'}</option>
           {folders.map((f) => <option key={f.id} value={f.id}>{f.emoji ? `${f.emoji} ` : ''}{f.name}</option>)}
         </select>
@@ -391,9 +391,9 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
     const v = typeof value === 'string' ? value : '';
     return (
       <div>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 5 }}>{label}</div>
         <select disabled={readOnly} value={v} onChange={(e) => onChange(e.target.value || undefined)}
-          style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none', background: '#fff', color: '#1c1b22' }}>
+          style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '7px 10px', outline: 'none', background: 'var(--color-white)', color: 'var(--color-text-primary)' }}>
           <option value="">Choose a workspace…</option>
           {workspaces.map((w) => <option key={w.id} value={w.id}>{w.emoji ? `${w.emoji} ` : ''}{w.name}</option>)}
         </select>
@@ -405,11 +405,11 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
     const v = typeof value === 'string' ? value : '';
     return (
       <div>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 5 }}>{label}</div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {prop.enum.map((opt) => (
             <button key={opt} type="button" disabled={readOnly} onClick={() => onChange(opt)}
-              style={{ padding: '6px 14px', borderRadius: 8, border: `1.5px solid ${v === opt ? '#5e4dbb' : '#e8e4f0'}`, background: v === opt ? '#F5F3FF' : '#fff', cursor: readOnly ? 'default' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: v === opt ? '#5e4dbb' : '#787584', textTransform: 'capitalize' }}>
+              style={{ padding: '6px 14px', borderRadius: 8, border: `1.5px solid ${v === opt ? 'var(--color-primary)' : 'var(--color-border)'}`, background: v === opt ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: readOnly ? 'default' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: v === opt ? 'var(--color-primary)' : 'var(--color-text-tertiary)', textTransform: 'capitalize' }}>
               {opt}
             </button>
           ))}
@@ -423,7 +423,7 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
     const setRows = (next: Array<{ key: string; value: string }>) => onChange(next.length > 0 ? next : undefined);
     return (
       <div>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 5 }}>{label}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {rows.map((row, i) => (
             <KeyValueRow key={i} row={row} readOnly={readOnly}
@@ -433,8 +433,8 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
           ))}
           {!readOnly && (
             <button type="button" onClick={() => setRows([...rows, { key: '', value: '' }])}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#5e4dbb', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
-              <Icon name="add" size={13} color="#5e4dbb" /> Add
+              style={{ display: 'flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start', fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0' }}>
+              <Icon name="add" size={13} color="var(--color-primary)" /> Add
             </button>
           )}
         </div>
@@ -445,16 +445,16 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
   if (prop.isLongText || prop.isCode) {
     return (
       <div>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 5 }}>{label}</div>
         <textarea ref={insertRef as React.RefObject<HTMLTextAreaElement>} disabled={readOnly} value={stringValue} rows={prop.isCode ? 8 : 4} spellCheck={false}
           onChange={(e) => onChange(e.target.value || undefined)}
           onDrop={insert.onDrop} onDragOver={insert.onDragOver} onSelect={insert.onSelect} onClick={insert.onClick} onKeyUp={insert.onKeyUp}
           style={{
             width: '100%', fontFamily: prop.isCode ? "'SF Mono', Monaco, Consolas, monospace" : 'Inter, sans-serif', fontSize: prop.isCode ? 12 : 12.5,
-            lineHeight: 1.5, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', outline: 'none', resize: 'vertical',
-            background: prop.isCode ? '#1c1b22' : '#fff', color: prop.isCode ? '#e8e4f0' : '#1c1b22',
+            lineHeight: 1.5, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '8px 10px', outline: 'none', resize: 'vertical',
+            background: prop.isCode ? 'var(--color-text-primary)' : 'var(--color-white)', color: prop.isCode ? 'var(--color-border)' : 'var(--color-text-primary)',
           }} />
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 4 }}>{prop.description}</div>
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', marginTop: 4 }}>{prop.description}</div>
       </div>
     );
   }
@@ -463,21 +463,21 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
     const v = typeof value === 'number' ? value : '';
     return (
       <div>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 5 }}>{label}</div>
         <input type="number" disabled={readOnly} value={v} onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))}
-          style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none' }} />
+          style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '7px 10px', outline: 'none' }} />
       </div>
     );
   }
 
   return (
     <div>
-      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', marginBottom: 5 }}>{label}</div>
+      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 5 }}>{label}</div>
       <input ref={insertRef as React.RefObject<HTMLInputElement>} disabled={readOnly} value={stringValue}
         onChange={(e) => onChange(e.target.value || undefined)}
         onDrop={insert.onDrop} onDragOver={insert.onDragOver} onSelect={insert.onSelect} onClick={insert.onClick} onKeyUp={insert.onKeyUp}
-        style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none' }} />
-      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 4 }}>{prop.description}</div>
+        style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '7px 10px', outline: 'none' }} />
+      <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', marginTop: 4 }}>{prop.description}</div>
     </div>
   );
 }
@@ -493,7 +493,7 @@ function ParamsForm({ def, params, onChange, lists, folders, workspaces, readOnl
 }) {
   const entries = Object.entries(def.paramsSchema.properties);
   if (entries.length === 0) {
-    return <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#b0acbe', fontStyle: 'italic' }}>No configuration needed.</div>;
+    return <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)', fontStyle: 'italic' }}>No configuration needed.</div>;
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -514,32 +514,32 @@ function FlowNodeCard({ data }: NodeProps) {
     onClick: () => void; onDelete?: () => void;
     onTest?: () => void; testing?: boolean; testDisabled?: boolean;
   };
-  const accent = d.kind === 'trigger' ? '#5e4dbb' : '#f59e0b';
-  const bg = d.kind === 'trigger' ? '#F5F3FF' : '#FEF3E2';
+  const accent = d.kind === 'trigger' ? 'var(--color-primary)' : 'var(--color-warning-alt)';
+  const bg = d.kind === 'trigger' ? 'var(--color-surface-tint)' : 'var(--color-orange-pale-5)';
   return (
     <div onClick={d.onClick}
-      style={{ width: 220, background: '#fff', borderRadius: 12, border: `2px solid ${d.selected ? accent : '#e8e4f0'}`, boxShadow: d.selected ? `0 6px 18px ${accent}26` : '0 2px 8px rgba(0,0,0,0.06)', padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
-      {d.kind === 'action' && <Handle type="target" position={Position.Top} style={{ background: '#c9c4d5', width: 8, height: 8 }} />}
+      style={{ width: 220, background: 'var(--color-white)', borderRadius: 12, border: `2px solid ${d.selected ? accent : 'var(--color-border)'}`, boxShadow: d.selected ? `0 6px 18px ${accent}26` : '0 2px 8px rgba(var(--color-black-rgb), 0.06)', padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, position: 'relative' }}>
+      {d.kind === 'action' && <Handle type="target" position={Position.Top} style={{ background: 'var(--color-border-strong)', width: 8, height: 8 }} />}
       <div style={{ width: 30, height: 30, borderRadius: 9, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         <Icon name={d.icon} size={15} color={accent} />
       </div>
-      <div style={{ flex: 1, minWidth: 0, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <div style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {d.label}
       </div>
       {!d.readOnly && d.onTest && (
         <button disabled={d.testing || d.testDisabled} title={d.testDisabled ? 'Save first to test' : 'Run this node for real, right now'}
           onClick={(e) => { e.stopPropagation(); d.onTest!(); }}
           style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: 'transparent', cursor: d.testing || d.testDisabled ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: d.testDisabled ? 0.35 : 1 }}>
-          <Icon name={d.testing ? 'sync' : 'play_circle'} size={15} color="#5e4dbb" />
+          <Icon name={d.testing ? 'sync' : 'play_circle'} size={15} color="var(--color-primary)" />
         </button>
       )}
       {d.kind === 'action' && !d.readOnly && d.onDelete && (
         <button onClick={(e) => { e.stopPropagation(); d.onDelete!(); }}
           style={{ width: 20, height: 20, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Icon name="close" size={13} color="#b0acbe" />
+          <Icon name="close" size={13} color="var(--color-text-quaternary)" />
         </button>
       )}
-      <Handle type="source" position={Position.Bottom} style={{ background: '#c9c4d5', width: 8, height: 8 }} />
+      <Handle type="source" position={Position.Bottom} style={{ background: 'var(--color-border-strong)', width: 8, height: 8 }} />
     </div>
   );
 }
@@ -680,7 +680,7 @@ export default function AutomationEditorScreen() {
   }), [graph.nodes, nodeTypes, selectedNodeId, readOnly, handleRemoveAction, testingNodeId, isNew, handleTestNode]);
 
   const rfEdges: RFEdge[] = useMemo(() => graph.edges.map((e) => ({
-    id: e.id, source: e.source, target: e.target, style: { stroke: '#c9c4d5', strokeWidth: 2 },
+    id: e.id, source: e.source, target: e.target, style: { stroke: 'var(--color-border-strong)', strokeWidth: 2 },
   })), [graph.edges]);
 
   const validationError = useMemo(() => validateClientSide(graph, nodeTypes), [graph, nodeTypes]);
@@ -717,13 +717,13 @@ export default function AutomationEditorScreen() {
   };
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading automation…</div>;
+    return <div style={{ padding: 40, textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Loading automation…</div>;
   }
   if (notFound) {
     return (
       <div style={{ padding: 40, textAlign: 'center' }}>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Automation not found</div>
-        <button onClick={() => navigate('/automations')} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', background: 'transparent', border: 'none', cursor: 'pointer' }}>← Back to Automations</button>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Automation not found</div>
+        <button onClick={() => navigate('/automations')} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer' }}>← Back to Automations</button>
       </div>
     );
   }
@@ -740,22 +740,22 @@ export default function AutomationEditorScreen() {
   return (
     <div style={{ flex: 1, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isMobile ? '12px 14px' : '14px 24px', borderBottom: '1px solid #ece8f4', flexWrap: 'wrap' }}>
-        <button onClick={() => navigate('/automations')} style={{ width: 32, height: 32, borderRadius: 9, border: 'none', background: '#f5f3ff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Icon name="arrow_back" size={16} color="#5e4dbb" />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isMobile ? '12px 14px' : '14px 24px', borderBottom: '1px solid var(--color-purple-pale-34)', flexWrap: 'wrap' }}>
+        <button onClick={() => navigate('/automations')} style={{ width: 32, height: 32, borderRadius: 9, border: 'none', background: 'var(--color-surface-tint)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Icon name="arrow_back" size={16} color="var(--color-primary)" />
         </button>
         <input value={name} disabled={readOnly} onChange={(e) => setName(e.target.value)} placeholder="Untitled automation" maxLength={255}
-          style={{ flex: 1, minWidth: 140, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', border: 'none', outline: 'none', background: 'transparent' }} />
+          style={{ flex: 1, minWidth: 140, fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)', border: 'none', outline: 'none', background: 'transparent' }} />
         {!isNew && automation && (
-          <button onClick={openRuns} style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#787584', background: '#f5f3ff', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
-            <Icon name="history" size={14} color="#787584" /> Run history
+          <button onClick={openRuns} style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
+            <Icon name="history" size={14} color="var(--color-text-tertiary)" /> Run history
           </button>
         )}
         {!readOnly && (
           <>
-            <button onClick={() => navigate('/automations')} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 14px' }}>Cancel</button>
+            <button onClick={() => navigate('/automations')} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 14px' }}>Cancel</button>
             <button onClick={handleSave} disabled={saving} title={validationError ?? undefined}
-              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: saving ? '#a99ee0' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '9px 20px', cursor: saving ? 'default' : 'pointer' }}>
+              style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: saving ? 'var(--color-purple-tint-12)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '9px 20px', cursor: saving ? 'default' : 'pointer' }}>
               {saving ? 'Saving…' : 'Save'}
             </button>
           </>
@@ -763,30 +763,30 @@ export default function AutomationEditorScreen() {
       </div>
 
       {readOnly && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 24px', background: '#FEF3E2', fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#92400e' }}>
-          <Icon name="visibility" size={14} color="#92400e" /> View-only — created by {automation?.ownerName ?? 'another user'}. Only they can edit this automation.
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 24px', background: 'var(--color-orange-pale-5)', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-orange-deep-1)' }}>
+          <Icon name="visibility" size={14} color="var(--color-orange-deep-1)" /> View-only — created by {automation?.ownerName ?? 'another user'}. Only they can edit this automation.
         </div>
       )}
       {error && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 24px', background: '#ffdad6', fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#ba1a1a' }}>
-          <Icon name="error" size={14} color="#ba1a1a" /> {error}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 24px', background: 'var(--color-error-bg)', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-error)' }}>
+          <Icon name="error" size={14} color="var(--color-error)" /> {error}
         </div>
       )}
 
       {testResult && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 24px', background: testResult.error || testResult.result?.status === 'failed' ? '#ffdad6' : '#e8f8f0', fontFamily: 'Inter, sans-serif', fontSize: 12.5 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 24px', background: testResult.error || testResult.result?.status === 'failed' ? 'var(--color-error-bg)' : 'var(--color-green-pale-3)', fontFamily: 'var(--font-body)', fontSize: 12.5 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Icon name={testResult.error || testResult.result?.status === 'failed' ? 'error' : 'check_circle'} size={14} color={testResult.error || testResult.result?.status === 'failed' ? '#ba1a1a' : '#10B981'} />
+            <Icon name={testResult.error || testResult.result?.status === 'failed' ? 'error' : 'check_circle'} size={14} color={testResult.error || testResult.result?.status === 'failed' ? 'var(--color-error)' : 'var(--color-success)'} />
             <span style={{ fontWeight: 700 }}>Test {testResult.error || testResult.result?.status === 'failed' ? 'failed' : 'ran'}</span>
             <button onClick={() => setTestResult(null)} style={{ marginLeft: 'auto', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex' }}>
-              <Icon name="close" size={13} color="#787584" />
+              <Icon name="close" size={13} color="var(--color-text-tertiary)" />
             </button>
           </div>
-          {testResult.error && <div style={{ color: '#ba1a1a', paddingLeft: 22 }}>{testResult.error}</div>}
+          {testResult.error && <div style={{ color: 'var(--color-error)', paddingLeft: 22 }}>{testResult.error}</div>}
           {testResult.result?.steps.map((s, i) => (
-            <div key={i} style={{ color: s.ok ? '#1c1b22' : '#ba1a1a', paddingLeft: 22 }}>{s.ok ? '✓' : '✗'} {s.summary}</div>
+            <div key={i} style={{ color: s.ok ? 'var(--color-text-primary)' : 'var(--color-error)', paddingLeft: 22 }}>{s.ok ? '✓' : '✗'} {s.summary}</div>
           ))}
-          {testResult.result?.error && <div style={{ color: '#ba1a1a', paddingLeft: 22 }}>{testResult.result.error}</div>}
+          {testResult.result?.error && <div style={{ color: 'var(--color-error)', paddingLeft: 22 }}>{testResult.result.error}</div>}
         </div>
       )}
 
@@ -816,26 +816,26 @@ export default function AutomationEditorScreen() {
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           {/* Palette */}
           {!readOnly && (
-            <div style={{ width: 220, borderRight: '1px solid #ece8f4', padding: 16, overflowY: 'auto', flexShrink: 0 }}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Trigger</div>
+            <div style={{ width: 220, borderRight: '1px solid var(--color-purple-pale-34)', padding: 16, overflowY: 'auto', flexShrink: 0 }}>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Trigger</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
                 {(nodeTypes?.triggers ?? []).map((t) => (
                   <button key={t.id} onClick={() => handleSetTrigger(t.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', padding: '8px 10px', borderRadius: 9, border: `1.5px solid ${triggerNode?.type === t.id ? '#5e4dbb' : '#e8e4f0'}`, background: triggerNode?.type === t.id ? '#F5F3FF' : '#fff', cursor: 'pointer' }}>
-                    <Icon name={t.icon} size={15} color="#5e4dbb" />
-                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#1c1b22' }}>{t.label}</span>
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', padding: '8px 10px', borderRadius: 9, border: `1.5px solid ${triggerNode?.type === t.id ? 'var(--color-primary)' : 'var(--color-border)'}`, background: triggerNode?.type === t.id ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer' }}>
+                    <Icon name={t.icon} size={15} color="var(--color-primary)" />
+                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)' }}>{t.label}</span>
                   </button>
                 ))}
               </div>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#787584', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Actions</div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Actions</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {(nodeTypes?.actions ?? []).map((a) => {
                   const disabled = !triggerNode || !availableActions.some((x) => x.id === a.id);
                   return (
                     <button key={a.id} disabled={disabled} onClick={() => handleAddAction(a.id)} title={disabled ? 'Not compatible with the current trigger' : undefined}
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', padding: '8px 10px', borderRadius: 9, border: '1.5px solid #e8e4f0', background: '#fff', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.4 : 1 }}>
-                      <Icon name={a.icon} size={15} color="#f59e0b" />
-                      <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#1c1b22' }}>{a.label}</span>
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', padding: '8px 10px', borderRadius: 9, border: '1.5px solid var(--color-border)', background: 'var(--color-white)', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.4 : 1 }}>
+                      <Icon name={a.icon} size={15} color="var(--color-warning-alt)" />
+                      <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)' }}>{a.label}</span>
                     </button>
                   );
                 })}
@@ -846,9 +846,9 @@ export default function AutomationEditorScreen() {
           {/* Canvas */}
           <div style={{ flex: 1, position: 'relative' }}>
             {!triggerNode ? (
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: '#b0acbe' }}>
-                <Icon name="bolt" size={36} color="#d8d2e8" />
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600 }}>Choose a trigger to get started</div>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8, color: 'var(--color-text-quaternary)' }}>
+                <Icon name="bolt" size={36} color="var(--color-purple-tint-3)" />
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600 }}>Choose a trigger to get started</div>
               </div>
             ) : (
               <ReactFlow
@@ -862,7 +862,7 @@ export default function AutomationEditorScreen() {
                 fitView
                 proOptions={{ hideAttribution: true }}
               >
-                <Background gap={18} color="#ece8f4" />
+                <Background gap={18} color="var(--color-purple-pale-34)" />
                 <Controls showInteractive={false} />
               </ReactFlow>
             )}
@@ -870,7 +870,7 @@ export default function AutomationEditorScreen() {
 
           {/* Inspector */}
           {selectedNode && (
-            <div style={{ width: 300, borderLeft: '1px solid #ece8f4', padding: 18, overflowY: 'auto', flexShrink: 0 }}>
+            <div style={{ width: 300, borderLeft: '1px solid var(--color-purple-pale-34)', padding: 18, overflowY: 'auto', flexShrink: 0 }}>
               {(() => {
                 const def = selectedNode.kind === 'trigger'
                   ? nodeTypes?.triggers.find((t) => t.id === selectedNode.type)
@@ -879,10 +879,10 @@ export default function AutomationEditorScreen() {
                 return (
                   <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <Icon name={def.icon} size={16} color={selectedNode.kind === 'trigger' ? '#5e4dbb' : '#f59e0b'} />
-                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14.5, fontWeight: 700, color: '#1c1b22' }}>{def.label}</div>
+                      <Icon name={def.icon} size={16} color={selectedNode.kind === 'trigger' ? 'var(--color-primary)' : 'var(--color-warning-alt)'} />
+                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14.5, fontWeight: 700, color: 'var(--color-text-primary)' }}>{def.label}</div>
                     </div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginBottom: 16 }}>{def.description}</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 16 }}>{def.description}</div>
                     <ParamsForm def={def} params={selectedNode.params} onChange={(p) => handleSetParams(selectedNode.id, p)} lists={workspaceLists} folders={workspaceFolders} workspaces={otherWorkspaces} readOnly={readOnly} />
                     {(() => {
                       const io = computeNodeIO(testResult, triggerNode?.id, selectedNode.id);
@@ -938,7 +938,7 @@ function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, folders
         <StepCard
           icon={nodeTypes?.triggers.find((t) => t.id === triggerNode.type)?.icon ?? 'bolt'}
           label={nodeTypes?.triggers.find((t) => t.id === triggerNode.type)?.label ?? triggerNode.type}
-          accent="#5e4dbb" bg="#F5F3FF"
+          accent="var(--color-primary)" bg="var(--color-surface-tint)"
           expanded={selectedNodeId === triggerNode.id}
           onToggle={() => setSelectedNodeId(selectedNodeId === triggerNode.id ? null : triggerNode.id)}
           rightAction={!readOnly ? { icon: 'sync_alt', label: 'Change', onClick: () => setShowTriggerPicker(true) } : undefined}
@@ -957,16 +957,16 @@ function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, folders
           })()}
         </StepCard>
       ) : (
-        <div style={{ background: '#fff', border: '1.5px dashed #d8d2e8', borderRadius: 14, padding: 14 }}>
-          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22', marginBottom: 10 }}>Choose a trigger</div>
+        <div style={{ background: 'var(--color-white)', border: '1.5px dashed var(--color-purple-tint-3)', borderRadius: 14, padding: 14 }}>
+          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 10 }}>Choose a trigger</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {(nodeTypes?.triggers ?? []).map((t) => (
               <button key={t.id} onClick={() => { onSetTrigger(t.id); setShowTriggerPicker(false); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e8e4f0', background: '#fff' }}>
-                <Icon name={t.icon} size={16} color="#5e4dbb" />
+                style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', padding: '10px 12px', borderRadius: 10, border: '1.5px solid var(--color-border)', background: 'var(--color-white)' }}>
+                <Icon name={t.icon} size={16} color="var(--color-primary)" />
                 <div>
-                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#1c1b22' }}>{t.label}</div>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584' }}>{t.description}</div>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>{t.label}</div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)' }}>{t.description}</div>
                 </div>
               </button>
             ))}
@@ -981,15 +981,15 @@ function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, folders
           <div key={node.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 14 }}>
               <button disabled={readOnly || i === 0} onClick={() => onMoveAction(node.id, 'up')} style={{ width: 22, height: 22, border: 'none', background: 'transparent', cursor: readOnly || i === 0 ? 'default' : 'pointer', opacity: readOnly || i === 0 ? 0.3 : 1 }}>
-                <Icon name="keyboard_arrow_up" size={16} color="#787584" />
+                <Icon name="keyboard_arrow_up" size={16} color="var(--color-text-tertiary)" />
               </button>
               <button disabled={readOnly || i === orderedActions.length - 1} onClick={() => onMoveAction(node.id, 'down')} style={{ width: 22, height: 22, border: 'none', background: 'transparent', cursor: readOnly || i === orderedActions.length - 1 ? 'default' : 'pointer', opacity: readOnly || i === orderedActions.length - 1 ? 0.3 : 1 }}>
-                <Icon name="keyboard_arrow_down" size={16} color="#787584" />
+                <Icon name="keyboard_arrow_down" size={16} color="var(--color-text-tertiary)" />
               </button>
             </div>
             <div style={{ flex: 1 }}>
               <StepCard
-                icon={def?.icon ?? 'flash_on'} label={def?.label ?? node.type} accent="#f59e0b" bg="#FEF3E2"
+                icon={def?.icon ?? 'flash_on'} label={def?.label ?? node.type} accent="var(--color-warning-alt)" bg="var(--color-orange-pale-5)"
                 expanded={selectedNodeId === node.id}
                 onToggle={() => setSelectedNodeId(selectedNodeId === node.id ? null : node.id)}
                 rightAction={!readOnly ? { icon: 'close', label: '', onClick: () => onRemoveAction(node.id) } : undefined}
@@ -1013,20 +1013,20 @@ function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, folders
       {triggerNode && !readOnly && (
         <div>
           <button onClick={() => setShowAddAction((s) => !s)}
-            style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', width: '100%', justifyContent: 'center' }}>
-            <Icon name="add" size={15} color="#5e4dbb" /> Add action
+            style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', width: '100%', justifyContent: 'center' }}>
+            <Icon name="add" size={15} color="var(--color-primary)" /> Add action
           </button>
           {showAddAction && (
-            <div style={{ marginTop: 8, background: '#fff', border: '1.5px solid #e8e4f0', borderRadius: 12, padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ marginTop: 8, background: 'var(--color-white)', border: '1.5px solid var(--color-border)', borderRadius: 12, padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {availableActions.map((a) => (
                 <button key={a.id} onClick={() => { onAddAction(a.id); setShowAddAction(false); }}
                   style={{ display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left', padding: '9px 10px', borderRadius: 8, border: 'none', background: 'transparent' }}>
-                  <Icon name={a.icon} size={15} color="#f59e0b" />
-                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#1c1b22' }}>{a.label}</span>
+                  <Icon name={a.icon} size={15} color="var(--color-warning-alt)" />
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>{a.label}</span>
                 </button>
               ))}
               {availableActions.length === 0 && (
-                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', padding: '6px 10px' }}>No actions are compatible with this trigger.</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', padding: '6px 10px' }}>No actions are compatible with this trigger.</div>
               )}
             </div>
           )}
@@ -1043,25 +1043,25 @@ function StepCard({ icon, label, accent, bg, expanded, onToggle, rightAction, te
   children?: React.ReactNode;
 }) {
   return (
-    <div style={{ background: '#fff', border: `1.5px solid ${expanded ? accent : '#ece8f4'}`, borderRadius: 14, overflow: 'hidden' }}>
+    <div style={{ background: 'var(--color-white)', border: `1.5px solid ${expanded ? accent : 'var(--color-purple-pale-34)'}`, borderRadius: 14, overflow: 'hidden' }}>
       <div onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, cursor: 'pointer' }}>
         <div style={{ width: 32, height: 32, borderRadius: 9, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <Icon name={icon} size={16} color={accent} />
         </div>
-        <div style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22' }}>{label}</div>
+        <div style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>{label}</div>
         {testAction && (
           <button disabled={testAction.testing || testAction.disabled} title={testAction.disabled ? 'Save first to test' : 'Run this node for real, right now'}
             onClick={(e) => { e.stopPropagation(); testAction.onClick(); }}
             style={{ width: 26, height: 26, border: 'none', background: 'transparent', cursor: testAction.testing || testAction.disabled ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: testAction.disabled ? 0.35 : 1 }}>
-            <Icon name={testAction.testing ? 'sync' : 'play_circle'} size={16} color="#5e4dbb" />
+            <Icon name={testAction.testing ? 'sync' : 'play_circle'} size={16} color="var(--color-primary)" />
           </button>
         )}
         {rightAction && (
           <button onClick={(e) => { e.stopPropagation(); rightAction.onClick(); }} style={{ width: 26, height: 26, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name={rightAction.icon} size={15} color="#b0acbe" />
+            <Icon name={rightAction.icon} size={15} color="var(--color-text-quaternary)" />
           </button>
         )}
-        <Icon name={expanded ? 'expand_less' : 'expand_more'} size={16} color="#b0acbe" />
+        <Icon name={expanded ? 'expand_less' : 'expand_more'} size={16} color="var(--color-text-quaternary)" />
       </div>
       {expanded && (
         <div style={{ padding: '0 14px 14px' }}>{children}</div>
@@ -1072,36 +1072,36 @@ function StepCard({ icon, label, accent, bg, expanded, onToggle, rightAction, te
 
 function RunHistoryPanel({ runs, onClose }: { runs: AutomationRun[] | null; onClose: () => void }) {
   return (
-    <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(380px, 100vw)', background: '#fff', boxShadow: '-8px 0 32px rgba(0,0,0,0.14)', zIndex: 500, display: 'flex', flexDirection: 'column', animation: 'modalIn 220ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid #ece8f4' }}>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22' }}>Run history</div>
-        <button onClick={onClose} style={{ width: 28, height: 28, border: 'none', background: '#f5f3ff', borderRadius: 8, cursor: 'pointer' }}>
-          <Icon name="close" size={15} color="#787584" />
+    <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(380px, 100vw)', background: 'var(--color-white)', boxShadow: '-8px 0 32px rgba(var(--color-black-rgb), 0.14)', zIndex: 500, display: 'flex', flexDirection: 'column', animation: 'modalIn 220ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--color-purple-pale-34)' }}>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>Run history</div>
+        <button onClick={onClose} style={{ width: 28, height: 28, border: 'none', background: 'var(--color-surface-tint)', borderRadius: 8, cursor: 'pointer' }}>
+          <Icon name="close" size={15} color="var(--color-text-tertiary)" />
         </button>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
         {runs === null ? (
-          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', textAlign: 'center', padding: 30 }}>Loading…</div>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', textAlign: 'center', padding: 30 }}>Loading…</div>
         ) : runs.length === 0 ? (
-          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', textAlign: 'center', padding: 30 }}>No runs yet.</div>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', textAlign: 'center', padding: 30 }}>No runs yet.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {runs.map((r) => (
-              <div key={r.id} style={{ border: '1.5px solid #ece8f4', borderRadius: 10, padding: 12 }}>
+              <div key={r.id} style={{ border: '1.5px solid var(--color-purple-pale-34)', borderRadius: 10, padding: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                  <Icon name={r.status === 'success' ? 'check_circle' : r.status === 'failed' ? 'error' : 'sync'} size={14} color={r.status === 'success' ? '#10B981' : r.status === 'failed' ? '#ba1a1a' : '#787584'} />
-                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#1c1b22', textTransform: 'capitalize' }}>{r.status}</span>
+                  <Icon name={r.status === 'success' ? 'check_circle' : r.status === 'failed' ? 'error' : 'sync'} size={14} color={r.status === 'success' ? 'var(--color-success)' : r.status === 'failed' ? 'var(--color-error)' : 'var(--color-text-tertiary)'} />
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 700, color: 'var(--color-text-primary)', textTransform: 'capitalize' }}>{r.status}</span>
                   {r.isTest && (
-                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', padding: '1px 7px', borderRadius: 9999 }}>Test</span>
+                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', padding: '1px 7px', borderRadius: 9999 }}>Test</span>
                   )}
-                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginLeft: 'auto' }}>{new Date(r.startedAt).toLocaleString()}</span>
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', marginLeft: 'auto' }}>{new Date(r.startedAt).toLocaleString()}</span>
                 </div>
                 {r.steps.map((s, i) => (
-                  <div key={i} style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: s.ok ? '#484552' : '#ba1a1a', paddingLeft: 20 }}>
+                  <div key={i} style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: s.ok ? 'var(--color-text-secondary)' : 'var(--color-error)', paddingLeft: 20 }}>
                     {s.ok ? '✓' : '✗'} {s.summary}
                   </div>
                 ))}
-                {r.error && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#ba1a1a', marginTop: 4 }}>{r.error}</div>}
+                {r.error && <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-error)', marginTop: 4 }}>{r.error}</div>}
               </div>
             ))}
           </div>

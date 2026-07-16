@@ -19,8 +19,8 @@ import useAppStore from '../store/useAppStore';
 import useMarkdownListsStore from '../store/useMarkdownListsStore';
 
 const FOLDER_COLORS = [
-  '#5e4dbb', '#1D4ED8', '#15803d', '#ea580c',
-  '#db2777', '#ba1a1a', '#0d9488', '#6b7280',
+  'var(--color-primary)', 'var(--color-blue-mid-7)', 'var(--color-green-deep-3)', 'var(--color-orange)',
+  'var(--color-pink-mid-3)', 'var(--color-error)', 'var(--color-teal-deep-2)', 'var(--color-blue-mid-8)',
 ];
 
 const KIND_DISPLAY_NAME: Record<'list' | 'folder' | 'timeline' | 'markdownList', string> = {
@@ -28,12 +28,12 @@ const KIND_DISPLAY_NAME: Record<'list' | 'folder' | 'timeline' | 'markdownList',
 };
 
 const LIST_COLORS = [
-  { color: '#5e4dbb', bg: '#F5F3FF' },
-  { color: '#1D4ED8', bg: '#eff6ff' },
-  { color: '#10B981', bg: 'rgba(16,185,129,0.10)' },
-  { color: '#ea580c', bg: '#fff7ed' },
-  { color: '#f59e0b', bg: '#fffbeb' },
-  { color: '#ba1a1a', bg: '#ffdad6' },
+  { color: 'var(--color-primary)', bg: 'var(--color-surface-tint)' },
+  { color: 'var(--color-blue-mid-7)', bg: 'var(--color-blue-pale-2)' },
+  { color: 'var(--color-success)', bg: 'rgba(var(--color-success-rgb), 0.10)' },
+  { color: 'var(--color-orange)', bg: 'var(--color-orange-pale-3)' },
+  { color: 'var(--color-warning-alt)', bg: 'var(--color-yellow-pale-1)' },
+  { color: 'var(--color-error)', bg: 'var(--color-error-bg)' },
 ];
 
 export interface ItemSettingsUpdates {
@@ -70,14 +70,14 @@ interface ItemSettingsModalProps {
 }
 
 const sectionLabel = (text: string) => (
-  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: '#b0acbe', marginBottom: 10, paddingLeft: 2 }}>
+  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: 'var(--color-text-quaternary)', marginBottom: 10, paddingLeft: 2 }}>
     {text}
   </div>
 );
 
 const card: React.CSSProperties = {
-  background: '#F9FAFB',
-  border: '1px solid #E5E7EB',
+  background: 'var(--color-surface-gray)',
+  border: '1px solid var(--color-border-alt)',
   borderRadius: 14,
   overflow: 'hidden',
 };
@@ -154,10 +154,10 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
                 <button key={opt.label}
                   disabled={saving}
                   onClick={() => { if (enabled !== opt.val) apply({ enabled: opt.val }); }}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: selected ? '#5e4dbb' : 'transparent', cursor: saving ? 'wait' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? '#fff' : '#5e4dbb', transition: 'all 120ms' }}>
-                  <Icon name={opt.icon} size={15} color={selected ? '#fff' : '#5e4dbb'} />
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'transparent', cursor: saving ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? 'var(--color-white)' : 'var(--color-primary)', transition: 'all 120ms' }}>
+                  <Icon name={opt.icon} size={15} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
                   {opt.label}
-                  {selected && <Icon name="check" size={13} color="#fff" />}
+                  {selected && <Icon name="check" size={13} color="var(--color-white)" />}
                 </button>
               );
             })}
@@ -171,17 +171,17 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
           {shareUrl && (
             <div>
               {sectionLabel('Share URL')}
-              <div style={{ background: '#F5F3FF', borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Icon name="link" size={16} color="#5e4dbb" />
-                <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#5e4dbb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shareUrl}</span>
+              <div style={{ background: 'var(--color-surface-tint)', borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Icon name="link" size={16} color="var(--color-primary)" />
+                <span style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shareUrl}</span>
                 <button onClick={copyLink}
-                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: copied ? '#10B981' : '#5e4dbb', background: copied ? '#f0fdf4' : '#fff', border: `1px solid ${copied ? '#a7f3d0' : '#c4b5fd'}`, borderRadius: 7, padding: '5px 12px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, transition: 'all 150ms' }}>
-                  <Icon name={copied ? 'check' : 'content_copy'} size={12} color={copied ? '#10B981' : '#5e4dbb'} />
+                  style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: copied ? 'var(--color-success)' : 'var(--color-primary)', background: copied ? 'var(--color-green-pale-1)' : 'var(--color-white)', border: `1px solid ${copied ? 'var(--color-green-tint-2)' : 'var(--color-accent-purple-soft-alt)'}`, borderRadius: 7, padding: '5px 12px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, transition: 'all 150ms' }}>
+                  <Icon name={copied ? 'check' : 'content_copy'} size={12} color={copied ? 'var(--color-success)' : 'var(--color-primary)'} />
                   {copied ? 'Copied!' : 'Copy'}
                 </button>
               </div>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', lineHeight: 1.4, marginTop: 6, paddingLeft: 2 }}>
-                <span style={{ marginTop: 1, flexShrink: 0, display: 'flex' }}><Icon name="visibility" size={13} color="#b0acbe" /></span>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', lineHeight: 1.4, marginTop: 6, paddingLeft: 2 }}>
+                <span style={{ marginTop: 1, flexShrink: 0, display: 'flex' }}><Icon name="visibility" size={13} color="var(--color-text-quaternary)" /></span>
                 Anyone with this link can view a read-only copy. No sign-in required.
               </div>
             </div>
@@ -203,15 +203,15 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
                       <button key={opt.val}
                         disabled={saving}
                         onClick={() => { if (viewMode !== opt.val) apply({ viewMode: opt.val }); }}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 8px', borderRadius: 10, border: 'none', background: selected ? '#5e4dbb' : 'transparent', cursor: saving ? 'wait' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: selected ? 600 : 500, color: selected ? '#fff' : '#5e4dbb', transition: 'all 120ms' }}>
-                        <Icon name={opt.icon} size={14} color={selected ? '#fff' : '#5e4dbb'} />
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 8px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'transparent', cursor: saving ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: selected ? 600 : 500, color: selected ? 'var(--color-white)' : 'var(--color-primary)', transition: 'all 120ms' }}>
+                        <Icon name={opt.icon} size={14} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
                         {opt.label}
                       </button>
                     );
                   })}
                 </div>
               </div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', marginTop: 6, lineHeight: 1.4, paddingLeft: 2 }}>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', marginTop: 6, lineHeight: 1.4, paddingLeft: 2 }}>
                 Choose which layout visitors see on the public page — independent of your own view.
               </div>
             </div>
@@ -229,15 +229,15 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
                       <button key={opt.label}
                         disabled={saving}
                         onClick={() => { if (subpages !== opt.val) apply({ subpages: opt.val }); }}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: selected ? '#5e4dbb' : 'transparent', cursor: saving ? 'wait' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? '#fff' : '#5e4dbb', transition: 'all 120ms' }}>
-                        <Icon name={opt.icon} size={14} color={selected ? '#fff' : '#5e4dbb'} />
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'transparent', cursor: saving ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? 'var(--color-white)' : 'var(--color-primary)', transition: 'all 120ms' }}>
+                        <Icon name={opt.icon} size={14} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
                         {opt.label}
                       </button>
                     );
                   })}
                 </div>
               </div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', marginTop: 6, lineHeight: 1.4, paddingLeft: 2 }}>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', marginTop: 6, lineHeight: 1.4, paddingLeft: 2 }}>
                 When shared, nested sublists become clickable links on the public page.
               </div>
             </div>
@@ -248,12 +248,12 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
             {sectionLabel('Password')}
             {hasPassword && !showPwField ? (
               <div style={{ ...card, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Icon name="lock" size={15} color="#5e4dbb" />
-                <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#484552' }}>Password protected</span>
+                <Icon name="lock" size={15} color="var(--color-primary)" />
+                <span style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-secondary)' }}>Password protected</span>
                 <button onClick={() => setShowPwField(true)}
-                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: 'transparent', border: 'none', cursor: 'pointer' }}>Change</button>
+                  style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer' }}>Change</button>
                 <button disabled={saving} onClick={() => apply({ password: null })}
-                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#ba1a1a', background: 'transparent', border: 'none', cursor: saving ? 'wait' : 'pointer' }}>Remove</button>
+                  style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)', background: 'transparent', border: 'none', cursor: saving ? 'wait' : 'pointer' }}>Remove</button>
               </div>
             ) : (
               <div style={{ display: 'flex', gap: 8 }}>
@@ -262,13 +262,13 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
                   value={pwInput}
                   onChange={e => setPwInput(e.target.value)}
                   placeholder="Set a password (optional)"
-                  style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #E5E7EB', borderRadius: 10, padding: '10px 14px', outline: 'none', background: '#fff', color: '#1c1b22' }}
-                  onFocus={e => (e.target.style.borderColor = '#5e4dbb')}
-                  onBlur={e => (e.target.style.borderColor = '#E5E7EB')}
+                  style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border-alt)', borderRadius: 10, padding: '10px 14px', outline: 'none', background: 'var(--color-white)', color: 'var(--color-text-primary)' }}
+                  onFocus={e => (e.target.style.borderColor = 'var(--color-primary)')}
+                  onBlur={e => (e.target.style.borderColor = 'var(--color-border-alt)')}
                 />
                 <button disabled={saving || !pwInput.trim()}
                   onClick={() => { apply({ password: pwInput }); setPwInput(''); setShowPwField(false); }}
-                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: pwInput.trim() ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: pwInput.trim() && !saving ? 'pointer' : 'not-allowed', flexShrink: 0 }}>
+                  style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: pwInput.trim() ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: pwInput.trim() && !saving ? 'pointer' : 'not-allowed', flexShrink: 0 }}>
                   Set
                 </button>
               </div>
@@ -281,17 +281,17 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
             <button
               disabled={saving}
               onClick={() => setShowExpiryCal(s => !s)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 12, padding: '11px 16px', cursor: saving ? 'wait' : 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: expiresAt ? '#1c1b22' : '#b0acbe', textAlign: 'left' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#E5E7EB'; }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 12, padding: '11px 16px', cursor: saving ? 'wait' : 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: expiresAt ? 'var(--color-text-primary)' : 'var(--color-text-quaternary)', textAlign: 'left' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border-alt)'; }}
             >
-              <Icon name="calendar_today" size={14} color={expiresAt ? '#5e4dbb' : '#b0acbe'} />
+              <Icon name="calendar_today" size={14} color={expiresAt ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
               <span style={{ flex: 1 }}>
                 {expiresAt ? new Date(expiresAt + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No expiry'}
               </span>
               {expiresAt && (
                 <span onClick={e => { e.stopPropagation(); setShowExpiryCal(false); apply({ expiresAt: null }); }}
-                  style={{ color: '#b0acbe', lineHeight: 1, cursor: 'pointer', padding: '0 2px', fontSize: 16 }}>×</span>
+                  style={{ color: 'var(--color-text-quaternary)', lineHeight: 1, cursor: 'pointer', padding: '0 2px', fontSize: 16 }}>×</span>
               )}
             </button>
             {showExpiryCal && (
@@ -354,10 +354,10 @@ function AccessibilitySection({ kind, itemId, initialPublic, onApplied }: {
             <button key={opt.label}
               disabled={busy}
               onClick={() => { if (pub !== opt.val) apply(opt.val); }}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: selected ? '#5e4dbb' : 'transparent', cursor: busy ? 'wait' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? '#fff' : '#5e4dbb', transition: 'all 120ms' }}>
-              <Icon name={opt.icon} size={14} color={selected ? '#fff' : '#5e4dbb'} />
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'transparent', cursor: busy ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? 'var(--color-white)' : 'var(--color-primary)', transition: 'all 120ms' }}>
+              <Icon name={opt.icon} size={14} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
               {opt.label}
-              {selected && <Icon name="check" size={13} color="#fff" />}
+              {selected && <Icon name="check" size={13} color="var(--color-white)" />}
             </button>
           );
         })}
@@ -380,7 +380,7 @@ type ItemTab = 'appearance' | 'access' | 'organization' | 'share' | 'admin';
 // ── Main modal ────────────────────────────────────────────────────────────────
 export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, folders, folderId, itemId, creatorId, share, onShareUpdated, onVisibilityApplied, onChange, onClose }: ItemSettingsModalProps) {
   const isMobile = useMobile();
-  const accent = color ?? '#5e4dbb';
+  const accent = color ?? 'var(--color-primary)';
   const { isAdmin } = useAuthStore();
   const { lists, timelines } = useAppStore();
   const { markdownLists } = useMarkdownListsStore();
@@ -418,23 +418,23 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
   const modal = (
     <div
       onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.24)', backdropFilter: 'blur(5px)', zIndex: 1200, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : 24, animation: 'backdropIn 220ms ease both' }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.24)', backdropFilter: 'blur(5px)', zIndex: 1200, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : 24, animation: 'backdropIn 220ms ease both' }}>
       <div
         onClick={e => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: isMobile ? '16px 16px 0 0' : 22, width: '100%', maxWidth: isMobile ? undefined : 720, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: isMobile ? 'slideUp 300ms cubic-bezier(0.22,1,0.36,1) both' : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both', overflow: 'hidden', maxHeight: isMobile ? '92vh' : '90vh', display: 'flex', flexDirection: 'column' }}>
+        style={{ background: 'var(--color-white)', borderRadius: isMobile ? '16px 16px 0 0' : 22, width: '100%', maxWidth: isMobile ? undefined : 720, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.22)', animation: isMobile ? 'slideUp 300ms cubic-bezier(0.22,1,0.36,1) both' : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both', overflow: 'hidden', maxHeight: isMobile ? '92vh' : '90vh', display: 'flex', flexDirection: 'column' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 24px 0', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {emoji
                 ? <span style={{ fontSize: 18 }}>{emoji}</span>
                 : <Icon name={kind === 'folder' ? 'folder' : kind === 'timeline' ? 'timeline' : kind === 'markdownList' ? 'notes' : 'format_list_bulleted'} size={18} color={accent} />
               }
             </div>
             <div>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 200 : 420 }}>{name}</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', marginTop: 1 }}>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 200 : 420 }}>{name}</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', marginTop: 1 }}>
                 {kind === 'folder' ? 'Folder settings' : kind === 'timeline' ? 'Timeline settings' : kind === 'markdownList' ? 'Markdown List settings' : 'To-Do settings'}
               </div>
             </div>
@@ -443,18 +443,18 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
             {creatorId && <CreatorBubble creatorId={creatorId} taskHovered />}
             <button
               onClick={onClose}
-              style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 150ms' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#e8e4f0')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#f1ecf6')}
+              style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 150ms' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-surface-tint-2)')}
             >
-              <Icon name="close" size={15} color="#484552" />
+              <Icon name="close" size={15} color="var(--color-text-secondary)" />
             </button>
           </div>
         </div>
 
         {/* Tab bar */}
         <div style={{ padding: '16px 24px 0', flexShrink: 0 }}>
-          <div style={{ display: 'flex', gap: 4, background: '#F5F3FF', borderRadius: 14, padding: 4, overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ display: 'flex', gap: 4, background: 'var(--color-surface-tint)', borderRadius: 14, padding: 4, overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch' }}>
             {tabs.map(tab => {
               const active = activeTab === tab.id;
               return (
@@ -463,16 +463,16 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                   onClick={() => setActiveTab(tab.id)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6,
-                    fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600,
-                    color: active ? '#fff' : '#5e4dbb',
-                    background: active ? '#5e4dbb' : 'transparent',
+                    fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600,
+                    color: active ? 'var(--color-white)' : 'var(--color-primary)',
+                    background: active ? 'var(--color-primary)' : 'transparent',
                     border: 'none', borderRadius: 10, padding: '8px 14px', cursor: 'pointer',
                     transition: 'all 150ms', flex: '1 1 0', flexBasis: 0, justifyContent: 'center', minWidth: 0,
                   }}
-                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#ede9ff'; }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
                   onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <Icon name={tab.icon} size={15} color={active ? '#fff' : '#5e4dbb'} />
+                  <Icon name={tab.icon} size={15} color={active ? 'var(--color-white)' : 'var(--color-primary)'} />
                   <span style={{ whiteSpace: 'nowrap' }}>{tab.label}</span>
                 </button>
               );
@@ -491,8 +491,8 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                 <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16 }}>
                   <EmojiSelector value={emoji ?? ''} onChange={em => onChange({ emoji: em })} direction="down" size={44} />
                   <div>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#1c1b22' }}>Emoji</div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', marginTop: 3 }}>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>Emoji</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', marginTop: 3 }}>
                       {emoji ? 'Click to change or remove' : 'Click to add an emoji icon'}
                     </div>
                   </div>
@@ -536,16 +536,16 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                       return (
                         <button key={opt.label}
                           onClick={() => onChange({ isPublic: opt.val })}
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: selected ? '#5e4dbb' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? '#fff' : '#5e4dbb', transition: 'all 120ms' }}>
-                          <Icon name={opt.icon} size={14} color={selected ? '#fff' : '#5e4dbb'} />
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? 'var(--color-white)' : 'var(--color-primary)', transition: 'all 120ms' }}>
+                          <Icon name={opt.icon} size={14} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
                           {opt.label}
-                          {selected && <Icon name="check" size={13} color="#fff" />}
+                          {selected && <Icon name="check" size={13} color="var(--color-white)" />}
                         </button>
                       );
                     })}
                   </div>
                 )}
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', marginTop: 10, lineHeight: 1.5, paddingLeft: 2 }}>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', marginTop: 10, lineHeight: 1.5, paddingLeft: 2 }}>
                 Controls who can see this {KIND_DISPLAY_NAME[kind]} inside your workspace. Does not affect public share links.
               </div>
             </div>
@@ -562,19 +562,19 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                     <div key={f.id ?? '__none__'}>
                       <button
                         onClick={() => { if (!selected) onChange({ folderId: f.id }); }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', border: 'none', background: selected ? '#f0edff' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: selected ? 600 : 450, color: selected ? '#5e4dbb' : '#484552', textAlign: 'left', width: '100%', transition: 'background 120ms' }}
-                        onMouseEnter={e => { if (!selected) e.currentTarget.style.background = '#faf8ff'; }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', border: 'none', background: selected ? 'var(--color-surface-tint-alt)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: selected ? 600 : 450, color: selected ? 'var(--color-primary)' : 'var(--color-text-secondary)', textAlign: 'left', width: '100%', transition: 'background 120ms' }}
+                        onMouseEnter={e => { if (!selected) e.currentTarget.style.background = 'var(--color-purple-pale-5)'; }}
                         onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent'; }}>
                         {f.id === null
-                          ? <Icon name="remove_circle_outline" size={17} color={selected ? '#5e4dbb' : '#b0acbe'} />
+                          ? <Icon name="remove_circle_outline" size={17} color={selected ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
                           : f.emoji
                             ? <span style={{ fontSize: 16 }}>{f.emoji}</span>
-                            : <Icon name="folder" size={17} color={f.color ?? '#787584'} />
+                            : <Icon name="folder" size={17} color={f.color ?? 'var(--color-text-tertiary)'} />
                         }
                         <span style={{ flex: 1 }}>{f.name}</span>
-                        {selected && <Icon name="check" size={15} color="#5e4dbb" />}
+                        {selected && <Icon name="check" size={15} color="var(--color-primary)" />}
                       </button>
-                      {i < arr.length - 1 && <div style={{ height: 1, background: '#f0ecf8', marginLeft: 18 }} />}
+                      {i < arr.length - 1 && <div style={{ height: 1, background: 'var(--color-divider)', marginLeft: 18 }} />}
                     </div>
                   );
                 })}
@@ -587,10 +587,10 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
           {activeTab === 'admin' && isAdmin && itemId && kind !== 'folder' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18, animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
               {sectionLabel(`${kind === 'timeline' ? 'Timeline' : kind === 'markdownList' ? 'Markdown List' : 'To-Do'} ID`)}
-              <div style={{ background: '#F5F3FF', border: '1px solid #e8e4f0', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <code style={{ flex: 1, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#484552', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemId}</code>
-                <button onClick={copyAdminId} style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: copiedAdminId ? '#10B981' : '#5e4dbb', background: '#fff', border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', flexShrink: 0 }}>
-                  <Icon name={copiedAdminId ? 'check' : 'content_copy'} size={13} color={copiedAdminId ? '#10B981' : '#5e4dbb'} />
+              <div style={{ background: 'var(--color-surface-tint)', border: '1px solid var(--color-border)', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <code style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemId}</code>
+                <button onClick={copyAdminId} style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, color: copiedAdminId ? 'var(--color-success)' : 'var(--color-primary)', background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', flexShrink: 0 }}>
+                  <Icon name={copiedAdminId ? 'check' : 'content_copy'} size={13} color={copiedAdminId ? 'var(--color-success)' : 'var(--color-primary)'} />
                   {copiedAdminId ? 'Copied' : 'Copy ID'}
                 </button>
               </div>
@@ -613,10 +613,10 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                   ['Upcoming', milestones.filter(m => m.status === 'upcoming').length, 'event_upcoming'],
                   ['Private', currentTimeline?.isPublic ? 'No' : 'Yes', currentTimeline?.isPublic ? 'public' : 'lock'],
                 ]).map(([label, value, icon]) => (
-                  <div key={String(label)} style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 14, padding: 14 }}>
-                    <Icon name={String(icon)} size={16} color="#5e4dbb" />
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 800, color: '#1c1b22', marginTop: 8 }}>{value}</div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{label}</div>
+                  <div key={String(label)} style={{ background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 14, padding: 14 }}>
+                    <Icon name={String(icon)} size={16} color="var(--color-primary)" />
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 800, color: 'var(--color-text-primary)', marginTop: 8 }}>{value}</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>{label}</div>
                   </div>
                 ))}
               </div>
@@ -632,10 +632,10 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
         </div>
 
         {/* Footer */}
-        <div style={{ borderTop: '1px solid #f0ecf8', padding: '14px 24px 18px', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+        <div style={{ borderTop: '1px solid var(--color-divider)', padding: '14px 24px 18px', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
           <button
             onClick={onClose}
-            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 10, padding: '10px 28px', cursor: 'pointer', transition: 'filter 140ms, transform 140ms' }}
+            style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '10px 28px', cursor: 'pointer', transition: 'filter 140ms, transform 140ms' }}
             onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(0.88)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
             onMouseLeave={e => { e.currentTarget.style.filter = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}>
             Done

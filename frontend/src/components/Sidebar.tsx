@@ -26,18 +26,18 @@ interface NavItemProps {
 }
 function NavItem({ icon, label, active, onClick, collapsed }: NavItemProps) {
   const [hov, setHov] = useState(false);
-  const col = active ? '#5e4dbb' : '#787584';
-  const bg = active ? '#F5F3FF' : hov ? '#f1ecf6' : 'transparent';
+  const col = active ? 'var(--color-primary)' : 'var(--color-text-tertiary)';
+  const bg = active ? 'var(--color-surface-tint)' : hov ? 'var(--color-surface-tint-2)' : 'transparent';
   return (
     <div style={{ position: 'relative' }}>
       <button title={collapsed ? label : undefined} onClick={onClick}
         onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-        style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: active ? 600 : 450, color: col, border: 'none', background: bg, width: '100%', transition: 'all 200ms' }}>
+        style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: active ? 600 : 450, color: col, border: 'none', background: bg, width: '100%', transition: 'all 200ms' }}>
         <Icon name={icon} size={19} color={col} />
         {!collapsed && <span>{label}</span>}
       </button>
       {collapsed && hov && (
-        <div style={{ position: 'fixed', left: MINI + 8, zIndex: 200, background: '#1c1b22', color: '#fff', borderRadius: 6, padding: '4px 10px', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 500, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+        <div style={{ position: 'fixed', left: MINI + 8, zIndex: 200, background: 'var(--color-text-primary)', color: 'var(--color-white)', borderRadius: 6, padding: '4px 10px', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 500, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
           {label}
         </div>
       )}
@@ -123,7 +123,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
         onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
         style={{
           display: 'flex', alignItems: 'center', borderRadius: 8,
-          borderTop: dragOverId === list.id ? '2px solid #9d8dff' : '2px solid transparent',
+          borderTop: dragOverId === list.id ? '2px solid var(--color-accent-purple-light)' : '2px solid transparent',
           position: 'relative',
           animation: isTaskDropTarget ? 'taskDropPulse 1.2s ease-in-out infinite' : (wasRecentlyDropped ? 'taskDropSuccess 550ms ease-out forwards' : undefined),
           transition: isTaskDropTarget || wasRecentlyDropped ? 'none' : 'border-color 120ms',
@@ -132,17 +132,17 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
 
         <button title={collapsed ? list.name : undefined}
           onClick={() => onNavigate(`/list/${list.id}`)}
-          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: hov ? (list.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? (list.color ?? '#5e4dbb') : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: hov ? (list.colorBg ?? 'var(--color-surface-tint-2)') : 'transparent', color: isActive ? (list.color ?? 'var(--color-primary)') : 'var(--color-text-secondary)', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
           {!collapsed && (
             <Icon
               name={list.isPublic ? 'public' : 'lock'}
               size={13}
-              color="#b0acbe"
+              color="var(--color-text-quaternary)"
             />
           )}
           {list.emoji
             ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{list.emoji}</span>
-            : <Icon name="format_list_bulleted" size={19} color={isActive ? (list.color ?? '#5e4dbb') : '#787584'} />
+            : <Icon name="format_list_bulleted" size={19} color={isActive ? (list.color ?? 'var(--color-primary)') : 'var(--color-text-tertiary)'} />
           }
           {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{list.name}</span>}
         </button>
@@ -153,14 +153,14 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
               ref={menuBtnRef}
               onClick={openMenu}
               title="To-Do options"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? '#ebe6f0' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#ebe6f0')}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-pale-39)')}
               onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background = 'transparent'; }}
             >
-              <Icon name="more_vert" size={15} color="#9d8dff" />
+              <Icon name="more_vert" size={15} color="var(--color-accent-purple-light)" />
             </button>
             <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
-              <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+              <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
             </div>
           </div>
         )}
@@ -175,19 +175,19 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
             display: 'flex',
             alignItems: 'center',
             gap: 3,
-            background: '#5e4dbb',
+            background: 'var(--color-primary)',
             borderRadius: 9999,
             padding: collapsed ? '3px 5px' : '3px 9px',
-            boxShadow: '0 2px 10px rgba(94,77,187,0.4)',
+            boxShadow: '0 2px 10px rgba(var(--color-primary-rgb), 0.4)',
             animation: 'moveHerePill 180ms cubic-bezier(0.34,1.56,0.64,1) both',
             zIndex: 10,
           }}>
             {!collapsed && (
-              <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#fff', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 700, color: 'var(--color-white)', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
                 Move here
               </span>
             )}
-            <Icon name="arrow_right_alt" size={collapsed ? 13 : 12} color="#fff" />
+            <Icon name="arrow_right_alt" size={collapsed ? 13 : 12} color="var(--color-white)" />
           </div>
         )}
       </div>
@@ -247,20 +247,20 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
       {showDeleteDialog && createPortal(
         <div
           onClick={() => setShowDeleteDialog(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
           <div
             onClick={e => e.stopPropagation()}
-            style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-              <Icon name="delete" size={20} color="#ba1a1a" />
+            style={{ background: 'var(--color-white)', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <Icon name="delete" size={20} color="var(--color-error)" />
             </div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Delete list?</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.5, marginBottom: 24 }}>
-              "<span style={{ color: '#1c1b22', fontWeight: 500 }}>{list.name}</span>" and all its tasks will be permanently deleted.
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Delete list?</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.5, marginBottom: 24 }}>
+              "<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{list.name}</span>" and all its tasks will be permanently deleted.
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={handleDelete} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
+              <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleDelete} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
             </div>
           </div>
         </div>,
@@ -326,7 +326,7 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
     updateTimeline(timeline.id, updates as Partial<Timeline>);
   };
 
-  const accent = timeline.color ?? '#1D4ED8';
+  const accent = timeline.color ?? 'var(--color-blue-mid-7)';
 
   const menuItems: ContextMenuEntry[] = [
     { key: 'rename', label: 'Edit name', icon: 'edit', onClick: () => setEditingName(true) },
@@ -346,17 +346,17 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
         onDrop={onDrop}
         onContextMenu={openContextMenu}
         onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, position: 'relative', paddingLeft: indented ? 8 : 0, borderTop: dragOverId === timeline.id ? '2px solid #9d8dff' : '2px solid transparent', transition: 'border-color 120ms' }}>
+        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, position: 'relative', paddingLeft: indented ? 8 : 0, borderTop: dragOverId === timeline.id ? '2px solid var(--color-accent-purple-light)' : '2px solid transparent', transition: 'border-color 120ms' }}>
 
         <button title={collapsed ? timeline.name : undefined}
           onClick={() => onNavigate(`/timeline/${timeline.id}`)}
-          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: hov ? (timeline.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? accent : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: hov ? (timeline.colorBg ?? 'var(--color-surface-tint-2)') : 'transparent', color: isActive ? accent : 'var(--color-text-secondary)', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
             {!collapsed && (
-              <Icon name={timeline.isPublic ? 'public' : 'lock'} size={13} color="#b0acbe" />
+              <Icon name={timeline.isPublic ? 'public' : 'lock'} size={13} color="var(--color-text-quaternary)" />
             )}
             {timeline.emoji
               ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{timeline.emoji}</span>
-              : <Icon name="timeline" size={19} color={isActive ? accent : '#787584'} />
+              : <Icon name="timeline" size={19} color={isActive ? accent : 'var(--color-text-tertiary)'} />
             }
             {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{timeline.name}</span>}
           </button>
@@ -367,14 +367,14 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
               ref={menuBtnRef}
               onClick={openMenu}
               title="Timeline options"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? '#ebe6f0' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#ebe6f0')}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-pale-39)')}
               onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background = 'transparent'; }}
             >
-              <Icon name="more_vert" size={15} color="#9d8dff" />
+              <Icon name="more_vert" size={15} color="var(--color-accent-purple-light)" />
             </button>
             <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
-              <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+              <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
             </div>
           </div>
         )}
@@ -436,20 +436,20 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
       {showDeleteDialog && createPortal(
         <div
           onClick={() => setShowDeleteDialog(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
           <div
             onClick={e => e.stopPropagation()}
-            style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-              <Icon name="delete" size={20} color="#ba1a1a" />
+            style={{ background: 'var(--color-white)', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <Icon name="delete" size={20} color="var(--color-error)" />
             </div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Delete timeline?</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.5, marginBottom: 24 }}>
-              "<span style={{ color: '#1c1b22', fontWeight: 500 }}>{timeline.name}</span>" and all its milestones will be moved to Trash.
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Delete timeline?</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.5, marginBottom: 24 }}>
+              "<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{timeline.name}</span>" and all its milestones will be moved to Trash.
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={handleDelete} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
+              <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleDelete} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
             </div>
           </div>
         </div>,
@@ -535,7 +535,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
     setShowDeleteDialog(false);
   };
 
-  const accentColor = folder.color ?? '#787584';
+  const accentColor = folder.color ?? 'var(--color-text-tertiary)';
   const isDragTarget = dragOverFolderId === folder.id;
   const isActiveDash = active === 'folder' && activeFolderId === folder.id;
 
@@ -568,7 +568,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
         onContextMenu={openContextMenu}
         onMouseEnter={() => setHov(true)}
         onMouseLeave={() => setHov(false)}
-        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', borderTop: dragOverFolderReorderId === folder.id ? '2px solid #9d8dff' : isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', transition: 'all 120ms', background: isDragTarget ? `${accentColor}15` : 'transparent' }}>
+        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', borderTop: dragOverFolderReorderId === folder.id ? '2px solid var(--color-accent-purple-light)' : isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', transition: 'all 120ms', background: isDragTarget ? `${accentColor}15` : 'transparent' }}>
 
         {editingName && !collapsed ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '4px 8px', animation: 'menuItemIn 140ms ease both' }}>
@@ -581,7 +581,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
                 if (e.key === 'Enter') handleRename();
                 if (e.key === 'Escape') { setEditingName(false); setNameInput(folder.name); }
               }}
-              style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, border: 'none', borderBottom: `1.5px solid ${accentColor}`, outline: 'none', background: 'transparent', color: '#1c1b22', padding: '2px 4px' }}
+              style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13.5, border: 'none', borderBottom: `1.5px solid ${accentColor}`, outline: 'none', background: 'transparent', color: 'var(--color-text-primary)', padding: '2px 4px' }}
             />
           </div>
         ) : (
@@ -600,7 +600,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
             <button
               onClick={() => onNavigate(`/folder/${folder.id}`)}
               title={collapsed ? folder.name : `Open ${folder.name} overview`}
-              style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '5px 8px 5px 4px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: 'transparent', borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%', color: accentColor }}
+              style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '5px 8px 5px 4px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: 'transparent', borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left', width: '100%', color: accentColor }}
             >
               {folder.emoji
                 ? <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{folder.emoji}</span>
@@ -621,14 +621,14 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
               ref={menuBtnRef}
               onClick={openMenu}
               title="Folder options"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? '#ebe6f0' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#ebe6f0')}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-pale-39)')}
               onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background = 'transparent'; }}
             >
-              <Icon name="more_vert" size={15} color="#9d8dff" />
+              <Icon name="more_vert" size={15} color="var(--color-accent-purple-light)" />
             </button>
             <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
-              <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+              <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
             </div>
           </div>
         )}
@@ -678,7 +678,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
             );
           })}
           {lists.length === 0 && timelines.length === 0 && (
-            <div style={{ padding: '6px 10px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', fontStyle: 'italic' }}>
+            <div style={{ padding: '6px 10px', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', fontStyle: 'italic' }}>
               Empty folder
             </div>
           )}
@@ -732,20 +732,20 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
       {showDeleteDialog && createPortal(
         <div
           onClick={() => setShowDeleteDialog(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
           <div
             onClick={e => e.stopPropagation()}
-            style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-              <Icon name="folder_off" size={20} color="#ba1a1a" />
+            style={{ background: 'var(--color-white)', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <Icon name="folder_off" size={20} color="var(--color-error)" />
             </div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Delete folder?</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.5, marginBottom: 24 }}>
-              "<span style={{ color: '#1c1b22', fontWeight: 500 }}>{folder.name}</span>" will be deleted. Lists inside it will be moved out and kept.
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Delete folder?</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.5, marginBottom: 24 }}>
+              "<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{folder.name}</span>" will be deleted. Lists inside it will be moved out and kept.
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={handleDelete} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
+              <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleDelete} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
             </div>
           </div>
         </div>,
@@ -783,7 +783,7 @@ function StandaloneListWithSublists({ list, sublists, active, activeListId, coll
         {!collapsed && sublists.length > 0 && (
           <button onClick={() => setSubExpanded(e => !e)}
             style={{ display: 'flex', alignItems: 'center', padding: '0 2px', border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}>
-            <Icon name={subExpanded ? 'expand_more' : 'chevron_right'} size={14} color="#b0acbe" />
+            <Icon name={subExpanded ? 'expand_more' : 'chevron_right'} size={14} color="var(--color-text-quaternary)" />
           </button>
         )}
         <div style={{ flex: 1 }}>
@@ -806,7 +806,7 @@ function StandaloneListWithSublists({ list, sublists, active, activeListId, coll
       {!collapsed && subExpanded && sublists.map(sub => {
         const isSubActive = active === 'list' && activeListId === sub.id;
         return (
-          <div key={sub.id} style={{ paddingLeft: (sub.depth ?? 1) * 12, borderLeft: '2px solid #e8e4f0', marginLeft: 10 }}>
+          <div key={sub.id} style={{ paddingLeft: (sub.depth ?? 1) * 12, borderLeft: '2px solid var(--color-border)', marginLeft: 10 }}>
             <ListItemRow
               list={sub}
               isActive={isSubActive}
@@ -881,17 +881,17 @@ function MarkdownListRow({ markdownList, isActive, collapsed, onNavigate }: Mark
         style={{ display: 'flex', alignItems: 'center', borderRadius: 8 }}>
         <button title={collapsed ? markdownList.name : undefined}
           onClick={() => onNavigate(`/markdown-list/${markdownList.id}`)}
-          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: hov ? (markdownList.colorBg ?? '#f1ecf6') : 'transparent', color: isActive ? (markdownList.color ?? '#5e4dbb') : '#484552', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: hov ? (markdownList.colorBg ?? 'var(--color-surface-tint-2)') : 'transparent', color: isActive ? (markdownList.color ?? 'var(--color-primary)') : 'var(--color-text-secondary)', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
           {markdownList.emoji
             ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{markdownList.emoji}</span>
-            : <Icon name="notes" size={19} color={isActive ? (markdownList.color ?? '#5e4dbb') : '#787584'} />
+            : <Icon name="notes" size={19} color={isActive ? (markdownList.color ?? 'var(--color-primary)') : 'var(--color-text-tertiary)'} />
           }
           {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{markdownList.name}</span>}
         </button>
         {!collapsed && (
           <button ref={menuBtnRef} onClick={openMenu} title="Markdown list options"
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? '#ebe6f0' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms', marginRight: 4, flexShrink: 0 }}>
-            <Icon name="more_vert" size={15} color="#9d8dff" />
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms', marginRight: 4, flexShrink: 0 }}>
+            <Icon name="more_vert" size={15} color="var(--color-accent-purple-light)" />
           </button>
         )}
       </div>
@@ -923,20 +923,20 @@ function MarkdownListRow({ markdownList, isActive, collapsed, onNavigate }: Mark
       {showDeleteDialog && createPortal(
         <div
           onClick={() => setShowDeleteDialog(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
           <div
             onClick={e => e.stopPropagation()}
-            style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-              <Icon name="delete" size={20} color="#ba1a1a" />
+            style={{ background: 'var(--color-white)', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <Icon name="delete" size={20} color="var(--color-error)" />
             </div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Delete markdown list?</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.5, marginBottom: 24 }}>
-              "<span style={{ color: '#1c1b22', fontWeight: 500 }}>{markdownList.name}</span>" and its Todo list will be moved to Trash.
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Delete markdown list?</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.5, marginBottom: 24 }}>
+              "<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{markdownList.name}</span>" and its Todo list will be moved to Trash.
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={handleDelete} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
+              <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleDelete} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
             </div>
           </div>
         </div>,
@@ -978,7 +978,7 @@ function MarkdownListWithTodo({ markdownList, todoList, active, activeListId, ac
         {!collapsed && todoList && (
           <button onClick={() => setSubExpanded(e => !e)}
             style={{ display: 'flex', alignItems: 'center', padding: '0 2px', border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}>
-            <Icon name={subExpanded ? 'expand_more' : 'chevron_right'} size={14} color="#b0acbe" />
+            <Icon name={subExpanded ? 'expand_more' : 'chevron_right'} size={14} color="var(--color-text-quaternary)" />
           </button>
         )}
         <div style={{ flex: 1 }}>
@@ -986,7 +986,7 @@ function MarkdownListWithTodo({ markdownList, todoList, active, activeListId, ac
         </div>
       </div>
       {!collapsed && subExpanded && todoList && (
-        <div style={{ paddingLeft: 12, borderLeft: '2px solid #e8e4f0', marginLeft: 10 }}>
+        <div style={{ paddingLeft: 12, borderLeft: '2px solid var(--color-border)', marginLeft: 10 }}>
           <ListItemRow
             list={todoList}
             isActive={active === 'list' && activeListId === todoList.id}
@@ -1061,8 +1061,8 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
   return (
     <>
       <button ref={btnRef} onClick={openDropdown} title={collapsed ? (current?.name ?? 'Workspaces') : undefined}
-        style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', width: '100%', borderRadius: 8, border: 'none', background: dropdownOpen ? '#F5F3FF' : 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 500, color: '#5e4dbb', transition: 'background 150ms' }}>
-        <div style={{ width: 22, height: 22, borderRadius: 6, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+        style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', width: '100%', borderRadius: 8, border: 'none', background: dropdownOpen ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 500, color: 'var(--color-primary)', transition: 'background 150ms' }}>
+        <div style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--color-purple-pale-21)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
           {current?.image
             ? <img src={current.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : <span style={{ fontSize: 13 }}>{current?.emoji ?? '🏠'}</span>
@@ -1071,27 +1071,27 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
         {!collapsed && (
           <>
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>{current?.name ?? 'Select workspace'}</span>
-            <Icon name="unfold_more" size={15} color="#9d8dff" />
+            <Icon name="unfold_more" size={15} color="var(--color-accent-purple-light)" />
           </>
         )}
       </button>
 
       {dropdownOpen && dropdownPos && (
         <div ref={dropRef}
-          style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 500, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.14)', border: '1px solid #e8e4f0', minWidth: 230, padding: '4px 0', animation: 'menuIn 140ms ease both', overflow: 'hidden' }}>
+          style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 500, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 24px rgba(var(--color-black-rgb), 0.14)', border: '1px solid var(--color-border)', minWidth: 230, padding: '4px 0', animation: 'menuIn 140ms ease both', overflow: 'hidden' }}>
 
           {workspaces.length === 0 && (
-            <div style={{ padding: '12px 14px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>No workspaces yet.</div>
+            <div style={{ padding: '12px 14px', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>No workspaces yet.</div>
           )}
 
           {workspaces.map(ws => (
             <div key={ws.id} style={{ overflow: 'hidden', animation: ws.id === deletingWorkspaceId ? 'wsItemOut 420ms ease forwards' : undefined }}>
               <button
                 onClick={() => { if (ws.id === deletingWorkspaceId) return; setCurrentWorkspace(ws.id); setDropdownOpen(false); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', background: ws.id === currentWorkspaceId ? '#f5f3ff' : 'transparent', cursor: ws.id === deletingWorkspaceId ? 'default' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: ws.id === currentWorkspaceId ? 600 : 450, color: ws.id === currentWorkspaceId ? '#5e4dbb' : '#1c1b22', textAlign: 'left', pointerEvents: ws.id === deletingWorkspaceId ? 'none' : undefined }}
-                onMouseEnter={e => { if (ws.id !== currentWorkspaceId && ws.id !== deletingWorkspaceId) e.currentTarget.style.background = '#f7f4fc'; }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', background: ws.id === currentWorkspaceId ? 'var(--color-surface-tint)' : 'transparent', cursor: ws.id === deletingWorkspaceId ? 'default' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: ws.id === currentWorkspaceId ? 600 : 450, color: ws.id === currentWorkspaceId ? 'var(--color-primary)' : 'var(--color-text-primary)', textAlign: 'left', pointerEvents: ws.id === deletingWorkspaceId ? 'none' : undefined }}
+                onMouseEnter={e => { if (ws.id !== currentWorkspaceId && ws.id !== deletingWorkspaceId) e.currentTarget.style.background = 'var(--color-purple-pale-11)'; }}
                 onMouseLeave={e => { if (ws.id !== currentWorkspaceId) e.currentTarget.style.background = 'transparent'; }}>
-                <div style={{ width: 26, height: 26, borderRadius: 8, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+                <div style={{ width: 26, height: 26, borderRadius: 8, background: 'var(--color-purple-pale-21)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
                   {ws.image
                     ? <img src={ws.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <span style={{ fontSize: 14 }}>{ws.emoji ?? '🏠'}</span>
@@ -1100,34 +1100,34 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
                 <div style={{ flex: 1, overflow: 'hidden' }}>
                   <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ws.name}</div>
                   {(() => {
-                  if (ws.visibility === 'public') return <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe' }}>Public</div>;
-                  if ((ws.memberCount ?? 1) > 1) return <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe' }}>Shared</div>;
-                  return <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#b0acbe' }}>Private</div>;
+                  if (ws.visibility === 'public') return <div style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-quaternary)' }}>Public</div>;
+                  if ((ws.memberCount ?? 1) > 1) return <div style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-quaternary)' }}>Shared</div>;
+                  return <div style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-quaternary)' }}>Private</div>;
                 })()}
                 </div>
-                {ws.id === currentWorkspaceId && <Icon name="check" size={14} color="#5e4dbb" />}
+                {ws.id === currentWorkspaceId && <Icon name="check" size={14} color="var(--color-primary)" />}
               </button>
             </div>
           ))}
 
-          <div style={{ height: 1, background: '#f0ecf8', margin: '4px 0' }} />
+          <div style={{ height: 1, background: 'var(--color-divider)', margin: '4px 0' }} />
 
           {current && (current.role === 'owner' || current.ownerId === current.ownerId) && (
             <button
               onClick={() => { setShowSettings(true); setDropdownOpen(false); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 450, color: '#484552', textAlign: 'left' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 450, color: 'var(--color-text-secondary)', textAlign: 'left' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-              <Icon name="settings" size={15} color="#787584" /> Workspace settings
+              <Icon name="settings" size={15} color="var(--color-text-tertiary)" /> Workspace settings
             </button>
           )}
 
           <button
             onClick={() => { setShowWizard(true); setDropdownOpen(false); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', textAlign: 'left' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', textAlign: 'left' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-            <Icon name="add_circle" size={15} color="#5e4dbb" /> New workspace
+            <Icon name="add_circle" size={15} color="var(--color-primary)" /> New workspace
           </button>
         </div>
       )}
@@ -1351,8 +1351,8 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         width: isMobile ? 280 : width,
         minWidth: isMobile ? 280 : width,
         height: '100vh',
-        background: '#f7f2fc',
-        borderRight: '1px solid #E5E7EB',
+        background: 'var(--color-purple-pale-13)',
+        borderRight: '1px solid var(--color-border-alt)',
         display: 'flex',
         flexDirection: 'column',
         padding: isMobile
@@ -1372,15 +1372,15 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         {!isMobile && (
           <div onMouseDown={e => { e.preventDefault(); onResizeStart(e.clientX); }}
             onMouseEnter={() => setHandleHov(true)} onMouseLeave={() => setHandleHov(false)}
-            style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, background: handleHov ? 'rgba(94,77,187,0.10)' : 'transparent', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {handleHov && <div style={{ width: 2, height: 48, borderRadius: 2, background: '#9d8dff', opacity: 0.7 }} />}
+            style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, background: handleHov ? 'rgba(var(--color-primary-rgb), 0.10)' : 'transparent', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {handleHov && <div style={{ width: 2, height: 48, borderRadius: 2, background: 'var(--color-accent-purple-light)', opacity: 0.7 }} />}
             {handleHov && (
               <button type="button"
                 onMouseDown={e => e.stopPropagation()}
                 onClick={e => { e.stopPropagation(); toggleCollapsed(); }}
                 title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                style={{ position: 'fixed', top: '50%', left: width - 12, transform: 'translateY(-50%)', width: 24, height: 24, borderRadius: 7, border: '1px solid #e8e4f0', background: '#fff', boxShadow: '0 2px 8px rgba(94,77,187,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 60 }}>
-                <Icon name={collapsed ? 'chevron_right' : 'chevron_left'} size={14} color="#5e4dbb" />
+                style={{ position: 'fixed', top: '50%', left: width - 12, transform: 'translateY(-50%)', width: 24, height: 24, borderRadius: 7, border: '1px solid var(--color-border)', background: 'var(--color-white)', boxShadow: '0 2px 8px rgba(var(--color-primary-rgb), 0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 60 }}>
+                <Icon name={collapsed ? 'chevron_right' : 'chevron_left'} size={14} color="var(--color-primary)" />
               </button>
             )}
           </div>
@@ -1392,8 +1392,8 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           <img src="/solytiq-cloud.png" alt="Solytiq" style={{ width: isMobile ? 32 : 44, height: isMobile ? 32 : 44, borderRadius: isMobile ? 9 : 11, objectFit: 'cover', marginBottom: 6, flexShrink: 0 }} />
           {!collapsed && (
             <>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 500, color: '#5e4dbb', lineHeight: 1.2, whiteSpace: 'nowrap' }}>Solytiq Cloud</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>Your Routes. Your cloud.</div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 500, color: 'var(--color-primary)', lineHeight: 1.2, whiteSpace: 'nowrap' }}>Solytiq Cloud</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>Your Routes. Your cloud.</div>
             </>
           )}
         </button>
@@ -1402,30 +1402,30 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('gps-upload-trigger'))}
           title={collapsed ? 'Upload Route' : undefined}
-          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 500, color: '#5e4dbb', background: 'transparent', border: 'none', transition: 'background 200ms', width: '100%' }}
-          onMouseEnter={e => (e.currentTarget.style.background = '#F5F3FF')}
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 500, color: 'var(--color-primary)', background: 'transparent', border: 'none', transition: 'background 200ms', width: '100%' }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
         >
-          <Icon name="upload" size={19} color="#5e4dbb" />
+          <Icon name="upload" size={19} color="var(--color-primary)" />
           {!collapsed && <span>Upload Route</span>}
         </button>
 
-        {!collapsed && <div style={{ height: 1, background: '#e8e4f0', margin: '2px 8px' }} />}
+        {!collapsed && <div style={{ height: 1, background: 'var(--color-border)', margin: '2px 8px' }} />}
 
         {/* Search */}
         {!collapsed && (
           <div style={{ padding: '0 4px 4px', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #e8e4f0', borderRadius: 8, padding: '5px 8px' }}>
-              <Icon name="search" size={14} color="#b0acbe" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '5px 8px' }}>
+              <Icon name="search" size={14} color="var(--color-text-quaternary)" />
               <input
                 value={gpsSearch}
                 onChange={e => setGpsSearch(e.target.value)}
                 placeholder="Search routes…"
-                style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#1c1b22' }}
+                style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-primary)' }}
               />
               {gpsSearch && (
                 <button onClick={() => setGpsSearch('')} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
-                  <Icon name="close" size={13} color="#b0acbe" />
+                  <Icon name="close" size={13} color="var(--color-text-quaternary)" />
                 </button>
               )}
             </div>
@@ -1435,10 +1435,10 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         {/* Route list */}
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
           {gpsLoading && !collapsed && (
-            <div style={{ padding: '16px 8px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', textAlign: 'center' }}>Loading…</div>
+            <div style={{ padding: '16px 8px', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', textAlign: 'center' }}>Loading…</div>
           )}
           {!gpsLoading && gpsFiles.length === 0 && !collapsed && (
-            <div style={{ padding: '20px 8px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', textAlign: 'center', lineHeight: 1.6 }}>
+            <div style={{ padding: '20px 8px', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', textAlign: 'center', lineHeight: 1.6 }}>
               No routes yet.<br />Upload a .GPX or .FIT file.
             </div>
           )}
@@ -1451,9 +1451,9 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
                   <button
                     title={displayName}
                     onClick={() => onNavigate(`/gps?file=${file.id}`)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '8px 0', border: 'none', background: isActive ? '#F5F3FF' : 'transparent', borderRadius: 8, cursor: 'pointer', transition: 'all 150ms' }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '8px 0', border: 'none', background: isActive ? 'var(--color-surface-tint)' : 'transparent', borderRadius: 8, cursor: 'pointer', transition: 'all 150ms' }}
                   >
-                    <Icon name="route" size={18} color={isActive ? '#5e4dbb' : '#787584'} />
+                    <Icon name="route" size={18} color={isActive ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                   </button>
                 </div>
               );
@@ -1462,20 +1462,20 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
               <div
                 key={file.id}
                 onClick={() => onNavigate(`/gps?file=${file.id}`)}
-                style={{ background: isActive ? '#F5F3FF' : 'transparent', borderLeft: `3px solid ${isActive ? '#5e4dbb' : 'transparent'}`, borderRadius: 8, padding: '7px 8px 7px 6px', cursor: 'pointer', transition: 'all 150ms' }}
-                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f1ecf6'; }}
+                style={{ background: isActive ? 'var(--color-surface-tint)' : 'transparent', borderLeft: `3px solid ${isActive ? 'var(--color-primary)' : 'transparent'}`, borderRadius: 8, padding: '7px 8px 7px 6px', cursor: 'pointer', transition: 'all 150ms' }}
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
                 onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 4, background: file.fileType === 'gpx' ? '#ede9fe' : '#ccfbf1', color: file.fileType === 'gpx' ? '#5e4dbb' : '#0d9488', letterSpacing: '0.04em', flexShrink: 0 }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 4, background: file.fileType === 'gpx' ? 'var(--color-purple-pale-21)' : 'var(--color-teal-tint-1)', color: file.fileType === 'gpx' ? 'var(--color-primary)' : 'var(--color-teal-deep-2)', letterSpacing: '0.04em', flexShrink: 0 }}>
                     {file.fileType.toUpperCase()}
                   </span>
-                  <span style={{ fontSize: 12.5, fontWeight: isActive ? 600 : 450, color: isActive ? '#5e4dbb' : '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontFamily: 'Hanken Grotesk, sans-serif' }}>
+                  <span style={{ fontSize: 12.5, fontWeight: isActive ? 600 : 450, color: isActive ? 'var(--color-primary)' : 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, fontFamily: 'var(--font-heading)' }}>
                     {displayName}
                   </span>
                 </div>
                 {file.metadata && (
-                  <div style={{ marginTop: 3, fontSize: 11, color: '#b0acbe', display: 'flex', gap: 8, paddingLeft: 2, fontFamily: 'Inter, sans-serif' }}>
+                  <div style={{ marginTop: 3, fontSize: 11, color: 'var(--color-text-quaternary)', display: 'flex', gap: 8, paddingLeft: 2, fontFamily: 'var(--font-body)' }}>
                     {file.metadata.totalDistance != null && <span>{fmtDistShort(file.metadata.totalDistance)}</span>}
                     {file.metadata.totalElevationGain != null && file.metadata.totalElevationGain > 0 && <span>↑{Math.round(file.metadata.totalElevationGain)}m</span>}
                   </div>
@@ -1486,9 +1486,9 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         </div>
 
         {/* Bottom: version */}
-        <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8 }}>
+        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
           {!collapsed && (
-            <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
+            <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
               v1.48.2
             </div>
           )}
@@ -1502,8 +1502,8 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
       width: isMobile ? 280 : width,
       minWidth: isMobile ? 280 : width,
       height: '100vh',
-      background: '#f7f2fc',
-      borderRight: '1px solid #E5E7EB',
+      background: 'var(--color-purple-pale-13)',
+      borderRight: '1px solid var(--color-border-alt)',
       display: 'flex',
       flexDirection: 'column',
       padding: isMobile
@@ -1524,15 +1524,15 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
       {!isMobile && (
         <div onMouseDown={e => { e.preventDefault(); onResizeStart(e.clientX); }}
           onMouseEnter={() => setHandleHov(true)} onMouseLeave={() => setHandleHov(false)}
-          style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, background: handleHov ? 'rgba(94,77,187,0.10)' : 'transparent', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {handleHov && <div style={{ width: 2, height: 48, borderRadius: 2, background: '#9d8dff', opacity: 0.7 }} />}
+          style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, background: handleHov ? 'rgba(var(--color-primary-rgb), 0.10)' : 'transparent', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {handleHov && <div style={{ width: 2, height: 48, borderRadius: 2, background: 'var(--color-accent-purple-light)', opacity: 0.7 }} />}
           {handleHov && (
             <button type="button"
               onMouseDown={e => e.stopPropagation()}
               onClick={e => { e.stopPropagation(); toggleCollapsed(); }}
               title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              style={{ position: 'absolute', top: '50%', right: 3, transform: 'translateY(-50%)', width: 20, height: 20, borderRadius: '50%', border: '1px solid #e8e4f0', background: '#fff', boxShadow: '0 2px 8px rgba(94,77,187,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 60 }}>
-              <Icon name={collapsed ? 'chevron_right' : 'chevron_left'} size={14} color="#5e4dbb" />
+              style={{ position: 'absolute', top: '50%', right: 3, transform: 'translateY(-50%)', width: 20, height: 20, borderRadius: '50%', border: '1px solid var(--color-border)', background: 'var(--color-white)', boxShadow: '0 2px 8px rgba(var(--color-primary-rgb), 0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 60 }}>
+              <Icon name={collapsed ? 'chevron_right' : 'chevron_left'} size={14} color="var(--color-primary)" />
             </button>
           )}
         </div>
@@ -1544,8 +1544,8 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <img src="/solytiq-cloud.png" alt="Solytiq" style={{ width: 44, height: 44, borderRadius: 11, objectFit: 'cover', marginBottom: 6, flexShrink: 0 }} />
         {!collapsed && (
           <>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 500, color: '#5e4dbb', lineHeight: 1.2, whiteSpace: 'nowrap' }}>Solytiq Cloud</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>Your to-dos. Your cloud.</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 500, color: 'var(--color-primary)', lineHeight: 1.2, whiteSpace: 'nowrap' }}>Solytiq Cloud</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>Your to-dos. Your cloud.</div>
           </>
         )}
       </button>
@@ -1562,13 +1562,13 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           style={{
             display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8,
             padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start',
-            borderRadius: 8, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5,
+            borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5,
             fontWeight: active === 'calendar' ? 700 : 500,
-            color: active === 'calendar' ? '#5e4dbb' : '#484552',
-            background: active === 'calendar' ? '#F5F3FF' : (calendarHov ? '#faf9ff' : 'transparent'),
+            color: active === 'calendar' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+            background: active === 'calendar' ? 'var(--color-surface-tint)' : (calendarHov ? 'var(--color-surface-tint-3)' : 'transparent'),
             border: 'none', transition: 'background 150ms', width: '100%',
           }}>
-          <Icon name="calendar_month" size={17} color={active === 'calendar' ? '#5e4dbb' : '#787584'} />
+          <Icon name="calendar_month" size={17} color={active === 'calendar' ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
           {!collapsed && <span>Calendar</span>}
         </button>
 
@@ -1581,13 +1581,13 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           style={{
             display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8,
             padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start',
-            borderRadius: 8, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5,
+            borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5,
             fontWeight: active === 'templates' ? 700 : 500,
-            color: active === 'templates' ? '#5e4dbb' : '#484552',
-            background: active === 'templates' ? '#F5F3FF' : (templatesHov ? '#faf9ff' : 'transparent'),
+            color: active === 'templates' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+            background: active === 'templates' ? 'var(--color-surface-tint)' : (templatesHov ? 'var(--color-surface-tint-3)' : 'transparent'),
             border: 'none', transition: 'background 150ms', width: '100%',
           }}>
-          <Icon name="dashboard_customize" size={17} color={active === 'templates' ? '#5e4dbb' : '#787584'} />
+          <Icon name="dashboard_customize" size={17} color={active === 'templates' ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
           {!collapsed && <span>Templates</span>}
         </button>
 
@@ -1602,42 +1602,42 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
             style={{
               display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8,
               padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start',
-              borderRadius: 8, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5,
+              borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5,
               fontWeight: active === 'automations' ? 700 : 500,
-              color: active === 'automations' ? '#5e4dbb' : '#484552',
-              background: active === 'automations' ? '#F5F3FF' : (automationsHov ? '#faf9ff' : 'transparent'),
+              color: active === 'automations' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+              background: active === 'automations' ? 'var(--color-surface-tint)' : (automationsHov ? 'var(--color-surface-tint-3)' : 'transparent'),
               border: 'none', transition: 'background 150ms', width: '100%',
             }}>
-            <Icon name="bolt" size={17} color={active === 'automations' ? '#5e4dbb' : '#787584'} />
+            <Icon name="bolt" size={17} color={active === 'automations' ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
             {!collapsed && <span>Automations</span>}
           </button>
         )}
 
-        <div style={{ height: 1, background: '#e8e4f0', margin: '6px 8px' }} />
+        <div style={{ height: 1, background: 'var(--color-border)', margin: '6px 8px' }} />
 
         {/* Add List / Add Folder buttons */}
         <div style={{ display: 'flex', gap: 4 }}>
           <button title={collapsed ? 'Add' : undefined}
             onMouseEnter={() => setAddHov(true)} onMouseLeave={() => setAddHov(false)}
             onClick={() => onOpenModal('add')}
-            style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, borderRadius: 8, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 500, color: '#5e4dbb', background: addHov ? '#F5F3FF' : 'transparent', border: 'none', transition: 'background 200ms' }}>
-            <Icon name="add" size={19} color="#5e4dbb" />
+            style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 500, color: 'var(--color-primary)', background: addHov ? 'var(--color-surface-tint)' : 'transparent', border: 'none', transition: 'background 200ms' }}>
+            <Icon name="add" size={19} color="var(--color-primary)" />
             {!collapsed && <span>Add</span>}
           </button>
           {!collapsed && (
             <button title="Add Folder"
               onMouseEnter={() => setFolderHov(true)} onMouseLeave={() => setFolderHov(false)}
               onClick={() => { setAddingFolder(true); setTimeout(() => folderInputRef.current?.focus(), 50); }}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: 'none', background: folderHov ? '#F5F3FF' : 'transparent', cursor: 'pointer', padding: 0, flexShrink: 0, transition: 'background 200ms', alignSelf: 'center' }}>
-              <Icon name="create_new_folder" size={17} color="#5e4dbb" />
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: 'none', background: folderHov ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', padding: 0, flexShrink: 0, transition: 'background 200ms', alignSelf: 'center' }}>
+              <Icon name="create_new_folder" size={17} color="var(--color-primary)" />
             </button>
           )}
         </div>
 
         {/* New folder input */}
         {addingFolder && !collapsed && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: '#f0edff', borderRadius: 8, border: '1.5px solid #c4b5fd' }}>
-            <Icon name="folder" size={15} color="#5e4dbb" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'var(--color-surface-tint-alt)', borderRadius: 8, border: '1.5px solid var(--color-accent-purple-soft-alt)' }}>
+            <Icon name="folder" size={15} color="var(--color-primary)" />
             <input
               ref={folderInputRef}
               value={newFolderName}
@@ -1648,7 +1648,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
                 if (e.key === 'Escape') { setAddingFolder(false); setNewFolderName(''); }
               }}
               placeholder="Folder name…"
-              style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, border: 'none', outline: 'none', background: 'transparent', color: '#1c1b22' }}
+              style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, border: 'none', outline: 'none', background: 'transparent', color: 'var(--color-text-primary)' }}
             />
           </div>
         )}
@@ -1800,12 +1800,12 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         ))}
       </div>
 
-      <div style={{ marginTop: 'auto', borderTop: '1px solid #e8e4f0', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <NavItem icon="check_circle" label="Completed" active={false} onClick={() => onOpenModal('completed')} collapsed={collapsed} />
         <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
         <NavItem icon="archive" label="Archived" active={false} onClick={() => onOpenModal('archived')} collapsed={collapsed} />
         {!collapsed && (
-          <div style={{ padding: '6px 10px 2px', fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#c0bcd0', letterSpacing: '0.03em', userSelect: 'none' }}>
+          <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
             v1.48.2
           </div>
         )}

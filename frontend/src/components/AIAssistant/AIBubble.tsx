@@ -51,10 +51,10 @@ export default function AIBubble({ isOpen, isThinking, onClick, size = 52 }: Pro
 
   // Glow shadow layers
   const shadow = isOpen
-    ? '0 0 0 5px rgba(157,141,255,0.25), 0 0 22px rgba(94,77,187,0.5), 0 8px 24px rgba(94,77,187,0.4)'
+    ? '0 0 0 5px rgba(var(--color-accent-purple-light-rgb), 0.25), 0 0 22px rgba(var(--color-primary-rgb), 0.5), 0 8px 24px rgba(var(--color-primary-rgb), 0.4)'
     : hovered
-    ? '0 0 0 6px rgba(157,141,255,0.22), 0 0 20px rgba(94,77,187,0.45), 0 6px 20px rgba(94,77,187,0.35)'
-    : '0 4px 16px rgba(94,77,187,0.28)';
+    ? '0 0 0 6px rgba(var(--color-accent-purple-light-rgb), 0.22), 0 0 20px rgba(var(--color-primary-rgb), 0.45), 0 6px 20px rgba(var(--color-primary-rgb), 0.35)'
+    : '0 4px 16px rgba(var(--color-primary-rgb), 0.28)';
 
   return (
     <button
@@ -81,8 +81,8 @@ export default function AIBubble({ isOpen, isThinking, onClick, size = 52 }: Pro
       <svg viewBox="0 0 52 52" width={size} height={size} style={{ display: 'block' }}>
         <defs>
           <radialGradient id="bubbleGrad" cx="40%" cy="35%" r="65%">
-            <stop offset="0%" stopColor="#9d8dff" />
-            <stop offset="100%" stopColor="#4a39aa" />
+            <stop offset="0%" stopColor="var(--color-accent-purple-light)" />
+            <stop offset="100%" stopColor="var(--color-purple-mid-13)" />
           </radialGradient>
           <clipPath id="leftEyeClip">
             <ellipse cx="18" cy="22" rx="7" ry="8" />
@@ -93,26 +93,26 @@ export default function AIBubble({ isOpen, isThinking, onClick, size = 52 }: Pro
         </defs>
 
         <circle cx="26" cy="26" r="26" fill="url(#bubbleGrad)" />
-        <ellipse cx="20" cy="14" rx="9" ry="5" fill="rgba(255,255,255,0.18)" />
+        <ellipse cx="20" cy="14" rx="9" ry="5" fill="rgba(var(--color-white-rgb), 0.18)" />
 
         {/* Left eye */}
         <ellipse
           cx="18" cy="22" rx="7" ry="8" fill="white"
           style={{ transformOrigin: '18px 22px', transform: `scaleY(${eyeScaleY})`, transition: 'transform 80ms' }}
         />
-        {!blink && <circle cx={18 + pupil.x} cy={22 + pupil.y} r="3.5" fill="#2a1f6e" clipPath="url(#leftEyeClip)" />}
-        {!blink && <circle cx={18 + pupil.x + 1.2} cy={22 + pupil.y - 1.2} r="1" fill="rgba(255,255,255,0.7)" clipPath="url(#leftEyeClip)" />}
+        {!blink && <circle cx={18 + pupil.x} cy={22 + pupil.y} r="3.5" fill="var(--color-purple-deep-2)" clipPath="url(#leftEyeClip)" />}
+        {!blink && <circle cx={18 + pupil.x + 1.2} cy={22 + pupil.y - 1.2} r="1" fill="rgba(var(--color-white-rgb), 0.7)" clipPath="url(#leftEyeClip)" />}
 
         {/* Right eye */}
         <ellipse
           cx="34" cy="22" rx="7" ry="8" fill="white"
           style={{ transformOrigin: '34px 22px', transform: `scaleY(${eyeScaleY})`, transition: 'transform 80ms' }}
         />
-        {!blink && <circle cx={34 + pupil.x} cy={22 + pupil.y} r="3.5" fill="#2a1f6e" clipPath="url(#rightEyeClip)" />}
-        {!blink && <circle cx={34 + pupil.x + 1.2} cy={22 + pupil.y - 1.2} r="1" fill="rgba(255,255,255,0.7)" clipPath="url(#rightEyeClip)" />}
+        {!blink && <circle cx={34 + pupil.x} cy={22 + pupil.y} r="3.5" fill="var(--color-purple-deep-2)" clipPath="url(#rightEyeClip)" />}
+        {!blink && <circle cx={34 + pupil.x + 1.2} cy={22 + pupil.y - 1.2} r="1" fill="rgba(var(--color-white-rgb), 0.7)" clipPath="url(#rightEyeClip)" />}
 
         {/* Smile */}
-        <path d="M 19 32 Q 26 38 33 32" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2" strokeLinecap="round" />
+        <path d="M 19 32 Q 26 38 33 32" fill="none" stroke="rgba(var(--color-white-rgb), 0.85)" strokeWidth="2" strokeLinecap="round" />
       </svg>
 
       {/* Thinking dot */}
@@ -120,7 +120,7 @@ export default function AIBubble({ isOpen, isThinking, onClick, size = 52 }: Pro
         <span style={{
           position: 'absolute', top: 2, right: 2,
           width: 12, height: 12, borderRadius: '50%',
-          background: '#10B981', border: '2px solid #fff',
+          background: 'var(--color-success)', border: '2px solid var(--color-white)',
           animation: 'aiPulse 1s ease-in-out infinite',
         }} />
       )}

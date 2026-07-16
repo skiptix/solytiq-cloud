@@ -242,7 +242,7 @@ export default function AIAssistant() {
             const sublistName = (args.sublist_name as string) || task.title;
             const newListId = `list_${crypto.randomUUID()}`;
             const newSecId = `sec_${crypto.randomUUID()}`;
-            const listRes = await apiCreateList({ id: newListId, name: sublistName, color: '#5e4dbb', isPublic: false });
+            const listRes = await apiCreateList({ id: newListId, name: sublistName, color: 'var(--color-primary)', isPublic: false });
             const actualListId = listRes.list?.id ?? newListId;
             const secRes = await apiCreateSection(actualListId, { id: newSecId, label: 'Tasks' });
             sectionId = secRes.section?.id ?? newSecId;

@@ -56,43 +56,43 @@ export default function ArchivedModal({ onClose }: ArchivedModalProps) {
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div
-        style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 480, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden', position: 'relative' }}
+        style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 480, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden', position: 'relative' }}
         onClick={(e) => e.stopPropagation()}>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 20px', borderBottom: '1px solid #f1ecf6', flexShrink: 0 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: '#FEF3E2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="archive" size={18} color="#f59e0b" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 20px', borderBottom: '1px solid var(--color-surface-tint-2)', flexShrink: 0 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-orange-pale-5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="archive" size={18} color="var(--color-warning-alt)" />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>Archived</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>Lists hidden from your workspace — kept forever until you unarchive them.</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>Archived</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>Lists hidden from your workspace — kept forever until you unarchive them.</div>
           </div>
-          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: '#f5f3ff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="close" size={16} color="#787584" />
+          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'var(--color-surface-tint)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="close" size={16} color="var(--color-text-tertiary)" />
           </button>
         </div>
 
-        <div style={{ padding: '12px 20px', borderBottom: '1px solid #f1ecf6', flexShrink: 0 }}>
+        <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--color-surface-tint-2)', flexShrink: 0 }}>
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <span style={{ position: 'absolute', left: 12, display: 'flex', pointerEvents: 'none' }}>
-              <Icon name="search" size={15} color="#b0acbe" />
+              <Icon name="search" size={15} color="var(--color-text-quaternary)" />
             </span>
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search archived lists…"
-              style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 9999, padding: '8px 14px 8px 34px', outline: 'none', background: '#fafafa' }}
-              onFocus={(e) => (e.target.style.borderColor = '#5e4dbb')} onBlur={(e) => (e.target.style.borderColor = '#e8e4f0')} />
+              style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 9999, padding: '8px 14px 8px 34px', outline: 'none', background: 'var(--color-surface-neutral)' }}
+              onFocus={(e) => (e.target.style.borderColor = 'var(--color-primary)')} onBlur={(e) => (e.target.style.borderColor = 'var(--color-border)')} />
           </div>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px 14px' }}>
           {loading ? (
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', padding: '40px 0', textAlign: 'center' }}>Loading…</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '40px 0', textAlign: 'center' }}>Loading…</div>
           ) : filtered.length === 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '40px 20px', color: '#b0acbe' }}>
-              <Icon name="archive" size={32} color="#d8d2e8" />
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#787584' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '40px 20px', color: 'var(--color-text-quaternary)' }}>
+              <Icon name="archive" size={32} color="var(--color-purple-tint-3)" />
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>
                 {lists.length === 0 ? 'No archived lists' : 'No matches'}
               </div>
             </div>
@@ -100,17 +100,17 @@ export default function ArchivedModal({ onClose }: ArchivedModalProps) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {filtered.map((list) => (
                 <div key={list.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 10px', borderRadius: 10 }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = '#faf9ff')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                  <div style={{ width: 32, height: 32, borderRadius: 9, background: list.colorBg ?? '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-surface-tint-3)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                  <div style={{ width: 32, height: 32, borderRadius: 9, background: list.colorBg ?? 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>
                     {list.emoji ?? '📋'}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe' }}>Archived {list.archivedAt ? friendlyTime(list.archivedAt) : ''}</div>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)' }}>Archived {list.archivedAt ? friendlyTime(list.archivedAt) : ''}</div>
                   </div>
                   <button onClick={() => handleUnarchive(list)} disabled={unarchivingId === list.id}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: unarchivingId === list.id ? 'default' : 'pointer', flexShrink: 0 }}>
-                    <Icon name="unarchive" size={13} color="#5e4dbb" />
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: unarchivingId === list.id ? 'default' : 'pointer', flexShrink: 0 }}>
+                    <Icon name="unarchive" size={13} color="var(--color-primary)" />
                     {unarchivingId === list.id ? 'Unarchiving…' : 'Unarchive'}
                   </button>
                 </div>

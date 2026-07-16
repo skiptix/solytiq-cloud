@@ -47,58 +47,58 @@ export default function MoveMilestoneModal({ milestone, currentTimelineId, onPic
   return createPortal(
     <div
       onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.24)', backdropFilter: 'blur(5px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 220ms ease both' }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.24)', backdropFilter: 'blur(5px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 220ms ease both' }}>
       <div
         onClick={e => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: 18, maxWidth: 420, width: '100%', maxHeight: '78vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(94,77,187,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+        style={{ background: 'var(--color-white)', borderRadius: 18, maxWidth: 420, width: '100%', maxHeight: '78vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 22px 4px' }}>
-          <div style={{ width: 38, height: 38, borderRadius: 11, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Icon name="drive_file_move" size={19} color="#5e4dbb" />
+          <div style={{ width: 38, height: 38, borderRadius: 11, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="drive_file_move" size={19} color="var(--color-primary)" />
           </div>
           <div style={{ flex: 1, overflow: 'hidden' }}>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>Move to another timeline</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{milestone.title}</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>Move to another timeline</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{milestone.title}</div>
           </div>
         </div>
 
         <div style={{ padding: '14px 22px 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 10, padding: '9px 12px' }}>
-            <Icon name="search" size={15} color="#b0acbe" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 10, padding: '9px 12px' }}>
+            <Icon name="search" size={15} color="var(--color-text-quaternary)" />
             <input
               autoFocus
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search timelines…"
-              style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22' }}
+              style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)' }}
             />
           </div>
         </div>
 
         <div style={{ padding: '12px 22px 0', overflowY: 'auto', flex: 1 }}>
           {timelines === null && (
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', padding: '12px 2px' }}>Loading timelines…</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '12px 2px' }}>Loading timelines…</div>
           )}
           {timelines !== null && filtered.length === 0 && (
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', padding: '12px 2px' }}>No matching timelines.</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '12px 2px' }}>No matching timelines.</div>
           )}
 
           {grouped.map(([wsName, wsTimelines]) => (
             <div key={wsName} style={{ marginBottom: 14 }}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#b0acbe', marginBottom: 6, paddingLeft: 2 }}>{wsName}</div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-quaternary)', marginBottom: 6, paddingLeft: 2 }}>{wsName}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {wsTimelines.map(t => (
                   <button
                     key={t.id}
                     onClick={() => { onPick(t.id); onClose(); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #e8e4f0', background: '#fff', cursor: 'pointer', textAlign: 'left' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#F5F3FF')}
-                    onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
-                    <div style={{ width: 28, height: 28, borderRadius: 8, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>
-                      {t.emoji ?? <Icon name="timeline" size={15} color={t.color ?? '#5e4dbb'} />}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer', textAlign: 'left' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-white)')}>
+                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>
+                      {t.emoji ?? <Icon name="timeline" size={15} color={t.color ?? 'var(--color-primary)'} />}
                     </div>
                     <div style={{ flex: 1, overflow: 'hidden' }}>
-                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
+                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</div>
                     </div>
                   </button>
                 ))}
@@ -110,7 +110,7 @@ export default function MoveMilestoneModal({ milestone, currentTimelineId, onPic
         <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '14px 22px 20px' }}>
           <button
             onClick={onClose}
-            style={{ padding: '9px 18px', borderRadius: 10, border: '1.5px solid #e8e4f0', background: '#fff', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#484552' }}>
+            style={{ padding: '9px 18px', borderRadius: 10, border: '1.5px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
             Cancel
           </button>
         </div>

@@ -20,20 +20,20 @@ export function EmojiGrid({ value, onSelect, onRemove }: { value?: string; onSel
       {value && onRemove && (
         <button
           onClick={onRemove}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', marginBottom: 8, padding: '4px 6px', border: 'none', borderRadius: 6, background: '#ffeaea', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#ba1a1a', fontWeight: 500 }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', marginBottom: 8, padding: '4px 6px', border: 'none', borderRadius: 6, background: 'var(--color-red-pale-6)', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-error)', fontWeight: 500 }}
         >
-          <Icon name="close" size={12} color="#ba1a1a" /> Remove emoji
+          <Icon name="close" size={12} color="var(--color-error)" /> Remove emoji
         </button>
       )}
       {EMOJI_GROUPS.map(group => (
         <div key={group.label} style={{ marginBottom: 8 }}>
-          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{group.label}</div>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{group.label}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 24px)', gap: 2, justifyContent: 'space-between' }}>
             {group.emojis.map(em => (
               <button key={em} onClick={() => onSelect(em)}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 4, border: 'none', background: value === em ? '#f0edff' : 'transparent', cursor: 'pointer', fontSize: 15, transition: 'background 100ms, transform 120ms cubic-bezier(0.34,1.56,0.64,1)' }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; e.currentTarget.style.transform = 'scale(1.25)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = value === em ? '#f0edff' : 'transparent'; e.currentTarget.style.transform = 'scale(1)'; }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 4, border: 'none', background: value === em ? 'var(--color-surface-tint-alt)' : 'transparent', cursor: 'pointer', fontSize: 15, transition: 'background 100ms, transform 120ms cubic-bezier(0.34,1.56,0.64,1)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.transform = 'scale(1.25)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = value === em ? 'var(--color-surface-tint-alt)' : 'transparent'; e.currentTarget.style.transform = 'scale(1)'; }}
               >{em}</button>
             ))}
           </div>
@@ -99,9 +99,9 @@ export default function EmojiSelector({ value, onChange, direction = 'down', siz
         type="button"
         onClick={toggle}
         title="Choose emoji"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, borderRadius: 8, border: `1.5px solid ${open ? '#5e4dbb' : '#e2dff0'}`, background: open ? '#f5f3ff' : '#faf9fc', cursor: 'pointer', fontSize: size / 2, transition: 'all 150ms' }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, borderRadius: 8, border: `1.5px solid ${open ? 'var(--color-primary)' : 'var(--color-purple-pale-42)'}`, background: open ? 'var(--color-surface-tint)' : 'var(--color-purple-pale-7)', cursor: 'pointer', fontSize: size / 2, transition: 'all 150ms' }}
       >
-        {value || <Icon name="tag" size={size * 0.45} color="#b0acbe" />}
+        {value || <Icon name="tag" size={size * 0.45} color="var(--color-text-quaternary)" />}
       </button>
       {open && pos && createPortal(
         // Portaled to <body>: ancestors with backdrop-filter (modal overlays)
@@ -109,7 +109,7 @@ export default function EmojiSelector({ value, onChange, direction = 'down', siz
         <div
           ref={popRef}
           onMouseDown={e => e.preventDefault()}
-          style={{ position: 'fixed', left: pos.left, top: pos.top, bottom: pos.bottom, zIndex: 1600, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', padding: '10px', width: POPUP_WIDTH, boxSizing: 'border-box', maxHeight: 'calc(100vh - 24px)', overflowY: 'auto', animation: 'modalIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+          style={{ position: 'fixed', left: pos.left, top: pos.top, bottom: pos.bottom, zIndex: 1600, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 24px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', padding: '10px', width: POPUP_WIDTH, boxSizing: 'border-box', maxHeight: 'calc(100vh - 24px)', overflowY: 'auto', animation: 'modalIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
         >
           <EmojiGrid
             value={value}

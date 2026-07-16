@@ -7,12 +7,12 @@ import { apiLogin, api2FAVerify } from '../api/client';
 import Icon from '../components/Icon';
 
 const s: Record<string, CSSProperties> = {
-  wrap:  { minHeight: '100vh', background: 'linear-gradient(135deg, #fdf8ff 0%, #f5f0ff 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, padding: 24 },
-  card:  { width: '100%', maxWidth: 400, background: '#ffffff', border: '1px solid #E5E7EB', borderRadius: 12, padding: '40px 40px 36px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', gap: 28 },
-  title: { fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 30, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.02em', lineHeight: 1.2 },
-  sub:   { fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#787584', lineHeight: 1.5 },
-  label: { fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#484552' },
-  input: { fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', background: 'transparent', border: 'none', padding: '8px 0', outline: 'none', width: '100%', transition: 'border-color 200ms' },
+  wrap:  { minHeight: '100vh', background: 'linear-gradient(135deg, var(--color-page-bg) 0%, var(--color-purple-pale-12) 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, padding: 24 },
+  card:  { width: '100%', maxWidth: 400, background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 12, padding: '40px 40px 36px', boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.05)', display: 'flex', flexDirection: 'column', gap: 28 },
+  title: { fontFamily: 'var(--font-heading)', fontSize: 30, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 },
+  sub:   { fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)', lineHeight: 1.5 },
+  label: { fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' },
+  input: { fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', padding: '8px 0', outline: 'none', width: '100%', transition: 'border-color 200ms' },
 };
 
 export default function LoginScreen() {
@@ -138,7 +138,7 @@ export default function LoginScreen() {
 
   return (
     <div style={s.wrap}>
-      <img src="/solytiq-cloud.png" alt="Solytiq Cloud" style={{ width: 80, height: 80, borderRadius: 20, objectFit: 'cover', boxShadow: '0 4px 20px rgba(94,77,187,0.18)' }} />
+      <img src="/solytiq-cloud.png" alt="Solytiq Cloud" style={{ width: 80, height: 80, borderRadius: 20, objectFit: 'cover', boxShadow: '0 4px 20px rgba(var(--color-primary-rgb), 0.18)' }} />
 
       <div style={{ ...s.card, animation: shake ? 'shake 400ms ease-in-out' : undefined }}>
 
@@ -154,7 +154,7 @@ export default function LoginScreen() {
                 <label style={s.label}>Username</label>
                 <input type="text" value={username} onChange={e => setUsername(e.target.value)}
                   placeholder="Enter your username…" autoFocus autoComplete="username"
-                  style={{ ...s.input, borderBottom: `${userFocus ? 2 : 1.5}px solid ${userFocus ? '#5e4dbb' : '#E5E7EB'}` }}
+                  style={{ ...s.input, borderBottom: `${userFocus ? 2 : 1.5}px solid ${userFocus ? 'var(--color-primary)' : 'var(--color-border-alt)'}` }}
                   onFocus={() => setUserFocus(true)} onBlur={() => setUserFocus(false)} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -162,23 +162,23 @@ export default function LoginScreen() {
                 <div style={{ position: 'relative' }}>
                   <input type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
                     placeholder="••••••••" autoComplete="current-password"
-                    style={{ ...s.input, borderBottom: `${passFocus ? 2 : 1.5}px solid ${passFocus ? '#5e4dbb' : '#E5E7EB'}`, paddingRight: 32 }}
+                    style={{ ...s.input, borderBottom: `${passFocus ? 2 : 1.5}px solid ${passFocus ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, paddingRight: 32 }}
                     onFocus={() => setPassFocus(true)} onBlur={() => setPassFocus(false)} />
                   <button type="button" onClick={() => setShowPw(v => !v)}
-                    style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#787584', fontFamily: 'Inter, sans-serif', fontSize: 11.5, fontWeight: 600 }}>
+                    style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)', fontSize: 11.5, fontWeight: 600 }}>
                     {showPw ? 'Hide' : 'Show'}
                   </button>
                 </div>
               </div>
-              {error && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a', marginTop: -8 }}>{error}</div>}
+              {error && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: -8 }}>{error}</div>}
               <button type="submit" disabled={loading}
-                style={{ width: '100%', background: loading ? '#9d8dff' : '#5e4dbb', color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 10, border: 'none', cursor: loading ? 'wait' : 'pointer', transition: 'all 180ms', marginTop: 4 }}>
+                style={{ width: '100%', background: loading ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 10, border: 'none', cursor: loading ? 'wait' : 'pointer', transition: 'all 180ms', marginTop: 4 }}>
                 {loading ? 'Signing in…' : 'Sign In'}
               </button>
               <div style={{ textAlign: 'center', marginTop: 4 }}>
-                <Link to="/admin-reset" style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#b0acbe', textDecoration: 'none', transition: 'color 150ms' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = '#5e4dbb'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = '#b0acbe'; }}>
+                <Link to="/admin-reset" style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)', textDecoration: 'none', transition: 'color 150ms' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--color-primary)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--color-text-quaternary)'; }}>
                   Forgot admin password?
                 </Link>
               </div>
@@ -190,8 +190,8 @@ export default function LoginScreen() {
         {step === 'otp' && (
           <>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg, #F5F3FF 0%, #e8e3ff 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                <Icon name="shield_lock" size={26} color="#5e4dbb" />
+              <div style={{ width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg, var(--color-surface-tint) 0%, var(--color-purple-pale-30) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <Icon name="shield_lock" size={26} color="var(--color-primary)" />
               </div>
               <div style={s.title}>Two-Factor Auth</div>
               <div style={{ ...s.sub, marginTop: 6 }}>Enter the 6-digit code from your authenticator app.</div>
@@ -213,9 +213,9 @@ export default function LoginScreen() {
                     onPaste={i === 0 ? handleOtpPaste : undefined}
                     style={{
                       width: 46, height: 56, textAlign: 'center',
-                      fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700,
-                      color: '#1c1b22', background: digit ? '#F5F3FF' : '#F9FAFB',
-                      border: `2px solid ${digit ? '#5e4dbb' : '#E5E7EB'}`,
+                      fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700,
+                      color: 'var(--color-text-primary)', background: digit ? 'var(--color-surface-tint)' : 'var(--color-surface-gray)',
+                      border: `2px solid ${digit ? 'var(--color-primary)' : 'var(--color-border-alt)'}`,
                       borderRadius: 10, outline: 'none', transition: 'border-color 150ms, background 150ms',
                       caretColor: 'transparent',
                     }}
@@ -223,21 +223,21 @@ export default function LoginScreen() {
                 ))}
               </div>
 
-              {error && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a', textAlign: 'center', marginTop: -8 }}>{error}</div>}
+              {error && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', textAlign: 'center', marginTop: -8 }}>{error}</div>}
 
               <button
                 onClick={handleVerify}
                 disabled={loading || !otpComplete}
-                style={{ width: '100%', background: loading || !otpComplete ? '#c9c4d5' : '#5e4dbb', color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 10, border: 'none', cursor: loading || !otpComplete ? 'not-allowed' : 'pointer', transition: 'all 180ms' }}>
+                style={{ width: '100%', background: loading || !otpComplete ? 'var(--color-border-strong)' : 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 10, border: 'none', cursor: loading || !otpComplete ? 'not-allowed' : 'pointer', transition: 'all 180ms' }}>
                 {loading ? 'Verifying…' : 'Verify'}
               </button>
 
               <button
                 type="button"
                 onClick={() => { setStep('creds'); setError(''); setOtp(Array(6).fill('')); }}
-                style={{ background: 'none', border: 'none', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'transparent', transition: 'color 150ms' }}
-                onMouseEnter={e => { e.currentTarget.style.color = '#5e4dbb'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = '#787584'; }}
+                style={{ background: 'none', border: 'none', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'transparent', transition: 'color 150ms' }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-primary)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-tertiary)'; }}
               >
                 ← Back to login
               </button>

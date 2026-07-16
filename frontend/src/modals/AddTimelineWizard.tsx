@@ -10,12 +10,12 @@ import CalendarPicker from '../components/CalendarPicker';
 import TimePicker from '../components/TimePicker';
 
 const COLORS = [
-  { color: '#5e4dbb', bg: '#F5F3FF' },
-  { color: '#1D4ED8', bg: '#eff6ff' },
-  { color: '#10B981', bg: 'rgba(16,185,129,0.10)' },
-  { color: '#ea580c', bg: '#fff7ed' },
-  { color: '#f59e0b', bg: '#fffbeb' },
-  { color: '#ba1a1a', bg: '#ffdad6' },
+  { color: 'var(--color-primary)', bg: 'var(--color-surface-tint)' },
+  { color: 'var(--color-blue-mid-7)', bg: 'var(--color-blue-pale-2)' },
+  { color: 'var(--color-success)', bg: 'rgba(var(--color-success-rgb), 0.10)' },
+  { color: 'var(--color-orange)', bg: 'var(--color-orange-pale-3)' },
+  { color: 'var(--color-warning-alt)', bg: 'var(--color-yellow-pale-1)' },
+  { color: 'var(--color-error)', bg: 'var(--color-error-bg)' },
 ];
 
 const LAYOUTS: Array<{ key: TimelineLayout; label: string; desc: string; icon: string }> = [
@@ -25,9 +25,9 @@ const LAYOUTS: Array<{ key: TimelineLayout; label: string; desc: string; icon: s
 ];
 
 const MILESTONE_STATUSES: Array<{ key: MilestoneStatus; label: string; color: string; icon: string }> = [
-  { key: 'upcoming', label: 'Upcoming', color: '#9d8dff', icon: 'schedule' },
-  { key: 'in-progress', label: 'In progress', color: '#ea580c', icon: 'pending' },
-  { key: 'done', label: 'Done', color: '#10B981', icon: 'check_circle' },
+  { key: 'upcoming', label: 'Upcoming', color: 'var(--color-accent-purple-light)', icon: 'schedule' },
+  { key: 'in-progress', label: 'In progress', color: 'var(--color-orange)', icon: 'pending' },
+  { key: 'done', label: 'Done', color: 'var(--color-success)', icon: 'check_circle' },
 ];
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -171,27 +171,27 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
     }
   };
 
-  const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, border: 'none', borderBottom: '1.5px solid #E5E7EB', padding: '8px 0', outline: 'none', color: '#1c1b22', background: 'transparent' };
+  const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, border: 'none', borderBottom: '1.5px solid var(--color-border-alt)', padding: '8px 0', outline: 'none', color: 'var(--color-text-primary)', background: 'transparent' };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 24px', overflowY: 'auto' }}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 24px', overflowY: 'auto' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ margin: 'auto', background: '#fff', borderRadius: 16, width: '100%', maxWidth: 520, display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <div style={{ margin: 'auto', background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 520, display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
         onClick={e => e.stopPropagation()}>
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid #f1ecf6', flexShrink: 0 }}>
-          <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--color-surface-tint-2)', flexShrink: 0 }}>
+          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>
             {step === 0 ? 'New Timeline' : step === 1 ? 'Add Milestones' : 'Review & Create'}
           </span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}>
-            <Icon name="close" size={18} color="#787584" />
+            <Icon name="close" size={18} color="var(--color-text-tertiary)" />
           </button>
         </div>
 
         {/* Progress */}
         <div style={{ display: 'flex', gap: 4, padding: '12px 24px 0', flexShrink: 0 }}>
-          {[0, 1, 2].map(i => <div key={i} style={{ flex: 1, height: 3, borderRadius: 9999, background: i <= step ? selectedColor.color : '#e8e4f0', transition: 'background 300ms' }} />)}
+          {[0, 1, 2].map(i => <div key={i} style={{ flex: 1, height: 3, borderRadius: 9999, background: i <= step ? selectedColor.color : 'var(--color-border)', transition: 'background 300ms' }} />)}
         </div>
 
         <div style={{ padding: '20px 24px 24px' }}>
@@ -199,41 +199,41 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               {/* Emoji */}
               <div>
-                <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 8 }}>Icon</label>
+                <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 8 }}>Icon</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <EmojiSelector value={emoji} onChange={setEmoji} direction="down" size={40} allowRemove={false} />
-                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>Click to choose an emoji</span>
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>Click to choose an emoji</span>
                 </div>
               </div>
               {/* Name */}
               <div>
-                <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 6 }}>Timeline Name *</label>
+                <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 6 }}>Timeline Name *</label>
                 <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Product Launch"
                   style={inputStyle}
                   onFocus={e => (e.target.style.borderBottomColor = selectedColor.color)}
-                  onBlur={e => (e.target.style.borderBottomColor = '#E5E7EB')} />
+                  onBlur={e => (e.target.style.borderBottomColor = 'var(--color-border-alt)')} />
               </div>
               {/* Subtitle */}
               <div>
-                <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 6 }}>Subtitle</label>
+                <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 6 }}>Subtitle</label>
                 <input value={subtitle} onChange={e => setSubtitle(e.target.value)} placeholder="Optional description"
                   style={inputStyle}
                   onFocus={e => (e.target.style.borderBottomColor = selectedColor.color)}
-                  onBlur={e => (e.target.style.borderBottomColor = '#E5E7EB')} />
+                  onBlur={e => (e.target.style.borderBottomColor = 'var(--color-border-alt)')} />
               </div>
               {/* Layout */}
               <div>
-                <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 8 }}>Layout</label>
+                <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 8 }}>Layout</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {LAYOUTS.map(l => {
                     const sel = layout === l.key;
                     return (
                       <button key={l.key} onClick={() => setLayout(l.key)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${sel ? selectedColor.color : '#E5E7EB'}`, background: sel ? selectedColor.bg : '#fff', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}>
-                        <Icon name={l.icon} size={20} color={sel ? selectedColor.color : '#9d8dff'} />
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${sel ? selectedColor.color : 'var(--color-border-alt)'}`, background: sel ? selectedColor.bg : 'var(--color-white)', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}>
+                        <Icon name={l.icon} size={20} color={sel ? selectedColor.color : 'var(--color-accent-purple-light)'} />
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#1c1b22' }}>{l.label}</div>
-                          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#787584' }}>{l.desc}</div>
+                          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>{l.label}</div>
+                          <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>{l.desc}</div>
                         </div>
                         {sel && <Icon name="check_circle" size={18} color={selectedColor.color} />}
                       </button>
@@ -243,30 +243,30 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
               </div>
               {/* Privacy */}
               <div>
-                <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 8 }}>Privacy</label>
+                <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 8 }}>Privacy</label>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={() => setIsPublic(false)}
-                    style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${!isPublic ? selectedColor.color : '#E5E7EB'}`, background: !isPublic ? selectedColor.bg : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 150ms' }}>
-                    <Icon name="lock" size={16} color={!isPublic ? selectedColor.color : '#787584'} />
-                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: !isPublic ? selectedColor.color : '#787584' }}>Private</span>
+                    style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${!isPublic ? selectedColor.color : 'var(--color-border-alt)'}`, background: !isPublic ? selectedColor.bg : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 150ms' }}>
+                    <Icon name="lock" size={16} color={!isPublic ? selectedColor.color : 'var(--color-text-tertiary)'} />
+                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: !isPublic ? selectedColor.color : 'var(--color-text-tertiary)' }}>Private</span>
                   </button>
                   <button onClick={() => setIsPublic(true)}
-                    style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${isPublic ? selectedColor.color : '#E5E7EB'}`, background: isPublic ? selectedColor.bg : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 150ms' }}>
-                    <Icon name="public" size={16} color={isPublic ? selectedColor.color : '#787584'} />
-                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: isPublic ? selectedColor.color : '#787584' }}>Public</span>
+                    style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${isPublic ? selectedColor.color : 'var(--color-border-alt)'}`, background: isPublic ? selectedColor.bg : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 150ms' }}>
+                    <Icon name="public" size={16} color={isPublic ? selectedColor.color : 'var(--color-text-tertiary)'} />
+                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: isPublic ? selectedColor.color : 'var(--color-text-tertiary)' }}>Public</span>
                   </button>
                 </div>
-                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584', marginTop: 6 }}>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
                   {isPublic ? 'Everyone in this workspace can see this timeline.' : 'Only you can see and edit this timeline.'}
                 </div>
               </div>
               {/* Color */}
               <div>
-                <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 8 }}>Accent Color</label>
+                <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 8 }}>Accent Color</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {COLORS.map((c, i) => (
                     <button key={i} onClick={() => setColorIdx(i)}
-                      style={{ width: 32, height: 32, borderRadius: '50%', background: c.color, border: `3px solid ${colorIdx === i ? '#1c1b22' : 'transparent'}`, cursor: 'pointer', transition: 'all 150ms' }} />
+                      style={{ width: 32, height: 32, borderRadius: '50%', background: c.color, border: `3px solid ${colorIdx === i ? 'var(--color-text-primary)' : 'transparent'}`, cursor: 'pointer', transition: 'all 150ms' }} />
                   ))}
                 </div>
               </div>
@@ -274,8 +274,8 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
               <div style={{ background: selectedColor.bg, border: `1px solid ${selectedColor.color}40`, borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 20 }}>{emoji}</span>
                 <div>
-                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22' }}>{name || 'Timeline Name'}</div>
-                  {subtitle && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>{subtitle}</div>}
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>{name || 'Timeline Name'}</div>
+                  {subtitle && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>{subtitle}</div>}
                 </div>
               </div>
             </div>
@@ -283,48 +283,48 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
 
           {step === 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>Milestones are the dated points on your timeline. Add some now or skip and add them later.</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)' }}>Milestones are the dated points on your timeline. Add some now or skip and add them later.</div>
 
               {/* Existing milestones */}
               {sortedMilestones.map(m => {
                 const st = MILESTONE_STATUSES.find(s => s.key === m.status)!;
                 return (
-                  <div key={m.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: '#f7f4fc', borderRadius: 10, border: '1px solid #e8e4f0' }}>
+                  <div key={m.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: 'var(--color-purple-pale-11)', borderRadius: 10, border: '1px solid var(--color-border)' }}>
                     <span style={{ fontSize: 16, marginTop: 1 }}>{m.emoji}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#1c1b22' }}>{m.title}</div>
+                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>{m.title}</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
-                        {m.date && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#787584' }}>{m.date}{m.time ? ` · ${m.time}` : ''}</span>}
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10.5, fontWeight: 700, color: st.color, background: `${st.color}1a`, padding: '1px 7px', borderRadius: 9999, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        {m.date && <span style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>{m.date}{m.time ? ` · ${m.time}` : ''}</span>}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 700, color: st.color, background: `${st.color}1a`, padding: '1px 7px', borderRadius: 9999, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                           <Icon name={st.icon} size={11} color={st.color} />{st.label}
                         </span>
                       </div>
-                      {m.description && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 3 }}>{m.description}</div>}
+                      {m.description && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 3 }}>{m.description}</div>}
                     </div>
                     <button onClick={() => setMilestones(ms => ms.filter(x => x.id !== m.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 2 }}>
-                      <Icon name="close" size={14} color="#787584" />
+                      <Icon name="close" size={14} color="var(--color-text-tertiary)" />
                     </button>
                   </div>
                 );
               })}
 
               {/* New milestone form */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px', borderRadius: 12, border: '1.5px dashed #d8d2e8', background: '#fcfbff' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px', borderRadius: 12, border: '1.5px dashed var(--color-purple-tint-3)', background: 'var(--color-purple-pale-2)' }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <EmojiSelector value={mEmoji} onChange={setMEmoji} direction="down" size={38} allowRemove={false} />
                   <input value={mTitle} onChange={e => setMTitle(e.target.value)} onKeyDown={e => e.key === 'Enter' && addMilestone()} placeholder="Milestone title…"
-                    style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 14, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 12px', outline: 'none', background: '#fff' }}
-                    onFocus={e => (e.target.style.borderColor = selectedColor.color)} onBlur={e => (e.target.style.borderColor = '#e8e4f0')} />
+                    style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 14, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '8px 12px', outline: 'none', background: 'var(--color-white)' }}
+                    onFocus={e => (e.target.style.borderColor = selectedColor.color)} onBlur={e => (e.target.style.borderColor = 'var(--color-border)')} />
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <div style={{ flex: 1, position: 'relative' }} ref={calRef}>
-                    <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10.5, fontWeight: 600, color: '#787584', display: 'block', marginBottom: 3 }}>Date</label>
+                    <label style={{ fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-tertiary)', display: 'block', marginBottom: 3 }}>Date</label>
                     <button
                       type="button"
                       onClick={() => setShowCal(v => !v)}
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${showCal ? selectedColor.color : '#e8e4f0'}`, background: '#fff', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: mDate ? '#1c1b22' : '#b0acbe', transition: 'border-color 150ms', textAlign: 'left' }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${showCal ? selectedColor.color : 'var(--color-border)'}`, background: 'var(--color-white)', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: mDate ? 'var(--color-text-primary)' : 'var(--color-text-quaternary)', transition: 'border-color 150ms', textAlign: 'left' }}
                     >
-                      <Icon name="calendar_today" size={14} color={mDate ? selectedColor.color : '#c9c4d5'} />
+                      <Icon name="calendar_today" size={14} color={mDate ? selectedColor.color : 'var(--color-border-strong)'} />
                       {mDate ? fmtDate(mDate) : 'dd.mm.yyyy'}
                     </button>
                     {showCal && (
@@ -338,13 +338,13 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
                     )}
                   </div>
                   <div style={{ width: 120, position: 'relative' }} ref={timeRef}>
-                    <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10.5, fontWeight: 600, color: '#787584', display: 'block', marginBottom: 3 }}>Time</label>
+                    <label style={{ fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-tertiary)', display: 'block', marginBottom: 3 }}>Time</label>
                     <button
                       type="button"
                       onClick={() => setShowTime(v => !v)}
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${showTime ? selectedColor.color : '#e8e4f0'}`, background: '#fff', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: mTime ? '#1c1b22' : '#b0acbe', transition: 'border-color 150ms', textAlign: 'left' }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${showTime ? selectedColor.color : 'var(--color-border)'}`, background: 'var(--color-white)', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: mTime ? 'var(--color-text-primary)' : 'var(--color-text-quaternary)', transition: 'border-color 150ms', textAlign: 'left' }}
                     >
-                      <Icon name="schedule" size={14} color={mTime ? selectedColor.color : '#c9c4d5'} />
+                      <Icon name="schedule" size={14} color={mTime ? selectedColor.color : 'var(--color-border-strong)'} />
                       {mTime || '--:--'}
                     </button>
                     {showTime && (
@@ -359,25 +359,25 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
                   </div>
                 </div>
                 <div>
-                  <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10.5, fontWeight: 600, color: '#787584', display: 'block', marginBottom: 4 }}>Status</label>
+                  <label style={{ fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-tertiary)', display: 'block', marginBottom: 4 }}>Status</label>
                   <div style={{ display: 'flex', gap: 6 }}>
                     {MILESTONE_STATUSES.map(s => {
                       const sel = mStatus === s.key;
                       return (
                         <button key={s.key} onClick={() => setMStatus(s.key)}
-                          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', borderRadius: 8, border: `1.5px solid ${sel ? s.color : '#e8e4f0'}`, background: sel ? `${s.color}14` : '#fff', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: sel ? s.color : '#787584', transition: 'all 140ms' }}>
-                          <Icon name={s.icon} size={13} color={sel ? s.color : '#9d8dff'} />{s.label}
+                          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', borderRadius: 8, border: `1.5px solid ${sel ? s.color : 'var(--color-border)'}`, background: sel ? `${s.color}14` : 'var(--color-white)', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: sel ? s.color : 'var(--color-text-tertiary)', transition: 'all 140ms' }}>
+                          <Icon name={s.icon} size={13} color={sel ? s.color : 'var(--color-accent-purple-light)'} />{s.label}
                         </button>
                       );
                     })}
                   </div>
                 </div>
                 <input value={mDesc} onChange={e => setMDesc(e.target.value)} placeholder="Notes (optional)"
-                  style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none', background: '#fff' }}
-                  onFocus={e => (e.target.style.borderColor = selectedColor.color)} onBlur={e => (e.target.style.borderColor = '#e8e4f0')} />
+                  style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '7px 10px', outline: 'none', background: 'var(--color-white)' }}
+                  onFocus={e => (e.target.style.borderColor = selectedColor.color)} onBlur={e => (e.target.style.borderColor = 'var(--color-border)')} />
                 <button onClick={addMilestone} disabled={!mTitle.trim()}
-                  style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: mTitle.trim() ? selectedColor.color : '#c9c4d5', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: mTitle.trim() ? 'pointer' : 'default' }}>
-                  <Icon name="add" size={15} color="#fff" /> Add milestone
+                  style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: mTitle.trim() ? selectedColor.color : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: mTitle.trim() ? 'pointer' : 'default' }}>
+                  <Icon name="add" size={15} color="var(--color-white)" /> Add milestone
                 </button>
               </div>
             </div>
@@ -389,25 +389,25 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                   <span style={{ fontSize: 24 }}>{emoji}</span>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22' }}>{name}</div>
-                    {subtitle && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>{subtitle}</div>}
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)' }}>{name}</div>
+                    {subtitle && <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)' }}>{subtitle}</div>}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.5)', padding: '4px 8px', borderRadius: 8 }}>
-                    <Icon name={isPublic ? 'public' : 'lock'} size={14} color="#787584" />
-                    <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#787584', textTransform: 'uppercase' }}>{isPublic ? 'Public' : 'Private'}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(var(--color-white-rgb), 0.5)', padding: '4px 8px', borderRadius: 8 }}>
+                    <Icon name={isPublic ? 'public' : 'lock'} size={14} color="var(--color-text-tertiary)" />
+                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase' }}>{isPublic ? 'Public' : 'Private'}</span>
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: milestones.length ? 12 : 0 }}>
                   <Icon name={LAYOUTS.find(l => l.key === layout)!.icon} size={14} color={selectedColor.color} />
-                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584' }}>{LAYOUTS.find(l => l.key === layout)!.label} layout · {milestones.length} milestone{milestones.length === 1 ? '' : 's'}</span>
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>{LAYOUTS.find(l => l.key === layout)!.label} layout · {milestones.length} milestone{milestones.length === 1 ? '' : 's'}</span>
                 </div>
                 {sortedMilestones.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 4, borderLeft: `2px solid ${selectedColor.color}40` }}>
                     {sortedMilestones.map(m => (
                       <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 10 }}>
                         <span style={{ fontSize: 13 }}>{m.emoji}</span>
-                        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#1c1b22' }}>{m.title}</span>
-                        {m.date && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584' }}>· {m.date}</span>}
+                        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>{m.title}</span>
+                        {m.date && <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)' }}>· {m.date}</span>}
                       </div>
                     ))}
                   </div>
@@ -419,24 +419,24 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
 
         {/* Footer */}
         {createError && (
-          <div style={{ margin: '0 24px 8px', padding: '8px 12px', background: '#ffdad6', borderRadius: 8, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a' }}>
+          <div style={{ margin: '0 24px 8px', padding: '8px 12px', background: 'var(--color-error-bg)', borderRadius: 8, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>
             {createError}
           </div>
         )}
-        <div style={{ display: 'flex', gap: 10, padding: '12px 24px 24px', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f1ecf6', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 10, padding: '12px 24px 24px', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--color-surface-tint-2)', flexShrink: 0 }}>
           {step > 0 ? (
-            <button onClick={() => setStep(s => s - 1)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 0', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Icon name="chevron_left" size={14} color="#484552" /> Back
+            <button onClick={() => setStep(s => s - 1)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 0', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Icon name="chevron_left" size={14} color="var(--color-text-secondary)" /> Back
             </button>
           ) : <div />}
           {step < 2 ? (
             <button onClick={() => setStep(s => s + 1)} disabled={step === 0 && !name.trim()}
-              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: (step === 0 && !name.trim()) ? '#c9c4d5' : selectedColor.color, border: 'none', borderRadius: 8, padding: '10px 24px', cursor: (step === 0 && !name.trim()) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-              {step === 1 ? 'Review' : 'Next'} <Icon name="arrow_forward" size={14} color="#fff" />
+              style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: (step === 0 && !name.trim()) ? 'var(--color-border-strong)' : selectedColor.color, border: 'none', borderRadius: 8, padding: '10px 24px', cursor: (step === 0 && !name.trim()) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {step === 1 ? 'Review' : 'Next'} <Icon name="arrow_forward" size={14} color="var(--color-white)" />
             </button>
           ) : (
             <button onClick={handleCreate} disabled={loading}
-              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: loading ? '#9d8dff' : selectedColor.color, border: 'none', borderRadius: 8, padding: '10px 24px', cursor: loading ? 'wait' : 'pointer' }}>
+              style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: loading ? 'var(--color-accent-purple-light)' : selectedColor.color, border: 'none', borderRadius: 8, padding: '10px 24px', cursor: loading ? 'wait' : 'pointer' }}>
               {loading ? 'Creating…' : 'Create Timeline'}
             </button>
           )}

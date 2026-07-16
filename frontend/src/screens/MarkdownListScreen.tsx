@@ -95,14 +95,14 @@ function ImageUploadModal({ markdownListId, isMobile, onUploaded, onClose }: Ima
   };
 
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={e => { if (e.target === e.currentTarget && !uploading) onClose(); }}>
-      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: isMobile ? '100%' : 440, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+      <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: isMobile ? '100%' : 440, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
         onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid #f1ecf6' }}>
-          <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>Add image</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
+          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>Add image</span>
           <button onClick={onClose} disabled={uploading} style={{ background: 'none', border: 'none', cursor: uploading ? 'default' : 'pointer', display: 'flex', padding: 2, opacity: uploading ? 0.4 : 1 }}>
-            <Icon name="close" size={18} color="#787584" />
+            <Icon name="close" size={18} color="var(--color-text-tertiary)" />
           </button>
         </div>
         <div style={{ padding: 24 }}>
@@ -117,23 +117,23 @@ function ImageUploadModal({ markdownListId, isMobile, onUploaded, onClose }: Ima
             }}
             onClick={() => !uploading && fileInputRef.current?.click()}
             style={{
-              border: `2px dashed ${dragOver ? '#5e4dbb' : '#e8e4f0'}`, borderRadius: 14, padding: '40px 20px',
+              border: `2px dashed ${dragOver ? 'var(--color-primary)' : 'var(--color-border)'}`, borderRadius: 14, padding: '40px 20px',
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: uploading ? 'default' : 'pointer',
-              background: dragOver ? '#F5F3FF' : '#faf9fc', transition: 'all 150ms',
+              background: dragOver ? 'var(--color-surface-tint)' : 'var(--color-purple-pale-7)', transition: 'all 150ms',
             }}>
-            <Icon name={uploading ? 'progress_activity' : 'add_photo_alternate'} size={32} color="#9d8dff" />
+            <Icon name={uploading ? 'progress_activity' : 'add_photo_alternate'} size={32} color="var(--color-accent-purple-light)" />
             {uploading ? (
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>Uploading… {progress}%</span>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)' }}>Uploading… {progress}%</span>
             ) : (
               <>
-                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Drag & drop an image</span>
-                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>or click to browse — PNG, JPEG, WEBP or GIF, up to 15MB</span>
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Drag & drop an image</span>
+                <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>or click to browse — PNG, JPEG, WEBP or GIF, up to 15MB</span>
               </>
             )}
             <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" style={{ display: 'none' }}
               onChange={e => { const f = e.target.files?.[0]; if (f) void handleFile(f); }} />
           </div>
-          {error && <div style={{ marginTop: 12, padding: '8px 12px', background: '#ffdad6', borderRadius: 8, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a' }}>{error}</div>}
+          {error && <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--color-error-bg)', borderRadius: 8, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>{error}</div>}
         </div>
       </div>
     </div>,
@@ -451,14 +451,14 @@ export default function MarkdownListScreen() {
   };
 
   if (loading) {
-    return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#787584', fontFamily: 'Inter, sans-serif', fontSize: 14 }}>Loading…</div>;
+    return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)', fontSize: 14 }}>Loading…</div>;
   }
   if (notFound || !mdId) {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-        <Icon name="notes" size={40} color="#c9c4d5" />
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>Markdown list not found</div>
-        <button onClick={() => navigate('/dashboard')} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer' }}>Back to Dashboard</button>
+        <Icon name="notes" size={40} color="var(--color-border-strong)" />
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>Markdown list not found</div>
+        <button onClick={() => navigate('/dashboard')} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer' }}>Back to Dashboard</button>
       </div>
     );
   }
@@ -500,7 +500,7 @@ export default function MarkdownListScreen() {
           onDragStart={() => setDragBlockId(block.id)}
           title="Drag to reorder"
           style={{ cursor: 'grab', flexShrink: 0, width: 15, overflow: 'hidden', display: 'flex', alignItems: 'center', paddingTop: 12, opacity: hovered ? 1 : 0, transition: 'opacity 120ms' }}>
-          <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+          <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
         </span>
 
         <div style={{
@@ -513,34 +513,34 @@ export default function MarkdownListScreen() {
           overflow: block.type === 'image' ? 'hidden' : 'visible',
         }}>
           {block.type === 'divider' ? (
-            <hr style={{ border: 'none', borderTop: '1.5px solid #e8e4f0', margin: '10px 0' }} />
+            <hr style={{ border: 'none', borderTop: '1.5px solid var(--color-border)', margin: '10px 0' }} />
           ) : block.type === 'image' ? (
             <div>
               <img src={markdownImageUrl(mdId, block.imageId)} alt={block.caption ?? ''} style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }} />
               <input value={block.caption ?? ''} placeholder="Add a caption…"
                 onChange={e => updateBlocks(prev => prev.map(b => b.id === block.id ? { ...b, caption: e.target.value } as MarkdownBlock : b))}
-                style={{ marginTop: 6, padding: '0 4px 4px', width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontStyle: 'italic', color: '#787584', border: 'none', outline: 'none', background: 'transparent' }} />
+                style={{ marginTop: 6, padding: '0 4px 4px', width: '100%', fontFamily: 'var(--font-body)', fontSize: 12.5, fontStyle: 'italic', color: 'var(--color-text-tertiary)', border: 'none', outline: 'none', background: 'transparent' }} />
             </div>
           ) : block.type === 'link' ? (
             <a href={block.url} target="_blank" rel="noopener noreferrer"
               style={{ display: 'flex', flexDirection: 'column', gap: 3, textDecoration: 'none', padding: '8px 2px' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#5e4dbb' }}>
-                <Icon name="link" size={14} color="#5e4dbb" /> {block.title || block.url}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-primary)' }}>
+                <Icon name="link" size={14} color="var(--color-primary)" /> {block.title || block.url}
               </span>
-              {block.description && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>{block.description}</span>}
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{block.url}</span>
+              {block.description && <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>{block.description}</span>}
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{block.url}</span>
             </a>
           ) : (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-              {block.type === 'bulleted-list-item' && <span style={{ paddingTop: 9, color: '#787584', fontSize: 16, lineHeight: 1, flexShrink: 0 }}>•</span>}
-              {block.type === 'numbered-list-item' && <span style={{ paddingTop: 8, color: '#787584', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, flexShrink: 0, minWidth: 16 }}>{numberByBlockId[block.id]}.</span>}
+              {block.type === 'bulleted-list-item' && <span style={{ paddingTop: 9, color: 'var(--color-text-tertiary)', fontSize: 16, lineHeight: 1, flexShrink: 0 }}>•</span>}
+              {block.type === 'numbered-list-item' && <span style={{ paddingTop: 8, color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, flexShrink: 0, minWidth: 16 }}>{numberByBlockId[block.id]}.</span>}
               {block.type === 'todo' && (
                 <div onClick={() => toggleTodo(block)}
-                  style={{ marginTop: 8, width: 20, height: 20, minWidth: 20, borderRadius: 5, border: '1.5px solid', borderColor: block.checked ? '#5e4dbb' : '#c9c4d5', background: block.checked ? '#5e4dbb' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', flexShrink: 0 }}>
+                  style={{ marginTop: 8, width: 20, height: 20, minWidth: 20, borderRadius: 5, border: '1.5px solid', borderColor: block.checked ? 'var(--color-primary)' : 'var(--color-border-strong)', background: block.checked ? 'var(--color-primary)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', flexShrink: 0 }}>
                   {block.checked && <Checkmark />}
                 </div>
               )}
-              {block.type === 'quote' && <span style={{ width: 3, alignSelf: 'stretch', background: '#c9c4d5', borderRadius: 2, flexShrink: 0, marginTop: 8, marginBottom: 8 }} />}
+              {block.type === 'quote' && <span style={{ width: 3, alignSelf: 'stretch', background: 'var(--color-border-strong)', borderRadius: 2, flexShrink: 0, marginTop: 8, marginBottom: 8 }} />}
               {hasText(block) && (focusedBlockId === block.id ? (
                 <AutoTextarea
                   innerRef={el => { blockRefs.current[block.id] = el; }}
@@ -557,42 +557,42 @@ export default function MarkdownListScreen() {
                   style={{ ...headingStyleFor(block, isMobile), cursor: 'text', whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: '1.6em' }}>
                   {block.text
                     ? renderInline(block.text, block.id)
-                    : <span style={{ color: '#b0acbe' }}>{index === 0 && blocks.length === 1 ? "Type '/' for commands, or just start writing…" : ' '}</span>}
+                    : <span style={{ color: 'var(--color-text-quaternary)' }}>{index === 0 && blocks.length === 1 ? "Type '/' for commands, or just start writing…" : ' '}</span>}
                 </div>
               ))}
             </div>
           )}
 
           {slashMenu?.blockId === block.id && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#fff', borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.16)', border: '1px solid #e8e4f0', minWidth: 220, maxHeight: 260, overflowY: 'auto', zIndex: 210, animation: 'menuIn 140ms ease both' }}>
+            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', border: '1px solid var(--color-border)', minWidth: 220, maxHeight: 260, overflowY: 'auto', zIndex: 210, animation: 'menuIn 140ms ease both' }}>
             {filteredCommands(slashMenu.query).length === 0 && (
-              <div style={{ padding: '10px 14px', fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#b0acbe' }}>No matching command</div>
+              <div style={{ padding: '10px 14px', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)' }}>No matching command</div>
             )}
             {filteredCommands(slashMenu.query).map(cmd => (
               <button key={cmd.cmd} onMouseDown={e => { e.preventDefault(); applyCommand(block.id, cmd); }}
                 style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                <Icon name={cmd.icon} size={16} color="#5e4dbb" />
-                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, color: '#1c1b22' }}>{cmd.label}</span>
-                <span style={{ marginLeft: 'auto', fontFamily: 'monospace', fontSize: 11, color: '#b0acbe' }}>/{cmd.cmd}</span>
+                <Icon name={cmd.icon} size={16} color="var(--color-primary)" />
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-text-primary)' }}>{cmd.label}</span>
+                <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-quaternary)' }}>/{cmd.cmd}</span>
               </button>
             ))}
             </div>
           )}
 
           {linkEditingBlockId === block.id && (
-            <div style={{ marginTop: 6, padding: 14, border: '1.5px solid #e8e4f0', borderRadius: 12, background: '#faf9fc', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ marginTop: 6, padding: 14, border: '1.5px solid var(--color-border)', borderRadius: 12, background: 'var(--color-purple-pale-7)', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <input autoFocus value={linkDraft.url} onChange={e => setLinkDraft(d => ({ ...d, url: e.target.value }))} placeholder="https://…"
-                style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', outline: 'none' }} />
+                style={{ fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '8px 10px', outline: 'none' }} />
               <input value={linkDraft.title} onChange={e => setLinkDraft(d => ({ ...d, title: e.target.value }))} placeholder="Title (optional)"
-                style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', outline: 'none' }} />
+                style={{ fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '8px 10px', outline: 'none' }} />
               <input value={linkDraft.description} onChange={e => setLinkDraft(d => ({ ...d, description: e.target.value }))} placeholder="Description (optional)"
-                style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '8px 10px', outline: 'none' }} />
+                style={{ fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '8px 10px', outline: 'none' }} />
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button onClick={() => setLinkEditingBlockId(null)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 7, padding: '7px 14px', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => setLinkEditingBlockId(null)} style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 7, padding: '7px 14px', cursor: 'pointer' }}>Cancel</button>
                 <button onClick={saveLinkBlock} disabled={!linkDraft.url.trim()}
-                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#fff', background: linkDraft.url.trim() ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 7, padding: '7px 14px', cursor: linkDraft.url.trim() ? 'pointer' : 'not-allowed' }}>Save link</button>
+                  style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', background: linkDraft.url.trim() ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 7, padding: '7px 14px', cursor: linkDraft.url.trim() ? 'pointer' : 'not-allowed' }}>Save link</button>
               </div>
             </div>
           )}
@@ -600,7 +600,7 @@ export default function MarkdownListScreen() {
 
         <button onClick={() => deleteBlock(block.id)} title="Delete block"
           style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, marginTop: 12, borderRadius: 5, border: 'none', background: 'transparent', cursor: 'pointer', opacity: hovered ? 1 : 0, transition: 'opacity 120ms' }}>
-          <Icon name="close" size={13} color="#b0acbe" />
+          <Icon name="close" size={13} color="var(--color-text-quaternary)" />
         </button>
       </div>
     );
@@ -616,50 +616,50 @@ export default function MarkdownListScreen() {
             {nameEditing ? (
               <input autoFocus value={nameDraft} onChange={e => setNameDraft(e.target.value)}
                 onBlur={handleNameSave} onKeyDown={e => { if (e.key === 'Enter') handleNameSave(); if (e.key === 'Escape') setNameEditing(false); }}
-                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 28, fontWeight: 700, color: '#1c1b22', border: 'none', borderBottom: '2px solid #5e4dbb', outline: 'none', width: '100%', background: 'transparent' }} />
+                style={{ fontFamily: 'var(--font-heading)', fontSize: 28, fontWeight: 700, color: 'var(--color-text-primary)', border: 'none', borderBottom: '2px solid var(--color-primary)', outline: 'none', width: '100%', background: 'transparent' }} />
             ) : (
               <h1 onClick={() => { setNameDraft(name); setNameEditing(true); }}
-                style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 28, fontWeight: 700, color: '#1c1b22', margin: 0, cursor: 'text', overflowWrap: 'break-word' }}>
+                style={{ fontFamily: 'var(--font-heading)', fontSize: 28, fontWeight: 700, color: 'var(--color-text-primary)', margin: 0, cursor: 'text', overflowWrap: 'break-word' }}>
                 {name}
               </h1>
             )}
-            {subtitle && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#787584', marginTop: 4 }}>{subtitle}</div>}
+            {subtitle && <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', marginTop: 4 }}>{subtitle}</div>}
           </div>
           <div style={{ position: 'relative', flexShrink: 0 }}>
-            <button onClick={() => setMenuOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: '1px solid #e8e4f0', background: '#fff', cursor: 'pointer' }}>
-              <Icon name="more_vert" size={16} color="#787584" />
+            <button onClick={() => setMenuOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer' }}>
+              <Icon name="more_vert" size={16} color="var(--color-text-tertiary)" />
             </button>
             {menuOpen && (
               <>
                 <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 190 }} />
-                <div style={{ position: 'absolute', top: 38, right: 0, background: '#fff', borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', border: '1px solid #e8e4f0', minWidth: 180, zIndex: 200, overflow: 'hidden', animation: 'menuIn 160ms ease both' }}>
+                <div style={{ position: 'absolute', top: 38, right: 0, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', border: '1px solid var(--color-border)', minWidth: 180, zIndex: 200, overflow: 'hidden', animation: 'menuIn 160ms ease both' }}>
                   {todoListId && (
                     <button onClick={() => { setMenuOpen(false); navigate(`/list/${todoListId}`); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, color: '#1c1b22', textAlign: 'left' }}>
-                      <Icon name="check_circle" size={16} color="#787584" /> View Todo list
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-text-primary)', textAlign: 'left' }}>
+                      <Icon name="check_circle" size={16} color="var(--color-text-tertiary)" /> View Todo list
                     </button>
                   )}
                   <button onClick={() => { setMenuOpen(false); setShowSettings(true); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, color: '#1c1b22', textAlign: 'left' }}>
-                    <Icon name="tune" size={16} color="#787584" /> More settings…
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-text-primary)', textAlign: 'left' }}>
+                    <Icon name="tune" size={16} color="var(--color-text-tertiary)" /> More settings…
                   </button>
                   <button onClick={() => { setMenuOpen(false); setShowDeleteDialog(true); }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, color: '#ba1a1a', textAlign: 'left' }}>
-                    <Icon name="delete" size={16} color="#ba1a1a" /> Delete
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-error)', textAlign: 'left' }}>
+                    <Icon name="delete" size={16} color="var(--color-error)" /> Delete
                   </button>
                 </div>
               </>
             )}
           </div>
         </div>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: saveState === 'error' ? '#ba1a1a' : '#b0acbe', marginBottom: 24, height: 14 }}>{saveLabel}</div>
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: saveState === 'error' ? 'var(--color-error)' : 'var(--color-text-quaternary)', marginBottom: 24, height: 14 }}>{saveLabel}</div>
 
         {/* Blocks */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {sections.map((sectionBlocks, i) => (
             <Fragment key={`section-${i}`}>
               {sectionBlocks.length > 0 && (
-                <div style={{ border: '1px solid #E5E7EB', borderRadius: 12, background: '#F9FAFB', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div style={{ border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {sectionBlocks.map(block => renderBlock(block, blockIndexById[block.id]))}
                 </div>
               )}
@@ -669,10 +669,10 @@ export default function MarkdownListScreen() {
         </div>
 
         <button onClick={() => { const b = makeEmptyBlock('paragraph'); addBlockAfter(blocks[blocks.length - 1]?.id ?? '', b); }}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '9px 12px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#787584' }}
-          onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '9px 12px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-tertiary)' }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-          <Icon name="add" size={16} color="#787584" /> Add block
+          <Icon name="add" size={16} color="var(--color-text-tertiary)" /> Add block
         </button>
       </div>
 
@@ -702,18 +702,18 @@ export default function MarkdownListScreen() {
       )}
 
       {showDeleteDialog && createPortal(
-        <div onClick={() => setShowDeleteDialog(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-            <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-              <Icon name="delete" size={20} color="#ba1a1a" />
+        <div onClick={() => setShowDeleteDialog(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--color-white)', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <Icon name="delete" size={20} color="var(--color-error)" />
             </div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Delete "{name}"?</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.5, marginBottom: 24 }}>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Delete "{name}"?</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.5, marginBottom: 24 }}>
               This markdown list{todoListId ? ' and its Todo list' : ''} will be moved to Trash.
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={handleDelete} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
+              <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleDelete} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
             </div>
           </div>
         </div>,
@@ -725,14 +725,14 @@ export default function MarkdownListScreen() {
 
 function headingStyleFor(block: MarkdownBlock, isMobile: boolean): React.CSSProperties {
   const base: React.CSSProperties = {
-    fontFamily: 'Inter, sans-serif', fontSize: isMobile ? 14.5 : 15, color: '#1c1b22', lineHeight: 1.6,
+    fontFamily: 'var(--font-body)', fontSize: isMobile ? 14.5 : 15, color: 'var(--color-text-primary)', lineHeight: 1.6,
     border: 'none', outline: 'none', background: 'transparent', width: '100%', resize: 'none', padding: '6px 0',
   };
   if (block.type === 'heading') {
     const sizes = { 1: 26, 2: 21, 3: 17 } as const;
-    return { ...base, fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 700, fontSize: sizes[block.level], padding: '10px 0 4px' };
+    return { ...base, fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: sizes[block.level], padding: '10px 0 4px' };
   }
-  if (block.type === 'quote') return { ...base, fontStyle: 'italic', color: '#484552' };
+  if (block.type === 'quote') return { ...base, fontStyle: 'italic', color: 'var(--color-text-secondary)' };
   // Matches TaskItem.tsx's checked-title treatment: opacity + strikethrough together.
   if (block.type === 'todo' && block.checked) return { ...base, opacity: 0.4, textDecoration: 'line-through' };
   return base;

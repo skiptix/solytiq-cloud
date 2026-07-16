@@ -71,32 +71,32 @@ function WorkspaceImagePicker({ onSelect, onClose }: { onSelect: (dataUrl: strin
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 1500, background: 'rgba(0,0,0,0.38)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 1500, background: 'rgba(var(--color-black-rgb), 0.38)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ background: '#fff', borderRadius: 18, width: '100%', maxWidth: 440, maxHeight: '68vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(0,0,0,0.22)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 440, maxHeight: '68vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(var(--color-black-rgb), 0.22)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 18px 14px', borderBottom: '1px solid #F0EEF8', flexShrink: 0 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 8, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Icon name="image" size={16} color="#5e4dbb" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 18px 14px', borderBottom: '1px solid var(--color-purple-pale-23)', flexShrink: 0 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="image" size={16} color="var(--color-primary)" />
           </div>
-          <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22', flex: 1 }}>Pick icon from Files</span>
+          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', flex: 1 }}>Pick icon from Files</span>
           <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#F5F3FF')}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-            <Icon name="close" size={16} color="#787584" />
+            <Icon name="close" size={16} color="var(--color-text-tertiary)" />
           </button>
         </div>
         {/* Search */}
         <div style={{ padding: '10px 18px 0', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 9, padding: '7px 12px' }}>
-            <Icon name="search" size={15} color="#b0acbe" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 9, padding: '7px 12px' }}>
+            <Icon name="search" size={15} color="var(--color-text-quaternary)" />
             <input
               autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search images…"
-              style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none' }}
+              style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', outline: 'none' }}
             />
           </div>
         </div>
@@ -104,14 +104,14 @@ function WorkspaceImagePicker({ onSelect, onClose }: { onSelect: (dataUrl: strin
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px 12px' }}>
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 28 }}>
-              <div style={{ width: 22, height: 22, border: '2.5px solid #e8e4f0', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+              <div style={{ width: 22, height: 22, border: '2.5px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
             </div>
           ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '28px 16px' }}>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>
                 {search ? 'No matching images' : 'No image files found'}
               </div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#c9c4d5', marginTop: 4 }}>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-border-strong)', marginTop: 4 }}>
                 Upload PNG, JPG, SVG, or WEBP to Files first
               </div>
             </div>
@@ -120,20 +120,20 @@ function WorkspaceImagePicker({ onSelect, onClose }: { onSelect: (dataUrl: strin
               <button key={f.id}
                 disabled={!!fetchingId}
                 onClick={() => handleSelect(f)}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 10px', borderRadius: 10, border: 'none', background: fetchingId === f.id ? '#F5F3FF' : 'transparent', cursor: fetchingId ? 'default' : 'pointer', textAlign: 'left', transition: 'background 120ms' }}
-                onMouseEnter={e => { if (!fetchingId) e.currentTarget.style.background = '#faf9ff'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = fetchingId === f.id ? '#F5F3FF' : 'transparent'; }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 10px', borderRadius: 10, border: 'none', background: fetchingId === f.id ? 'var(--color-surface-tint)' : 'transparent', cursor: fetchingId ? 'default' : 'pointer', textAlign: 'left', transition: 'background 120ms' }}
+                onMouseEnter={e => { if (!fetchingId) e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = fetchingId === f.id ? 'var(--color-surface-tint)' : 'transparent'; }}
               >
-                <div style={{ width: 38, height: 38, borderRadius: 10, background: '#F5F3FF', border: '1px solid #ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 9.5, fontWeight: 700, color: '#5e4dbb', letterSpacing: '0.03em' }}>{extBadge(f.mimeType)}</span>
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--color-surface-tint)', border: '1px solid var(--color-purple-pale-21)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: 9.5, fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.03em' }}>{extBadge(f.mimeType)}</span>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.title || f.name}</div>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 1 }}>{(f.size / 1024).toFixed(0)} KB</div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.title || f.name}</div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', marginTop: 1 }}>{(f.size / 1024).toFixed(0)} KB</div>
                 </div>
                 {fetchingId === f.id
-                  ? <div style={{ width: 14, height: 14, border: '2px solid #c4b5fd', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite', flexShrink: 0 }} />
-                  : <Icon name="add_photo_alternate" size={16} color="#c9c4d5" />
+                  ? <div style={{ width: 14, height: 14, border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite', flexShrink: 0 }} />
+                  : <Icon name="add_photo_alternate" size={16} color="var(--color-border-strong)" />
                 }
               </button>
             ))
@@ -347,38 +347,38 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
     <>
     <div
       onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: backdropAnim }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: backdropAnim }}>
       <div
         onClick={e => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 520, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.18)', animation: panelAnim, overflow: 'hidden' }}>
+        style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 520, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', animation: panelAnim, overflow: 'hidden' }}>
 
         {/* Header */}
         <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 12, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
               {workspace.image
                 ? <img src={workspace.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : <span style={{ fontSize: 22 }}>{workspace.emoji ?? '🏠'}</span>
               }
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>{workspace.name}</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584' }}>Workspace settings</div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>{workspace.name}</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)' }}>Workspace settings</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
               <CreatorBubble creatorId={workspace.ownerId} taskHovered />
               <button onClick={handleClose} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name="close" size={18} color="#787584" />
+                <Icon name="close" size={18} color="var(--color-text-tertiary)" />
               </button>
             </div>
           </div>
 
           {/* Tab bar */}
-          <div style={{ display: 'flex', gap: 4, background: '#F5F3FF', borderRadius: 10, padding: 4 }}>
+          <div style={{ display: 'flex', gap: 4, background: 'var(--color-surface-tint)', borderRadius: 10, padding: 4 }}>
             {TABS.map(t => (
               <button key={t.id} onClick={() => setActiveTab(t.id)}
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: activeTab === t.id ? 700 : 500, background: activeTab === t.id ? '#fff' : 'transparent', color: activeTab === t.id ? (t.id === 'danger' ? '#ba1a1a' : '#5e4dbb') : '#787584', boxShadow: activeTab === t.id ? '0 1px 4px rgba(0,0,0,0.08)' : 'none', transition: 'all 150ms' }}>
-                <Icon name={t.icon} size={14} color={activeTab === t.id ? (t.id === 'danger' ? '#ba1a1a' : '#5e4dbb') : '#787584'} />
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: activeTab === t.id ? 700 : 500, background: activeTab === t.id ? 'var(--color-white)' : 'transparent', color: activeTab === t.id ? (t.id === 'danger' ? 'var(--color-error)' : 'var(--color-primary)') : 'var(--color-text-tertiary)', boxShadow: activeTab === t.id ? '0 1px 4px rgba(var(--color-black-rgb), 0.08)' : 'none', transition: 'all 150ms' }}>
+                <Icon name={t.icon} size={14} color={activeTab === t.id ? (t.id === 'danger' ? 'var(--color-error)' : 'var(--color-primary)') : 'var(--color-text-tertiary)'} />
                 {t.label}
               </button>
             ))}
@@ -393,9 +393,9 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18, animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
               {/* Icon */}
               <div>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Icon</div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Icon</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div ref={iconTileRef} style={{ width: 64, height: 64, borderRadius: 16, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', border: '2px solid #e8e4f0', flexShrink: 0 }}
+                  <div ref={iconTileRef} style={{ width: 64, height: 64, borderRadius: 16, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', border: '2px solid var(--color-border)', flexShrink: 0 }}
                     onClick={() => useImage ? fileInputRef.current?.click() : toggleEmojiPicker()}>
                     {useImage && image
                       ? <img src={image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -403,17 +403,17 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                     }
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ display: 'flex', background: '#f1ecf6', borderRadius: 8, padding: 2, gap: 2 }}>
-                      <button onClick={() => setUseImage(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: !useImage ? '#5e4dbb' : 'transparent', color: !useImage ? '#fff' : '#787584', transition: 'all 150ms' }}>Emoji</button>
-                      <button onClick={() => setUseImage(true)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: useImage ? '#5e4dbb' : 'transparent', color: useImage ? '#fff' : '#787584', transition: 'all 150ms' }}>Image</button>
+                    <div style={{ display: 'flex', background: 'var(--color-surface-tint-2)', borderRadius: 8, padding: 2, gap: 2 }}>
+                      <button onClick={() => setUseImage(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: !useImage ? 'var(--color-primary)' : 'transparent', color: !useImage ? 'var(--color-white)' : 'var(--color-text-tertiary)', transition: 'all 150ms' }}>Emoji</button>
+                      <button onClick={() => setUseImage(true)} style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: useImage ? 'var(--color-primary)' : 'transparent', color: useImage ? 'var(--color-white)' : 'var(--color-text-tertiary)', transition: 'all 150ms' }}>Image</button>
                     </div>
                     {useImage && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        <button onClick={() => fileInputRef.current?.click()} style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#5e4dbb', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <Icon name="upload" size={13} color="#5e4dbb" />Upload from device
+                        <button onClick={() => fileInputRef.current?.click()} style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Icon name="upload" size={13} color="var(--color-primary)" />Upload from device
                         </button>
-                        <button onClick={() => setShowImagePicker(true)} style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#5e4dbb', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <Icon name="folder_open" size={13} color="#5e4dbb" />Pick from Files
+                        <button onClick={() => setShowImagePicker(true)} style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Icon name="folder_open" size={13} color="var(--color-primary)" />Pick from Files
                         </button>
                       </div>
                     )}
@@ -425,16 +425,16 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                     onDragLeave={() => setDragOver(false)}
                     onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) processFile(f); }}
                     onClick={() => fileInputRef.current?.click()}
-                    style={{ marginTop: 10, border: `2px dashed ${dragOver ? '#5e4dbb' : '#c4b5fd'}`, borderRadius: 10, padding: '14px', textAlign: 'center', cursor: 'pointer', background: dragOver ? '#f0edff' : '#fafbff', transition: 'all 150ms' }}>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>Drop image or click to upload</div>
-                    {imgError && <div style={{ color: '#ba1a1a', fontSize: 11, marginTop: 4 }}>{imgError}</div>}
+                    style={{ marginTop: 10, border: `2px dashed ${dragOver ? 'var(--color-primary)' : 'var(--color-accent-purple-soft-alt)'}`, borderRadius: 10, padding: '14px', textAlign: 'center', cursor: 'pointer', background: dragOver ? 'var(--color-surface-tint-alt)' : 'var(--color-blue-pale-1)', transition: 'all 150ms' }}>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>Drop image or click to upload</div>
+                    {imgError && <div style={{ color: 'var(--color-error)', fontSize: 11, marginTop: 4 }}>{imgError}</div>}
                   </div>
                 )}
                 {!useImage && showEmojiPicker && emojiPopPos && createPortal(
                   <div
                     ref={emojiPopRef}
                     onMouseDown={e => e.preventDefault()}
-                    style={{ position: 'fixed', left: emojiPopPos.left, top: emojiPopPos.top, bottom: emojiPopPos.bottom, zIndex: 1600, background: '#fff', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', padding: '10px', width: POPUP_WIDTH, boxSizing: 'border-box', maxHeight: 'calc(100vh - 24px)', overflowY: 'auto', animation: 'modalIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+                    style={{ position: 'fixed', left: emojiPopPos.left, top: emojiPopPos.top, bottom: emojiPopPos.bottom, zIndex: 1600, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 24px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', padding: '10px', width: POPUP_WIDTH, boxSizing: 'border-box', maxHeight: 'calc(100vh - 24px)', overflowY: 'auto', animation: 'modalIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
                   >
                     <EmojiGrid value={emoji} onSelect={em => { setEmoji(em); setShowEmojiPicker(false); }} />
                   </div>,
@@ -446,26 +446,26 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
 
               {/* Name */}
               <div>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Name</div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Name</div>
                 <input value={name} onChange={e => setName(e.target.value)} maxLength={60}
-                  style={{ width: '100%', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, padding: '10px 14px', borderRadius: 10, border: '1.5px solid #e8e4f0', outline: 'none', color: '#1c1b22', background: '#fafafa', boxSizing: 'border-box' }} />
+                  style={{ width: '100%', fontFamily: 'var(--font-heading)', fontSize: 14, padding: '10px 14px', borderRadius: 10, border: '1.5px solid var(--color-border)', outline: 'none', color: 'var(--color-text-primary)', background: 'var(--color-surface-neutral)', boxSizing: 'border-box' }} />
               </div>
 
               {/* Description */}
               <div>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Description</div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Description</div>
                 <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} maxLength={300}
-                  style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, padding: '10px 14px', borderRadius: 10, border: '1.5px solid #e8e4f0', outline: 'none', color: '#484552', background: '#fafafa', resize: 'none', boxSizing: 'border-box' }} />
+                  style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 13, padding: '10px 14px', borderRadius: 10, border: '1.5px solid var(--color-border)', outline: 'none', color: 'var(--color-text-secondary)', background: 'var(--color-surface-neutral)', resize: 'none', boxSizing: 'border-box' }} />
               </div>
 
               {/* Visibility */}
               <div>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Visibility</div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Visibility</div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {(['private', 'public'] as const).map(v => (
                     <button key={v} onClick={() => setVisibility(v)}
-                      style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${visibility === v ? '#5e4dbb' : '#e8e4f0'}`, background: visibility === v ? '#F5F3FF' : '#fafafa', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: visibility === v ? 600 : 450, color: visibility === v ? '#5e4dbb' : '#484552', transition: 'all 150ms' }}>
-                      <Icon name={v === 'private' ? 'lock' : 'public'} size={15} color={visibility === v ? '#5e4dbb' : '#787584'} />
+                      style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${visibility === v ? 'var(--color-primary)' : 'var(--color-border)'}`, background: visibility === v ? 'var(--color-surface-tint)' : 'var(--color-surface-neutral)', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: visibility === v ? 600 : 450, color: visibility === v ? 'var(--color-primary)' : 'var(--color-text-secondary)', transition: 'all 150ms' }}>
+                      <Icon name={v === 'private' ? 'lock' : 'public'} size={15} color={visibility === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                       {v === 'private' ? 'Private' : 'Public'}
                     </button>
                   ))}
@@ -473,9 +473,9 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10 }}>
-                {saved && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#15803d', animation: 'savedPop 300ms ease both', display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="check_circle" size={14} color="#15803d" /> Saved</div>}
+                {saved && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-green-deep-3)', animation: 'savedPop 300ms ease both', display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="check_circle" size={14} color="var(--color-green-deep-3)" /> Saved</div>}
                 <button onClick={() => handleSave()} disabled={saving || !isOwner}
-                  style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#5e4dbb', border: 'none', borderRadius: 10, padding: '10px 22px', cursor: (saving || !isOwner) ? 'default' : 'pointer', opacity: !isOwner ? 0.5 : 1 }}>
+                  style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '10px 22px', cursor: (saving || !isOwner) ? 'default' : 'pointer', opacity: !isOwner ? 0.5 : 1 }}>
                   {saving ? 'Saving…' : 'Save changes'}
                 </button>
               </div>
@@ -487,10 +487,10 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
               {isOwner && (
                 <div>
-                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Invite member</div>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Invite member</div>
                   <div style={{ position: 'relative' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#f7f4fc', borderRadius: 10, padding: '8px 14px', border: `1.5px solid ${showSuggestions && suggestions.length > 0 ? '#c4b5fd' : 'transparent'}`, transition: 'border-color 150ms' }}>
-                      <Icon name="person_search" size={16} color="#787584" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--color-purple-pale-11)', borderRadius: 10, padding: '8px 14px', border: `1.5px solid ${showSuggestions && suggestions.length > 0 ? 'var(--color-accent-purple-soft-alt)' : 'transparent'}`, transition: 'border-color 150ms' }}>
+                      <Icon name="person_search" size={16} color="var(--color-text-tertiary)" />
                       <input
                         ref={inviteInputRef}
                         value={inviteUsername}
@@ -507,69 +507,69 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                           else if (e.key === 'Escape') { setShowSuggestions(false); setSuggestionIndex(-1); }
                         }}
                         placeholder="Search by name or username…"
-                        style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#1c1b22' }}
+                        style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-primary)' }}
                       />
-                      {inviteLoading && <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid #c4b5fd', borderTopColor: '#5e4dbb', animation: 'spin 600ms linear infinite', flexShrink: 0 }} />}
+                      {inviteLoading && <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', animation: 'spin 600ms linear infinite', flexShrink: 0 }} />}
                     </div>
 
                     {showSuggestions && suggestions.length > 0 && (
-                      <div ref={suggestionsRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: '#fff', borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.13)', border: '1px solid #e8e4f0', overflow: 'hidden', zIndex: 50, animation: 'menuIn 140ms ease both' }}>
+                      <div ref={suggestionsRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', overflow: 'hidden', zIndex: 50, animation: 'menuIn 140ms ease both' }}>
                         {suggestions.map((u, i) => (
                           <button key={u.id}
                             tabIndex={0}
                             onMouseDown={e => { e.preventDefault(); handleInviteUser(u.username); }}
-                            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', background: i === suggestionIndex ? '#F5F3FF' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 100ms' }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', background: i === suggestionIndex ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 100ms' }}
                             onMouseEnter={() => setSuggestionIndex(i)}
                             onMouseLeave={() => setSuggestionIndex(-1)}
                           >
                             {u.profileImage
                               ? <img src={u.profileImage} style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                              : <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#5e4dbb' }}>{u.username[0].toUpperCase()}</span>
+                              : <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-purple-pale-21)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-primary)' }}>{u.username[0].toUpperCase()}</span>
                                 </div>
                             }
                             <div style={{ flex: 1, overflow: 'hidden' }}>
-                              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.fullName ?? u.username}</div>
-                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584' }}>@{u.username}</div>
+                              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.fullName ?? u.username}</div>
+                              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)' }}>@{u.username}</div>
                             </div>
-                            <Icon name="person_add" size={14} color="#9d8dff" />
+                            <Icon name="person_add" size={14} color="var(--color-accent-purple-light)" />
                           </button>
                         ))}
                       </div>
                     )}
                   </div>
-                  {inviteError && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a', marginTop: 6 }}>{inviteError}</div>}
+                  {inviteError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: 6 }}>{inviteError}</div>}
                 </div>
               )}
 
               <div>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Members</div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Members</div>
                 {!membersLoaded
-                  ? <div style={{ padding: 20, textAlign: 'center', color: '#b0acbe', fontFamily: 'Inter, sans-serif', fontSize: 13 }}>Loading…</div>
+                  ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--color-text-quaternary)', fontFamily: 'var(--font-body)', fontSize: 13 }}>Loading…</div>
                   : members.length === 0
-                    ? <div style={{ padding: 20, textAlign: 'center', color: '#b0acbe', fontFamily: 'Inter, sans-serif', fontSize: 13 }}>No members yet.</div>
+                    ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--color-text-quaternary)', fontFamily: 'var(--font-body)', fontSize: 13 }}>No members yet.</div>
                     : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {members.map(m => (
-                          <div key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#fafafa', borderRadius: 10, border: '1px solid #f1ecf6' }}>
+                          <div key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--color-surface-neutral)', borderRadius: 10, border: '1px solid var(--color-surface-tint-2)' }}>
                             {m.profileImage
                               ? <img src={m.profileImage} style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                              : <div style={{ width: 34, height: 34, borderRadius: '50%', background: m.role === 'owner' ? '#5e4dbb' : '#e8e4f0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: m.role === 'owner' ? '#fff' : '#787584' }}>{m.username[0].toUpperCase()}</span>
+                              : <div style={{ width: 34, height: 34, borderRadius: '50%', background: m.role === 'owner' ? 'var(--color-primary)' : 'var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: m.role === 'owner' ? 'var(--color-white)' : 'var(--color-text-tertiary)' }}>{m.username[0].toUpperCase()}</span>
                                 </div>
                             }
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22' }}>{m.fullName ?? m.username}</div>
-                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584' }}>@{m.username}</div>
+                              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>{m.fullName ?? m.username}</div>
+                              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)' }}>@{m.username}</div>
                             </div>
-                            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: m.role === 'owner' ? '#F5F3FF' : '#f1ecf6', color: m.role === 'owner' ? '#5e4dbb' : '#787584' }}>
+                            <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: m.role === 'owner' ? 'var(--color-surface-tint)' : 'var(--color-surface-tint-2)', color: m.role === 'owner' ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>
                               {m.role}
                             </span>
                             {isOwner && m.role !== 'owner' && (
                               <button onClick={() => handleRemoveMember(m.userId)}
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 4, borderRadius: 6 }}
                                 title="Remove member">
-                                <Icon name="person_remove" size={15} color="#ba1a1a" />
+                                <Icon name="person_remove" size={15} color="var(--color-error)" />
                               </button>
                             )}
                           </div>
@@ -586,17 +586,17 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
           {activeTab === 'admin' && isAdmin && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
               <div>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Workspace ID</div>
-                <div style={{ background: '#F5F3FF', border: '1px solid #e8e4f0', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <code style={{ flex: 1, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#484552', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{workspace.id}</code>
-                  <button onClick={copyWorkspaceId} style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: copiedWorkspaceId ? '#10B981' : '#5e4dbb', background: '#fff', border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', flexShrink: 0 }}>
-                    <Icon name={copiedWorkspaceId ? 'check' : 'content_copy'} size={13} color={copiedWorkspaceId ? '#10B981' : '#5e4dbb'} />
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Workspace ID</div>
+                <div style={{ background: 'var(--color-surface-tint)', border: '1px solid var(--color-border)', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <code style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{workspace.id}</code>
+                  <button onClick={copyWorkspaceId} style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, color: copiedWorkspaceId ? 'var(--color-success)' : 'var(--color-primary)', background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', flexShrink: 0 }}>
+                    <Icon name={copiedWorkspaceId ? 'check' : 'content_copy'} size={13} color={copiedWorkspaceId ? 'var(--color-success)' : 'var(--color-primary)'} />
                     {copiedWorkspaceId ? 'Copied' : 'Copy ID'}
                   </button>
                 </div>
               </div>
               <div>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stats</div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stats</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   {[
                     ['To-Dos', workspaceLists.length, 'format_list_bulleted'],
@@ -604,10 +604,10 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                     ['Timelines', workspaceTimelines.length, 'timeline'],
                     ['Private timelines', workspaceTimelines.filter(t => !t.isPublic).length, 'lock_clock'],
                   ].map(([label, value, icon]) => (
-                    <div key={String(label)} style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 14, padding: 14 }}>
-                      <Icon name={String(icon)} size={16} color="#5e4dbb" />
-                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 800, color: '#1c1b22', marginTop: 8 }}>{value}</div>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{label}</div>
+                    <div key={String(label)} style={{ background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 14, padding: 14 }}>
+                      <Icon name={String(icon)} size={16} color="var(--color-primary)" />
+                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 800, color: 'var(--color-text-primary)', marginTop: 8 }}>{value}</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>{label}</div>
                     </div>
                   ))}
                 </div>
@@ -619,34 +619,34 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
           {activeTab === 'danger' && (
             <div style={{ animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
               {!isOwner
-                ? <div style={{ padding: '24px', textAlign: 'center', color: '#787584', fontFamily: 'Inter, sans-serif', fontSize: 13 }}>Only the workspace owner can perform these actions.</div>
+                ? <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)', fontSize: 13 }}>Only the workspace owner can perform these actions.</div>
                 : confirmDelete
                   ? (
-                    <div style={{ background: '#fff5f5', border: '1.5px solid #ffdad6', borderRadius: 14, padding: '24px', textAlign: 'center' }}>
-                      <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-                        <Icon name="warning" size={24} color="#ba1a1a" />
+                    <div style={{ background: 'var(--color-error-bg-alt)', border: '1.5px solid var(--color-error-bg)', borderRadius: 14, padding: '24px', textAlign: 'center' }}>
+                      <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+                        <Icon name="warning" size={24} color="var(--color-error)" />
                       </div>
-                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Delete workspace?</div>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.6, marginBottom: 20 }}>
+                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Delete workspace?</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.6, marginBottom: 20 }}>
                         This will permanently delete "<strong>{workspace.name}</strong>" and all its lists, folders, and tasks. This cannot be undone.
                       </div>
                       <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-                        <button onClick={() => setConfirmDelete(false)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: 'pointer' }}>Cancel</button>
+                        <button onClick={() => setConfirmDelete(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: 'pointer' }}>Cancel</button>
                         <button onClick={handleDelete} disabled={deleteLoading}
-                          style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: deleteLoading ? 'wait' : 'pointer' }}>
+                          style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: deleteLoading ? 'wait' : 'pointer' }}>
                           {deleteLoading ? 'Deleting…' : 'Delete permanently'}
                         </button>
                       </div>
                     </div>
                   )
                   : (
-                    <div style={{ background: '#fff5f5', border: '1.5px solid #ffdad6', borderRadius: 14, padding: '20px' }}>
-                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#ba1a1a', marginBottom: 6 }}>Delete workspace</div>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.5, marginBottom: 16 }}>
+                    <div style={{ background: 'var(--color-error-bg-alt)', border: '1.5px solid var(--color-error-bg)', borderRadius: 14, padding: '20px' }}>
+                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-error)', marginBottom: 6 }}>Delete workspace</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.5, marginBottom: 16 }}>
                         Permanently deletes this workspace and all of its lists, folders, and tasks.
                       </div>
                       <button onClick={() => setConfirmDelete(true)}
-                        style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#ba1a1a', background: '#ffdad6', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: 'pointer' }}>
+                        style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg)', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: 'pointer' }}>
                         Delete workspace…
                       </button>
                     </div>

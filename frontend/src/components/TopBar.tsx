@@ -227,8 +227,8 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
   };
 
   const renderField = (label: string, field: 'name' | 'email', displayValue: string, inputType = 'text') => (
-    <div style={{ padding: '11px 0', borderBottom: '1px solid #f1ecf6' }}>
-      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 5 }}>{label}</div>
+    <div style={{ padding: '11px 0', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
+      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 5 }}>{label}</div>
       {editingField === field ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <input
@@ -237,36 +237,36 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
             value={editValue}
             onChange={e => setEditValue(e.target.value)}
             onKeyDown={handleFieldKey}
-            style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none', padding: '1px 0', borderBottom: '1.5px solid #5e4dbb' }}
+            style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', outline: 'none', padding: '1px 0', borderBottom: '1.5px solid var(--color-primary)' }}
           />
           <button
             onClick={commitEdit}
             disabled={editSaving || !editValue.trim()}
-            style={{ ...iconBtn, color: '#10B981' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(16,185,129,0.10)'; }}
+            style={{ ...iconBtn, color: 'var(--color-success)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--color-success-rgb), 0.10)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
           >
-            <Icon name="check" size={15} color={editSaving ? '#b0acbe' : '#10B981'} />
+            <Icon name="check" size={15} color={editSaving ? 'var(--color-text-quaternary)' : 'var(--color-success)'} />
           </button>
           <button
             onClick={cancelEdit}
             style={iconBtn}
-            onMouseEnter={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
           >
-            <Icon name="close" size={15} color="#b0acbe" />
+            <Icon name="close" size={15} color="var(--color-text-quaternary)" />
           </button>
         </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayValue}</span>
+          <span style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayValue}</span>
           <button
             onClick={() => startEdit(field)}
             style={iconBtn}
-            onMouseEnter={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
           >
-            <Icon name="edit" size={14} color="#b0acbe" />
+            <Icon name="edit" size={14} color="var(--color-text-quaternary)" />
           </button>
         </div>
       )}
@@ -275,7 +275,7 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
 
   return (
     <>
-      <header style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(253,248,255,0.92)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #e8e4f0', display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16, padding: isMobile ? '10px 16px' : '10px 24px', height: 56 }}>
+      <header style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(var(--color-page-bg-rgb), 0.92)', backdropFilter: 'blur(12px)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16, padding: isMobile ? '10px 16px' : '10px 24px', height: 56 }}>
         {/* Hamburger — mobile only */}
         {isMobile && (
           <button
@@ -283,7 +283,7 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
             onClick={onOpenDrawer}
             style={{ width: 40, height: 40, borderRadius: 10, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
           >
-            <Icon name="menu" size={22} color="#484552" />
+            <Icon name="menu" size={22} color="var(--color-text-secondary)" />
           </button>
         )}
 
@@ -297,18 +297,18 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
             onClick={() => setPaletteOpen(true)}
             style={{ width: 40, height: 40, borderRadius: 10, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
           >
-            <Icon name="search" size={20} color="#787584" />
+            <Icon name="search" size={20} color="var(--color-text-tertiary)" />
           </button>
         ) : (
           <button
             onClick={() => setPaletteOpen(true)}
-            style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', width: 'min(440px, 40vw)', display: 'flex', alignItems: 'center', gap: 10, background: '#f7f4fc', borderRadius: 9999, border: '1.5px solid transparent', padding: '8px 14px', cursor: 'pointer', transition: 'all 200ms', textAlign: 'left' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#e0d9ff'; e.currentTarget.style.background = '#fff'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = '#f7f4fc'; }}
+            style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', width: 'min(440px, 40vw)', display: 'flex', alignItems: 'center', gap: 10, background: 'var(--color-purple-pale-11)', borderRadius: 9999, border: '1.5px solid transparent', padding: '8px 14px', cursor: 'pointer', transition: 'all 200ms', textAlign: 'left' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-purple-pale-38)'; e.currentTarget.style.background = 'var(--color-white)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'var(--color-purple-pale-11)'; }}
           >
-            <Icon name="search" size={16} color="#787584" />
-            <span style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#9d96aa' }}>Search tasks, lists…</span>
-            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', background: '#fff', border: '1px solid #e8e4f0', borderRadius: 6, padding: '2px 6px', flexShrink: 0 }}>{searchShortcutHint}</span>
+            <Icon name="search" size={16} color="var(--color-text-tertiary)" />
+            <span style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-purple-mid-6)' }}>Search tasks, lists…</span>
+            <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 6, padding: '2px 6px', flexShrink: 0 }}>{searchShortcutHint}</span>
           </button>
         )}
 
@@ -319,11 +319,11 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
             <button
               onClick={() => { setProfileOpen(false); onNavigate('/settings'); }}
               title="Admin Settings"
-              style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid #e8e4f0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms' }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.borderColor = '#c4b8f0'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#e8e4f0'; }}
+              style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-soft)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}
             >
-              <Icon name="admin_panel_settings" size={17} color="#787584" />
+              <Icon name="admin_panel_settings" size={17} color="var(--color-text-tertiary)" />
             </button>
           )}
 
@@ -332,11 +332,11 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
             <button
               onClick={() => onNavigate('/gps')}
               title="GPS Routes"
-              style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid #e8e4f0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms' }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.borderColor = '#c4b8f0'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#e8e4f0'; }}
+              style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-soft)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}
             >
-              <Icon name="route" size={17} color="#787584" />
+              <Icon name="route" size={17} color="var(--color-text-tertiary)" />
             </button>
           )}
 
@@ -357,52 +357,52 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
               style={{
                 width: 32, height: 32, borderRadius: '50%', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 200ms',
-                background: fileDropHover ? '#ede9ff' : (fileDragActive ? '#f5f3ff' : 'transparent'),
-                border: fileDropHover ? '1.5px solid #5e4dbb' : (fileDragActive ? '1px solid #c4b8f0' : '1px solid #e8e4f0'),
-                boxShadow: fileDropHover ? '0 0 0 3px rgba(94,77,187,0.18)' : 'none',
+                background: fileDropHover ? 'var(--color-surface-tint-4)' : (fileDragActive ? 'var(--color-surface-tint)' : 'transparent'),
+                border: fileDropHover ? '1.5px solid var(--color-primary)' : (fileDragActive ? '1px solid var(--color-accent-purple-soft)' : '1px solid var(--color-border)'),
+                boxShadow: fileDropHover ? '0 0 0 3px rgba(var(--color-primary-rgb), 0.18)' : 'none',
                 animation: fileDragActive && !fileDropHover ? 'filesBtnPulse 1.4s ease infinite' : undefined,
               }}
-              onMouseEnter={e => { if (!fileDragActive) { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.borderColor = '#c4b8f0'; } }}
-              onMouseLeave={e => { if (!fileDragActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#e8e4f0'; } }}
+              onMouseEnter={e => { if (!fileDragActive) { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-soft)'; } }}
+              onMouseLeave={e => { if (!fileDragActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-border)'; } }}
             >
-              <Icon name="folder_shared" size={17} color={fileDropHover || fileDragActive ? '#5e4dbb' : '#787584'} />
+              <Icon name="folder_shared" size={17} color={fileDropHover || fileDragActive ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
             </button>
 
             {fileDropHover && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: 220, background: '#fff', borderRadius: 14, boxShadow: '0 8px 32px rgba(94,77,187,0.18)', border: '1.5px solid #c4b8f0', zIndex: 400, animation: 'fileDropPanelIn 220ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: 220, background: 'var(--color-white)', borderRadius: 14, boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.18)', border: '1.5px solid var(--color-accent-purple-soft)', zIndex: 400, animation: 'fileDropPanelIn 220ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
                 {fileUploadProgress === null ? (
                   <div style={{ padding: '18px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 46, height: 46, borderRadius: 13, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fileDropIconFloat 1.6s ease infinite' }}>
-                      <Icon name="cloud_upload" size={24} color="#5e4dbb" />
+                    <div style={{ width: 46, height: 46, borderRadius: 13, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fileDropIconFloat 1.6s ease infinite' }}>
+                      <Icon name="cloud_upload" size={24} color="var(--color-primary)" />
                     </div>
                     <div>
-                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 700, color: '#1c1b22', textAlign: 'center' }}>Drop to upload</div>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#9d96aa', textAlign: 'center', marginTop: 3 }}>Adds file to your Files</div>
+                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'center' }}>Drop to upload</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-purple-mid-6)', textAlign: 'center', marginTop: 3 }}>Adds file to your Files</div>
                     </div>
                   </div>
                 ) : fileUploadDone ? (
                   <div style={{ padding: '18px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 46, height: 46, borderRadius: 13, background: '#e8f5e9', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fileUploadDone 380ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-                      <Icon name="check" size={22} color="#2e7d32" />
+                    <div style={{ width: 46, height: 46, borderRadius: 13, background: 'var(--color-green-pale-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fileUploadDone 380ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                      <Icon name="check" size={22} color="var(--color-green-deep-1)" />
                     </div>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22' }}>Uploaded!</div>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>Uploaded!</div>
                   </div>
                 ) : (
                   <div style={{ padding: '16px' }}>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#1c1b22', marginBottom: 8 }}>Uploading…</div>
-                    <div style={{ height: 5, borderRadius: 9999, background: '#f0ecf8', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${fileUploadProgress}%`, background: 'linear-gradient(90deg, #9d8dff, #5e4dbb)', borderRadius: 9999, transition: 'width 150ms ease' }} />
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 8 }}>Uploading…</div>
+                    <div style={{ height: 5, borderRadius: 9999, background: 'var(--color-divider)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${fileUploadProgress}%`, background: 'linear-gradient(90deg, var(--color-accent-purple-light), var(--color-primary))', borderRadius: 9999, transition: 'width 150ms ease' }} />
                     </div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#9d96aa', marginTop: 5, textAlign: 'right' }}>{fileUploadProgress}%</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-purple-mid-6)', marginTop: 5, textAlign: 'right' }}>{fileUploadProgress}%</div>
                   </div>
                 )}
                 {fileUploadProgress === null && (
-                  <div style={{ borderTop: '1px solid #f0ecf8', padding: '8px 12px' }}>
+                  <div style={{ borderTop: '1px solid var(--color-divider)', padding: '8px 12px' }}>
                     <button
                       onClick={() => { setFileDropHover(false); onNavigate('/files'); }}
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: 'transparent', border: 'none', cursor: 'pointer', padding: '3px 0' }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '3px 0' }}
                     >
-                      <Icon name="open_in_new" size={12} color="#5e4dbb" />
+                      <Icon name="open_in_new" size={12} color="var(--color-primary)" />
                       Open Files
                     </button>
                   </div>
@@ -417,25 +417,25 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
               onClick={() => { setProfileOpen(v => !v); setEditingField(null); }}
               onMouseEnter={() => setAvatarHover(true)}
               onMouseLeave={() => setAvatarHover(false)}
-              style={{ width: 34, height: 34, borderRadius: '50%', border: profileOpen ? '2px solid #5e4dbb' : '2px solid transparent', cursor: 'pointer', padding: 0, background: 'none', transition: 'border-color 150ms', flexShrink: 0, position: 'relative', overflow: 'hidden' }}
+              style={{ width: 34, height: 34, borderRadius: '50%', border: profileOpen ? '2px solid var(--color-primary)' : '2px solid transparent', cursor: 'pointer', padding: 0, background: 'none', transition: 'border-color 150ms', flexShrink: 0, position: 'relative', overflow: 'hidden' }}
               title="Profile"
             >
-              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'linear-gradient(135deg, #9d8dff 0%, #5e4dbb 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-accent-purple-light) 0%, var(--color-primary) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                 {profileImage ? (
                   <img src={profileImage} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
-                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1 }}>{initials}</span>
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-white)', lineHeight: 1 }}>{initials}</span>
                 )}
               </div>
-              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.12)', opacity: avatarHover && !profileOpen ? 1 : 0, transition: 'opacity 150ms', pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(var(--color-black-rgb), 0.12)', opacity: avatarHover && !profileOpen ? 1 : 0, transition: 'opacity 150ms', pointerEvents: 'none' }} />
             </button>
 
             {/* Profile dropdown */}
             {profileOpen && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: Math.min(300, window.innerWidth - 24), background: '#fff', border: '1px solid #E5E7EB', borderRadius: 16, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', zIndex: 200, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: Math.min(300, window.innerWidth - 24), background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 16, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', zIndex: 200, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
 
                 {/* Avatar header */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '22px 20px 16px', background: '#faf9ff', borderBottom: '1px solid #f1ecf6', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '22px 20px 16px', background: 'var(--color-surface-tint-3)', borderBottom: '1px solid var(--color-surface-tint-2)', gap: 8 }}>
                   <div
                     style={{ position: 'relative', width: 64, height: 64, cursor: 'pointer', flexShrink: 0 }}
                     onMouseEnter={() => setUploadAvatarHover(true)}
@@ -443,25 +443,25 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
                     onClick={() => { setProfileOpen(false); setUploadOpen(true); }}
                     title="Upload profile photo"
                   >
-                    <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, #9d8dff 0%, #5e4dbb 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                    <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-accent-purple-light) 0%, var(--color-primary) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                       {profileImage ? (
                         <img src={profileImage} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
                       ) : (
-                        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#fff' }}>{initials}</span>
+                        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700, color: 'var(--color-white)' }}>{initials}</span>
                       )}
                     </div>
-                    <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: uploadAvatarHover ? 1 : 0, transition: 'opacity 180ms', pointerEvents: 'none' }}>
-                      <Icon name="add" size={22} color="#fff" />
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(var(--color-black-rgb), 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: uploadAvatarHover ? 1 : 0, transition: 'opacity 180ms', pointerEvents: 'none' }}>
+                      <Icon name="add" size={22} color="var(--color-white)" />
                     </div>
                   </div>
                   <div style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                      <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22' }}>{fullName || username}</span>
+                      <span style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>{fullName || username}</span>
                       {isAdmin && (
-                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 9999, padding: '2px 8px', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>Admin</span>
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', borderRadius: 9999, padding: '2px 8px', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>Admin</span>
                       )}
                     </div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>@{username}</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>@{username}</div>
                   </div>
                 </div>
 
@@ -475,18 +475,18 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
                 <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <button
                     onClick={() => { setProfileOpen(false); setSettingsOpen(true); }}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: '1.5px solid #e0d9ff', borderRadius: 8, padding: '9px 0', cursor: 'pointer', transition: 'all 150ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#ede9ff'; e.currentTarget.style.borderColor = '#c4b8f0'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.borderColor = '#e0d9ff'; }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: '1.5px solid var(--color-purple-pale-38)', borderRadius: 8, padding: '9px 0', cursor: 'pointer', transition: 'all 150ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-4)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-soft)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-purple-pale-38)'; }}
                   >
-                    <Icon name="manage_accounts" size={15} color="#5e4dbb" />
+                    <Icon name="manage_accounts" size={15} color="var(--color-primary)" />
                     Account Settings
                   </button>
                   <button
                     onClick={handleSignOut}
-                    style={{ width: '100%', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#ba1a1a', background: '#fff5f5', border: '1.5px solid #ffdad6', borderRadius: 8, padding: '9px 0', cursor: 'pointer', transition: 'all 150ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#ba1a1a'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#ba1a1a'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#fff5f5'; e.currentTarget.style.color = '#ba1a1a'; e.currentTarget.style.borderColor = '#ffdad6'; }}
+                    style={{ width: '100%', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: '1.5px solid var(--color-error-bg)', borderRadius: 8, padding: '9px 0', cursor: 'pointer', transition: 'all 150ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-error)'; e.currentTarget.style.color = 'var(--color-white)'; e.currentTarget.style.borderColor = 'var(--color-error)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; e.currentTarget.style.color = 'var(--color-error)'; e.currentTarget.style.borderColor = 'var(--color-error-bg)'; }}
                   >
                     Sign Out
                   </button>
@@ -506,24 +506,24 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
       {/* Profile Image Upload Wizard */}
       {uploadOpen && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) closeUploadWizard(); }}
         >
           <div
-            style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 440, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 440, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 0' }}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22' }}>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)' }}>
                 {pendingImage ? 'Preview' : 'Upload Profile Photo'}
               </div>
               <button
                 onClick={closeUploadWizard}
-                style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+                style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
               >
-                <Icon name="close" size={15} color="#484552" />
+                <Icon name="close" size={15} color="var(--color-text-secondary)" />
               </button>
             </div>
 
@@ -536,38 +536,38 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
                     onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={e => { e.preventDefault(); setDragOver(false); }}
                     onClick={() => fileInputRef.current?.click()}
-                    style={{ border: `2px dashed ${dragOver ? '#5e4dbb' : fileError ? '#ba1a1a' : '#e8e4f0'}`, borderRadius: 14, background: dragOver ? '#F5F3FF' : fileError ? '#fff5f5' : '#faf9ff', padding: '36px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'all 200ms', userSelect: 'none' }}
+                    style={{ border: `2px dashed ${dragOver ? 'var(--color-primary)' : fileError ? 'var(--color-error)' : 'var(--color-border)'}`, borderRadius: 14, background: dragOver ? 'var(--color-surface-tint)' : fileError ? 'var(--color-error-bg-alt)' : 'var(--color-surface-tint-3)', padding: '36px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'all 200ms', userSelect: 'none' }}
                   >
-                    <div style={{ width: 48, height: 48, borderRadius: '50%', background: dragOver ? '#ede9ff' : '#f1ecf6', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 200ms' }}>
-                      <Icon name="upload" size={24} color={dragOver ? '#5e4dbb' : '#b0acbe'} />
+                    <div style={{ width: 48, height: 48, borderRadius: '50%', background: dragOver ? 'var(--color-surface-tint-4)' : 'var(--color-surface-tint-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 200ms' }}>
+                      <Icon name="upload" size={24} color={dragOver ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
                     </div>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: dragOver ? '#5e4dbb' : '#484552', textAlign: 'center' }}>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: dragOver ? 'var(--color-primary)' : 'var(--color-text-secondary)', textAlign: 'center' }}>
                       {dragOver ? 'Drop to upload' : 'Drag & drop your photo'}
                     </div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>or</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>or</div>
                     <div
-                      style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 8, padding: '8px 20px' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#ede9ff'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#F5F3FF'; }}
+                      style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', borderRadius: 8, padding: '8px 20px' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-tint-4)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-tint)'; }}
                     >
                       Select file
                     </div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', marginTop: 2 }}>JPG, PNG, GIF or WebP · Max 2 MB</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', marginTop: 2 }}>JPG, PNG, GIF or WebP · Max 2 MB</div>
                   </div>
 
                   {fileError && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '10px 14px', background: '#fff5f5', borderRadius: 8, border: '1px solid #ffdad6' }}>
-                      <Icon name="error" size={15} color="#ba1a1a" />
-                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a' }}>{fileError}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '10px 14px', background: 'var(--color-error-bg-alt)', borderRadius: 8, border: '1px solid var(--color-error-bg)' }}>
+                      <Icon name="error" size={15} color="var(--color-error)" />
+                      <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>{fileError}</span>
                     </div>
                   )}
 
                   <div style={{ marginTop: 20 }}>
                     <button
                       onClick={closeUploadWizard}
-                      style={{ width: '100%', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+                      style={{ width: '100%', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
                     >
                       Cancel
                     </button>
@@ -576,37 +576,37 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
               ) : (
                 <>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-                    <div style={{ width: 96, height: 96, borderRadius: '50%', overflow: 'hidden', boxShadow: '0 4px 16px rgba(94,77,187,0.25)' }}>
+                    <div style={{ width: 96, height: 96, borderRadius: '50%', overflow: 'hidden', boxShadow: '0 4px 16px rgba(var(--color-primary-rgb), 0.25)' }}>
                       <img src={pendingImage} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </div>
                     <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Looks good?</div>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 3 }}>This will be your profile photo.</div>
+                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Looks good?</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 3 }}>This will be your profile photo.</div>
                     </div>
                   </div>
 
                   {fileError && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, padding: '10px 14px', background: '#fff5f5', borderRadius: 8, border: '1px solid #ffdad6' }}>
-                      <Icon name="error" size={15} color="#ba1a1a" />
-                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a' }}>{fileError}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, padding: '10px 14px', background: 'var(--color-error-bg-alt)', borderRadius: 8, border: '1px solid var(--color-error-bg)' }}>
+                      <Icon name="error" size={15} color="var(--color-error)" />
+                      <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>{fileError}</span>
                     </div>
                   )}
 
                   <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
                     <button
                       onClick={() => { setPendingImage(null); setFileError(null); }}
-                      style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+                      style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
                     >
                       Choose different
                     </button>
                     <button
                       onClick={handleSaveImage}
                       disabled={imgSaving}
-                      style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: imgSaving ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '11px 0', cursor: imgSaving ? 'wait' : 'pointer' }}
-                      onMouseEnter={e => { if (!imgSaving) e.currentTarget.style.background = '#4d3da8'; }}
-                      onMouseLeave={e => { if (!imgSaving) e.currentTarget.style.background = '#5e4dbb'; }}
+                      style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: imgSaving ? 'var(--color-border-strong)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: imgSaving ? 'wait' : 'pointer' }}
+                      onMouseEnter={e => { if (!imgSaving) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
+                      onMouseLeave={e => { if (!imgSaving) e.currentTarget.style.background = 'var(--color-primary)'; }}
                     >
                       {imgSaving ? 'Saving…' : 'Save'}
                     </button>

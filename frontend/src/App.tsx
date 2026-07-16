@@ -319,7 +319,7 @@ function AppLayout() {
           onClick={() => setDrawerOpen(false)}
           style={{
             position: 'fixed', inset: 0, zIndex: 39,
-            background: 'rgba(0,0,0,0.32)',
+            background: 'rgba(var(--color-black-rgb), 0.32)',
             backdropFilter: 'blur(2px)',
             animation: 'backdropIn 180ms ease both',
           }}
@@ -370,19 +370,19 @@ function AppLayout() {
           </div>
 
           {currentWorkspaceId && lists.length === 0 && timelines.length === 0 && !listsLoading && getActive() === 'dashboard' && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, zIndex: 10, background: 'rgba(247,242,252,0.90)', backdropFilter: 'blur(10px)', animation: 'backdropIn 220ms ease both' }}>
-              <div style={{ width: 72, height: 72, borderRadius: 20, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, zIndex: 10, background: 'rgba(var(--color-purple-pale-13-rgb), 0.90)', backdropFilter: 'blur(10px)', animation: 'backdropIn 220ms ease both' }}>
+              <div style={{ width: 72, height: 72, borderRadius: 20, background: 'var(--color-purple-pale-21)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
                 <span style={{ fontSize: 36 }}>📋</span>
               </div>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22' }}>No to-dos yet</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#787584', textAlign: 'center', maxWidth: 280, lineHeight: 1.6 }}>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)' }}>No to-dos yet</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)', textAlign: 'center', maxWidth: 280, lineHeight: 1.6 }}>
                 This workspace is empty. Create your first to-do to get started.
               </div>
               <button
                 onClick={() => setModal('add')}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 12, border: 'none', background: '#5e4dbb', color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 16px rgba(94,77,187,0.35)', transition: 'all 150ms' }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#4d3da8')}
-                onMouseLeave={e => (e.currentTarget.style.background = '#5e4dbb')}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 12, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 16px rgba(var(--color-primary-rgb), 0.35)', transition: 'all 150ms' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-mid-11)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-primary)')}
               >
                 <span style={{ fontSize: 18, lineHeight: 1 }}>+</span>
                 Create To-Do
@@ -411,13 +411,13 @@ function AppLayout() {
           failure must be visible — a silently empty sidebar looks like data
           loss. The previous slices stay rendered while this is shown. */}
       {loadError && (
-        <div style={{ position: 'fixed', bottom: 20, left: '50%', marginLeft: -170, width: 340, maxWidth: 'calc(100vw - 32px)', zIndex: 500, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, background: '#fff', border: '1px solid #e8e4f0', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', animation: 'menuIn 200ms ease both' }}>
-          <span style={{ color: '#ba1a1a', fontWeight: 600 }}>Couldn't refresh your data.</span>
+        <div style={{ position: 'fixed', bottom: 20, left: '50%', marginLeft: -170, width: 340, maxWidth: 'calc(100vw - 32px)', zIndex: 500, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, background: 'var(--color-white)', border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', animation: 'menuIn 200ms ease both' }}>
+          <span style={{ color: 'var(--color-error)', fontWeight: 600 }}>Couldn't refresh your data.</span>
           <button
             onClick={() => (SYNC_ENGINE ? useSyncStore.getState().bootstrap(currentWorkspaceId ?? undefined) : loadFromApi(currentWorkspaceId ?? undefined))}
-            style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 8, border: 'none', background: '#5e4dbb', color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#4d3da8')}
-            onMouseLeave={e => (e.currentTarget.style.background = '#5e4dbb')}
+            style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 8, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-mid-11)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-primary)')}
           >
             Retry
           </button>
@@ -426,7 +426,7 @@ function AppLayout() {
 
       {workspacesLoaded && workspaces.length === 0 && !location.pathname.startsWith('/settings') && (
         <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 450, backdropFilter: 'blur(10px)', background: 'rgba(245,243,255,0.65)', pointerEvents: 'all' }} />
+          <div style={{ position: 'fixed', inset: 0, zIndex: 450, backdropFilter: 'blur(10px)', background: 'rgba(var(--color-surface-tint-rgb), 0.65)', pointerEvents: 'all' }} />
           <WorkspaceWizard forced onClose={() => {}} />
         </>
       )}

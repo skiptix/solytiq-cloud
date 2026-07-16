@@ -168,17 +168,17 @@ export default function SlashCommandInput({
     left: dropdownPos.left,
     minWidth: Math.max(dropdownPos.width, 290),
     zIndex: 9000,
-    background: '#fff',
-    border: '1px solid #e8e4f0',
+    background: 'var(--color-white)',
+    border: '1px solid var(--color-border)',
     borderRadius: 12,
-    boxShadow: '0 8px 24px rgba(94,77,187,0.12), 0 2px 8px rgba(0,0,0,0.06)',
+    boxShadow: '0 8px 24px rgba(var(--color-primary-rgb), 0.12), 0 2px 8px rgba(var(--color-black-rgb), 0.06)',
     overflow: 'hidden',
     animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both',
   } : { display: 'none' };
 
   const itemBase: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-    cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22',
+    cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)',
     border: 'none', background: 'transparent', width: '100%', textAlign: 'left',
     transition: 'background 100ms',
   };
@@ -201,41 +201,41 @@ export default function SlashCommandInput({
       {menu.kind === 'slash-menu' && dropdownPos && (
         <div style={dropdownBase}>
           {/* Header */}
-          <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid #F5F3FF', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#5e4dbb' }}>
+          <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--color-surface-tint)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-primary)' }}>
               /{menu.query}
             </span>
             {!menu.query && (
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#c9c4d5' }}>Type to filter…</span>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-border-strong)' }}>Type to filter…</span>
             )}
           </div>
 
           {/* Section label */}
-          <div style={{ padding: '8px 14px 3px', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#c9c4d5', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          <div style={{ padding: '8px 14px 3px', fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 700, color: 'var(--color-border-strong)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
             To-Do commands
           </div>
 
           {/* Commands */}
           {visibleCommands.length === 0 ? (
-            <div style={{ padding: '10px 14px 12px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#c9c4d5' }}>
+            <div style={{ padding: '10px 14px 12px', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-border-strong)' }}>
               No commands match
             </div>
           ) : (
             visibleCommands.map((cmd, idx) => (
               <button
                 key={cmd.id}
-                style={{ ...itemBase, background: highlightIdx === idx ? '#F5F3FF' : 'transparent' }}
+                style={{ ...itemBase, background: highlightIdx === idx ? 'var(--color-surface-tint)' : 'transparent' }}
                 onMouseEnter={() => setHighlightIdx(idx)}
                 onMouseDown={e => { e.preventDefault(); selectSlashOption(cmd.id); }}
               >
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: highlightIdx === idx ? '#ede9fc' : '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 100ms' }}>
-                  <Icon name={cmd.icon} size={16} color="#5e4dbb" />
+                <div style={{ width: 32, height: 32, borderRadius: 8, background: highlightIdx === idx ? 'var(--color-purple-pale-26)' : 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 100ms' }}>
+                  <Icon name={cmd.icon} size={16} color="var(--color-primary)" />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22' }}>{cmd.label}</div>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584', marginTop: 1 }}>{cmd.desc}</div>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>{cmd.label}</div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 1 }}>{cmd.desc}</div>
                 </div>
-                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#c9c4d5', background: '#F5F3FF', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>
+                <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-border-strong)', background: 'var(--color-surface-tint)', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>
                   {cmd.hint}
                 </span>
               </button>
@@ -243,9 +243,9 @@ export default function SlashCommandInput({
           )}
 
           {/* Footer */}
-          <div style={{ padding: '7px 14px', borderTop: '1px solid #F5F3FF', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#c9c4d5' }}>Close menu</span>
-            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#c9c4d5', background: '#F5F3FF', borderRadius: 5, padding: '2px 7px' }}>esc</span>
+          <div style={{ padding: '7px 14px', borderTop: '1px solid var(--color-surface-tint)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-border-strong)' }}>Close menu</span>
+            <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-border-strong)', background: 'var(--color-surface-tint)', borderRadius: 5, padding: '2px 7px' }}>esc</span>
           </div>
         </div>
       )}
@@ -254,20 +254,20 @@ export default function SlashCommandInput({
       {menu.kind === 'link-search' && dropdownPos && (
         <div style={dropdownBase}>
           {searchResults.length === 0 ? (
-            <div style={{ padding: '10px 14px', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#c9c4d5' }}>
+            <div style={{ padding: '10px 14px', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-border-strong)' }}>
               No to-dos found
             </div>
           ) : (
             searchResults.map((list, idx) => (
               <button
                 key={list.id}
-                style={{ ...itemBase, background: highlightIdx === idx ? '#F5F3FF' : 'transparent' }}
+                style={{ ...itemBase, background: highlightIdx === idx ? 'var(--color-surface-tint)' : 'transparent' }}
                 onMouseEnter={() => setHighlightIdx(idx)}
                 onMouseDown={e => { e.preventDefault(); selectLinkedList(list); }}
               >
                 {list.emoji
                   ? <span style={{ fontSize: 15 }}>{list.emoji}</span>
-                  : <Icon name="format_list_bulleted" size={15} color="#787584" />
+                  : <Icon name="format_list_bulleted" size={15} color="var(--color-text-tertiary)" />
                 }
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>
               </button>

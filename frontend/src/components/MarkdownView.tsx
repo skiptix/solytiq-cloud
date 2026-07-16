@@ -24,12 +24,12 @@ export function renderInline(text: string, keyPrefix: string): ReactNode[] {
     const key = `${keyPrefix}-${i++}`;
     if (tok.startsWith('`')) {
       out.push(
-        <code key={key} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '0.9em', background: '#F5F3FF', color: '#5e4dbb', borderRadius: 4, padding: '1px 5px' }}>
+        <code key={key} style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9em', background: 'var(--color-surface-tint)', color: 'var(--color-primary)', borderRadius: 4, padding: '1px 5px' }}>
           {tok.slice(1, -1)}
         </code>
       );
     } else if (tok.startsWith('**')) {
-      out.push(<strong key={key} style={{ fontWeight: 700, color: '#1c1b22' }}>{renderInline(tok.slice(2, -2), key)}</strong>);
+      out.push(<strong key={key} style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>{renderInline(tok.slice(2, -2), key)}</strong>);
     } else if (tok.startsWith('~~')) {
       out.push(<s key={key} style={{ opacity: 0.65 }}>{renderInline(tok.slice(2, -2), key)}</s>);
     } else if (tok.startsWith('*') || tok.startsWith('_')) {
@@ -39,7 +39,7 @@ export function renderInline(text: string, keyPrefix: string): ReactNode[] {
       const label = tok.slice(1, close);
       const url = tok.slice(close + 2, -1);
       out.push(
-        <a key={key} href={url} target="_blank" rel="noopener noreferrer" style={{ color: '#5e4dbb', textDecoration: 'underline', textUnderlineOffset: 2 }}>
+        <a key={key} href={url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'underline', textUnderlineOffset: 2 }}>
           {renderInline(label, key)}
         </a>
       );
@@ -143,7 +143,7 @@ interface MarkdownViewProps {
 
 export default function MarkdownView({ source, fontSize = 14 }: MarkdownViewProps) {
   const blocks = parseBlocks(source);
-  const bodyStyle: CSSProperties = { fontFamily: 'Inter, sans-serif', fontSize, color: '#484552', lineHeight: 1.7, margin: '0 0 8px', overflowWrap: 'anywhere', wordBreak: 'break-word' };
+  const bodyStyle: CSSProperties = { fontFamily: 'var(--font-body)', fontSize, color: 'var(--color-text-secondary)', lineHeight: 1.7, margin: '0 0 8px', overflowWrap: 'anywhere', wordBreak: 'break-word' };
   return (
     <div>
       {blocks.map((b, bi) => {
@@ -151,7 +151,7 @@ export default function MarkdownView({ source, fontSize = 14 }: MarkdownViewProp
         switch (b.kind) {
           case 'heading':
             return (
-              <div key={key} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 700, color: '#1c1b22', lineHeight: 1.35, ...HEADING_STYLE[b.level] }}>
+              <div key={key} style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.35, ...HEADING_STYLE[b.level] }}>
                 {renderInline(b.text, key)}
               </div>
             );
@@ -169,13 +169,13 @@ export default function MarkdownView({ source, fontSize = 14 }: MarkdownViewProp
             );
           case 'quote':
             return (
-              <blockquote key={key} style={{ ...bodyStyle, borderLeft: '3px solid #c4b5fd', background: '#faf9ff', borderRadius: '0 8px 8px 0', padding: '6px 12px', marginLeft: 0, marginRight: 0, color: '#787584' }}>
+              <blockquote key={key} style={{ ...bodyStyle, borderLeft: '3px solid var(--color-accent-purple-soft-alt)', background: 'var(--color-surface-tint-3)', borderRadius: '0 8px 8px 0', padding: '6px 12px', marginLeft: 0, marginRight: 0, color: 'var(--color-text-tertiary)' }}>
                 {b.lines.map((l, li) => <div key={`${key}-${li}`}>{renderInline(l, `${key}-${li}`)}</div>)}
               </blockquote>
             );
           case 'code':
             return (
-              <pre key={key} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: fontSize - 1.5, background: '#F5F3FF', border: '1px solid #e8e4f0', color: '#3b3654', borderRadius: 10, padding: '10px 14px', margin: '0 0 8px', overflowX: 'auto', lineHeight: 1.6 }}>
+              <pre key={key} style={{ fontFamily: 'var(--font-mono)', fontSize: fontSize - 1.5, background: 'var(--color-surface-tint)', border: '1px solid var(--color-border)', color: 'var(--color-purple-deep-3)', borderRadius: 10, padding: '10px 14px', margin: '0 0 8px', overflowX: 'auto', lineHeight: 1.6 }}>
                 {b.lines.join('\n')}
               </pre>
             );

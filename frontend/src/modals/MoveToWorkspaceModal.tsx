@@ -56,24 +56,24 @@ export default function MoveToWorkspaceModal({ kind, itemId, itemName, currentWo
       {createPortal(
         <div
           onClick={onClose}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.24)', backdropFilter: 'blur(5px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 220ms ease both' }}>
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.24)', backdropFilter: 'blur(5px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 220ms ease both' }}>
           <div
             onClick={e => e.stopPropagation()}
-            style={{ background: '#fff', borderRadius: 18, maxWidth: 400, width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(94,77,187,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+            style={{ background: 'var(--color-white)', borderRadius: 18, maxWidth: 400, width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 22px 4px' }}>
-              <div style={{ width: 38, height: 38, borderRadius: 11, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Icon name="drive_file_move" size={19} color="#5e4dbb" />
+              <div style={{ width: 38, height: 38, borderRadius: 11, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon name="drive_file_move" size={19} color="var(--color-primary)" />
               </div>
               <div style={{ flex: 1, overflow: 'hidden' }}>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>Move to workspace</div>
-                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemName}</div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>Move to workspace</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemName}</div>
               </div>
             </div>
 
             <div style={{ padding: '16px 22px 0', overflowY: 'auto', flex: 1 }}>
               {options.length === 0 ? (
-                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', padding: '12px 2px' }}>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '12px 2px' }}>
                   No other workspaces to move this into.
                 </div>
               ) : (
@@ -84,22 +84,22 @@ export default function MoveToWorkspaceModal({ kind, itemId, itemName, currentWo
                       <button
                         key={w.id}
                         onClick={() => setSelected(w.id)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: isSelected ? '1.5px solid #5e4dbb' : '1.5px solid #e8e4f0', background: isSelected ? '#F5F3FF' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
-                        <div style={{ width: 28, height: 28, borderRadius: 8, background: isSelected ? '#fff' : '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>
-                          {w.emoji ?? <Icon name="workspaces" size={15} color="#5e4dbb" />}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: isSelected ? '1.5px solid var(--color-primary)' : '1.5px solid var(--color-border)', background: isSelected ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', textAlign: 'left' }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 8, background: isSelected ? 'var(--color-white)' : 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>
+                          {w.emoji ?? <Icon name="workspaces" size={15} color="var(--color-primary)" />}
                         </div>
                         <div style={{ flex: 1, overflow: 'hidden' }}>
-                          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
-                          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'capitalize' }}>{w.visibility} · {w.role}</div>
+                          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</div>
+                          <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', textTransform: 'capitalize' }}>{w.visibility} · {w.role}</div>
                         </div>
-                        {isSelected && <Icon name="check" size={16} color="#5e4dbb" />}
+                        {isSelected && <Icon name="check" size={16} color="var(--color-primary)" />}
                       </button>
                     );
                   })}
                 </div>
               )}
               {error && (
-                <div style={{ marginTop: 12, fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#ba1a1a' }}>{error}</div>
+                <div style={{ marginTop: 12, fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-error)' }}>{error}</div>
               )}
             </div>
 
@@ -107,14 +107,14 @@ export default function MoveToWorkspaceModal({ kind, itemId, itemName, currentWo
               <button
                 onClick={onClose}
                 disabled={busy}
-                style={{ padding: '9px 18px', borderRadius: 10, border: '1.5px solid #e8e4f0', background: '#fff', cursor: busy ? 'wait' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#484552' }}>
+                style={{ padding: '9px 18px', borderRadius: 10, border: '1.5px solid var(--color-border)', background: 'var(--color-white)', cursor: busy ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
                 Cancel
               </button>
               <button
                 onClick={() => doMove()}
                 disabled={busy || !selected}
-                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, border: 'none', background: selected ? '#5e4dbb' : '#c9c4d5', cursor: busy || !selected ? (busy ? 'wait' : 'not-allowed') : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#fff' }}>
-                {busy && <Icon name="progress_activity" size={15} color="#fff" />}
+                style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'var(--color-border-strong)', cursor: busy || !selected ? (busy ? 'wait' : 'not-allowed') : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-white)' }}>
+                {busy && <Icon name="progress_activity" size={15} color="var(--color-white)" />}
                 Move
               </button>
             </div>

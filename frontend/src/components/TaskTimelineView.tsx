@@ -131,7 +131,7 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
   const [zoom, setZoom] = useState<Zoom>('day');
   const [containerWidth, setContainerWidth] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const barColor = list.color ?? '#5e4dbb';
+  const barColor = list.color ?? 'var(--color-primary)';
 
   // Measure the visible chart width so a short date range can stretch its
   // columns to fill it exactly, rather than leaving dead space on the right.
@@ -214,18 +214,18 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
     <div key="view-timeline" style={{ display: 'flex', flexDirection: 'column', gap: 12, animation: 'viewSwitchIn 220ms cubic-bezier(0.16,1,0.3,1) both' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
         <button onClick={jumpToToday}
-          style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
-          <Icon name="today" size={14} color="#5e4dbb" />
+          style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
+          <Icon name="today" size={14} color="var(--color-primary)" />
           Today
         </button>
-        <div style={{ display: 'inline-flex', background: '#F5F3FF', borderRadius: 10, padding: 3, gap: 2 }}>
+        <div style={{ display: 'inline-flex', background: 'var(--color-surface-tint)', borderRadius: 10, padding: 3, gap: 2 }}>
           {(['day', 'week', 'month'] as const).map(z => (
             <button key={z} onClick={() => setZoom(z)}
               style={{
-                fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, textTransform: 'capitalize',
-                color: zoom === z ? '#5e4dbb' : '#787584',
-                background: zoom === z ? '#fff' : 'transparent',
-                boxShadow: zoom === z ? '0 1px 4px rgba(94,77,187,0.18)' : 'none',
+                fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, textTransform: 'capitalize',
+                color: zoom === z ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                background: zoom === z ? 'var(--color-white)' : 'transparent',
+                boxShadow: zoom === z ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none',
                 border: 'none', borderRadius: 8, padding: '7px 13px', cursor: 'pointer', transition: 'all 150ms',
               }}>
               {z}
@@ -235,40 +235,40 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
       </div>
 
       {!range ? (
-        <div style={{ textAlign: 'center', padding: '48px 16px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 12 }}>
+        <div style={{ textAlign: 'center', padding: '48px 16px', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 12 }}>
           No tasks yet — add some to see them on the timeline.
         </div>
       ) : (
-        <div style={{ display: 'flex', border: '1px solid #E5E7EB', borderRadius: 12, background: '#F9FAFB', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', overflow: 'hidden' }}>
           {/* Left label column — fixed, does not scroll horizontally */}
-          <div style={{ width: LEFT_COL_WIDTH, flexShrink: 0, borderRight: '1px solid #E5E7EB', background: '#fff' }}>
-            <div style={{ height: RULER_H, borderBottom: '1px solid #E5E7EB' }} />
+          <div style={{ width: LEFT_COL_WIDTH, flexShrink: 0, borderRight: '1px solid var(--color-border-alt)', background: 'var(--color-white)' }}>
+            <div style={{ height: RULER_H, borderBottom: '1px solid var(--color-border-alt)' }} />
             {rows.map(row => row.kind === 'section' ? (
               <div key={row.id} style={{
                 height: SECTION_HEADER_HEIGHT, display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px',
-                background: '#fbfaff', borderBottom: '1px solid #f1ecf6',
+                background: 'var(--color-purple-pale-3)', borderBottom: '1px solid var(--color-surface-tint-2)',
               }}>
                 {row.emoji && <span style={{ fontSize: 12 }}>{row.emoji}</span>}
-                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#5e5e5e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-gray-deep-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {row.label}
                 </span>
               </div>
             ) : (
               <div key={row.id} onClick={() => onRowClick(row.task)} style={{
                 height: ROW_HEIGHT, display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', cursor: 'pointer',
-                borderBottom: '1px solid #f1ecf6',
+                borderBottom: '1px solid var(--color-surface-tint-2)',
               }}>
                 <div
                   onClick={e => { e.stopPropagation(); onToggle(row.task.id); }}
                   style={{
                     width: 16, height: 16, minWidth: 16, borderRadius: 4, border: '1.5px solid',
-                    borderColor: row.task.checked ? barColor : '#c9c4d5', background: row.task.checked ? barColor : 'transparent',
+                    borderColor: row.task.checked ? barColor : 'var(--color-border-strong)', background: row.task.checked ? barColor : 'transparent',
                     cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
-                  {row.task.checked && <Icon name="check" size={11} color="#fff" />}
+                  {row.task.checked && <Icon name="check" size={11} color="var(--color-white)" />}
                 </div>
                 <span style={{
-                  fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22',
+                  fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)',
                   opacity: row.task.checked ? 0.45 : 1, textDecoration: row.task.checked ? 'line-through' : 'none',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>
@@ -282,13 +282,13 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
           <div ref={scrollRef} style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden' }}>
             <div style={{ width: totalWidth, minWidth: '100%', position: 'relative' }}>
               {/* Ruler */}
-              <div style={{ borderBottom: '1px solid #E5E7EB', background: '#fff' }}>
-                <div style={{ display: 'flex', height: MAJOR_H, borderBottom: '1px solid #f1ecf6' }}>
+              <div style={{ borderBottom: '1px solid var(--color-border-alt)', background: 'var(--color-white)' }}>
+                <div style={{ display: 'flex', height: MAJOR_H, borderBottom: '1px solid var(--color-surface-tint-2)' }}>
                   {majorTicks.map((t, i) => (
                     <div key={i} style={{
                       width: t.days * pxPerDay, flexShrink: 0, display: 'flex', alignItems: 'center', paddingLeft: 8,
-                      fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#787584',
-                      borderRight: '1px solid #f1ecf6', overflow: 'hidden', whiteSpace: 'nowrap',
+                      fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-text-tertiary)',
+                      borderRight: '1px solid var(--color-surface-tint-2)', overflow: 'hidden', whiteSpace: 'nowrap',
                     }}>
                       {t.label}
                     </div>
@@ -298,10 +298,10 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
                   {minorTicks.map((t, i) => (
                     <div key={i} style={{
                       width: t.days * pxPerDay, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: t.isToday ? 700 : 500,
-                      color: t.isToday ? '#5e4dbb' : (t.isWeekend ? '#b0acbe' : '#787584'),
-                      background: t.isToday ? '#F5F3FF' : (t.isWeekend ? '#f5f4f8' : 'transparent'),
-                      borderRight: '1px solid #f1ecf6',
+                      fontFamily: 'var(--font-body)', fontSize: 11, fontWeight: t.isToday ? 700 : 500,
+                      color: t.isToday ? 'var(--color-primary)' : (t.isWeekend ? 'var(--color-text-quaternary)' : 'var(--color-text-tertiary)'),
+                      background: t.isToday ? 'var(--color-surface-tint)' : (t.isWeekend ? 'var(--color-purple-pale-16)' : 'transparent'),
+                      borderRight: '1px solid var(--color-surface-tint-2)',
                     }}>
                       {t.label}
                     </div>
@@ -310,11 +310,11 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
               </div>
 
               {/* Today marker line */}
-              <div style={{ position: 'absolute', left: todayOffsetPx, top: 0, bottom: 0, borderLeft: '2px dashed #9d8dff', zIndex: 2, pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', left: todayOffsetPx, top: 0, bottom: 0, borderLeft: '2px dashed var(--color-accent-purple-light)', zIndex: 2, pointerEvents: 'none' }} />
 
               {/* Rows */}
               {rows.map(row => row.kind === 'section' ? (
-                <div key={row.id} style={{ height: SECTION_HEADER_HEIGHT, borderBottom: '1px solid #f1ecf6', background: '#fbfaff' }} />
+                <div key={row.id} style={{ height: SECTION_HEADER_HEIGHT, borderBottom: '1px solid var(--color-surface-tint-2)', background: 'var(--color-purple-pale-3)' }} />
               ) : (
                 (() => {
                   const t = row.task;
@@ -340,7 +340,7 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
                   ].filter(Boolean).join('\n');
 
                   return (
-                    <div key={row.id} style={{ height: ROW_HEIGHT, position: 'relative', borderBottom: '1px solid #f1ecf6' }}>
+                    <div key={row.id} style={{ height: ROW_HEIGHT, position: 'relative', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
                       <div
                         onClick={() => onRowClick(t)}
                         title={tooltip}
@@ -349,9 +349,9 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
                           height: BAR_HEIGHT, borderRadius: BAR_HEIGHT / 2, cursor: 'pointer',
                           background: t.checked ? `${barColor}80` : barColor,
                           display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 4,
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                          boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.12)',
                         }}>
-                        {t.checked && <Icon name="check" size={11} color="#fff" />}
+                        {t.checked && <Icon name="check" size={11} color="var(--color-white)" />}
                       </div>
                       {deadlineLeft !== null && (
                         <div
@@ -360,7 +360,7 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
                             position: 'absolute', left: deadlineLeft - 6, top: '50%', transform: 'translateY(-50%)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', width: 12, height: 12, zIndex: 1,
                           }}>
-                          <Icon name="flag" size={13} color={deadlineOverdue ? '#ba1a1a' : '#484552'} />
+                          <Icon name="flag" size={13} color={deadlineOverdue ? 'var(--color-error)' : 'var(--color-text-secondary)'} />
                         </div>
                       )}
                     </div>

@@ -40,25 +40,25 @@ function relativeTime(iso: string | null): string {
 function UserAvatar({ name, username, profileImage, size = 36 }: { name: string | null; username: string; profileImage?: string | null; size?: number }) {
   const initials = (name || username || 'U').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
   return (
-    <div style={{ width: size, height: size, borderRadius: '50%', background: 'linear-gradient(135deg, #9d8dff 0%, #5e4dbb 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+    <div style={{ width: size, height: size, borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-accent-purple-light) 0%, var(--color-primary) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
       {profileImage
         ? <img src={profileImage} alt={username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        : <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: size * 0.36, fontWeight: 700, color: '#fff' }}>{initials}</span>
+        : <span style={{ fontFamily: 'var(--font-heading)', fontSize: size * 0.36, fontWeight: 700, color: 'var(--color-white)' }}>{initials}</span>
       }
     </div>
   );
 }
 
 const MODEL_PRICING: Record<string, { input: number; output: number; label: string; color: string }> = {
-  'openai/gpt-4o-mini':                 { input: 0.15,  output: 0.60,  label: 'GPT-4o Mini',           color: '#10a37f' },
-  'openai/gpt-4o':                      { input: 2.50,  output: 10.00, label: 'GPT-4o',                color: '#4d9e80' },
-  'anthropic/claude-3-5-haiku':         { input: 0.80,  output: 4.00,  label: 'Claude 3.5 Haiku',      color: '#d4691e' },
-  'anthropic/claude-3-5-sonnet':        { input: 3.00,  output: 15.00, label: 'Claude 3.5 Sonnet',     color: '#cc785c' },
-  'anthropic/claude-3.7-sonnet':        { input: 3.00,  output: 15.00, label: 'Claude 3.7 Sonnet',     color: '#cc785c' },
-  'google/gemini-flash-1.5':            { input: 0.075, output: 0.30,  label: 'Gemini Flash 1.5',      color: '#4285f4' },
-  'google/gemini-2.5-flash':            { input: 0.15,  output: 0.60,  label: 'Gemini 2.5 Flash',      color: '#4285f4' },
-  'google/gemini-2.5-pro':              { input: 1.25,  output: 10.00, label: 'Gemini 2.5 Pro',        color: '#4285f4' },
-  'meta-llama/llama-3.3-70b-instruct':  { input: 0.12,  output: 0.30,  label: 'Llama 3.3 70B',        color: '#0064e0' },
+  'openai/gpt-4o-mini':                 { input: 0.15,  output: 0.60,  label: 'GPT-4o Mini',           color: 'var(--color-teal-deep-1)' },
+  'openai/gpt-4o':                      { input: 2.50,  output: 10.00, label: 'GPT-4o',                color: 'var(--color-green-mid-1)' },
+  'anthropic/claude-3-5-haiku':         { input: 0.80,  output: 4.00,  label: 'Claude 3.5 Haiku',      color: 'var(--color-orange-mid-2)' },
+  'anthropic/claude-3-5-sonnet':        { input: 3.00,  output: 15.00, label: 'Claude 3.5 Sonnet',     color: 'var(--color-orange-mid-1)' },
+  'anthropic/claude-3.7-sonnet':        { input: 3.00,  output: 15.00, label: 'Claude 3.7 Sonnet',     color: 'var(--color-orange-mid-1)' },
+  'google/gemini-flash-1.5':            { input: 0.075, output: 0.30,  label: 'Gemini Flash 1.5',      color: 'var(--color-blue-mid-3)' },
+  'google/gemini-2.5-flash':            { input: 0.15,  output: 0.60,  label: 'Gemini 2.5 Flash',      color: 'var(--color-blue-mid-3)' },
+  'google/gemini-2.5-pro':              { input: 1.25,  output: 10.00, label: 'Gemini 2.5 Pro',        color: 'var(--color-blue-mid-3)' },
+  'meta-llama/llama-3.3-70b-instruct':  { input: 0.12,  output: 0.30,  label: 'Llama 3.3 70B',        color: 'var(--color-blue-mid-9)' },
 };
 
 function calcCost(model: string, promptTokens: number, completionTokens: number): number {
@@ -356,8 +356,8 @@ export default function SettingsScreen() {
   };
 
   const AI_MODELS: { value: string; label: string; sub: string; badge?: string; badgeColor?: string }[] = [
-    { value: 'google/gemini-2.5-flash',            label: 'Gemini 2.5 Flash',    sub: 'Fast · Excellent tool use',         badge: 'Best Value',   badgeColor: '#1a8a4a' },
-    { value: 'anthropic/claude-3.7-sonnet',        label: 'Claude 3.7 Sonnet',   sub: 'Best for AI tasks · Expensive',     badge: 'Recommended',  badgeColor: '#5e4dbb' },
+    { value: 'google/gemini-2.5-flash',            label: 'Gemini 2.5 Flash',    sub: 'Fast · Excellent tool use',         badge: 'Best Value',   badgeColor: 'var(--color-green-deep-2)' },
+    { value: 'anthropic/claude-3.7-sonnet',        label: 'Claude 3.7 Sonnet',   sub: 'Best for AI tasks · Expensive',     badge: 'Recommended',  badgeColor: 'var(--color-primary)' },
     { value: 'openai/gpt-4o-mini',                 label: 'GPT-4o Mini',         sub: 'Fast · Affordable' },
     { value: 'anthropic/claude-3-5-haiku',         label: 'Claude 3.5 Haiku',    sub: 'Smart · Good value' },
     { value: 'google/gemini-2.5-pro',              label: 'Gemini 2.5 Pro',      sub: 'Most capable Gemini · Slower' },
@@ -396,13 +396,13 @@ export default function SettingsScreen() {
 
   const renderUserIdCopy = (id: string) => !isAdmin ? null : (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, minWidth: 0 }}>
-      <code style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11, color: '#787584', background: '#F5F3FF', borderRadius: 6, padding: '2px 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>ID: {id}</code>
+      <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-tertiary)', background: 'var(--color-surface-tint)', borderRadius: 6, padding: '2px 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>ID: {id}</code>
       <button
         onClick={() => copyUserId(id)}
         title="Copy user ID"
-        style={{ display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: copiedUserId === id ? '#10B981' : '#5e4dbb', background: copiedUserId === id ? 'rgba(16,185,129,0.10)' : '#F5F3FF', border: 'none', borderRadius: 6, padding: '3px 7px', cursor: 'pointer', flexShrink: 0 }}
+        style={{ display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: copiedUserId === id ? 'var(--color-success)' : 'var(--color-primary)', background: copiedUserId === id ? 'rgba(var(--color-success-rgb), 0.10)' : 'var(--color-surface-tint)', border: 'none', borderRadius: 6, padding: '3px 7px', cursor: 'pointer', flexShrink: 0 }}
       >
-        <Icon name={copiedUserId === id ? 'check' : 'content_copy'} size={12} color={copiedUserId === id ? '#10B981' : '#5e4dbb'} />
+        <Icon name={copiedUserId === id ? 'check' : 'content_copy'} size={12} color={copiedUserId === id ? 'var(--color-success)' : 'var(--color-primary)'} />
         {copiedUserId === id ? 'Copied' : 'Copy ID'}
       </button>
     </div>
@@ -533,13 +533,13 @@ export default function SettingsScreen() {
     return matchesSearch && matchesRole;
   });
 
-  const card = { background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 14, overflow: 'hidden' as const };
+  const card = { background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 14, overflow: 'hidden' as const };
   const row = { display: 'flex', alignItems: 'center', justifyContent: 'space-between' as const, gap: 12, padding: '14px 18px' };
-  const fi = { width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none', padding: '6px 0' };
+  const fi = { width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', outline: 'none', padding: '6px 0' };
 
   const sectionLabel = (text: string, action?: React.ReactNode) => (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingLeft: 4 }}>
-      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: '#b0acbe' }}>{text}</div>
+      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: 'var(--color-text-quaternary)' }}>{text}</div>
       {action}
     </div>
   );
@@ -550,18 +550,18 @@ export default function SettingsScreen() {
       disabled={saving || disabled}
       style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600,
-        color: saved ? '#10B981' : '#fff',
-        background: saved ? 'rgba(16,185,129,0.12)' : (saving || disabled) ? '#c9c4d5' : '#5e4dbb',
-        border: saved ? '1.5px solid rgba(16,185,129,0.3)' : 'none',
+        fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600,
+        color: saved ? 'var(--color-success)' : 'var(--color-white)',
+        background: saved ? 'rgba(var(--color-success-rgb), 0.12)' : (saving || disabled) ? 'var(--color-border-strong)' : 'var(--color-primary)',
+        border: saved ? '1.5px solid rgba(var(--color-success-rgb), 0.3)' : 'none',
         borderRadius: 10, padding: '9px 20px',
         cursor: (saving || disabled) ? 'not-allowed' : 'pointer',
         transition: 'all 150ms',
       }}
-      onMouseEnter={e => { if (!saving && !saved && !disabled) e.currentTarget.style.background = '#4f3fa8'; }}
-      onMouseLeave={e => { if (!saving && !saved && !disabled) e.currentTarget.style.background = '#5e4dbb'; }}
+      onMouseEnter={e => { if (!saving && !saved && !disabled) e.currentTarget.style.background = 'var(--color-purple-mid-10)'; }}
+      onMouseLeave={e => { if (!saving && !saved && !disabled) e.currentTarget.style.background = 'var(--color-primary)'; }}
     >
-      <Icon name={saved ? 'check' : 'save'} size={14} color={saved ? '#10B981' : '#fff'} />
+      <Icon name={saved ? 'check' : 'save'} size={14} color={saved ? 'var(--color-success)' : 'var(--color-white)'} />
       {saved ? 'Saved' : saving ? 'Saving…' : 'Save'}
     </button>
   );
@@ -579,12 +579,12 @@ export default function SettingsScreen() {
   return (
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
       <div style={{ maxWidth: 720, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
-        <h1 style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 28, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.02em' }}>Settings</h1>
+        <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 28, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.02em' }}>Settings</h1>
 
         {isAdmin ? (
           <>
             {/* Tab bar */}
-            <div style={{ display: 'flex', gap: 4, background: '#F5F3FF', borderRadius: 14, padding: 4, overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch', flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: 4, background: 'var(--color-surface-tint)', borderRadius: 14, padding: 4, overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch', flexShrink: 0 }}>
               {TABS.map(tab => {
                 const active = activeTab === tab.id;
                 const isDanger = tab.id === 'danger';
@@ -594,9 +594,9 @@ export default function SettingsScreen() {
                     onClick={() => setActiveTab(tab.id)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6,
-                      fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600,
-                      color: active ? (isDanger ? '#fff' : '#fff') : (isDanger ? '#ba1a1a' : '#5e4dbb'),
-                      background: active ? (isDanger ? '#ba1a1a' : '#5e4dbb') : 'transparent',
+                      fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600,
+                      color: active ? (isDanger ? 'var(--color-white)' : 'var(--color-white)') : (isDanger ? 'var(--color-error)' : 'var(--color-primary)'),
+                      background: active ? (isDanger ? 'var(--color-error)' : 'var(--color-primary)') : 'transparent',
                       border: 'none', borderRadius: 10,
                       padding: '7px 14px',
                       cursor: 'pointer',
@@ -605,10 +605,10 @@ export default function SettingsScreen() {
                       justifyContent: 'center',
                       minWidth: 0,
                     }}
-                    onMouseEnter={e => { if (!active) e.currentTarget.style.background = isDanger ? 'rgba(186,26,26,0.08)' : '#ede9ff'; }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.background = isDanger ? 'rgba(var(--color-error-rgb), 0.08)' : 'var(--color-surface-tint-4)'; }}
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <Icon name={tab.icon} size={15} color={active ? '#fff' : (isDanger ? '#ba1a1a' : '#5e4dbb')} />
+                    <Icon name={tab.icon} size={15} color={active ? 'var(--color-white)' : (isDanger ? 'var(--color-error)' : 'var(--color-primary)')} />
                     <span style={{ whiteSpace: 'nowrap' }}>{tab.label}</span>
                   </button>
                 );
@@ -623,19 +623,19 @@ export default function SettingsScreen() {
                 <div style={card}>
                   <div style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                     <div>
-                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Installed apps</div>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>
+                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Installed apps</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                         {installedApps.length === 0 ? 'No optional apps installed yet.' : `${installedApps.length} app${installedApps.length === 1 ? '' : 's'} installed.`}
                         {' '}Optional features stay hidden from every user until you install them here.
                       </div>
                     </div>
                     <button
                       onClick={() => setShowAppsStore(true)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, border: 'none', background: '#5e4dbb', color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0, boxShadow: '0 4px 14px rgba(94,77,187,0.28)' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0, boxShadow: '0 4px 14px rgba(var(--color-primary-rgb), 0.28)' }}
                       onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(0.92)'; }}
                       onMouseLeave={e => { e.currentTarget.style.filter = 'none'; }}
                     >
-                      <Icon name="apps" size={16} color="#fff" />
+                      <Icon name="apps" size={16} color="var(--color-white)" />
                       Discover Apps
                     </button>
                   </div>
@@ -646,11 +646,11 @@ export default function SettingsScreen() {
                 <div style={card}>
                   {storageLoading ? (
                     <div style={{ ...row, justifyContent: 'center' }}>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading…</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Loading…</div>
                     </div>
                   ) : storage === null ? (
                     <div style={{ ...row, justifyContent: 'center' }}>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Unable to read disk usage.</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Unable to read disk usage.</div>
                     </div>
                   ) : (() => {
                     const fmt = (b: number) => {
@@ -659,30 +659,30 @@ export default function SettingsScreen() {
                       return `${(b / 1e6).toFixed(1)} MB`;
                     };
                     const pct = Math.round((storage.used / storage.total) * 100);
-                    const barColor = pct >= 90 ? '#ba1a1a' : pct >= 70 ? '#d97706' : '#5e4dbb';
+                    const barColor = pct >= 90 ? 'var(--color-error)' : pct >= 70 ? 'var(--color-warning)' : 'var(--color-primary)';
                     return (
                       <div style={{ padding: '18px 18px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Used Space</div>
-                          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: barColor, background: pct >= 90 ? '#ffdad6' : pct >= 70 ? '#fef3c7' : '#F5F3FF', borderRadius: 9999, padding: '2px 9px' }}>{pct}% used</span>
+                          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Used Space</div>
+                          <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: barColor, background: pct >= 90 ? 'var(--color-error-bg)' : pct >= 70 ? 'var(--color-yellow-tint-1)' : 'var(--color-surface-tint)', borderRadius: 9999, padding: '2px 9px' }}>{pct}% used</span>
                         </div>
-                        <div style={{ background: '#E5E7EB', borderRadius: 99, height: 8, overflow: 'hidden', marginBottom: 12 }}>
+                        <div style={{ background: 'var(--color-border-alt)', borderRadius: 99, height: 8, overflow: 'hidden', marginBottom: 12 }}>
                           <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 99, transition: 'width 600ms ease' }} />
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <div style={{ display: 'flex', gap: 20 }}>
                             <div>
-                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Used</div>
-                              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>{fmt(storage.used)}</div>
+                              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Used</div>
+                              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>{fmt(storage.used)}</div>
                             </div>
                             <div>
-                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Available</div>
-                              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>{fmt(storage.available)}</div>
+                              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Available</div>
+                              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>{fmt(storage.available)}</div>
                             </div>
                           </div>
                           <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Total</div>
-                            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>{fmt(storage.total)}</div>
+                            <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 2 }}>Total</div>
+                            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>{fmt(storage.total)}</div>
                           </div>
                         </div>
                       </div>
@@ -696,10 +696,10 @@ export default function SettingsScreen() {
                   <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
                       <div>
-                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Storage limit per user</div>
-                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Admins are exempt and always have unlimited storage.</div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Storage limit per user</div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>Admins are exempt and always have unlimited storage.</div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', background: '#fff', border: `1.5px solid ${quotaInputFocus ? '#5e4dbb' : '#E5E7EB'}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color 200ms' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', background: 'var(--color-white)', border: `1.5px solid ${quotaInputFocus ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color 200ms' }}>
                         <input
                           type="number"
                           min="1"
@@ -709,9 +709,9 @@ export default function SettingsScreen() {
                           onFocus={() => setQuotaInputFocus(true)}
                           onBlur={() => setQuotaInputFocus(false)}
                           onKeyDown={e => { if (e.key === 'Enter') handleSaveSystem(); }}
-                          style={{ width: 64, fontFamily: 'Inter, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none', padding: '8px 10px', textAlign: 'right' }}
+                          style={{ width: 64, fontFamily: 'var(--font-body)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', outline: 'none', padding: '8px 10px', textAlign: 'right' }}
                         />
-                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', paddingRight: 10, paddingLeft: 2, userSelect: 'none' }}>GB</span>
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', paddingRight: 10, paddingLeft: 2, userSelect: 'none' }}>GB</span>
                       </div>
                     </div>
                   </div>
@@ -738,14 +738,14 @@ export default function SettingsScreen() {
                     {/* Enable toggle */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                       <div>
-                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Enable AI Assistant</div>
-                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Show the AI assistant bubble for all users on this instance.</div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Enable AI Assistant</div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>Show the AI assistant bubble for all users on this instance.</div>
                       </div>
                       <button
                         onClick={() => { setAiEnabled(v => !v); setAiSaved(false); }}
                         style={{
                           width: 44, height: 24, borderRadius: 12,
-                          background: aiEnabled ? '#5e4dbb' : '#e8e4f0',
+                          background: aiEnabled ? 'var(--color-primary)' : 'var(--color-border)',
                           border: 'none', cursor: 'pointer',
                           position: 'relative', flexShrink: 0,
                           transition: 'background 200ms',
@@ -755,17 +755,17 @@ export default function SettingsScreen() {
                           position: 'absolute', top: 2,
                           left: aiEnabled ? 22 : 2,
                           width: 20, height: 20, borderRadius: '50%',
-                          background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                          background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)',
                           transition: 'left 200ms',
                         }} />
                       </button>
                     </div>
 
-                    <div style={{ height: 1, background: '#f1ecf6' }} />
+                    <div style={{ height: 1, background: 'var(--color-surface-tint-2)' }} />
 
                     {/* Model picker */}
                     <div>
-                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 8 }}>AI Model</div>
+                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 8 }}>AI Model</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {AI_MODELS.map(m => {
                           const selected = aiModel === m.value;
@@ -776,26 +776,26 @@ export default function SettingsScreen() {
                               style={{
                                 display: 'flex', alignItems: 'center', gap: 10,
                                 padding: '9px 12px', borderRadius: 10, cursor: 'pointer',
-                                border: selected ? '1.5px solid #5e4dbb' : '1.5px solid #e8e4f0',
-                                background: selected ? '#f4f1fc' : '#fafafa',
+                                border: selected ? '1.5px solid var(--color-primary)' : '1.5px solid var(--color-border)',
+                                background: selected ? 'var(--color-purple-pale-14)' : 'var(--color-surface-neutral)',
                                 textAlign: 'left', width: '100%',
                                 transition: 'border-color 150ms, background 150ms',
                               }}
                             >
                               <span style={{
                                 width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
-                                border: selected ? '4px solid #5e4dbb' : '2px solid #c8c3d8',
-                                background: selected ? '#fff' : 'transparent',
+                                border: selected ? '4px solid var(--color-primary)' : '2px solid var(--color-purple-tint-8)',
+                                background: selected ? 'var(--color-white)' : 'transparent',
                                 transition: 'border 150ms',
                               }} />
                               <span style={{ flex: 1, minWidth: 0 }}>
-                                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', display: 'block' }}>{m.label}</span>
-                                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#9995a8' }}>{m.sub}</span>
+                                <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', display: 'block' }}>{m.label}</span>
+                                <span style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-purple-mid-7)' }}>{m.sub}</span>
                               </span>
                               {m.badge && (
                                 <span style={{
-                                  fontFamily: 'Inter, sans-serif', fontSize: 10.5, fontWeight: 700,
-                                  color: '#fff', background: m.badgeColor ?? '#5e4dbb',
+                                  fontFamily: 'var(--font-body)', fontSize: 10.5, fontWeight: 700,
+                                  color: 'var(--color-white)', background: m.badgeColor ?? 'var(--color-primary)',
                                   borderRadius: 5, padding: '2px 7px', flexShrink: 0,
                                   letterSpacing: '0.02em',
                                 }}>
@@ -806,8 +806,8 @@ export default function SettingsScreen() {
                           );
                         })}
                       </div>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', marginTop: 8 }}>
-                        Requires <code style={{ background: '#f1ecf6', padding: '1px 5px', borderRadius: 4 }}>OPENROUTER_API_KEY</code> set in your environment.
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', marginTop: 8 }}>
+                        Requires <code style={{ background: 'var(--color-surface-tint-2)', padding: '1px 5px', borderRadius: 4 }}>OPENROUTER_API_KEY</code> set in your environment.
                       </div>
                     </div>
                   </div>
@@ -822,13 +822,13 @@ export default function SettingsScreen() {
                 <div style={{ ...card }}>
                   <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
                     {!installedApps.includes('mcp') && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F5F3FF', border: '1px solid #e8e4f0', borderRadius: 10, padding: '10px 14px' }}>
-                        <Icon name="info" size={16} color="#5e4dbb" />
-                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#484552', flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--color-surface-tint)', border: '1px solid var(--color-border)', borderRadius: 10, padding: '10px 14px' }}>
+                        <Icon name="info" size={16} color="var(--color-primary)" />
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-secondary)', flex: 1 }}>
                           Not installed yet — this stays hidden from every user until you install it from <strong>Discover Apps</strong>.
                         </div>
                         <button onClick={() => setShowAppsStore(true)}
-                          style={{ flexShrink: 0, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: '#fff', border: '1px solid #ddd6f5', borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>
+                          style={{ flexShrink: 0, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-white)', border: '1px solid var(--color-purple-pale-45)', borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>
                           Install
                         </button>
                       </div>
@@ -836,15 +836,15 @@ export default function SettingsScreen() {
                     {/* Toggle row */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                       <div>
-                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Enable Claude MCP</div>
-                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Allow users to connect Claude via the MCP server. Disabling immediately revokes all active connections for all users.</div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Enable Claude MCP</div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>Allow users to connect Claude via the MCP server. Disabling immediately revokes all active connections for all users.</div>
                       </div>
                       <button
                         onClick={() => !mcpSaving && handleToggleMcp(!mcpEnabled)}
                         disabled={mcpSaving}
                         style={{
                           width: 44, height: 24, borderRadius: 12,
-                          background: mcpSaving ? '#c9c4d5' : mcpEnabled ? '#5e4dbb' : '#e8e4f0',
+                          background: mcpSaving ? 'var(--color-border-strong)' : mcpEnabled ? 'var(--color-primary)' : 'var(--color-border)',
                           border: 'none', cursor: mcpSaving ? 'wait' : 'pointer',
                           position: 'relative', flexShrink: 0,
                           transition: 'background 200ms',
@@ -854,7 +854,7 @@ export default function SettingsScreen() {
                           position: 'absolute', top: 2,
                           left: mcpEnabled ? 22 : 2,
                           width: 20, height: 20, borderRadius: '50%',
-                          background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                          background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)',
                           transition: 'left 200ms',
                         }} />
                       </button>
@@ -862,12 +862,12 @@ export default function SettingsScreen() {
 
                     {/* Confirmation dialog — shown inline when admin clicks to disable */}
                     {showMcpDisableConfirm && (
-                      <div style={{ background: '#fff8f5', border: '1.5px solid #ffdad6', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12, animation: 'menuIn 160ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                      <div style={{ background: 'var(--color-orange-pale-1)', border: '1.5px solid var(--color-error-bg)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12, animation: 'menuIn 160ms cubic-bezier(0.22,1,0.36,1) both' }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                          <Icon name="warning" size={18} color="#ba1a1a" />
+                          <Icon name="warning" size={18} color="var(--color-error)" />
                           <div>
-                            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#ba1a1a', marginBottom: 4 }}>Disable Claude MCP for all users?</div>
-                            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#484552', lineHeight: 1.55 }}>
+                            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-error)', marginBottom: 4 }}>Disable Claude MCP for all users?</div>
+                            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-secondary)', lineHeight: 1.55 }}>
                               This will <strong>immediately revoke all Claude connections</strong> across the entire instance. Every user will be disconnected and will need to reconnect once MCP is re-enabled. This action cannot be undone.
                             </div>
                           </div>
@@ -875,13 +875,13 @@ export default function SettingsScreen() {
                         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                           <button
                             onClick={() => setShowMcpDisableConfirm(false)}
-                            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#484552', background: '#f5f5f5', border: '1px solid #e8e4f0', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
+                            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)', background: 'var(--color-gray-pale-1)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
                           >
                             Cancel
                           </button>
                           <button
                             onClick={handleConfirmDisableMcp}
-                            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
+                            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
                           >
                             Disable MCP &amp; revoke all connections
                           </button>
@@ -896,7 +896,7 @@ export default function SettingsScreen() {
 
                 {usageLoading && (
                   <div style={{ ...card, padding: '32px', textAlign: 'center' as const }}>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading usage data…</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Loading usage data…</div>
                   </div>
                 )}
 
@@ -933,34 +933,34 @@ export default function SettingsScreen() {
                       {/* Stat cards */}
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
                         {[
-                          { label: 'Total Tokens', value: fmtTokens(usage.totals.totalTokens), icon: 'bolt', color: '#5e4dbb' },
-                          { label: 'Est. Cost', value: fmtCost(totalCost), icon: 'payments', color: '#10B981' },
-                          { label: 'Total Requests', value: usage.totals.requestCount.toLocaleString(), icon: 'chat_bubble', color: '#f59e0b' },
+                          { label: 'Total Tokens', value: fmtTokens(usage.totals.totalTokens), icon: 'bolt', color: 'var(--color-primary)' },
+                          { label: 'Est. Cost', value: fmtCost(totalCost), icon: 'payments', color: 'var(--color-success)' },
+                          { label: 'Total Requests', value: usage.totals.requestCount.toLocaleString(), icon: 'chat_bubble', color: 'var(--color-warning-alt)' },
                         ].map(stat => (
-                          <div key={stat.label} style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 12, padding: '16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <div key={stat.label} style={{ background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 12, padding: '16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <div style={{ width: 30, height: 30, borderRadius: 8, background: stat.color + '1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <Icon name={stat.icon} size={16} color={stat.color} />
                               </div>
-                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.07em', fontWeight: 600 }}>{stat.label}</div>
+                              <div style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const, letterSpacing: '0.07em', fontWeight: 600 }}>{stat.label}</div>
                             </div>
-                            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22', lineHeight: 1 }}>{stat.value}</div>
+                            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1 }}>{stat.value}</div>
                           </div>
                         ))}
                       </div>
 
                       {/* Bar chart */}
                       <div style={{ ...card, padding: '16px 18px 12px' }}>
-                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.07em', marginBottom: 10 }}>Daily Token Usage</div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const, letterSpacing: '0.07em', marginBottom: 10 }}>Daily Token Usage</div>
                         <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block', overflow: 'visible' }}>
                           {/* Y-axis grid + labels */}
                           {([0, 0.25, 0.5, 0.75, 1] as const).map(frac => {
                             const y = padT + plotH * (1 - frac);
                             return (
                               <g key={frac}>
-                                <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="#f1ecf6" strokeWidth={1} />
+                                <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="var(--color-surface-tint-2)" strokeWidth={1} />
                                 {frac > 0 && (
-                                  <text x={padL - 5} y={y + 3.5} textAnchor="end" fontFamily="Inter, sans-serif" fontSize="9" fill="#b0acbe">
+                                  <text x={padL - 5} y={y + 3.5} textAnchor="end" fontFamily="Inter, sans-serif" fontSize="9" fill="var(--color-text-quaternary)">
                                     {fmtTokens(Math.round(maxTotal * frac))}
                                   </text>
                                 )}
@@ -984,16 +984,16 @@ export default function SettingsScreen() {
                                 {total > 0 ? (
                                   <rect
                                     x={x} y={y} width={barW} height={barH} rx={3}
-                                    fill={isHov ? '#4f3fa8' : '#5e4dbb'}
+                                    fill={isHov ? 'var(--color-purple-mid-10)' : 'var(--color-primary)'}
                                     style={{ cursor: 'pointer', transition: 'fill 100ms' }}
                                     onMouseEnter={() => setHoveredBar({ x: x + barW / 2, y, date, total, prompt: data?.prompt ?? 0, completion: data?.completion ?? 0 })}
                                     onMouseLeave={() => setHoveredBar(null)}
                                   />
                                 ) : (
-                                  <rect x={x} y={padT + plotH - 2} width={barW} height={2} rx={1} fill="#f0edfb" />
+                                  <rect x={x} y={padT + plotH - 2} width={barW} height={2} rx={1} fill="var(--color-purple-pale-20)" />
                                 )}
                                 {showLabel && (
-                                  <text x={padL + i * slotW + slotW / 2} y={H - 4} textAnchor="middle" fontFamily="Inter, sans-serif" fontSize="8.5" fill="#b0acbe">{lStr}</text>
+                                  <text x={padL + i * slotW + slotW / 2} y={H - 4} textAnchor="middle" fontFamily="Inter, sans-serif" fontSize="8.5" fill="var(--color-text-quaternary)">{lStr}</text>
                                 )}
                               </g>
                             );
@@ -1006,14 +1006,14 @@ export default function SettingsScreen() {
                             const ttTop = hoveredBar.y > padT + ttH + 12 ? hoveredBar.y - ttH - 6 : hoveredBar.y + barW + 6;
                             return (
                               <g style={{ pointerEvents: 'none' }}>
-                                <rect x={tx - 76} y={ttTop} width={152} height={ttH} rx={7} fill="rgba(28,27,34,0.93)" />
-                                <text x={tx} y={ttTop + 17} textAnchor="middle" fontFamily="Inter, sans-serif" fontSize="9" fill="#9d8dff">
+                                <rect x={tx - 76} y={ttTop} width={152} height={ttH} rx={7} fill="rgba(var(--color-text-primary-rgb), 0.93)" />
+                                <text x={tx} y={ttTop + 17} textAnchor="middle" fontFamily="Inter, sans-serif" fontSize="9" fill="var(--color-accent-purple-light)">
                                   {new Date(hoveredBar.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                                 </text>
-                                <text x={tx} y={ttTop + 35} textAnchor="middle" fontFamily="Hanken Grotesk, sans-serif" fontSize="14" fontWeight="700" fill="#ffffff">
+                                <text x={tx} y={ttTop + 35} textAnchor="middle" fontFamily="Hanken Grotesk, sans-serif" fontSize="14" fontWeight="700" fill="var(--color-white)">
                                   {fmtTokens(hoveredBar.total)} tokens
                                 </text>
-                                <text x={tx} y={ttTop + 52} textAnchor="middle" fontFamily="Inter, sans-serif" fontSize="9" fill="#9d8dff">
+                                <text x={tx} y={ttTop + 52} textAnchor="middle" fontFamily="Inter, sans-serif" fontSize="9" fill="var(--color-accent-purple-light)">
                                   {`In: ${fmtTokens(hoveredBar.prompt)}  ·  Out: ${fmtTokens(hoveredBar.completion)}`}
                                 </text>
                               </g>
@@ -1025,33 +1025,33 @@ export default function SettingsScreen() {
                       {/* Per-model breakdown */}
                       {usage.byModel.length > 0 && (
                         <div style={card}>
-                          <div style={{ display: 'flex', alignItems: 'center', padding: '10px 18px', borderBottom: '1px solid #f1ecf6' }}>
-                            <div style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>Model</div>
+                          <div style={{ display: 'flex', alignItems: 'center', padding: '10px 18px', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
+                            <div style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>Model</div>
                             {['Requests', 'Tokens In', 'Tokens Out', 'Est. Cost'].map(h => (
-                              <div key={h} style={{ width: 84, textAlign: 'right' as const, fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>{h}</div>
+                              <div key={h} style={{ width: 84, textAlign: 'right' as const, fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const, letterSpacing: '0.07em' }}>{h}</div>
                             ))}
                           </div>
                           {usage.byModel.map((m, idx) => {
                             const cost = calcCost(m.model, m.promptTokens, m.completionTokens);
                             const info = MODEL_PRICING[m.model];
                             const label = info?.label ?? (m.model.split('/').pop() ?? m.model);
-                            const color = info?.color ?? '#5e4dbb';
+                            const color = info?.color ?? 'var(--color-primary)';
                             const isLast = idx === usage.byModel.length - 1;
                             return (
-                              <div key={m.model} style={{ display: 'flex', alignItems: 'center', padding: '10px 18px', borderBottom: isLast ? 'none' : '1px solid #f9f8fc' }}>
+                              <div key={m.model} style={{ display: 'flex', alignItems: 'center', padding: '10px 18px', borderBottom: isLast ? 'none' : '1px solid var(--color-purple-pale-8)' }}>
                                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
                                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22' }}>{label}</span>
+                                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>{label}</span>
                                 </div>
-                                <div style={{ width: 84, textAlign: 'right' as const, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#484552' }}>{m.requestCount.toLocaleString()}</div>
-                                <div style={{ width: 84, textAlign: 'right' as const, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#484552' }}>{fmtTokens(m.promptTokens)}</div>
-                                <div style={{ width: 84, textAlign: 'right' as const, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#484552' }}>{fmtTokens(m.completionTokens)}</div>
-                                <div style={{ width: 84, textAlign: 'right' as const, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22' }}>{fmtCost(cost)}</div>
+                                <div style={{ width: 84, textAlign: 'right' as const, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-secondary)' }}>{m.requestCount.toLocaleString()}</div>
+                                <div style={{ width: 84, textAlign: 'right' as const, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-secondary)' }}>{fmtTokens(m.promptTokens)}</div>
+                                <div style={{ width: 84, textAlign: 'right' as const, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-secondary)' }}>{fmtTokens(m.completionTokens)}</div>
+                                <div style={{ width: 84, textAlign: 'right' as const, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>{fmtCost(cost)}</div>
                               </div>
                             );
                           })}
-                          <div style={{ padding: '9px 18px', borderTop: '1px solid #f1ecf6', fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <Icon name="info" size={12} color="#b0acbe" />
+                          <div style={{ padding: '9px 18px', borderTop: '1px solid var(--color-surface-tint-2)', fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <Icon name="info" size={12} color="var(--color-text-quaternary)" />
                             Estimates based on OpenRouter published rates. Actual billing may differ.
                           </div>
                         </div>
@@ -1062,7 +1062,7 @@ export default function SettingsScreen() {
 
                 {!usageLoading && !usage && (
                   <div style={{ ...card, padding: '32px', textAlign: 'center' as const }}>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>No AI usage data for the last 30 days.</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>No AI usage data for the last 30 days.</div>
                   </div>
                 )}
               </div>
@@ -1075,12 +1075,12 @@ export default function SettingsScreen() {
                 <div style={card}>
                   <div style={{ ...row }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Icon name="shield_lock" size={18} color="#5e4dbb" />
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Icon name="shield_lock" size={18} color="var(--color-primary)" />
                       </div>
                       <div>
-                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Two-Factor Authentication</div>
-                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Two-Factor Authentication</div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                           Allow users to set up 2FA on their accounts via Account Settings.
                         </div>
                       </div>
@@ -1089,7 +1089,7 @@ export default function SettingsScreen() {
                       onClick={() => { setTwoFAFeatureEnabled(v => !v); setSecuritySaved(false); }}
                       style={{
                         width: 44, height: 24, borderRadius: 12,
-                        background: twoFAFeatureEnabled ? '#5e4dbb' : '#e8e4f0',
+                        background: twoFAFeatureEnabled ? 'var(--color-primary)' : 'var(--color-border)',
                         border: 'none', cursor: 'pointer',
                         position: 'relative', flexShrink: 0,
                         transition: 'background 200ms',
@@ -1099,7 +1099,7 @@ export default function SettingsScreen() {
                         position: 'absolute', top: 3,
                         left: twoFAFeatureEnabled ? 23 : 3,
                         width: 18, height: 18, borderRadius: '50%',
-                        background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
+                        background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.18)',
                         transition: 'left 200ms',
                       }} />
                     </button>
@@ -1119,52 +1119,52 @@ export default function SettingsScreen() {
                 {sectionLabel('Admin API',
                   <button
                     onClick={() => setShowApiKeyWizard(true)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'background 150ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#ede9ff'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'background 150ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
                   >
-                    <Icon name="add" size={14} color="#5e4dbb" />
+                    <Icon name="add" size={14} color="var(--color-primary)" />
                     New API key
                   </button>
                 )}
                 <div style={card}>
                   <div style={{ padding: '16px 18px' }}>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22' }}>Instance-wide API access</div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 3 }}>Each key carries its own set of permissions, chosen when you create it. Grant a key only the features an integration needs — read/export, or create &amp; manage users, workspaces, folders, lists, timelines and meetings. Secrets are shown once and stored only as hashes.</div>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>Instance-wide API access</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 3 }}>Each key carries its own set of permissions, chosen when you create it. Grant a key only the features an integration needs — read/export, or create &amp; manage users, workspaces, folders, lists, timelines and meetings. Secrets are shown once and stored only as hashes.</div>
                   </div>
                 </div>
 
                 {sectionLabel('Endpoints & examples')}
                 <div style={card}>
                   <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>Base URL</div>
-                    <code style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, overflowWrap: 'anywhere' }}>{apiOrigin}</code>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 4 }}>Read everything (needs the <b>read</b> permission):</div>
-                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, overflowX: 'auto' }}>{exportExample}</pre>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 4 }}>Create a to-do for a user (needs the <b>lists</b> permission). Write endpoints accept an optional <b>ownerId</b> — the target user; it defaults to the admin who owns the key:</div>
-                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12, color: '#1c1b22', background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, padding: 10, overflowX: 'auto' }}>{writeExample}</pre>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>Base URL</div>
+                    <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-primary)', background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 10, padding: 10, overflowWrap: 'anywhere' }}>{apiOrigin}</code>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 4 }}>Read everything (needs the <b>read</b> permission):</div>
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-primary)', background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 10, padding: 10, overflowX: 'auto' }}>{exportExample}</pre>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 4 }}>Create a to-do for a user (needs the <b>lists</b> permission). Write endpoints accept an optional <b>ownerId</b> — the target user; it defaults to the admin who owns the key:</div>
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-primary)', background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 10, padding: 10, overflowX: 'auto' }}>{writeExample}</pre>
                   </div>
                 </div>
 
                 {sectionLabel('Active keys')}
                 <div style={card}>
-                  {apiKeysLoading ? <div style={{ ...row, justifyContent: 'center', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading…</div> : apiKeys.length === 0 ? <div style={{ ...row, justifyContent: 'center', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>No API keys yet.</div> : apiKeys.map(k => (
-                    <div key={k.id} style={{ ...row, borderBottom: '1px solid #f1ecf6', flexWrap: 'wrap', gap: 10 }}>
+                  {apiKeysLoading ? <div style={{ ...row, justifyContent: 'center', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Loading…</div> : apiKeys.length === 0 ? <div style={{ ...row, justifyContent: 'center', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>No API keys yet.</div> : apiKeys.map(k => (
+                    <div key={k.id} style={{ ...row, borderBottom: '1px solid var(--color-surface-tint-2)', flexWrap: 'wrap', gap: 10 }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22' }}>{k.name}</div>
-                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>{k.keyPrefix} · Created {new Date(k.createdAt).toLocaleDateString()} · Last used {k.lastUsedAt ? relativeTime(k.lastUsedAt) : 'never'}</div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>{k.name}</div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>{k.keyPrefix} · Created {new Date(k.createdAt).toLocaleDateString()} · Last used {k.lastUsedAt ? relativeTime(k.lastUsedAt) : 'never'}</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
                           {k.scopes.map(s => {
                             const f = featureForScope(s);
                             return (
-                              <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: '1px solid #e8e4f0', borderRadius: 9999, padding: '3px 9px' }}>
-                                <Icon name={f?.icon ?? 'key'} size={12} color="#5e4dbb" /> {f?.label ?? s}
+                              <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: '1px solid var(--color-border)', borderRadius: 9999, padding: '3px 9px' }}>
+                                <Icon name={f?.icon ?? 'key'} size={12} color="var(--color-primary)" /> {f?.label ?? s}
                               </span>
                             );
                           })}
                         </div>
                       </div>
-                      <button onClick={() => handleRevokeApiKey(k.id)} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: '#ba1a1a', background: '#fff5f5', border: '1px solid #ffdad6', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', alignSelf: 'flex-start' }}>Revoke</button>
+                      <button onClick={() => handleRevokeApiKey(k.id)} style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: '1px solid var(--color-error-bg)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', alignSelf: 'flex-start' }}>Revoke</button>
                     </div>
                   ))}
                 </div>
@@ -1180,15 +1180,15 @@ export default function SettingsScreen() {
                     {/* Toggle row */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                       <div>
-                        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22' }}>Allow mobile app connections</div>
-                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Let users connect the Solytiq Cloud iOS app to this instance and sign in. Disabling immediately signs out every connected device and blocks new mobile logins.</div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Allow mobile app connections</div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>Let users connect the Solytiq Cloud iOS app to this instance and sign in. Disabling immediately signs out every connected device and blocks new mobile logins.</div>
                       </div>
                       <button
                         onClick={() => !mobileSaving && handleToggleMobile(!mobileEnabled)}
                         disabled={mobileSaving}
                         style={{
                           width: 44, height: 24, borderRadius: 12,
-                          background: mobileSaving ? '#c9c4d5' : mobileEnabled ? '#5e4dbb' : '#e8e4f0',
+                          background: mobileSaving ? 'var(--color-border-strong)' : mobileEnabled ? 'var(--color-primary)' : 'var(--color-border)',
                           border: 'none', cursor: mobileSaving ? 'wait' : 'pointer',
                           position: 'relative', flexShrink: 0,
                           transition: 'background 200ms',
@@ -1198,7 +1198,7 @@ export default function SettingsScreen() {
                           position: 'absolute', top: 2,
                           left: mobileEnabled ? 22 : 2,
                           width: 20, height: 20, borderRadius: '50%',
-                          background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                          background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)',
                           transition: 'left 200ms',
                         }} />
                       </button>
@@ -1206,12 +1206,12 @@ export default function SettingsScreen() {
 
                     {/* Confirmation dialog — shown inline when admin clicks to disable */}
                     {showMobileDisableConfirm && (
-                      <div style={{ background: '#fff8f5', border: '1.5px solid #ffdad6', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12, animation: 'menuIn 160ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                      <div style={{ background: 'var(--color-orange-pale-1)', border: '1.5px solid var(--color-error-bg)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12, animation: 'menuIn 160ms cubic-bezier(0.22,1,0.36,1) both' }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                          <Icon name="warning" size={18} color="#ba1a1a" />
+                          <Icon name="warning" size={18} color="var(--color-error)" />
                           <div>
-                            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#ba1a1a', marginBottom: 4 }}>Disable the mobile app for all users?</div>
-                            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#484552', lineHeight: 1.55 }}>
+                            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-error)', marginBottom: 4 }}>Disable the mobile app for all users?</div>
+                            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-secondary)', lineHeight: 1.55 }}>
                               This will <strong>immediately sign out every connected mobile device</strong> across the entire instance. Users can still use the app in on-device (local) mode, but will need to reconnect once mobile access is re-enabled.
                             </div>
                           </div>
@@ -1219,13 +1219,13 @@ export default function SettingsScreen() {
                         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
                           <button
                             onClick={() => setShowMobileDisableConfirm(false)}
-                            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#484552', background: '#f5f5f5', border: '1px solid #e8e4f0', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
+                            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)', background: 'var(--color-gray-pale-1)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
                           >
                             Cancel
                           </button>
                           <button
                             onClick={handleConfirmDisableMobile}
-                            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
+                            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}
                           >
                             Disable &amp; sign out all devices
                           </button>
@@ -1235,7 +1235,7 @@ export default function SettingsScreen() {
                   </div>
                 </div>
 
-                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', lineHeight: 1.6 }}>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', lineHeight: 1.6 }}>
                   Each user can review and revoke their own connected devices from <strong>Account Settings → Mobile</strong>. The app also works fully offline in on-device mode without connecting to a server.
                 </div>
               </div>
@@ -1247,39 +1247,39 @@ export default function SettingsScreen() {
                 {sectionLabel('Users',
                   <button
                     onClick={openAddUser}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'background 150ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#ede9ff'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'background 150ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
                   >
-                    <Icon name="person_add" size={14} color="#5e4dbb" />
+                    <Icon name="person_add" size={14} color="var(--color-primary)" />
                     Add User
                   </button>
                 )}
                 <div style={card}>
                   {usersLoading ? (
                     <div style={{ ...row, justifyContent: 'center' }}>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading users…</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Loading users…</div>
                     </div>
                   ) : users.length === 0 ? (
                     <div style={{ ...row, justifyContent: 'center' }}>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>No users yet.</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>No users yet.</div>
                     </div>
                   ) : (
                     <>
                       {previewUsers.map((u, i) => (
-                        <div key={u.id} style={{ ...row, borderBottom: i < previewUsers.length - 1 || hasMore ? '1px solid #f1ecf6' : 'none' }}>
+                        <div key={u.id} style={{ ...row, borderBottom: i < previewUsers.length - 1 || hasMore ? '1px solid var(--color-surface-tint-2)' : 'none' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                             <UserAvatar name={u.fullName} username={u.username} profileImage={u.profileImage} size={38} />
                             <div style={{ minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   {u.fullName || u.username}
                                 </div>
                                 {u.isAdmin && (
-                                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 9999, padding: '1px 7px', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>Admin</span>
+                                  <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', borderRadius: 9999, padding: '1px 7px', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>Admin</span>
                                 )}
                               </div>
-                              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 @{u.username} · {u.email}
                               </div>
                               {renderUserIdCopy(u.id)}
@@ -1287,8 +1287,8 @@ export default function SettingsScreen() {
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <div style={{ width: 6, height: 6, borderRadius: '50%', background: u.lastOnline && Date.now() - new Date(u.lastOnline).getTime() < 5 * 60 * 1000 ? '#10B981' : '#e8e4f0', flexShrink: 0 }} />
-                              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', whiteSpace: 'nowrap' }}>
+                              <div style={{ width: 6, height: 6, borderRadius: '50%', background: u.lastOnline && Date.now() - new Date(u.lastOnline).getTime() < 5 * 60 * 1000 ? 'var(--color-success)' : 'var(--color-border)', flexShrink: 0 }} />
+                              <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', whiteSpace: 'nowrap' }}>
                                 {relativeTime(u.lastOnline)}
                               </span>
                             </div>
@@ -1296,20 +1296,20 @@ export default function SettingsScreen() {
                               onClick={() => openEditUser(u)}
                               title="Edit user"
                               style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
-                              onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
                               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                             >
-                              <Icon name="edit" size={15} color="#787584" />
+                              <Icon name="edit" size={15} color="var(--color-text-tertiary)" />
                             </button>
                             {u.id !== userId && (
                               <button
                                 onClick={() => setDeleteTarget(u)}
                                 title="Remove user"
                                 style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
-                                onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }}
+                                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
                                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                               >
-                                <Icon name="delete" size={15} color="#ba1a1a" />
+                                <Icon name="delete" size={15} color="var(--color-error)" />
                               </button>
                             )}
                           </div>
@@ -1318,11 +1318,11 @@ export default function SettingsScreen() {
                       {hasMore && (
                         <button
                           onClick={() => { setSearchQuery(''); setRoleFilter('all'); setAllUsersOpen(true); }}
-                          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px 18px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', transition: 'background 150ms' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px 18px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', transition: 'background 150ms' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
                           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                         >
-                          <Icon name="group" size={15} color="#5e4dbb" />
+                          <Icon name="group" size={15} color="var(--color-primary)" />
                           Show all {users.length} users
                         </button>
                       )}
@@ -1336,17 +1336,17 @@ export default function SettingsScreen() {
             {activeTab === 'danger' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 {sectionLabel('Danger Zone')}
-                <div style={{ ...card, border: '1.5px solid #ffdad6' }}>
-                  <div style={{ ...row, background: '#fff5f5' }}>
+                <div style={{ ...card, border: '1.5px solid var(--color-error-bg)' }}>
+                  <div style={{ ...row, background: 'var(--color-error-bg-alt)' }}>
                     <div>
-                      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#ba1a1a' }}>Nuke Everything</div>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2 }}>Permanently delete all data. This cannot be undone.</div>
+                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-error)' }}>Nuke Everything</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>Permanently delete all data. This cannot be undone.</div>
                     </div>
                     <button
                       onClick={() => setNukeStep(1)}
-                      style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', flexShrink: 0, transition: 'background 150ms' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#991212'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = '#ba1a1a'; }}
+                      style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', flexShrink: 0, transition: 'background 150ms' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-red-deep-2)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-error)'; }}
                     >
                       Nuke
                     </button>
@@ -1356,7 +1356,7 @@ export default function SettingsScreen() {
             )}
           </>
         ) : (
-          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#b0acbe', textAlign: 'center', padding: '48px 0' }}>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-quaternary)', textAlign: 'center', padding: '48px 0' }}>
             No settings available.
           </div>
         )}
@@ -1365,47 +1365,47 @@ export default function SettingsScreen() {
       {/* ── All Users Dialog ── */}
       {allUsersOpen && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) setAllUsersOpen(false); }}
         >
           <div
-            style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 580, maxHeight: '82vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 580, maxHeight: '82vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ padding: '22px 24px 0', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon name="group" size={18} color="#5e4dbb" />
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon name="group" size={18} color="var(--color-primary)" />
                   </div>
                   <div>
-                    <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22' }}>All Users</div>
-                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>{users.length} {users.length === 1 ? 'user' : 'users'} total</div>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)' }}>All Users</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>{users.length} {users.length === 1 ? 'user' : 'users'} total</div>
                   </div>
                 </div>
                 <button
                   onClick={() => setAllUsersOpen(false)}
-                  style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+                  style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
                 >
-                  <Icon name="close" size={15} color="#484552" />
+                  <Icon name="close" size={15} color="var(--color-text-secondary)" />
                 </button>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#F9FAFB', border: `1.5px solid ${searchFocus ? '#5e4dbb' : '#E5E7EB'}`, borderRadius: 10, padding: '8px 14px', marginBottom: 14, transition: 'border-color 200ms' }}>
-                <Icon name="search" size={16} color="#b0acbe" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--color-surface-gray)', border: `1.5px solid ${searchFocus ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, borderRadius: 10, padding: '8px 14px', marginBottom: 14, transition: 'border-color 200ms' }}>
+                <Icon name="search" size={16} color="var(--color-text-quaternary)" />
                 <input
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   placeholder="Search by name, username or email…"
-                  style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none' }}
+                  style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', outline: 'none' }}
                   onFocus={() => setSearchFocus(true)}
                   onBlur={() => setSearchFocus(false)}
                   autoFocus
                 />
                 {searchQuery && (
                   <button onClick={() => setSearchQuery('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
-                    <Icon name="close" size={14} color="#b0acbe" />
+                    <Icon name="close" size={14} color="var(--color-text-quaternary)" />
                   </button>
                 )}
               </div>
@@ -1414,35 +1414,35 @@ export default function SettingsScreen() {
                   <button
                     key={f}
                     onClick={() => setRoleFilter(f)}
-                    style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 9999, border: 'none', cursor: 'pointer', transition: 'all 150ms', background: roleFilter === f ? '#5e4dbb' : '#F5F3FF', color: roleFilter === f ? '#fff' : '#5e4dbb' }}
-                    onMouseEnter={e => { if (roleFilter !== f) e.currentTarget.style.background = '#ede9ff'; }}
-                    onMouseLeave={e => { if (roleFilter !== f) e.currentTarget.style.background = '#F5F3FF'; }}
+                    style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 9999, border: 'none', cursor: 'pointer', transition: 'all 150ms', background: roleFilter === f ? 'var(--color-primary)' : 'var(--color-surface-tint)', color: roleFilter === f ? 'var(--color-white)' : 'var(--color-primary)' }}
+                    onMouseEnter={e => { if (roleFilter !== f) e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
+                    onMouseLeave={e => { if (roleFilter !== f) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
                   >
                     {f === 'all' ? `All (${users.length})` : f === 'admin' ? `Admins (${users.filter(u => u.isAdmin).length})` : `Users (${users.filter(u => !u.isAdmin).length})`}
                   </button>
                 ))}
               </div>
             </div>
-            <div style={{ overflowY: 'auto', flex: 1, borderTop: '1px solid #f1ecf6' }}>
+            <div style={{ overflowY: 'auto', flex: 1, borderTop: '1px solid var(--color-surface-tint-2)' }}>
               {filteredUsers.length === 0 ? (
-                <div style={{ padding: '32px 24px', textAlign: 'center', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>
+                <div style={{ padding: '32px 24px', textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>
                   No users match your search.
                 </div>
               ) : (
                 filteredUsers.map((u, i) => (
-                  <div key={u.id} style={{ ...row, borderBottom: i < filteredUsers.length - 1 ? '1px solid #f1ecf6' : 'none', padding: '12px 24px' }}>
+                  <div key={u.id} style={{ ...row, borderBottom: i < filteredUsers.length - 1 ? '1px solid var(--color-surface-tint-2)' : 'none', padding: '12px 24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                       <UserAvatar name={u.fullName} username={u.username} profileImage={u.profileImage} size={38} />
                       <div style={{ minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {u.fullName || u.username}
                           </div>
                           {u.isAdmin && (
-                            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 9999, padding: '1px 7px', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>Admin</span>
+                            <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', borderRadius: 9999, padding: '1px 7px', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>Admin</span>
                           )}
                         </div>
-                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           @{u.username} · {u.email}
                         </div>
                         {renderUserIdCopy(u.id)}
@@ -1450,8 +1450,8 @@ export default function SettingsScreen() {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: u.lastOnline && Date.now() - new Date(u.lastOnline).getTime() < 5 * 60 * 1000 ? '#10B981' : '#e8e4f0', flexShrink: 0 }} />
-                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe', whiteSpace: 'nowrap' }}>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: u.lastOnline && Date.now() - new Date(u.lastOnline).getTime() < 5 * 60 * 1000 ? 'var(--color-success)' : 'var(--color-border)', flexShrink: 0 }} />
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', whiteSpace: 'nowrap' }}>
                           {relativeTime(u.lastOnline)}
                         </span>
                       </div>
@@ -1459,20 +1459,20 @@ export default function SettingsScreen() {
                         onClick={() => { setAllUsersOpen(false); openEditUser(u); }}
                         title="Edit user"
                         style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                       >
-                        <Icon name="edit" size={15} color="#787584" />
+                        <Icon name="edit" size={15} color="var(--color-text-tertiary)" />
                       </button>
                       {u.id !== userId && (
                         <button
                           onClick={() => { setAllUsersOpen(false); setDeleteTarget(u); }}
                           title="Remove user"
                           style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
                           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                         >
-                          <Icon name="delete" size={15} color="#ba1a1a" />
+                          <Icon name="delete" size={15} color="var(--color-error)" />
                         </button>
                       )}
                     </div>
@@ -1487,44 +1487,44 @@ export default function SettingsScreen() {
       {/* ── Add User Modal ── */}
       {addUserOpen && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) closeAddUser(); }}
         >
           <div
-            style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 420, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 420, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 24px 0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name="person_add" size={18} color="#5e4dbb" />
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name="person_add" size={18} color="var(--color-primary)" />
                 </div>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22' }}>Add New User</div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)' }}>Add New User</div>
               </div>
               <button
                 onClick={closeAddUser}
-                style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}
+                style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
               >
-                <Icon name="close" size={15} color="#484552" />
+                <Icon name="close" size={15} color="var(--color-text-secondary)" />
               </button>
             </div>
             <div style={{ padding: '20px 24px' }}>
-              <div style={{ borderBottom: `${fullNameFocus ? 2 : 1}px solid ${fullNameFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Full Name</div>
+              <div style={{ borderBottom: `${fullNameFocus ? 2 : 1}px solid ${fullNameFocus ? 'var(--color-primary)' : 'var(--color-border)'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Full Name</div>
                 <input value={newFullName} onChange={e => setNewFullName(e.target.value)} placeholder="Jane Doe" style={fi} onFocus={() => setFullNameFocus(true)} onBlur={() => setFullNameFocus(false)} />
               </div>
-              <div style={{ borderBottom: `${usernameFocus ? 2 : 1}px solid ${usernameFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Username <span style={{ color: '#ba1a1a' }}>*</span></div>
+              <div style={{ borderBottom: `${usernameFocus ? 2 : 1}px solid ${usernameFocus ? 'var(--color-primary)' : 'var(--color-border)'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Username <span style={{ color: 'var(--color-error)' }}>*</span></div>
                 <input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="janedoe" style={fi} onFocus={() => setUsernameFocus(true)} onBlur={() => setUsernameFocus(false)} />
               </div>
-              <div style={{ borderBottom: `${emailFocus ? 2 : 1}px solid ${emailFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Email</div>
+              <div style={{ borderBottom: `${emailFocus ? 2 : 1}px solid ${emailFocus ? 'var(--color-primary)' : 'var(--color-border)'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Email</div>
                 <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="jane@example.com" style={fi} onFocus={() => setEmailFocus(true)} onBlur={() => setEmailFocus(false)} />
               </div>
-              <div style={{ borderBottom: `${passwordFocus ? 2 : 1}px solid ${passwordFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 20, transition: 'border-color 200ms' }}>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Password <span style={{ color: '#ba1a1a' }}>*</span></div>
+              <div style={{ borderBottom: `${passwordFocus ? 2 : 1}px solid ${passwordFocus ? 'var(--color-primary)' : 'var(--color-border)'}`, paddingBottom: 10, marginBottom: 20, transition: 'border-color 200ms' }}>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Password <span style={{ color: 'var(--color-error)' }}>*</span></div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <input
                     type={passwordVisible ? 'text' : 'password'}
@@ -1536,23 +1536,23 @@ export default function SettingsScreen() {
                     onBlur={() => setPasswordFocus(false)}
                     onKeyDown={e => { if (e.key === 'Enter') handleCreateUser(); }}
                   />
-                  <button type="button" onClick={generatePassword} title="Generate random password" style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                    <Icon name="casino" size={16} color="#787584" />
+                  <button type="button" onClick={generatePassword} title="Generate random password" style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                    <Icon name="casino" size={16} color="var(--color-text-tertiary)" />
                   </button>
-                  <button type="button" onClick={copyPassword} disabled={!newPassword} title={passwordCopied ? 'Copied!' : 'Copy password'} style={{ width: 28, height: 28, borderRadius: 7, background: passwordCopied ? 'rgba(16,185,129,0.10)' : 'transparent', border: 'none', cursor: newPassword ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { if (newPassword && !passwordCopied) e.currentTarget.style.background = '#F5F3FF'; }} onMouseLeave={e => { if (!passwordCopied) e.currentTarget.style.background = 'transparent'; }}>
-                    <Icon name={passwordCopied ? 'check' : 'content_copy'} size={15} color={passwordCopied ? '#10B981' : newPassword ? '#787584' : '#e8e4f0'} />
+                  <button type="button" onClick={copyPassword} disabled={!newPassword} title={passwordCopied ? 'Copied!' : 'Copy password'} style={{ width: 28, height: 28, borderRadius: 7, background: passwordCopied ? 'rgba(var(--color-success-rgb), 0.10)' : 'transparent', border: 'none', cursor: newPassword ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { if (newPassword && !passwordCopied) e.currentTarget.style.background = 'var(--color-surface-tint)'; }} onMouseLeave={e => { if (!passwordCopied) e.currentTarget.style.background = 'transparent'; }}>
+                    <Icon name={passwordCopied ? 'check' : 'content_copy'} size={15} color={passwordCopied ? 'var(--color-success)' : newPassword ? 'var(--color-text-tertiary)' : 'var(--color-border)'} />
                   </button>
                 </div>
               </div>
               {createError && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: '#fff5f5', borderRadius: 8, border: '1px solid #ffdad6' }}>
-                  <Icon name="error" size={15} color="#ba1a1a" />
-                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a' }}>{createError}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: 'var(--color-error-bg-alt)', borderRadius: 8, border: '1px solid var(--color-error-bg)' }}>
+                  <Icon name="error" size={15} color="var(--color-error)" />
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>{createError}</span>
                 </div>
               )}
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={closeAddUser} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }} onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}>Cancel</button>
-                <button onClick={handleCreateUser} disabled={creating || !newUsername.trim() || !newPassword.trim()} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: creating || !newUsername.trim() || !newPassword.trim() ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '11px 0', cursor: creating || !newUsername.trim() || !newPassword.trim() ? 'not-allowed' : 'pointer', transition: 'background 150ms' }} onMouseEnter={e => { if (!creating && newUsername.trim() && newPassword.trim()) e.currentTarget.style.background = '#4d3da8'; }} onMouseLeave={e => { if (!creating && newUsername.trim() && newPassword.trim()) e.currentTarget.style.background = '#5e4dbb'; }}>
+                <button onClick={closeAddUser} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}>Cancel</button>
+                <button onClick={handleCreateUser} disabled={creating || !newUsername.trim() || !newPassword.trim()} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: creating || !newUsername.trim() || !newPassword.trim() ? 'var(--color-border-strong)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: creating || !newUsername.trim() || !newPassword.trim() ? 'not-allowed' : 'pointer', transition: 'background 150ms' }} onMouseEnter={e => { if (!creating && newUsername.trim() && newPassword.trim()) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }} onMouseLeave={e => { if (!creating && newUsername.trim() && newPassword.trim()) e.currentTarget.style.background = 'var(--color-primary)'; }}>
                   {creating ? 'Creating…' : 'Create User'}
                 </button>
               </div>
@@ -1564,34 +1564,34 @@ export default function SettingsScreen() {
       {/* ── Edit User Modal ── */}
       {editUserOpen && editTarget && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) closeEditUser(); }}
         >
           <div
-            style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 420, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 420, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 24px 0' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#F5F3FF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name="edit" size={18} color="#5e4dbb" />
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name="edit" size={18} color="var(--color-primary)" />
                 </div>
                 <div>
-                  <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 17, fontWeight: 700, color: '#1c1b22' }}>Edit User</div>
-                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>@{editTarget.username}</div>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)' }}>Edit User</div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>@{editTarget.username}</div>
                 </div>
               </div>
-              <button onClick={closeEditUser} style={{ width: 30, height: 30, borderRadius: '50%', background: '#f1ecf6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }} onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}>
-                <Icon name="close" size={15} color="#484552" />
+              <button onClick={closeEditUser} style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}>
+                <Icon name="close" size={15} color="var(--color-text-secondary)" />
               </button>
             </div>
             <div style={{ padding: '20px 24px' }}>
-              <div style={{ borderBottom: `${editUsernameFocus ? 2 : 1}px solid ${editUsernameFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Username</div>
+              <div style={{ borderBottom: `${editUsernameFocus ? 2 : 1}px solid ${editUsernameFocus ? 'var(--color-primary)' : 'var(--color-border)'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Username</div>
                 <input value={editUsername} onChange={e => setEditUsername(e.target.value)} placeholder={editTarget.username} style={fi} onFocus={() => setEditUsernameFocus(true)} onBlur={() => setEditUsernameFocus(false)} />
               </div>
-              <div style={{ borderBottom: `${editPasswordFocus ? 2 : 1}px solid ${editPasswordFocus ? '#5e4dbb' : '#e8e4f0'}`, paddingBottom: 10, marginBottom: 20, transition: 'border-color 200ms' }}>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>New Password <span style={{ color: '#b0acbe', fontWeight: 400 }}>(optional)</span></div>
+              <div style={{ borderBottom: `${editPasswordFocus ? 2 : 1}px solid ${editPasswordFocus ? 'var(--color-primary)' : 'var(--color-border)'}`, paddingBottom: 10, marginBottom: 20, transition: 'border-color 200ms' }}>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>New Password <span style={{ color: 'var(--color-text-quaternary)', fontWeight: 400 }}>(optional)</span></div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <input
                     type={editPasswordVisible ? 'text' : 'password'}
@@ -1603,23 +1603,23 @@ export default function SettingsScreen() {
                     onBlur={() => setEditPasswordFocus(false)}
                     onKeyDown={e => { if (e.key === 'Enter') handleEditUser(); }}
                   />
-                  <button type="button" onClick={generateEditPassword} title="Generate random password" style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                    <Icon name="casino" size={16} color="#787584" />
+                  <button type="button" onClick={generateEditPassword} title="Generate random password" style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                    <Icon name="casino" size={16} color="var(--color-text-tertiary)" />
                   </button>
-                  <button type="button" onClick={copyEditPassword} disabled={!editPassword} title={editPasswordCopied ? 'Copied!' : 'Copy password'} style={{ width: 28, height: 28, borderRadius: 7, background: editPasswordCopied ? 'rgba(16,185,129,0.10)' : 'transparent', border: 'none', cursor: editPassword ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { if (editPassword && !editPasswordCopied) e.currentTarget.style.background = '#F5F3FF'; }} onMouseLeave={e => { if (!editPasswordCopied) e.currentTarget.style.background = 'transparent'; }}>
-                    <Icon name={editPasswordCopied ? 'check' : 'content_copy'} size={15} color={editPasswordCopied ? '#10B981' : editPassword ? '#787584' : '#e8e4f0'} />
+                  <button type="button" onClick={copyEditPassword} disabled={!editPassword} title={editPasswordCopied ? 'Copied!' : 'Copy password'} style={{ width: 28, height: 28, borderRadius: 7, background: editPasswordCopied ? 'rgba(var(--color-success-rgb), 0.10)' : 'transparent', border: 'none', cursor: editPassword ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { if (editPassword && !editPasswordCopied) e.currentTarget.style.background = 'var(--color-surface-tint)'; }} onMouseLeave={e => { if (!editPasswordCopied) e.currentTarget.style.background = 'transparent'; }}>
+                    <Icon name={editPasswordCopied ? 'check' : 'content_copy'} size={15} color={editPasswordCopied ? 'var(--color-success)' : editPassword ? 'var(--color-text-tertiary)' : 'var(--color-border)'} />
                   </button>
                 </div>
               </div>
               {editError && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: '#fff5f5', borderRadius: 8, border: '1px solid #ffdad6' }}>
-                  <Icon name="error" size={15} color="#ba1a1a" />
-                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a' }}>{editError}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: 'var(--color-error-bg-alt)', borderRadius: 8, border: '1px solid var(--color-error-bg)' }}>
+                  <Icon name="error" size={15} color="var(--color-error)" />
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>{editError}</span>
                 </div>
               )}
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={closeEditUser} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }} onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}>Cancel</button>
-                <button onClick={handleEditUser} disabled={editing} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: editing ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '11px 0', cursor: editing ? 'not-allowed' : 'pointer', transition: 'background 150ms' }} onMouseEnter={e => { if (!editing) e.currentTarget.style.background = '#4d3da8'; }} onMouseLeave={e => { if (!editing) e.currentTarget.style.background = '#5e4dbb'; }}>
+                <button onClick={closeEditUser} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}>Cancel</button>
+                <button onClick={handleEditUser} disabled={editing} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: editing ? 'var(--color-border-strong)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: editing ? 'not-allowed' : 'pointer', transition: 'background 150ms' }} onMouseEnter={e => { if (!editing) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }} onMouseLeave={e => { if (!editing) e.currentTarget.style.background = 'var(--color-primary)'; }}>
                   {editing ? 'Saving…' : 'Save Changes'}
                 </button>
               </div>
@@ -1631,23 +1631,23 @@ export default function SettingsScreen() {
       {/* ── Delete User Confirmation Modal ── */}
       {deleteTarget && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) setDeleteTarget(null); }}
         >
           <div
-            style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 380, padding: '28px 28px 24px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 380, padding: '28px 28px 24px', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
             onClick={e => e.stopPropagation()}
           >
-            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-              <Icon name="person_remove" size={24} color="#ba1a1a" />
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <Icon name="person_remove" size={24} color="var(--color-error)" />
             </div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 18, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Remove user?</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.6, marginBottom: 24 }}>
-              <span style={{ fontWeight: 600, color: '#1c1b22' }}>@{deleteTarget.username}</span> will be permanently deleted along with all their data. This cannot be undone.
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Remove user?</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.6, marginBottom: 24 }}>
+              <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>@{deleteTarget.username}</span> will be permanently deleted along with all their data. This cannot be undone.
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = '#e8e4f0'; }} onMouseLeave={e => { e.currentTarget.style.background = '#f1ecf6'; }}>Cancel</button>
-              <button onClick={handleDeleteUser} disabled={deleting} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: deleting ? '#c9c4d5' : '#ba1a1a', border: 'none', borderRadius: 8, padding: '11px 0', cursor: deleting ? 'not-allowed' : 'pointer', transition: 'background 150ms' }} onMouseEnter={e => { if (!deleting) e.currentTarget.style.background = '#991212'; }} onMouseLeave={e => { if (!deleting) e.currentTarget.style.background = '#ba1a1a'; }}>
+              <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}>Cancel</button>
+              <button onClick={handleDeleteUser} disabled={deleting} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: deleting ? 'var(--color-border-strong)' : 'var(--color-error)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: deleting ? 'not-allowed' : 'pointer', transition: 'background 150ms' }} onMouseEnter={e => { if (!deleting) e.currentTarget.style.background = 'var(--color-red-deep-2)'; }} onMouseLeave={e => { if (!deleting) e.currentTarget.style.background = 'var(--color-error)'; }}>
                 {deleting ? 'Removing…' : 'Remove User'}
               </button>
             </div>
@@ -1657,42 +1657,42 @@ export default function SettingsScreen() {
 
       {/* ── Nuke Confirm Modal ── */}
       {nukeStep > 0 && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) setNukeStep(0); }}>
-          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420, padding: '28px 32px', boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+          <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 420, padding: '28px 32px', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
             onClick={e => e.stopPropagation()}>
-            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#ffdad6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-              <Icon name="warning" size={24} color="#ba1a1a" />
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+              <Icon name="warning" size={24} color="var(--color-error)" />
             </div>
             {nukeStep === 1 && (
               <>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 18, fontWeight: 700, color: '#1c1b22', marginBottom: 12 }}>Are you absolutely sure?</div>
-                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', lineHeight: 1.6, marginBottom: 20 }}>This will permanently delete all your tasks, lists, and account data. This action cannot be undone.</div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 12 }}>Are you absolutely sure?</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.6, marginBottom: 20 }}>This will permanently delete all your tasks, lists, and account data. This action cannot be undone.</div>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => setNukeStep(0)} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>Cancel</button>
-                  <button onClick={() => setNukeStep(2)} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>I understand</button>
+                  <button onClick={() => setNukeStep(0)} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={() => setNukeStep(2)} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>I understand</button>
                 </div>
               </>
             )}
             {nukeStep === 2 && (
               <>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Type NUKE to confirm</div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Type NUKE to confirm</div>
                 <input value={nukeText} onChange={e => setNukeText(e.target.value)} placeholder="NUKE"
-                  style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '10px 12px', outline: 'none', marginBottom: 16, boxSizing: 'border-box' }} />
+                  style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '10px 12px', outline: 'none', marginBottom: 16, boxSizing: 'border-box' }} />
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => setNukeStep(0)} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>Cancel</button>
-                  <button disabled={nukeText !== 'NUKE'} onClick={() => setNukeStep(3)} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: nukeText === 'NUKE' ? '#ba1a1a' : '#c9c4d5', border: 'none', borderRadius: 8, padding: '10px 0', cursor: nukeText === 'NUKE' ? 'pointer' : 'not-allowed' }}>Continue</button>
+                  <button onClick={() => setNukeStep(0)} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>Cancel</button>
+                  <button disabled={nukeText !== 'NUKE'} onClick={() => setNukeStep(3)} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: nukeText === 'NUKE' ? 'var(--color-error)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '10px 0', cursor: nukeText === 'NUKE' ? 'pointer' : 'not-allowed' }}>Continue</button>
                 </div>
               </>
             )}
             {nukeStep === 3 && (
               <>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Confirm your password</div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Confirm your password</div>
                 <input type="password" value={nukePw} onChange={e => setNukePw(e.target.value)} placeholder="••••••••"
-                  style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, border: '1.5px solid #e8e4f0', borderRadius: 8, padding: '10px 12px', outline: 'none', marginBottom: 16, boxSizing: 'border-box' }} />
+                  style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '10px 12px', outline: 'none', marginBottom: 16, boxSizing: 'border-box' }} />
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => setNukeStep(0)} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>Cancel</button>
-                  <button onClick={() => { setNukeStep(0); navigate('/nuke', { state: { password: nukePw } }); }} style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: '#ba1a1a', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>Nuke Everything</button>
+                  <button onClick={() => setNukeStep(0)} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={() => { setNukeStep(0); navigate('/nuke', { state: { password: nukePw } }); }} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}>Nuke Everything</button>
                 </div>
               </>
             )}

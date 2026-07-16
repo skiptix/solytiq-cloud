@@ -48,22 +48,22 @@ export default function CalendarPicker({ value, onChange, onClear }: CalendarPic
   }
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '14px 16px', width: Math.min(288, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+    <div style={{ background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: '14px 16px', width: Math.min(288, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <button onClick={prevMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 6 }}>
-          <Icon name="chevron_left" size={18} color="#787584" />
+          <Icon name="chevron_left" size={18} color="var(--color-text-tertiary)" />
         </button>
-        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22' }}>
+        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>
           {MONTHS[view.month]} {view.year}
         </span>
         <button onClick={nextMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 6 }}>
-          <Icon name="chevron_right" size={18} color="#787584" />
+          <Icon name="chevron_right" size={18} color="var(--color-text-tertiary)" />
         </button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 6 }}>
         {DAYS.map(d => (
-          <div key={d} style={{ textAlign: 'center', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#b0acbe', padding: '4px 0' }}>{d}</div>
+          <div key={d} style={{ textAlign: 'center', fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 700, color: 'var(--color-text-quaternary)', padding: '4px 0' }}>{d}</div>
         ))}
         {cells.map((cell, i) => {
           const iso = toIso(cell.date);
@@ -74,10 +74,10 @@ export default function CalendarPicker({ value, onChange, onClear }: CalendarPic
             <button key={i} onClick={() => { if (cell.current) onChange(iso); }}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                height: 32, borderRadius: 8, border: isToday && !isSelected ? '1.5px solid #c8bfff' : 'none',
-                background: isSelected ? '#5e4dbb' : isToday ? '#faf8ff' : 'transparent',
-                fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontWeight: isSelected || isToday ? 600 : 400,
-                color: isSelected ? '#fff' : !cell.current ? '#d8d0eb' : isPast ? '#b0acbe' : '#1c1b22',
+                height: 32, borderRadius: 8, border: isToday && !isSelected ? '1.5px solid var(--color-purple-tint-1)' : 'none',
+                background: isSelected ? 'var(--color-primary)' : isToday ? 'var(--color-purple-pale-5)' : 'transparent',
+                fontFamily: 'var(--font-body)', fontSize: 12.5, fontWeight: isSelected || isToday ? 600 : 400,
+                color: isSelected ? 'var(--color-white)' : !cell.current ? 'var(--color-purple-tint-2)' : isPast ? 'var(--color-text-quaternary)' : 'var(--color-text-primary)',
                 cursor: cell.current ? 'pointer' : 'default',
                 transition: 'all 120ms',
               }}>
@@ -89,12 +89,12 @@ export default function CalendarPicker({ value, onChange, onClear }: CalendarPic
 
       <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
         <button onClick={() => onChange(toIso(today))}
-          style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 7, padding: '6px 0', cursor: 'pointer' }}>
+          style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 7, padding: '6px 0', cursor: 'pointer' }}>
           Today
         </button>
         {value && onClear && (
           <button onClick={onClear}
-            style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', background: '#f1ecf6', border: 'none', borderRadius: 7, padding: '6px 0', cursor: 'pointer' }}>
+            style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 7, padding: '6px 0', cursor: 'pointer' }}>
             Clear
           </button>
         )}
