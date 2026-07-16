@@ -58,8 +58,8 @@ export default function CreatorBubble({ creatorId, taskHovered }: CreatorBubbleP
         onMouseLeave={() => setCardVisible(false)}
         style={{
           width: 22, height: 22, borderRadius: '50%', flexShrink: 0, overflow: 'hidden',
-          background: 'linear-gradient(135deg, #9d8dff 0%, #5e4dbb 100%)',
-          border: '1.5px solid #fff',
+          background: 'linear-gradient(135deg, var(--color-accent-purple-light) 0%, var(--color-primary) 100%)',
+          border: '1.5px solid var(--color-white)',
           opacity: taskHovered ? 1 : 0.5,
           transition: 'opacity 150ms',
           cursor: 'default',
@@ -67,7 +67,7 @@ export default function CreatorBubble({ creatorId, taskHovered }: CreatorBubbleP
       >
         {avatar
           ? <img src={avatar} alt={member.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          : <span style={{ ...avatarStyle, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 8, fontWeight: 700, color: '#fff' }}>{ini}</span>
+          : <span style={{ ...avatarStyle, fontFamily: 'var(--font-heading)', fontSize: 8, fontWeight: 700, color: 'var(--color-white)' }}>{ini}</span>
         }
       </div>
 
@@ -82,10 +82,10 @@ export default function CreatorBubble({ creatorId, taskHovered }: CreatorBubbleP
             transform: 'translateX(-50%)',
             zIndex: 9999,
             width: 218,
-            background: '#fff',
-            border: '1px solid #E5E7EB',
+            background: 'var(--color-white)',
+            border: '1px solid var(--color-border-alt)',
             borderRadius: 14,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.13)',
+            boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.13)',
             padding: '18px 16px 16px',
             animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both',
           }}
@@ -94,37 +94,37 @@ export default function CreatorBubble({ creatorId, taskHovered }: CreatorBubbleP
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
             <div style={{
               width: 52, height: 52, borderRadius: '50%',
-              background: 'linear-gradient(135deg, #9d8dff 0%, #5e4dbb 100%)',
+              background: 'linear-gradient(135deg, var(--color-accent-purple-light) 0%, var(--color-primary) 100%)',
               overflow: 'hidden', flexShrink: 0,
             }}>
               {avatar
                 ? <img src={avatar} alt={member.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 19, fontWeight: 700, color: '#fff' }}>{ini}</span>
+                : <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontFamily: 'var(--font-heading)', fontSize: 19, fontWeight: 700, color: 'var(--color-white)' }}>{ini}</span>
               }
             </div>
 
             {/* Name + role */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
-              <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22' }}>
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>
                 {member.fullName || member.username}
               </span>
               {member.isAdmin && (
-                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 9, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 9999, padding: '1px 6px', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>
+                <span style={{ fontFamily: 'var(--font-body)', fontSize: 9, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', borderRadius: 9999, padding: '1px 6px', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>
                   Admin
                 </span>
               )}
             </div>
 
             {/* Username */}
-            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: -4 }}>
+            <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: -4 }}>
               @{member.username}
             </span>
 
             {/* Divider */}
-            <div style={{ width: '100%', height: 1, background: '#f1ecf6', margin: '2px 0' }} />
+            <div style={{ width: '100%', height: 1, background: 'var(--color-surface-tint-2)', margin: '2px 0' }} />
 
             {/* Email */}
-            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textAlign: 'center', wordBreak: 'break-all' }}>
+            <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', textAlign: 'center', wordBreak: 'break-all' }}>
               {member.email}
             </span>
           </div>

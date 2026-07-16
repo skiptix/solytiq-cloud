@@ -53,7 +53,7 @@ export default function TimePicker({ value, onChange, onClear }: TimePickerProps
     btnRef: React.RefObject<HTMLButtonElement | null>,
   ) => (
     <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ textAlign: 'center', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#b0acbe', padding: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+      <div style={{ textAlign: 'center', fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 700, color: 'var(--color-text-quaternary)', padding: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
         {kind === 'hour' ? 'Hour' : 'Min'}
       </div>
       <div style={{ height: 196, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, padding: '0 4px', scrollbarWidth: 'thin' }}>
@@ -68,12 +68,12 @@ export default function TimePicker({ value, onChange, onClear }: TimePickerProps
                 flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 height: 32, borderRadius: 8, border: 'none',
-                background: isSelected ? '#5e4dbb' : 'transparent',
-                fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: isSelected ? 600 : 400,
-                color: isSelected ? '#fff' : '#1c1b22',
+                background: isSelected ? 'var(--color-primary)' : 'transparent',
+                fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: isSelected ? 600 : 400,
+                color: isSelected ? 'var(--color-white)' : 'var(--color-text-primary)',
                 cursor: 'pointer', transition: 'background 120ms',
               }}
-              onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = '#faf8ff'; }}
+              onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--color-purple-pale-5)'; }}
               onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}>
               {pad(n)}
             </button>
@@ -84,30 +84,30 @@ export default function TimePicker({ value, onChange, onClear }: TimePickerProps
   );
 
   return (
-    <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', padding: '14px 16px', width: Math.min(220, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+    <div style={{ background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: '14px 16px', width: Math.min(220, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
-        <Icon name="schedule" size={16} color="#5e4dbb" />
-        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22', letterSpacing: '0.02em', fontVariantNumeric: 'tabular-nums' }}>
+        <Icon name="schedule" size={16} color="var(--color-primary)" />
+        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '0.02em', fontVariantNumeric: 'tabular-nums' }}>
           {label}
         </span>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 4 }}>
         {renderColumn(HOURS, hour, 'hour', hourRef)}
-        <div style={{ width: 1, background: '#f0ecf8', alignSelf: 'stretch', marginTop: 20 }} />
+        <div style={{ width: 1, background: 'var(--color-divider)', alignSelf: 'stretch', marginTop: 20 }} />
         {renderColumn(MINUTES, minute, 'minute', minuteRef)}
       </div>
 
       <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
         <button
           onClick={() => { const d = new Date(); emit(d.getHours(), d.getMinutes()); }}
-          style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 7, padding: '6px 0', cursor: 'pointer' }}>
+          style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 7, padding: '6px 0', cursor: 'pointer' }}>
           Now
         </button>
         {value && onClear && (
           <button
             onClick={onClear}
-            style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#787584', background: '#f1ecf6', border: 'none', borderRadius: 7, padding: '6px 0', cursor: 'pointer' }}>
+            style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 7, padding: '6px 0', cursor: 'pointer' }}>
             Clear
           </button>
         )}

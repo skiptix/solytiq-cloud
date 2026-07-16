@@ -79,7 +79,7 @@ function findNearestPoint(pts: Array<{ lat: number; lon: number }>, lat: number,
 function createDotIcon(color: string): L.DivIcon {
   return L.divIcon({
     className: '',
-    html: `<div style="width:18px;height:18px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.25);cursor:grab;"></div>`,
+    html: `<div style="width:18px;height:18px;border-radius:50%;background:${color};border:3px solid var(--color-white);box-shadow:0 2px 8px rgba(var(--color-black-rgb), 0.25);cursor:grab;"></div>`,
     iconSize: [18, 18],
     iconAnchor: [9, 9],
   });
@@ -338,7 +338,7 @@ function buildRoutedSpan(
 function createPtDotIcon(): L.DivIcon {
   return L.divIcon({
     className: '',
-    html: `<div style="width:14px;height:14px;border-radius:50%;background:#fff;border:3px solid #8a7ad6;box-shadow:0 1px 6px rgba(94,77,187,0.30);box-sizing:border-box;"></div>`,
+    html: `<div style="width:14px;height:14px;border-radius:50%;background:var(--color-white);border:3px solid var(--color-purple-mid-4);box-shadow:0 1px 6px rgba(var(--color-primary-rgb), 0.30);box-sizing:border-box;"></div>`,
     iconSize: [14, 14],
     iconAnchor: [7, 7],
   });
@@ -347,18 +347,18 @@ function createPtDotIcon(): L.DivIcon {
 function createClickPinIcon(): L.DivIcon {
   return L.divIcon({
     className: '',
-    html: `<div style="width:16px;height:16px;border-radius:50%;background:#5e4dbb;border:3px solid #fff;box-shadow:0 0 0 4px rgba(94,77,187,0.22), 0 2px 8px rgba(0,0,0,0.25);box-sizing:border-box;"></div>`,
+    html: `<div style="width:16px;height:16px;border-radius:50%;background:var(--color-primary);border:3px solid var(--color-white);box-shadow:0 0 0 4px rgba(var(--color-primary-rgb), 0.22), 0 2px 8px rgba(var(--color-black-rgb), 0.25);box-sizing:border-box;"></div>`,
     iconSize: [16, 16],
     iconAnchor: [8, 8],
   });
 }
 
 function createWpIcon(offRoad: boolean): L.DivIcon {
-  const color = offRoad ? '#f59e0b' : '#5e4dbb';
-  const border = offRoad ? '2.5px dashed #fff' : '3px solid #fff';
+  const color = offRoad ? 'var(--color-warning-alt)' : 'var(--color-primary)';
+  const border = offRoad ? '2.5px dashed var(--color-white)' : '3px solid var(--color-white)';
   return L.divIcon({
     className: '',
-    html: `<div style="width:22px;height:22px;border-radius:50%;background:${color};border:${border};box-shadow:0 2px 10px rgba(94,77,187,0.35);cursor:pointer;box-sizing:border-box;"></div>`,
+    html: `<div style="width:22px;height:22px;border-radius:50%;background:${color};border:${border};box-shadow:0 2px 10px rgba(var(--color-primary-rgb), 0.35);cursor:pointer;box-sizing:border-box;"></div>`,
     iconSize: [22, 22],
     iconAnchor: [11, 11],
   });
@@ -379,7 +379,7 @@ function gradeAt(pts: GpsTrackPoint[], idx: number): number | null {
 
 function gradeColor(g: number): string {
   const a = Math.abs(g);
-  return a < 3 ? '#22c55e' : a < 8 ? '#f59e0b' : '#ef4444';
+  return a < 3 ? 'var(--color-green-mid-2)' : a < 8 ? 'var(--color-warning-alt)' : 'var(--color-red-mid-2)';
 }
 
 // ─── EditElevationChart ───────────────────────────────────────────────────────
@@ -510,19 +510,19 @@ function EditElevationChart({ points, trimStart, trimEnd, hoveredIdx, onHover, o
       >
         <defs>
           <linearGradient id="edit-elev-grad-active" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#5e4dbb" stopOpacity="0.32" />
-            <stop offset="100%" stopColor="#5e4dbb" stopOpacity="0.04" />
+            <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.32" />
+            <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.04" />
           </linearGradient>
           <linearGradient id="edit-elev-grad-dim" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#b0acbe" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="#b0acbe" stopOpacity="0.02" />
+            <stop offset="0%" stopColor="var(--color-text-quaternary)" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="var(--color-text-quaternary)" stopOpacity="0.02" />
           </linearGradient>
         </defs>
 
         {/* Grid */}
         {[0, 0.25, 0.5, 0.75, 1].map(f => {
           const y = PAD.t + (1 - f) * ch;
-          return <line key={f} x1={PAD.l} y1={y} x2={PAD.l + cw} y2={y} stroke="rgba(94,77,187,0.08)" strokeWidth={0.8} />;
+          return <line key={f} x1={PAD.l} y1={y} x2={PAD.l + cw} y2={y} stroke="rgba(var(--color-primary-rgb), 0.08)" strokeWidth={0.8} />;
         })}
 
         {/* Dim areas */}
@@ -533,24 +533,24 @@ function EditElevationChart({ points, trimStart, trimEnd, hoveredIdx, onHover, o
         {trimStart <= trimEnd && <path d={buildArea(trimStart, trimEnd)} fill="url(#edit-elev-grad-active)" />}
 
         {/* Dim lines */}
-        {trimStart > 0 && <path d={buildPath(0, trimStart)} fill="none" stroke="#c4b8f0" strokeWidth={1.5} opacity={0.5} />}
-        {trimEnd < n - 1 && <path d={buildPath(trimEnd, n - 1)} fill="none" stroke="#c4b8f0" strokeWidth={1.5} opacity={0.5} />}
+        {trimStart > 0 && <path d={buildPath(0, trimStart)} fill="none" stroke="var(--color-accent-purple-soft)" strokeWidth={1.5} opacity={0.5} />}
+        {trimEnd < n - 1 && <path d={buildPath(trimEnd, n - 1)} fill="none" stroke="var(--color-accent-purple-soft)" strokeWidth={1.5} opacity={0.5} />}
 
         {/* Active line */}
         {trimStart <= trimEnd && (
-          <path d={buildPath(trimStart, trimEnd)} fill="none" stroke="#5e4dbb" strokeWidth={2} />
+          <path d={buildPath(trimStart, trimEnd)} fill="none" stroke="var(--color-primary)" strokeWidth={2} />
         )}
 
         {/* Hovered cursor */}
         {hovX != null && !dragging && (
-          <line x1={hovX} y1={PAD.t} x2={hovX} y2={PAD.t + ch} stroke="rgba(94,77,187,0.4)" strokeWidth={1.5} strokeDasharray="4,3" />
+          <line x1={hovX} y1={PAD.t} x2={hovX} y2={PAD.t + ch} stroke="rgba(var(--color-primary-rgb), 0.4)" strokeWidth={1.5} strokeDasharray="4,3" />
         )}
 
         {/* Trim region highlight */}
         <rect
           x={startX} y={PAD.t}
           width={Math.max(0, endX - startX)} height={ch}
-          fill="rgba(94,77,187,0.06)" stroke="none"
+          fill="rgba(var(--color-primary-rgb), 0.06)" stroke="none"
         />
 
         {/* X-axis labels */}
@@ -558,7 +558,7 @@ function EditElevationChart({ points, trimStart, trimEnd, hoveredIdx, onHover, o
           const idx = Math.round((i / 5) * (n - 1));
           const x = toX(idx);
           return (
-            <text key={i} x={x} y={dims.h - 5} textAnchor="middle" style={{ fontSize: 9, fill: 'rgba(80,60,140,0.55)', fontFamily: 'Inter,sans-serif' }}>
+            <text key={i} x={x} y={dims.h - 5} textAnchor="middle" style={{ fontSize: 9, fill: 'rgba(var(--color-purple-deep-1-rgb), 0.55)', fontFamily: 'var(--font-body)' }}>
               {i + 1}
             </text>
           );
@@ -566,20 +566,20 @@ function EditElevationChart({ points, trimStart, trimEnd, hoveredIdx, onHover, o
 
         {/* Trim start handle — wide invisible hit zone + visible line */}
         <line x1={startX} y1={PAD.t - 4} x2={startX} y2={PAD.t + ch + 4} stroke="transparent" strokeWidth={12} style={{ cursor: 'ew-resize' }} onMouseDown={handleStartMouseDown} />
-        <line x1={startX} y1={PAD.t - 4} x2={startX} y2={PAD.t + ch + 4} stroke="#22c55e" strokeWidth={2} strokeDasharray="4,2" style={{ pointerEvents: 'none' }} />
+        <line x1={startX} y1={PAD.t - 4} x2={startX} y2={PAD.t + ch + 4} stroke="var(--color-green-mid-2)" strokeWidth={2} strokeDasharray="4,2" style={{ pointerEvents: 'none' }} />
         {/* Start handle dot */}
-        <circle cx={startX} cy={PAD.t + ch / 2} r={6} fill="#22c55e" stroke="#fff" strokeWidth={2} style={{ cursor: 'ew-resize' }} onMouseDown={handleStartMouseDown} />
+        <circle cx={startX} cy={PAD.t + ch / 2} r={6} fill="var(--color-green-mid-2)" stroke="var(--color-white)" strokeWidth={2} style={{ cursor: 'ew-resize' }} onMouseDown={handleStartMouseDown} />
 
         {/* Trim end handle */}
         <line x1={endX} y1={PAD.t - 4} x2={endX} y2={PAD.t + ch + 4} stroke="transparent" strokeWidth={12} style={{ cursor: 'ew-resize' }} onMouseDown={handleEndMouseDown} />
-        <line x1={endX} y1={PAD.t - 4} x2={endX} y2={PAD.t + ch + 4} stroke="#ef4444" strokeWidth={2} strokeDasharray="4,2" style={{ pointerEvents: 'none' }} />
-        <circle cx={endX} cy={PAD.t + ch / 2} r={6} fill="#ef4444" stroke="#fff" strokeWidth={2} style={{ cursor: 'ew-resize' }} onMouseDown={handleEndMouseDown} />
+        <line x1={endX} y1={PAD.t - 4} x2={endX} y2={PAD.t + ch + 4} stroke="var(--color-red-mid-2)" strokeWidth={2} strokeDasharray="4,2" style={{ pointerEvents: 'none' }} />
+        <circle cx={endX} cy={PAD.t + ch / 2} r={6} fill="var(--color-red-mid-2)" stroke="var(--color-white)" strokeWidth={2} style={{ cursor: 'ew-resize' }} onMouseDown={handleEndMouseDown} />
       </svg>
 
       {/* Elevation range label */}
       <div style={{
         position: 'absolute', top: 4, right: PAD.r + 4,
-        fontSize: 9, color: 'rgba(80,60,140,0.55)', fontFamily: 'Inter,sans-serif',
+        fontSize: 9, color: 'rgba(var(--color-purple-deep-1-rgb), 0.55)', fontFamily: 'var(--font-body)',
         pointerEvents: 'none',
       }}>
         {Math.round(elevData.minE)}–{Math.round(elevData.maxE)} m
@@ -590,12 +590,12 @@ function EditElevationChart({ points, trimStart, trimEnd, hoveredIdx, onHover, o
         <div style={{
           position: 'absolute', top: 6,
           left: Math.min(Math.max(hovX + 10, PAD.l), Math.max(PAD.l, dims.w - 130)),
-          background: 'rgba(255,255,255,0.95)', borderRadius: 8, padding: '4px 9px',
-          border: '1px solid rgba(94,77,187,0.15)', boxShadow: '0 2px 10px rgba(94,77,187,0.12)',
-          fontSize: 10.5, fontFamily: 'Inter, sans-serif', pointerEvents: 'none', whiteSpace: 'nowrap',
+          background: 'rgba(var(--color-white-rgb), 0.95)', borderRadius: 8, padding: '4px 9px',
+          border: '1px solid rgba(var(--color-primary-rgb), 0.15)', boxShadow: '0 2px 10px rgba(var(--color-primary-rgb), 0.12)',
+          fontSize: 10.5, fontFamily: 'var(--font-body)', pointerEvents: 'none', whiteSpace: 'nowrap',
         }}>
-          <span style={{ color: '#787584' }}>{fmtDist(cumDist[hoveredIdx] ?? 0)}</span>
-          <span style={{ color: '#1c1b22', fontWeight: 700, marginLeft: 8 }}>{Math.round(points[hoveredIdx].ele)} m</span>
+          <span style={{ color: 'var(--color-text-tertiary)' }}>{fmtDist(cumDist[hoveredIdx] ?? 0)}</span>
+          <span style={{ color: 'var(--color-text-primary)', fontWeight: 700, marginLeft: 8 }}>{Math.round(points[hoveredIdx].ele)} m</span>
         </div>
       )}
     </div>
@@ -1098,7 +1098,7 @@ export default function GPSEditScreen() {
 
     // Draggable start marker
     const sMkr = L.marker([pts[ts].lat, pts[ts].lon], {
-      icon: createDotIcon('#22c55e'),
+      icon: createDotIcon('var(--color-green-mid-2)'),
       draggable: true,
     }).addTo(map);
     sMkr.on('dragend', e => {
@@ -1114,7 +1114,7 @@ export default function GPSEditScreen() {
 
     // Draggable end marker
     const eMkr = L.marker([pts[te].lat, pts[te].lon], {
-      icon: createDotIcon('#ef4444'),
+      icon: createDotIcon('var(--color-red-mid-2)'),
       draggable: true,
     }).addTo(map);
     eMkr.on('dragend', e => {
@@ -2041,7 +2041,7 @@ export default function GPSEditScreen() {
     const map = leafletRef.current;
     if (!map) return;
     searchPinRef.current?.remove();
-    const icon = L.divIcon({ className: '', html: `<div style="background:#5e4dbb;border:2px solid #fff;border-radius:50%;width:14px;height:14px;box-shadow:0 2px 8px rgba(94,77,187,0.4);"></div>`, iconSize: [14, 14], iconAnchor: [7, 7] });
+    const icon = L.divIcon({ className: '', html: `<div style="background:var(--color-primary);border:2px solid var(--color-white);border-radius:50%;width:14px;height:14px;box-shadow:0 2px 8px rgba(var(--color-primary-rgb), 0.4);"></div>`, iconSize: [14, 14], iconAnchor: [7, 7] });
     searchPinRef.current = L.marker([lat, lon], { icon }).bindTooltip(label, { permanent: false, direction: 'top' }).addTo(map);
   }
 
@@ -2195,20 +2195,20 @@ export default function GPSEditScreen() {
 
   const secBtnStyle: React.CSSProperties = {
     width: '100%', padding: '7px 0', borderRadius: 8,
-    border: '1px solid #e8e4f0', background: '#fff', color: '#484552',
+    border: '1px solid var(--color-border)', background: 'var(--color-white)', color: 'var(--color-text-secondary)',
     fontSize: 12, fontWeight: 600, cursor: 'pointer',
-    fontFamily: 'Hanken Grotesk, sans-serif',
+    fontFamily: 'var(--font-heading)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
     transition: 'background 150ms',
   };
 
   const mapCtrlBtn: React.CSSProperties = {
     width: 36, height: 36, borderRadius: 9,
-    background: 'rgba(255,255,255,0.88)',
+    background: 'rgba(var(--color-white-rgb), 0.88)',
     backdropFilter: 'blur(16px)',
     WebkitBackdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255,255,255,0.75)',
-    boxShadow: '0 2px 12px rgba(94,77,187,0.10)',
+    border: '1px solid rgba(var(--color-white-rgb), 0.75)',
+    boxShadow: '0 2px 12px rgba(var(--color-primary-rgb), 0.10)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     cursor: 'pointer',
     transition: 'box-shadow 150ms, background 150ms',
@@ -2216,7 +2216,7 @@ export default function GPSEditScreen() {
 
   if (loading) {
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#faf9ff', fontFamily: 'Inter, sans-serif', color: '#787584', fontSize: 14 }}>
+      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-surface-tint-3)', fontFamily: 'var(--font-body)', color: 'var(--color-text-tertiary)', fontSize: 14 }}>
         Loading route…
       </div>
     );
@@ -2227,39 +2227,39 @@ export default function GPSEditScreen() {
       <style>{`
         .leaflet-div-icon { background: transparent !important; border: none !important; }
         .leaflet-editing-icon {
-          background: #5e4dbb !important; border: 2.5px solid white !important;
+          background: var(--color-primary) !important; border: 2.5px solid white !important;
           border-radius: 50% !important; width: 10px !important; height: 10px !important;
           margin-left: -5px !important; margin-top: -5px !important;
         }
         .leaflet-middle-icon {
-          background: rgba(94,77,187,0.45) !important; border: 2px solid white !important;
+          background: rgba(var(--color-primary-rgb), 0.45) !important; border: 2px solid white !important;
           border-radius: 50% !important;
         }
-        .gps-map-ctrl:hover { box-shadow: 0 4px 18px rgba(94,77,187,0.18) !important; background: rgba(255,255,255,0.97) !important; }
+        .gps-map-ctrl:hover { box-shadow: 0 4px 18px rgba(var(--color-primary-rgb), 0.18) !important; background: rgba(var(--color-white-rgb), 0.97) !important; }
         @keyframes wpPopIn { from { opacity: 0; transform: translate(-50%, -100%) scale(0.96); } to { opacity: 1; transform: translate(-50%, -100%) scale(1); } }
         @keyframes wpSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
 
-      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: '#faf9ff', fontFamily: 'Inter, sans-serif' }}>
+      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--color-surface-tint-3)', fontFamily: 'var(--font-body)' }}>
 
         {/* ── Edit Sidebar ────────────────────────────────────────────────── */}
         <div style={{
           width: 280, flexShrink: 0,
-          background: '#faf9ff', borderRight: '1px solid #e8e4f0',
+          background: 'var(--color-surface-tint-3)', borderRight: '1px solid var(--color-border)',
           display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden',
         }}>
           {/* Header */}
-          <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
+          <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
             <button
               onClick={() => navigate(`/gps?file=${id}`)}
               style={{
                 ...secBtnStyle, width: 'auto', padding: '5px 10px', marginBottom: 10,
-                fontSize: 11, color: '#787584', border: '1px solid #e8e4f0',
+                fontSize: 11, color: 'var(--color-text-tertiary)', border: '1px solid var(--color-border)',
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
             >
-              <Icon name="arrow_back" size={13} color="#787584" />
+              <Icon name="arrow_back" size={13} color="var(--color-text-tertiary)" />
               Route Map
             </button>
             <input
@@ -2268,19 +2268,19 @@ export default function GPSEditScreen() {
               placeholder="Route name"
               style={{
                 width: '100%', padding: '7px 10px', boxSizing: 'border-box',
-                background: '#fff', border: '1px solid #e8e4f0',
+                background: 'var(--color-white)', border: '1px solid var(--color-border)',
                 borderRadius: 8, fontSize: 13, fontWeight: 600,
-                color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif',
+                color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)',
                 outline: 'none',
               }}
-              onFocus={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
-              onBlur={e => { e.currentTarget.style.borderColor = '#e8e4f0'; }}
+              onFocus={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+              onBlur={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
             />
           </div>
 
           {/* Stats + Surface + Time */}
-          <div style={{ padding: '10px 16px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#b0acbe', letterSpacing: '0.06em', marginBottom: 8 }}>DETAILS</div>
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-quaternary)', letterSpacing: '0.06em', marginBottom: 8 }}>DETAILS</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
               {([
                 { label: 'Distance', value: routeStats ? fmtDist(routeStats.distance) : '—' },
@@ -2288,26 +2288,26 @@ export default function GPSEditScreen() {
                 { label: 'Highest', value: routeStats?.maxEle != null ? `${routeStats.maxEle} m` : '—' },
                 { label: 'Lowest', value: routeStats?.minEle != null ? `${routeStats.minEle} m` : '—' },
               ]).map(s => (
-                <div key={s.label} style={{ background: '#fff', borderRadius: 8, padding: '7px 8px', border: '1px solid #e8e4f0' }}>
-                  <div style={{ fontSize: 9, color: '#b0acbe', marginBottom: 3 }}>{s.label}</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>{s.value}</div>
+                <div key={s.label} style={{ background: 'var(--color-white)', borderRadius: 8, padding: '7px 8px', border: '1px solid var(--color-border)' }}>
+                  <div style={{ fontSize: 9, color: 'var(--color-text-quaternary)', marginBottom: 3 }}>{s.label}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)' }}>{s.value}</div>
                 </div>
               ))}
             </div>
 
             {/* Time estimate */}
             <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 9, color: '#b0acbe', marginBottom: 4 }}>ESTIMATED TIME</div>
+              <div style={{ fontSize: 9, color: 'var(--color-text-quaternary)', marginBottom: 4 }}>ESTIMATED TIME</div>
               <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
                 {(['road', 'gravel', 'custom'] as const).map(p => (
                   <button
                     key={p}
                     onClick={() => setSpeedProfile(p)}
                     style={{
-                      flex: 1, padding: '5px 0', borderRadius: 7, border: `1.5px solid ${speedProfile === p ? '#5e4dbb' : '#e8e4f0'}`,
-                      background: speedProfile === p ? '#f5f3ff' : '#fff', cursor: 'pointer',
-                      fontSize: 10, fontWeight: 600, color: speedProfile === p ? '#5e4dbb' : '#787584',
-                      fontFamily: 'Hanken Grotesk, sans-serif', transition: 'all 140ms',
+                      flex: 1, padding: '5px 0', borderRadius: 7, border: `1.5px solid ${speedProfile === p ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                      background: speedProfile === p ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer',
+                      fontSize: 10, fontWeight: 600, color: speedProfile === p ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                      fontFamily: 'var(--font-heading)', transition: 'all 140ms',
                     }}
                   >
                     {p === 'road' ? 'Road' : p === 'gravel' ? 'Gravel' : 'Custom'}
@@ -2320,19 +2320,19 @@ export default function GPSEditScreen() {
                     type="number" min={1} max={120}
                     value={customSpeedKmh}
                     onChange={e => setCustomSpeedKmh(Math.max(1, Math.min(120, Number(e.target.value))))}
-                    style={{ width: 60, padding: '4px 8px', border: '1px solid #e8e4f0', borderRadius: 7, fontSize: 12, outline: 'none', fontFamily: 'Inter, sans-serif' }}
-                    onFocus={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
-                    onBlur={e => { e.currentTarget.style.borderColor = '#e8e4f0'; }}
+                    style={{ width: 60, padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 7, fontSize: 12, outline: 'none', fontFamily: 'var(--font-body)' }}
+                    onFocus={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+                    onBlur={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
                   />
-                  <span style={{ fontSize: 11, color: '#787584' }}>km/h</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>km/h</span>
                 </div>
               )}
-              <div style={{ background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #e8e4f0', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Icon name="schedule" size={14} color="#5e4dbb" />
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>
+              <div style={{ background: 'var(--color-white)', borderRadius: 8, padding: '7px 10px', border: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon name="schedule" size={14} color="var(--color-primary)" />
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)' }}>
                   {timeEstimate ?? '—'}
                 </span>
-                <span style={{ fontSize: 10, color: '#b0acbe', marginLeft: 'auto' }}>
+                <span style={{ fontSize: 10, color: 'var(--color-text-quaternary)', marginLeft: 'auto' }}>
                   @ {speedProfile === 'road' ? '28' : speedProfile === 'gravel' ? '20' : customSpeedKmh} km/h
                 </span>
               </div>
@@ -2340,34 +2340,34 @@ export default function GPSEditScreen() {
 
             {/* Surface breakdown bar */}
             <div>
-              <div style={{ fontSize: 9, color: '#b0acbe', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div style={{ fontSize: 9, color: 'var(--color-text-quaternary)', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 4 }}>
                 SURFACE
-                {surfaceLoading && <span style={{ fontSize: 9, color: '#9c6bde', animation: 'wpSpin 1s linear infinite', display: 'inline-block', fontFamily: "'Material Symbols Outlined'" }}>progress_activity</span>}
+                {surfaceLoading && <span style={{ fontSize: 9, color: 'var(--color-purple-mid-5)', animation: 'wpSpin 1s linear infinite', display: 'inline-block', fontFamily: "var(--font-icon)" }}>progress_activity</span>}
               </div>
               {surfaceData ? (
                 <>
                   <div style={{ height: 10, borderRadius: 5, overflow: 'hidden', display: 'flex', gap: 1, marginBottom: 6 }}>
-                    {surfaceData.road > 0 && <div style={{ flex: surfaceData.road, background: '#5e4dbb' }} title={`Road ${surfaceData.road}%`} />}
-                    {surfaceData.gravel > 0 && <div style={{ flex: surfaceData.gravel, background: '#f59e0b' }} title={`Gravel ${surfaceData.gravel}%`} />}
-                    {surfaceData.path > 0 && <div style={{ flex: surfaceData.path, background: '#22c55e' }} title={`Path ${surfaceData.path}%`} />}
-                    {surfaceData.unknown > 0 && <div style={{ flex: surfaceData.unknown, background: '#d8d4e4' }} title={`Unknown ${surfaceData.unknown}%`} />}
+                    {surfaceData.road > 0 && <div style={{ flex: surfaceData.road, background: 'var(--color-primary)' }} title={`Road ${surfaceData.road}%`} />}
+                    {surfaceData.gravel > 0 && <div style={{ flex: surfaceData.gravel, background: 'var(--color-warning-alt)' }} title={`Gravel ${surfaceData.gravel}%`} />}
+                    {surfaceData.path > 0 && <div style={{ flex: surfaceData.path, background: 'var(--color-green-mid-2)' }} title={`Path ${surfaceData.path}%`} />}
+                    {surfaceData.unknown > 0 && <div style={{ flex: surfaceData.unknown, background: 'var(--color-purple-tint-5)' }} title={`Unknown ${surfaceData.unknown}%`} />}
                   </div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {([
-                      { key: 'road', label: 'Road', color: '#5e4dbb', pct: surfaceData.road },
-                      { key: 'gravel', label: 'Gravel', color: '#f59e0b', pct: surfaceData.gravel },
-                      { key: 'path', label: 'Path', color: '#22c55e', pct: surfaceData.path },
-                      { key: 'unknown', label: 'Unknown', color: '#d8d4e4', pct: surfaceData.unknown },
+                      { key: 'road', label: 'Road', color: 'var(--color-primary)', pct: surfaceData.road },
+                      { key: 'gravel', label: 'Gravel', color: 'var(--color-warning-alt)', pct: surfaceData.gravel },
+                      { key: 'path', label: 'Path', color: 'var(--color-green-mid-2)', pct: surfaceData.path },
+                      { key: 'unknown', label: 'Unknown', color: 'var(--color-purple-tint-5)', pct: surfaceData.unknown },
                     ]).filter(s => s.pct > 0).map(s => (
                       <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                         <div style={{ width: 8, height: 8, borderRadius: 2, background: s.color, flexShrink: 0 }} />
-                        <span style={{ fontSize: 9.5, color: '#484552' }}>{s.label} {s.pct}%</span>
+                        <span style={{ fontSize: 9.5, color: 'var(--color-text-secondary)' }}>{s.label} {s.pct}%</span>
                       </div>
                     ))}
                   </div>
                 </>
               ) : (
-                <div style={{ fontSize: 10, color: '#b0acbe' }}>
+                <div style={{ fontSize: 10, color: 'var(--color-text-quaternary)' }}>
                   {editPoints && editPoints.length >= 10 ? (surfaceLoading ? 'Fetching…' : 'Will appear soon') : 'No route data yet'}
                 </div>
               )}
@@ -2375,36 +2375,36 @@ export default function GPSEditScreen() {
           </div>
 
           {/* Trim section */}
-          <div style={{ padding: '10px 16px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
             <button
               onClick={() => setTrimCollapsed(v => !v)}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, marginBottom: trimCollapsed ? 0 : 6 }}
             >
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#b0acbe', letterSpacing: '0.06em' }}>TRIM ROUTE</div>
-              <Icon name={trimCollapsed ? 'expand_more' : 'expand_less'} size={14} color="#b0acbe" />
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-quaternary)', letterSpacing: '0.06em' }}>TRIM ROUTE</div>
+              <Icon name={trimCollapsed ? 'expand_more' : 'expand_less'} size={14} color="var(--color-text-quaternary)" />
             </button>
             {!trimCollapsed && (
             <>
-            <div style={{ fontSize: 11, color: '#787584', marginBottom: 10, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 10, lineHeight: 1.5 }}>
               Drag the green/red handles on the map or chart to trim start/end.
             </div>
             {editPoints && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
-                <div style={{ background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #e8e4f0' }}>
+                <div style={{ background: 'var(--color-white)', borderRadius: 8, padding: '7px 10px', border: '1px solid var(--color-border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e' }} />
-                    <span style={{ fontSize: 9, color: '#b0acbe' }}>Start</span>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-green-mid-2)' }} />
+                    <span style={{ fontSize: 9, color: 'var(--color-text-quaternary)' }}>Start</span>
                   </div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#484552', fontFamily: 'Hanken Grotesk, sans-serif' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)' }}>
                     pt {trimStart + 1}
                   </div>
                 </div>
-                <div style={{ background: '#fff', borderRadius: 8, padding: '7px 10px', border: '1px solid #e8e4f0' }}>
+                <div style={{ background: 'var(--color-white)', borderRadius: 8, padding: '7px 10px', border: '1px solid var(--color-border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} />
-                    <span style={{ fontSize: 9, color: '#b0acbe' }}>End</span>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-red-mid-2)' }} />
+                    <span style={{ fontSize: 9, color: 'var(--color-text-quaternary)' }}>End</span>
                   </div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#484552', fontFamily: 'Hanken Grotesk, sans-serif' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)' }}>
                     pt {trimEnd + 1} / {editPoints.length}
                   </div>
                 </div>
@@ -2421,8 +2421,8 @@ export default function GPSEditScreen() {
                 endMarkerRef.current?.setLatLng([editPoints[te].lat, editPoints[te].lon]);
               }}
               style={{ ...secBtnStyle, fontSize: 11 }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
             >
               Reset Trim
             </button>
@@ -2431,27 +2431,27 @@ export default function GPSEditScreen() {
           </div>
 
           {/* Routing */}
-          <div style={{ padding: '10px 16px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#b0acbe', letterSpacing: '0.06em', marginBottom: 8 }}>ROUTING</div>
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-quaternary)', letterSpacing: '0.06em', marginBottom: 8 }}>ROUTING</div>
             <button
               onClick={() => setSnapEnabled(v => !v)}
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '8px 10px', borderRadius: 8, border: '1px solid #e8e4f0',
-                background: '#fff', cursor: 'pointer', transition: 'background 150ms',
+                padding: '8px 10px', borderRadius: 8, border: '1px solid var(--color-border)',
+                background: 'var(--color-white)', cursor: 'pointer', transition: 'background 150ms',
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
             >
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#484552', fontFamily: 'Hanken Grotesk, sans-serif' }}>Snap to ways</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)' }}>Snap to ways</span>
               <div style={{
                 width: 32, height: 18, borderRadius: 10, position: 'relative', flexShrink: 0,
-                background: snapEnabled ? '#5e4dbb' : '#d8d4e4', transition: 'background 180ms',
+                background: snapEnabled ? 'var(--color-primary)' : 'var(--color-purple-tint-5)', transition: 'background 180ms',
               }}>
                 <div style={{
                   position: 'absolute', top: 2, left: snapEnabled ? 16 : 2,
-                  width: 14, height: 14, borderRadius: '50%', background: '#fff',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left 180ms',
+                  width: 14, height: 14, borderRadius: '50%', background: 'var(--color-white)',
+                  boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.25)', transition: 'left 180ms',
                 }} />
               </div>
             </button>
@@ -2472,19 +2472,19 @@ export default function GPSEditScreen() {
                         title={opt.desc}
                         style={{
                           padding: '7px 0', borderRadius: 8, cursor: 'pointer',
-                          border: `1.5px solid ${active ? '#5e4dbb' : '#e8e4f0'}`,
-                          background: active ? '#f5f3ff' : '#fff',
+                          border: `1.5px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                          background: active ? 'var(--color-surface-tint)' : 'var(--color-white)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                           transition: 'all 150ms',
                         }}
                       >
-                        <Icon name={opt.icon} size={14} color={active ? '#5e4dbb' : '#b0acbe'} />
-                        <span style={{ fontSize: 11, fontWeight: 600, color: active ? '#5e4dbb' : '#787584', fontFamily: 'Hanken Grotesk, sans-serif' }}>{opt.label}</span>
+                        <Icon name={opt.icon} size={14} color={active ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
+                        <span style={{ fontSize: 11, fontWeight: 600, color: active ? 'var(--color-primary)' : 'var(--color-text-tertiary)', fontFamily: 'var(--font-heading)' }}>{opt.label}</span>
                       </button>
                     );
                   })}
                 </div>
-                <div style={{ fontSize: 10, color: '#9c6bde', marginTop: 6, fontWeight: 500 }}>
+                <div style={{ fontSize: 10, color: 'var(--color-purple-mid-5)', marginTop: 6, fontWeight: 500 }}>
                   {({
                     mtb: 'All available paths & trails',
                     gravel: 'Gravel tracks, no MTB trails',
@@ -2494,15 +2494,15 @@ export default function GPSEditScreen() {
                 </div>
               </>
             )}
-            <div style={{ fontSize: 10.5, color: '#b0acbe', marginTop: 8, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 10.5, color: 'var(--color-text-quaternary)', marginTop: 8, lineHeight: 1.5 }}>
               Dragged points connect along mapped ways. Click a waypoint dot to switch it to off-road, or click anywhere on the map to add a point.
             </div>
           </div>
 
           {/* Named Pins */}
-          <div style={{ padding: '10px 16px', borderBottom: '1px solid #e8e4f0', flexShrink: 0, maxHeight: 260, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--color-border)', flexShrink: 0, maxHeight: 260, display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexShrink: 0 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#b0acbe', letterSpacing: '0.06em' }}>PINS</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-quaternary)', letterSpacing: '0.06em' }}>PINS</div>
               <button
                 onClick={() => {
                   const map = leafletRef.current;
@@ -2513,15 +2513,15 @@ export default function GPSEditScreen() {
                   setAddPinMode('pin');
                 }}
                 style={{ ...secBtnStyle, width: 'auto', padding: '4px 8px', fontSize: 10, gap: 4 }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
               >
-                <Icon name="add_location_alt" size={12} color="#5e4dbb" />
+                <Icon name="add_location_alt" size={12} color="var(--color-primary)" />
                 Map Center
               </button>
             </div>
             {namedPins.length === 0 ? (
-              <div style={{ fontSize: 10.5, color: '#b0acbe', lineHeight: 1.55 }}>
+              <div style={{ fontSize: 10.5, color: 'var(--color-text-quaternary)', lineHeight: 1.55 }}>
                 Click a POI or search result to add a named pin.
               </div>
             ) : (
@@ -2531,8 +2531,8 @@ export default function GPSEditScreen() {
                   const cfg = (POI_CATEGORY_CONFIG as Record<string, typeof POI_CATEGORY_CONFIG[PoiCategory]>)[pin.sym] ?? null;
                   return (
                     <div key={pin.id} style={{
-                      background: '#fff', borderRadius: 8,
-                      border: `1px solid ${pin.highlighted ? '#c4b8f0' : '#e8e4f0'}`,
+                      background: 'var(--color-white)', borderRadius: 8,
+                      border: `1px solid ${pin.highlighted ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`,
                       padding: '7px 8px', marginBottom: 5, transition: 'border-color 150ms',
                     }}>
                       {editingPin === pin.id ? (
@@ -2548,21 +2548,21 @@ export default function GPSEditScreen() {
                             if (e.key === 'Enter') e.currentTarget.blur();
                             if (e.key === 'Escape') setEditingPin(null);
                           }}
-                          style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #c4b8f0', borderRadius: 6, padding: '4px 7px', fontSize: 11, outline: 'none', fontFamily: 'Inter, sans-serif' }}
+                          style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--color-accent-purple-soft)', borderRadius: 6, padding: '4px 7px', fontSize: 11, outline: 'none', fontFamily: 'var(--font-body)' }}
                         />
                       ) : (
                         <>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
-                            {cfg && <span style={{ fontFamily: "'Material Symbols Outlined'", fontSize: 13, color: cfg.fg, lineHeight: 1, fontVariationSettings: "'FILL' 1,'wght' 400" }}>{cfg.icon}</span>}
-                            <span style={{ fontSize: 11, fontWeight: 600, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pin.name}</span>
+                            {cfg && <span style={{ fontFamily: "var(--font-icon)", fontSize: 13, color: cfg.fg, lineHeight: 1, fontVariationSettings: "'FILL' 1,'wght' 400" }}>{cfg.icon}</span>}
+                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pin.name}</span>
                           </div>
-                          {dist != null && <div style={{ fontSize: 9, color: '#b0acbe', marginBottom: 4 }}>{fmtDist(dist)} from start</div>}
+                          {dist != null && <div style={{ fontSize: 9, color: 'var(--color-text-quaternary)', marginBottom: 4 }}>{fmtDist(dist)} from start</div>}
                           <div style={{ display: 'flex', gap: 4 }}>
-                            <button title="Show on map" onClick={() => leafletRef.current?.flyTo([pin.lat, pin.lon], Math.max(leafletRef.current?.getZoom() ?? 14, 14), { animate: true, duration: 0.8 })} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid #e8e4f0', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                              <Icon name="my_location" size={11} color="#5e4dbb" />
+                            <button title="Show on map" onClick={() => leafletRef.current?.flyTo([pin.lat, pin.lon], Math.max(leafletRef.current?.getZoom() ?? 14, 14), { animate: true, duration: 0.8 })} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                              <Icon name="my_location" size={11} color="var(--color-primary)" />
                             </button>
-                            <button title="Rename" onClick={() => setEditingPin(pin.id)} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid #e8e4f0', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                              <Icon name="edit" size={11} color="#787584" />
+                            <button title="Rename" onClick={() => setEditingPin(pin.id)} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid var(--color-border)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                              <Icon name="edit" size={11} color="var(--color-text-tertiary)" />
                             </button>
                             <button
                               title={pin.highlighted ? 'Remove star' : 'Mark as highlight'}
@@ -2571,14 +2571,14 @@ export default function GPSEditScreen() {
                                 setNamedPins(prev => prev.map(p => p.id === pin.id ? updated : p));
                                 renderNamedPinMarker(updated);
                               }}
-                              style={{ flex: 1, height: 22, borderRadius: 5, border: `1px solid ${pin.highlighted ? '#c4b8f0' : '#e8e4f0'}`, background: pin.highlighted ? '#ede9ff' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                              onMouseEnter={e => { e.currentTarget.style.background = pin.highlighted ? '#e0daff' : '#f5f3ff'; }}
-                              onMouseLeave={e => { e.currentTarget.style.background = pin.highlighted ? '#ede9ff' : 'transparent'; }}
+                              style={{ flex: 1, height: 22, borderRadius: 5, border: `1px solid ${pin.highlighted ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`, background: pin.highlighted ? 'var(--color-surface-tint-4)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              onMouseEnter={e => { e.currentTarget.style.background = pin.highlighted ? 'var(--color-purple-pale-37)' : 'var(--color-surface-tint)'; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = pin.highlighted ? 'var(--color-surface-tint-4)' : 'transparent'; }}
                             >
-                              <Icon name="star" size={11} color={pin.highlighted ? '#5e4dbb' : '#b0acbe'} />
+                              <Icon name="star" size={11} color={pin.highlighted ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
                             </button>
-                            <button title="Delete" onClick={() => { removeNamedPinMarker(pin.id); setNamedPins(prev => prev.filter(p => p.id !== pin.id)); }} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid #fca5a5', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                              <Icon name="delete" size={11} color="#ba1a1a" />
+                            <button title="Delete" onClick={() => { removeNamedPinMarker(pin.id); setNamedPins(prev => prev.filter(p => p.id !== pin.id)); }} style={{ flex: 1, height: 22, borderRadius: 5, border: '1px solid var(--color-red-tint-1)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                              <Icon name="delete" size={11} color="var(--color-error)" />
                             </button>
                           </div>
                         </>
@@ -2589,9 +2589,9 @@ export default function GPSEditScreen() {
                 {namedPins.length > 3 && (
                   <button
                     onClick={() => setPinsExpanded(v => !v)}
-                    style={{ width: '100%', padding: '5px 0', borderRadius: 7, border: '1px dashed #d8d4e4', background: 'transparent', cursor: 'pointer', fontSize: 10, color: '#787584', fontFamily: 'Hanken Grotesk, sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
+                    style={{ width: '100%', padding: '5px 0', borderRadius: 7, border: '1px dashed var(--color-purple-tint-5)', background: 'transparent', cursor: 'pointer', fontSize: 10, color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-heading)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}
                   >
-                    <Icon name={pinsExpanded ? 'expand_less' : 'expand_more'} size={12} color="#787584" />
+                    <Icon name={pinsExpanded ? 'expand_less' : 'expand_more'} size={12} color="var(--color-text-tertiary)" />
                     {pinsExpanded ? 'Show less' : `Show all ${namedPins.length} pins`}
                   </button>
                 )}
@@ -2600,26 +2600,26 @@ export default function GPSEditScreen() {
           </div>
 
           {/* Undo/Redo */}
-          <div style={{ padding: '10px 16px', borderBottom: '1px solid #e8e4f0', flexShrink: 0 }}>
+          <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               <button
                 disabled={!canUndo}
                 onClick={undo}
                 style={{ ...secBtnStyle, flex: 1, opacity: canUndo ? 1 : 0.45 }}
-                onMouseEnter={e => { if (canUndo) e.currentTarget.style.background = '#f5f3ff'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+                onMouseEnter={e => { if (canUndo) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
               >
-                <Icon name="undo" size={13} color={canUndo ? '#5e4dbb' : '#c4b8f0'} />
+                <Icon name="undo" size={13} color={canUndo ? 'var(--color-primary)' : 'var(--color-accent-purple-soft)'} />
                 Undo
               </button>
               <button
                 disabled={!canRedo}
                 onClick={redo}
                 style={{ ...secBtnStyle, flex: 1, opacity: canRedo ? 1 : 0.45 }}
-                onMouseEnter={e => { if (canRedo) e.currentTarget.style.background = '#f5f3ff'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+                onMouseEnter={e => { if (canRedo) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
               >
-                <Icon name="redo" size={13} color={canRedo ? '#5e4dbb' : '#c4b8f0'} />
+                <Icon name="redo" size={13} color={canRedo ? 'var(--color-primary)' : 'var(--color-accent-purple-soft)'} />
                 Redo
               </button>
             </div>
@@ -2640,9 +2640,9 @@ export default function GPSEditScreen() {
                 historyIdxRef.current = 0;
                 rebuildMap(originalPoints, 0, te);
               }}
-              style={{ ...secBtnStyle, color: '#ba1a1a', borderColor: '#fca5a5', fontSize: 11 }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+              style={{ ...secBtnStyle, color: 'var(--color-error)', borderColor: 'var(--color-red-tint-1)', fontSize: 11 }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
             >
               Reset to Original
             </button>
@@ -2651,7 +2651,7 @@ export default function GPSEditScreen() {
           {/* Original file info (flex spacer) */}
           <div style={{ padding: '10px 16px', flex: 1, overflowY: 'auto' }}>
             {fileInfo && (
-              <div style={{ fontSize: 10, color: '#b0acbe' }}>
+              <div style={{ fontSize: 10, color: 'var(--color-text-quaternary)' }}>
                 Original: {fileInfo.name}
                 {originalPoints && <><br />{originalPoints.length} pts (simplified)</>}
               </div>
@@ -2659,36 +2659,36 @@ export default function GPSEditScreen() {
           </div>
 
           {/* Save / Discard footer */}
-          <div style={{ padding: '12px 16px', borderTop: '1px solid #e8e4f0', flexShrink: 0 }}>
+          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--color-border)', flexShrink: 0 }}>
             {saveError && (
-              <div style={{ fontSize: 11, color: '#ba1a1a', marginBottom: 8, padding: '6px 10px', background: '#fff5f5', borderRadius: 6, border: '1px solid #fca5a5' }}>
+              <div style={{ fontSize: 11, color: 'var(--color-error)', marginBottom: 8, padding: '6px 10px', background: 'var(--color-error-bg-alt)', borderRadius: 6, border: '1px solid var(--color-red-tint-1)' }}>
                 {saveError}
               </div>
             )}
             <button
               onClick={() => navigate(`/gps?file=${id}`)}
               style={{ ...secBtnStyle, marginBottom: 6, fontSize: 12 }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
             >
               Discard Changes
             </button>
 
             {/* Save split button */}
             <div style={{ position: 'relative' }}>
-              <div style={{ display: 'flex', gap: 1, borderRadius: 9, overflow: 'hidden', border: '1.5px solid #5e4dbb' }}>
+              <div style={{ display: 'flex', gap: 1, borderRadius: 9, overflow: 'hidden', border: '1.5px solid var(--color-primary)' }}>
                 <button
                   onClick={() => handleSave('new')}
                   disabled={!!saving}
                   style={{
                     flex: 1, padding: '9px 12px',
-                    background: saving ? '#c4b8f0' : '#5e4dbb', color: '#fff',
+                    background: saving ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)', color: 'var(--color-white)',
                     fontSize: 12, fontWeight: 600, border: 'none',
                     cursor: saving ? 'default' : 'pointer',
-                    fontFamily: 'Hanken Grotesk, sans-serif', transition: 'background 150ms',
+                    fontFamily: 'var(--font-heading)', transition: 'background 150ms',
                   }}
-                  onMouseEnter={e => { if (!saving) e.currentTarget.style.background = '#4d3da8'; }}
-                  onMouseLeave={e => { if (!saving) e.currentTarget.style.background = '#5e4dbb'; }}
+                  onMouseEnter={e => { if (!saving) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
+                  onMouseLeave={e => { if (!saving) e.currentTarget.style.background = 'var(--color-primary)'; }}
                 >
                   {saving === 'new' ? 'Saving…' : 'Save as New'}
                 </button>
@@ -2697,24 +2697,24 @@ export default function GPSEditScreen() {
                   disabled={!!saving}
                   style={{
                     padding: '9px 10px',
-                    background: saving ? '#c4b8f0' : '#5e4dbb', color: '#fff',
-                    border: 'none', borderLeft: '1px solid rgba(255,255,255,0.25)',
+                    background: saving ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)', color: 'var(--color-white)',
+                    border: 'none', borderLeft: '1px solid rgba(var(--color-white-rgb), 0.25)',
                     cursor: saving ? 'default' : 'pointer',
                     transition: 'background 150ms',
                   }}
-                  onMouseEnter={e => { if (!saving) e.currentTarget.style.background = '#4d3da8'; }}
-                  onMouseLeave={e => { if (!saving) e.currentTarget.style.background = '#5e4dbb'; }}
+                  onMouseEnter={e => { if (!saving) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
+                  onMouseLeave={e => { if (!saving) e.currentTarget.style.background = 'var(--color-primary)'; }}
                 >
-                  <Icon name="expand_more" size={14} color="#fff" />
+                  <Icon name="expand_more" size={14} color="var(--color-white)" />
                 </button>
               </div>
 
               {saveMenuOpen && (
                 <div style={{
                   position: 'absolute', bottom: 44, left: 0, right: 0,
-                  background: '#fff', borderRadius: 10,
-                  border: '1px solid #e8e4f0',
-                  boxShadow: '0 8px 24px rgba(94,77,187,0.12)',
+                  background: 'var(--color-white)', borderRadius: 10,
+                  border: '1px solid var(--color-border)',
+                  boxShadow: '0 8px 24px rgba(var(--color-primary-rgb), 0.12)',
                   overflow: 'hidden', zIndex: 10,
                 }}>
                   {([
@@ -2727,14 +2727,14 @@ export default function GPSEditScreen() {
                       style={{
                         width: '100%', padding: '10px 14px', textAlign: 'left',
                         background: 'transparent', border: 'none', cursor: 'pointer',
-                        borderBottom: opt.mode === 'new' ? '1px solid #f0edf8' : 'none',
+                        borderBottom: opt.mode === 'new' ? '1px solid var(--color-purple-pale-25)' : 'none',
                         transition: 'background 150ms',
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#f5f3ff'; }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                     >
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>{opt.label}</div>
-                      <div style={{ fontSize: 10, color: '#b0acbe', marginTop: 1 }}>{opt.desc}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)' }}>{opt.label}</div>
+                      <div style={{ fontSize: 10, color: 'var(--color-text-quaternary)', marginTop: 1 }}>{opt.desc}</div>
                     </button>
                   ))}
                 </div>
@@ -2742,7 +2742,7 @@ export default function GPSEditScreen() {
             </div>
 
             {saving === 'replace' && (
-              <div style={{ textAlign: 'center', fontSize: 11, color: '#787584', marginTop: 6 }}>
+              <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
                 Replacing original…
               </div>
             )}
@@ -2760,33 +2760,33 @@ export default function GPSEditScreen() {
           {/* ── Search + POI toggles (unified card, top-center) ─────────────── */}
           <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 1001, width: 340 }}>
             <div style={{
-              background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px) saturate(180%)',
-              border: `1px solid ${searchOpen ? '#c4b8f0' : 'rgba(255,255,255,0.75)'}`,
-              borderRadius: 14, boxShadow: '0 4px 20px rgba(94,77,187,0.12)',
+              background: 'rgba(var(--color-white-rgb), 0.95)', backdropFilter: 'blur(20px) saturate(180%)',
+              border: `1px solid ${searchOpen ? 'var(--color-accent-purple-soft)' : 'rgba(var(--color-white-rgb), 0.75)'}`,
+              borderRadius: 14, boxShadow: '0 4px 20px rgba(var(--color-primary-rgb), 0.12)',
               transition: 'border-color 150ms', overflow: 'hidden',
             }}>
               {/* Search row */}
               <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', gap: 8 }}>
-                <Icon name={searchLoading ? 'progress_activity' : 'search'} size={16} color="#787584" />
+                <Icon name={searchLoading ? 'progress_activity' : 'search'} size={16} color="var(--color-text-tertiary)" />
                 <input
                   value={searchQuery}
                   onChange={e => { setSearchQuery(e.target.value); handleSearchChangeEdit(e.target.value); }}
                   onFocus={() => setSearchOpen(true)}
                   onBlur={() => setTimeout(() => setSearchOpen(false), 200)}
                   placeholder="Place, address or 53.123, 10.456"
-                  style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: '#1c1b22', fontFamily: 'Inter, sans-serif', padding: '10px 0' }}
+                  style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: 'var(--color-text-primary)', fontFamily: 'var(--font-body)', padding: '10px 0' }}
                 />
                 {searchQuery && (
                   <button
                     onMouseDown={e => { e.preventDefault(); setSearchQuery(''); setSearchResults([]); searchPinRef.current?.remove(); searchPinRef.current = null; }}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                   >
-                    <Icon name="close" size={14} color="#b0acbe" />
+                    <Icon name="close" size={14} color="var(--color-text-quaternary)" />
                   </button>
                 )}
               </div>
               {/* Divider */}
-              <div style={{ height: 1, background: '#ede9ff', margin: '0 10px' }} />
+              <div style={{ height: 1, background: 'var(--color-surface-tint-4)', margin: '0 10px' }} />
               {/* POI category toggles row */}
               <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', gap: 4 }}>
                 {(Object.entries(POI_CATEGORY_CONFIG) as Array<[PoiCategory, typeof POI_CATEGORY_CONFIG[PoiCategory]]>).map(([cat, cfg]) => {
@@ -2796,27 +2796,27 @@ export default function GPSEditScreen() {
                       key={cat}
                       title={cfg.label}
                       onClick={() => setActivePoi(prev => { const next = new Set(prev); active ? next.delete(cat) : next.add(cat); return next; })}
-                      style={{ flex: 1, height: 30, borderRadius: 7, background: active ? cfg.bg : 'transparent', border: active ? `1.5px solid ${cfg.borderColor}` : '1.5px solid #f0ecfa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', opacity: active ? 1 : 0.5 }}
+                      style={{ flex: 1, height: 30, borderRadius: 7, background: active ? cfg.bg : 'transparent', border: active ? `1.5px solid ${cfg.borderColor}` : '1.5px solid var(--color-purple-pale-24)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', opacity: active ? 1 : 0.5 }}
                     >
-                      <span style={{ fontFamily: "'Material Symbols Outlined'", fontSize: 15, color: active ? cfg.fg : '#b0acbe', lineHeight: 1, fontVariationSettings: "'FILL' 1,'wght' 400" }}>{cfg.icon}</span>
+                      <span style={{ fontFamily: "var(--font-icon)", fontSize: 15, color: active ? cfg.fg : 'var(--color-text-quaternary)', lineHeight: 1, fontVariationSettings: "'FILL' 1,'wght' 400" }}>{cfg.icon}</span>
                     </button>
                   );
                 })}
-                {poiLoading && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#5e4dbb', opacity: 0.7, animation: 'pulse 1s ease-in-out infinite', marginLeft: 4, flexShrink: 0 }} />}
+                {poiLoading && <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-primary)', opacity: 0.7, animation: 'pulse 1s ease-in-out infinite', marginLeft: 4, flexShrink: 0 }} />}
               </div>
               {/* Search results dropdown */}
               {searchOpen && searchResults.length > 0 && (
-                <div style={{ borderTop: '1px solid #e8e4f0', maxHeight: 220, overflowY: 'auto' }}>
+                <div style={{ borderTop: '1px solid var(--color-border)', maxHeight: 220, overflowY: 'auto' }}>
                   {searchResults.map(r => (
                     <button
                       key={r.place_id}
                       onMouseDown={() => handleSearchSelectEdit(r)}
-                      style={{ width: '100%', padding: '8px 14px', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: '1px solid #f5f3ff', transition: 'background 100ms' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = '#faf9ff'; }}
+                      style={{ width: '100%', padding: '8px 14px', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: '1px solid var(--color-surface-tint)', transition: 'background 100ms' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                     >
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>{r.display_name.split(',')[0]}</div>
-                      <div style={{ fontSize: 10, color: '#b0acbe', marginTop: 1 }}>{r.display_name.split(',').slice(1, 3).join(',').trim()}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)' }}>{r.display_name.split(',')[0]}</div>
+                      <div style={{ fontSize: 10, color: 'var(--color-text-quaternary)', marginTop: 1 }}>{r.display_name.split(',').slice(1, 3).join(',').trim()}</div>
                     </button>
                   ))}
                 </div>
@@ -2826,7 +2826,7 @@ export default function GPSEditScreen() {
 
           {/* Zoom hint when zoomed out with POIs active */}
           {activePoi.size > 0 && mapZoom < 13 && (
-            <div style={{ position: 'absolute', top: 110, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(12px)', border: '1px solid #e8e4f0', borderRadius: 8, padding: '6px 14px', fontSize: 11, color: '#787584', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>
+            <div style={{ position: 'absolute', top: 110, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(var(--color-white-rgb), 0.88)', backdropFilter: 'blur(12px)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '6px 14px', fontSize: 11, color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}>
               Zoom in to see POIs
             </div>
           )}
@@ -2837,11 +2837,11 @@ export default function GPSEditScreen() {
             display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8,
           }}>
             <div style={{
-              background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(16px)',
+              background: 'rgba(var(--color-white-rgb), 0.88)', backdropFilter: 'blur(16px)',
               WebkitBackdropFilter: 'blur(16px)',
-              border: '1px solid rgba(255,255,255,0.75)', borderRadius: 10,
-              padding: '7px 12px', fontSize: 11, color: '#5e4dbb', fontFamily: 'Inter, sans-serif',
-              boxShadow: '0 2px 12px rgba(94,77,187,0.10)',
+              border: '1px solid rgba(var(--color-white-rgb), 0.75)', borderRadius: 10,
+              padding: '7px 12px', fontSize: 11, color: 'var(--color-primary)', fontFamily: 'var(--font-body)',
+              boxShadow: '0 2px 12px rgba(var(--color-primary-rgb), 0.10)',
             }}>
               <span style={{ fontWeight: 600 }}>Edit Mode</span> — drag points to reshape
             </div>
@@ -2851,7 +2851,7 @@ export default function GPSEditScreen() {
               title="Zoom In"
               style={mapCtrlBtn}
             >
-              <Icon name="add" size={16} color="#5e4dbb" />
+              <Icon name="add" size={16} color="var(--color-primary)" />
             </button>
             <button
               className="gps-map-ctrl"
@@ -2859,29 +2859,29 @@ export default function GPSEditScreen() {
               title="Zoom Out"
               style={mapCtrlBtn}
             >
-              <Icon name="remove" size={16} color="#5e4dbb" />
+              <Icon name="remove" size={16} color="var(--color-primary)" />
             </button>
             <button
               className="gps-map-ctrl"
               onClick={handleMapTypeToggle}
               title={mapType === 'street' ? 'Satellite View' : 'Street Map'}
-              style={{ ...mapCtrlBtn, ...(mapType === 'satellite' ? { background: '#5e4dbb', border: '1px solid #4a3da8' } : {}) }}
+              style={{ ...mapCtrlBtn, ...(mapType === 'satellite' ? { background: 'var(--color-primary)', border: '1px solid var(--color-purple-mid-12)' } : {}) }}
             >
-              <Icon name={mapType === 'street' ? 'satellite_alt' : 'map'} size={16} color={mapType === 'satellite' ? '#fff' : '#5e4dbb'} />
+              <Icon name={mapType === 'street' ? 'satellite_alt' : 'map'} size={16} color={mapType === 'satellite' ? 'var(--color-white)' : 'var(--color-primary)'} />
             </button>
 
             {busy && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 6,
-                background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(16px)',
+                background: 'rgba(var(--color-white-rgb), 0.88)', backdropFilter: 'blur(16px)',
                 WebkitBackdropFilter: 'blur(16px)',
-                border: '1px solid rgba(255,255,255,0.75)', borderRadius: 10,
-                padding: '6px 10px', fontSize: 11, color: '#5e4dbb', fontWeight: 600,
-                boxShadow: '0 2px 12px rgba(94,77,187,0.10)', fontFamily: 'Inter, sans-serif',
+                border: '1px solid rgba(var(--color-white-rgb), 0.75)', borderRadius: 10,
+                padding: '6px 10px', fontSize: 11, color: 'var(--color-primary)', fontWeight: 600,
+                boxShadow: '0 2px 12px rgba(var(--color-primary-rgb), 0.10)', fontFamily: 'var(--font-body)',
               }}>
                 <div style={{
                   width: 11, height: 11, borderRadius: '50%',
-                  border: '2px solid rgba(94,77,187,0.25)', borderTopColor: '#5e4dbb',
+                  border: '2px solid rgba(var(--color-primary-rgb), 0.25)', borderTopColor: 'var(--color-primary)',
                   animation: 'wpSpin 700ms linear infinite',
                 }} />
                 {busy}
@@ -2890,19 +2890,19 @@ export default function GPSEditScreen() {
             {routingNotice && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 5,
-                background: routingNotice.kind === 'warning' ? 'rgba(255,247,237,0.92)' : 'rgba(255,245,245,0.92)',
+                background: routingNotice.kind === 'warning' ? 'rgba(var(--color-orange-pale-3-rgb), 0.92)' : 'rgba(var(--color-error-bg-alt-rgb), 0.92)',
                 backdropFilter: 'blur(16px)',
                 WebkitBackdropFilter: 'blur(16px)',
-                border: routingNotice.kind === 'warning' ? '1px solid #fdba74' : '1px solid #fca5a5',
+                border: routingNotice.kind === 'warning' ? '1px solid var(--color-orange-tint-3)' : '1px solid var(--color-red-tint-1)',
                 borderRadius: 9999,
                 padding: '5px 12px', fontSize: 11, fontWeight: 600,
-                color: routingNotice.kind === 'warning' ? '#ea580c' : '#ba1a1a',
-                boxShadow: routingNotice.kind === 'warning' ? '0 2px 12px rgba(234,88,12,0.10)' : '0 2px 12px rgba(186,26,26,0.10)',
-                fontFamily: 'Hanken Grotesk, sans-serif',
+                color: routingNotice.kind === 'warning' ? 'var(--color-orange)' : 'var(--color-error)',
+                boxShadow: routingNotice.kind === 'warning' ? '0 2px 12px rgba(var(--color-orange-rgb), 0.10)' : '0 2px 12px rgba(var(--color-error-rgb), 0.10)',
+                fontFamily: 'var(--font-heading)',
                 maxWidth: 240, textAlign: 'right',
                 animation: 'wpPopIn 180ms ease both',
               }}>
-                <Icon name={routingNotice.kind === 'warning' ? 'alt_route' : 'warning'} size={13} color={routingNotice.kind === 'warning' ? '#ea580c' : '#ba1a1a'} />
+                <Icon name={routingNotice.kind === 'warning' ? 'alt_route' : 'warning'} size={13} color={routingNotice.kind === 'warning' ? 'var(--color-orange)' : 'var(--color-error)'} />
                 {routingNotice.msg}
               </div>
             )}
@@ -2913,17 +2913,17 @@ export default function GPSEditScreen() {
             <div style={{
               position: 'absolute', left: popupXY.x, top: popupXY.y - 16, zIndex: 1100,
               transform: 'translate(-50%, -100%)', width: 272, boxSizing: 'border-box',
-              background: 'rgba(255,255,255,0.92)',
+              background: 'rgba(var(--color-white-rgb), 0.92)',
               backdropFilter: 'blur(20px) saturate(180%)',
               WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              border: '1px solid rgba(255,255,255,0.75)', borderRadius: 14,
-              boxShadow: '0 8px 32px rgba(94,77,187,0.18), inset 0 1px 0 rgba(255,255,255,0.90)',
-              padding: '12px 14px', fontFamily: 'Inter, sans-serif',
+              border: '1px solid rgba(var(--color-white-rgb), 0.75)', borderRadius: 14,
+              boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.18), inset 0 1px 0 rgba(var(--color-white-rgb), 0.90)',
+              padding: '12px 14px', fontFamily: 'var(--font-body)',
               animation: 'wpPopIn 180ms ease both',
             }}>
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22' }}>
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   {popupData.wp ? 'Waypoint' : 'Route Point'}
                 </span>
                 <button
@@ -2933,16 +2933,16 @@ export default function GPSEditScreen() {
                     background: 'transparent', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#f0edf8'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-pale-25)'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <Icon name="close" size={15} color="#787584" />
+                  <Icon name="close" size={15} color="var(--color-text-tertiary)" />
                 </button>
               </div>
 
               {/* Coordinates + copy */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                <span style={{ fontSize: 11.5, color: '#787584' }}>
+                <span style={{ fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>
                   {popupData.point.lat.toFixed(6)}, {popupData.point.lon.toFixed(6)}
                 </span>
                 <button
@@ -2957,10 +2957,10 @@ export default function GPSEditScreen() {
                     background: 'transparent', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#f0edf8'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-pale-25)'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <Icon name={coordsCopied ? 'check' : 'content_copy'} size={13} color={coordsCopied ? '#22c55e' : '#787584'} />
+                  <Icon name={coordsCopied ? 'check' : 'content_copy'} size={13} color={coordsCopied ? 'var(--color-green-mid-2)' : 'var(--color-text-tertiary)'} />
                 </button>
               </div>
 
@@ -2979,17 +2979,17 @@ export default function GPSEditScreen() {
                       onClick={() => toggleWaypointMode(popupData.wp!.id)}
                       style={{
                         padding: '7px 0', borderRadius: 8,
-                        border: `1.5px solid ${active ? '#5e4dbb' : '#e8e4f0'}`,
-                        background: active ? '#5e4dbb' : '#fff',
-                        color: active ? '#fff' : '#787584',
+                        border: `1.5px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                        background: active ? 'var(--color-primary)' : 'var(--color-white)',
+                        color: active ? 'var(--color-white)' : 'var(--color-text-tertiary)',
                         fontSize: 11, fontWeight: 600,
                         cursor: routingBusy || active ? 'default' : 'pointer',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                        fontFamily: 'Hanken Grotesk, sans-serif', transition: 'all 150ms',
+                        fontFamily: 'var(--font-heading)', transition: 'all 150ms',
                         opacity: routingBusy && !active ? 0.55 : 1,
                       }}
                     >
-                      <Icon name={opt.icon} size={13} color={active ? '#fff' : '#787584'} />
+                      <Icon name={opt.icon} size={13} color={active ? 'var(--color-white)' : 'var(--color-text-tertiary)'} />
                       {opt.label}
                     </button>
                   );
@@ -3000,23 +3000,23 @@ export default function GPSEditScreen() {
               {/* Stats rows — label left, value right */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif', flexShrink: 0 }}>From start:</span>
-                  <span style={{ fontSize: 12, color: '#484552', textAlign: 'right' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)', flexShrink: 0 }}>From start:</span>
+                  <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', textAlign: 'right' }}>
                     {fmtDist(popupData.dist)}
                     {' '}
-                    <span style={{ color: '#787584' }}>
+                    <span style={{ color: 'var(--color-text-tertiary)' }}>
                       ({popupData.durationS != null ? `${fmtDurationHM(popupData.durationS)}, ` : ''}↗ {Math.round(popupData.gain)} m)
                     </span>
                   </span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>Elevation:</span>
-                  <span style={{ fontSize: 12, color: '#484552' }}>{Math.round(popupData.point.ele)} m</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)' }}>Elevation:</span>
+                  <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{Math.round(popupData.point.ele)} m</span>
                 </div>
                 {popupData.grade != null && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>Grade:</span>
-                    <span style={{ fontSize: 12, color: '#484552', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)' }}>Grade:</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
                       ~ {Math.round(popupData.grade)} %
                       <span style={{ width: 10, height: 10, borderRadius: 3, background: gradeColor(popupData.grade), display: 'inline-block' }} />
                     </span>
@@ -3030,26 +3030,26 @@ export default function GPSEditScreen() {
                 disabled={routingBusy}
                 style={{
                   width: '100%', marginTop: 10, padding: '7px 0', borderRadius: 8,
-                  border: '1px solid #fca5a5', background: '#fff', color: '#ba1a1a',
+                  border: '1px solid var(--color-red-tint-1)', background: 'var(--color-white)', color: 'var(--color-error)',
                   fontSize: 11.5, fontWeight: 600,
                   cursor: routingBusy ? 'default' : 'pointer',
-                  fontFamily: 'Hanken Grotesk, sans-serif',
+                  fontFamily: 'var(--font-heading)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
                   transition: 'background 150ms', opacity: routingBusy ? 0.55 : 1,
                 }}
-                onMouseEnter={e => { if (!routingBusy) e.currentTarget.style.background = '#fff5f5'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+                onMouseEnter={e => { if (!routingBusy) e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
               >
-                <Icon name="delete" size={13} color="#ba1a1a" />
+                <Icon name="delete" size={13} color="var(--color-error)" />
                 Delete point
               </button>
 
               {/* Pointer */}
               <div style={{
                 position: 'absolute', bottom: -6, left: '50%',
-                width: 12, height: 12, background: 'rgba(255,255,255,0.92)',
-                borderRight: '1px solid rgba(255,255,255,0.75)',
-                borderBottom: '1px solid rgba(255,255,255,0.75)',
+                width: 12, height: 12, background: 'rgba(var(--color-white-rgb), 0.92)',
+                borderRight: '1px solid rgba(var(--color-white-rgb), 0.75)',
+                borderBottom: '1px solid rgba(var(--color-white-rgb), 0.75)',
                 transform: 'translateX(-50%) rotate(45deg)',
               }} />
             </div>
@@ -3060,19 +3060,19 @@ export default function GPSEditScreen() {
             <div style={{
               position: 'absolute', left: mapClickXY.x, top: mapClickXY.y - 16, zIndex: 1100,
               transform: 'translate(-50%, -100%)', width: 272, boxSizing: 'border-box',
-              background: 'rgba(255,255,255,0.92)',
+              background: 'rgba(var(--color-white-rgb), 0.92)',
               backdropFilter: 'blur(20px) saturate(180%)',
               WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              border: '1px solid rgba(255,255,255,0.75)', borderRadius: 14,
-              boxShadow: '0 8px 32px rgba(94,77,187,0.18), inset 0 1px 0 rgba(255,255,255,0.90)',
-              padding: '12px 14px', fontFamily: 'Inter, sans-serif',
+              border: '1px solid rgba(var(--color-white-rgb), 0.75)', borderRadius: 14,
+              boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.18), inset 0 1px 0 rgba(var(--color-white-rgb), 0.90)',
+              padding: '12px 14px', fontFamily: 'var(--font-body)',
               animation: 'wpPopIn 180ms ease both',
             }}>
               {/* Header — place name from reverse geocoding */}
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
                 <span style={{
-                  fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14.5, fontWeight: 700,
-                  color: mapClick.loading ? '#b0acbe' : '#1c1b22', lineHeight: 1.3,
+                  fontFamily: 'var(--font-heading)', fontSize: 14.5, fontWeight: 700,
+                  color: mapClick.loading ? 'var(--color-text-quaternary)' : 'var(--color-text-primary)', lineHeight: 1.3,
                   display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                 }}>
                   {mapClick.loading ? 'Looking up place…' : mapClick.name ?? 'Dropped pin'}
@@ -3084,16 +3084,16 @@ export default function GPSEditScreen() {
                     background: 'transparent', cursor: 'pointer', flexShrink: 0,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#f0edf8'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-pale-25)'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <Icon name="close" size={15} color="#787584" />
+                  <Icon name="close" size={15} color="var(--color-text-tertiary)" />
                 </button>
               </div>
 
               {/* Coordinates + copy */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                <span style={{ fontSize: 11.5, color: '#787584' }}>
+                <span style={{ fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>
                   {mapClick.lat.toFixed(6)}, {mapClick.lon.toFixed(6)}
                 </span>
                 <button
@@ -3108,17 +3108,17 @@ export default function GPSEditScreen() {
                     background: 'transparent', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#f0edf8'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-pale-25)'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <Icon name={coordsCopied ? 'check' : 'content_copy'} size={13} color={coordsCopied ? '#22c55e' : '#787584'} />
+                  <Icon name={coordsCopied ? 'check' : 'content_copy'} size={13} color={coordsCopied ? 'var(--color-green-mid-2)' : 'var(--color-text-tertiary)'} />
                 </button>
               </div>
 
               {/* Elevation */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>Elevation:</span>
-                <span style={{ fontSize: 12, color: '#484552' }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)' }}>Elevation:</span>
+                <span style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
                   {mapClick.ele != null ? `${Math.round(mapClick.ele)} m` : mapClick.loading ? '…' : '—'}
                 </span>
               </div>
@@ -3129,28 +3129,28 @@ export default function GPSEditScreen() {
                 disabled={routingBusy}
                 style={{
                   width: '100%', padding: '8px 0', borderRadius: 9, border: 'none',
-                  background: routingBusy ? '#c4b8f0' : '#5e4dbb', color: '#fff',
+                  background: routingBusy ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)', color: 'var(--color-white)',
                   fontSize: 12, fontWeight: 600, cursor: routingBusy ? 'default' : 'pointer',
-                  fontFamily: 'Hanken Grotesk, sans-serif',
+                  fontFamily: 'var(--font-heading)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                   transition: 'background 150ms',
                 }}
-                onMouseEnter={e => { if (!routingBusy) e.currentTarget.style.background = '#4d3da8'; }}
-                onMouseLeave={e => { if (!routingBusy) e.currentTarget.style.background = '#5e4dbb'; }}
+                onMouseEnter={e => { if (!routingBusy) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
+                onMouseLeave={e => { if (!routingBusy) e.currentTarget.style.background = 'var(--color-primary)'; }}
               >
-                <Icon name="add_location_alt" size={14} color="#fff" />
+                <Icon name="add_location_alt" size={14} color="var(--color-white)" />
                 Add to route
               </button>
-              <div style={{ fontSize: 10, color: '#b0acbe', marginTop: 6, textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: 'var(--color-text-quaternary)', marginTop: 6, textAlign: 'center' }}>
                 {snapEnabled ? 'Replans the nearest leg through this point — old sub-points replaced' : 'Connects with straight lines (snap off)'}
               </div>
 
               {/* Pointer */}
               <div style={{
                 position: 'absolute', bottom: -6, left: '50%',
-                width: 12, height: 12, background: 'rgba(255,255,255,0.92)',
-                borderRight: '1px solid rgba(255,255,255,0.75)',
-                borderBottom: '1px solid rgba(255,255,255,0.75)',
+                width: 12, height: 12, background: 'rgba(var(--color-white-rgb), 0.92)',
+                borderRight: '1px solid rgba(var(--color-white-rgb), 0.75)',
+                borderBottom: '1px solid rgba(var(--color-white-rgb), 0.75)',
                 transform: 'translateX(-50%) rotate(45deg)',
               }} />
             </div>
@@ -3159,34 +3159,34 @@ export default function GPSEditScreen() {
           {/* ── Add-Pin Dialog ──────────────────────────────────────────── */}
           {addPinDialog && createPortal(
             <div
-              style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(8,5,18,0.40)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(var(--color-purple-deep-6-rgb), 0.40)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               onClick={e => { if (e.target === e.currentTarget) setAddPinDialog(null); }}
             >
-              <div style={{ background: '#fff', borderRadius: 16, padding: '20px', width: 340, boxShadow: '0 20px 60px rgba(0,0,0,0.18)', border: '1px solid #e8e4f0', fontFamily: 'Inter, sans-serif', animation: 'wpPopIn 180ms ease both' }}>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22', marginBottom: 4 }}>
+              <div style={{ background: 'var(--color-white)', borderRadius: 16, padding: '20px', width: 340, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', fontFamily: 'var(--font-body)', animation: 'wpPopIn 180ms ease both' }}>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>
                   {addPinDialog.poi ? addPinDialog.poi.name : 'Neuer Pin'}
                 </div>
                 {addPinDialog.poi && (
-                  <div style={{ fontSize: 11, color: '#787584', marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 12 }}>
                     {(POI_CATEGORY_CONFIG as Record<string, typeof POI_CATEGORY_CONFIG[PoiCategory]>)[addPinDialog.poi.category]?.label ?? addPinDialog.poi.category}
                     {addPinDialog.poi.tags['addr:street'] && ` · ${addPinDialog.poi.tags['addr:street']}${addPinDialog.poi.tags['addr:housenumber'] ? ` ${addPinDialog.poi.tags['addr:housenumber']}` : ''}`}
                   </div>
                 )}
                 <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: '#787584', marginBottom: 4 }}>NAME</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>NAME</div>
                   <input
                     value={addPinName}
                     onChange={e => setAddPinName(e.target.value)}
                     placeholder={addPinDialog.suggestedName || 'Pin-Name'}
                     autoFocus
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid #e8e4f0', borderRadius: 8, fontSize: 13, fontFamily: 'Inter, sans-serif', outline: 'none', color: '#1c1b22' }}
-                    onFocus={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
-                    onBlur={e => { e.currentTarget.style.borderColor = '#e8e4f0'; }}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid var(--color-border)', borderRadius: 8, fontSize: 13, fontFamily: 'var(--font-body)', outline: 'none', color: 'var(--color-text-primary)' }}
+                    onFocus={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+                    onBlur={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
                     onKeyDown={e => { if (e.key === 'Enter') handleAddPin(); if (e.key === 'Escape') setAddPinDialog(null); }}
                   />
                 </div>
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: '#787584', marginBottom: 6 }}>ADD AS</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 6 }}>ADD AS</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                     {([
                       { value: 'pin' as const, label: 'Pin Only', icon: 'push_pin', desc: 'Waypoint in GPX export (Wahoo compatible)' },
@@ -3198,31 +3198,31 @@ export default function GPSEditScreen() {
                           key={opt.value}
                           onClick={() => setAddPinMode(opt.value)}
                           title={opt.desc}
-                          style={{ padding: '8px 10px', borderRadius: 8, cursor: 'pointer', border: `1.5px solid ${active ? '#5e4dbb' : '#e8e4f0'}`, background: active ? '#f5f3ff' : '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all 150ms' }}
+                          style={{ padding: '8px 10px', borderRadius: 8, cursor: 'pointer', border: `1.5px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`, background: active ? 'var(--color-surface-tint)' : 'var(--color-white)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all 150ms' }}
                         >
-                          <Icon name={opt.icon} size={16} color={active ? '#5e4dbb' : '#b0acbe'} />
-                          <span style={{ fontSize: 11, fontWeight: 600, color: active ? '#5e4dbb' : '#787584', fontFamily: 'Hanken Grotesk, sans-serif' }}>{opt.label}</span>
+                          <Icon name={opt.icon} size={16} color={active ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
+                          <span style={{ fontSize: 11, fontWeight: 600, color: active ? 'var(--color-primary)' : 'var(--color-text-tertiary)', fontFamily: 'var(--font-heading)' }}>{opt.label}</span>
                         </button>
                       );
                     })}
                   </div>
-                  <div style={{ fontSize: 10, color: '#b0acbe', marginTop: 6 }}>
+                  <div style={{ fontSize: 10, color: 'var(--color-text-quaternary)', marginTop: 6 }}>
                     {addPinMode === 'pin' ? 'Waypoint appears on your Wahoo as a POI on the map.' : 'Route will be re-planned through this point — intermediate points are replaced.'}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     onClick={() => setAddPinDialog(null)}
-                    style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid #e8e4f0', background: '#fff', color: '#484552', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif' }}
+                    style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', color: 'var(--color-text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-heading)' }}
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleAddPin}
                     disabled={routingBusy}
-                    style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', background: routingBusy ? '#c4b8f0' : '#5e4dbb', color: '#fff', fontSize: 12, fontWeight: 600, cursor: routingBusy ? 'default' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', transition: 'background 150ms' }}
-                    onMouseEnter={e => { if (!routingBusy) e.currentTarget.style.background = '#4d3da8'; }}
-                    onMouseLeave={e => { if (!routingBusy) e.currentTarget.style.background = routingBusy ? '#c4b8f0' : '#5e4dbb'; }}
+                    style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', background: routingBusy ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)', color: 'var(--color-white)', fontSize: 12, fontWeight: 600, cursor: routingBusy ? 'default' : 'pointer', fontFamily: 'var(--font-heading)', transition: 'background 150ms' }}
+                    onMouseEnter={e => { if (!routingBusy) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
+                    onMouseLeave={e => { if (!routingBusy) e.currentTarget.style.background = routingBusy ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)'; }}
                   >
                     {addPinMode === 'route' && routingBusy ? 'Routing…' : 'Add'}
                   </button>
@@ -3237,11 +3237,11 @@ export default function GPSEditScreen() {
             <div style={{
               position: 'absolute', bottom: 0, left: 0, right: 0,
               height: 150, zIndex: 1000,
-              background: 'rgba(255,255,255,0.88)',
+              background: 'rgba(var(--color-white-rgb), 0.88)',
               backdropFilter: 'blur(20px) saturate(180%)',
               WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              borderTop: '1px solid rgba(255,255,255,0.68)',
-              boxShadow: '0 -4px 24px rgba(94,77,187,0.08)',
+              borderTop: '1px solid rgba(var(--color-white-rgb), 0.68)',
+              boxShadow: '0 -4px 24px rgba(var(--color-primary-rgb), 0.08)',
             }}>
               <EditElevationChart
                 points={editPoints}

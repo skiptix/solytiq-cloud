@@ -27,13 +27,13 @@ const ROW_ICON: Record<string, string> = {
 // A small icon + name row for an affected ancestor/descendant.
 function ItemRow({ icon, name, sublabel }: { icon: string; name: string; sublabel: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, background: '#F5F3FF', border: '1px solid #e8e4f0' }}>
-      <div style={{ width: 28, height: 28, borderRadius: 8, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <Icon name={icon} size={15} color="#5e4dbb" />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, background: 'var(--color-surface-tint)', border: '1px solid var(--color-border)' }}>
+      <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--color-white)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Icon name={icon} size={15} color="var(--color-primary)" />
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', textTransform: 'capitalize' }}>{sublabel}</div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', textTransform: 'capitalize' }}>{sublabel}</div>
       </div>
     </div>
   );
@@ -45,15 +45,15 @@ export default function VisibilityConflictModal({ conflict, busy, onConfirm, onC
 
   // Accent: warning amber for promote (blocked or needs action), error-ish for
   // the "this will hide things" restrict case — both within the design language.
-  const accent = isPromote ? '#d97706' : '#5e4dbb';
-  const accentBg = isPromote ? '#fffbeb' : '#F5F3FF';
+  const accent = isPromote ? 'var(--color-warning)' : 'var(--color-primary)';
+  const accentBg = isPromote ? 'var(--color-yellow-pale-1)' : 'var(--color-surface-tint)';
 
   const rows = isPromote ? (conflict.ancestors ?? []) : (conflict.descendants ?? []);
 
   const title = isPromote ? 'Permission conflict' : 'This affects other items';
   const intro = isPromote
-    ? <>To make the {entityLabel} <strong style={{ color: '#1c1b22' }}>“{conflict.entityName}”</strong> public, everything above it must be public too:</>
-    : <>Making the {entityLabel} <strong style={{ color: '#1c1b22' }}>“{conflict.entityName}”</strong> private will also make these private:</>;
+    ? <>To make the {entityLabel} <strong style={{ color: 'var(--color-text-primary)' }}>“{conflict.entityName}”</strong> public, everything above it must be public too:</>
+    : <>Making the {entityLabel} <strong style={{ color: 'var(--color-text-primary)' }}>“{conflict.entityName}”</strong> private will also make these private:</>;
 
   const canAct = isPromote ? conflict.canResolve : true;
   const confirmLabel = isPromote ? 'Make all public' : 'Make all private';
@@ -61,10 +61,10 @@ export default function VisibilityConflictModal({ conflict, busy, onConfirm, onC
   return createPortal(
     <div
       onClick={onCancel}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(4px)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 200ms ease both' }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(4px)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 200ms ease both' }}>
       <div
         onClick={e => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: 18, maxWidth: 420, width: '100%', maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(94,77,187,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+        style={{ background: 'var(--color-white)', borderRadius: 18, maxWidth: 420, width: '100%', maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 22px 16px' }}>
@@ -72,13 +72,13 @@ export default function VisibilityConflictModal({ conflict, busy, onConfirm, onC
             <Icon name={isPromote ? 'lock' : 'visibility_off'} size={20} color={accent} />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>{title}</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>{title}</div>
           </div>
         </div>
 
         {/* Body */}
         <div style={{ padding: '0 22px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <p style={{ margin: 0, fontFamily: 'Inter, sans-serif', fontSize: 13.5, lineHeight: 1.5, color: '#484552' }}>{intro}</p>
+          <p style={{ margin: 0, fontFamily: 'var(--font-body)', fontSize: 13.5, lineHeight: 1.5, color: 'var(--color-text-secondary)' }}>{intro}</p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {rows.map(r => (
@@ -87,9 +87,9 @@ export default function VisibilityConflictModal({ conflict, busy, onConfirm, onC
           </div>
 
           {isPromote && !conflict.canResolve && conflict.blockedReason && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 10, background: '#fffbeb', border: '1px solid #fde68a' }}>
-              <Icon name="info" size={15} color="#d97706" />
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, lineHeight: 1.45, color: '#92400e' }}>{conflict.blockedReason}</span>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 10, background: 'var(--color-yellow-pale-1)', border: '1px solid var(--color-yellow-tint-2)' }}>
+              <Icon name="info" size={15} color="var(--color-warning)" />
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, lineHeight: 1.45, color: 'var(--color-orange-deep-1)' }}>{conflict.blockedReason}</span>
             </div>
           )}
         </div>
@@ -99,15 +99,15 @@ export default function VisibilityConflictModal({ conflict, busy, onConfirm, onC
           <button
             onClick={onCancel}
             disabled={busy}
-            style={{ padding: '9px 18px', borderRadius: 10, border: '1.5px solid #e8e4f0', background: '#fff', cursor: busy ? 'wait' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#484552' }}>
+            style={{ padding: '9px 18px', borderRadius: 10, border: '1.5px solid var(--color-border)', background: 'var(--color-white)', cursor: busy ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
             {canAct ? 'Cancel' : 'Got it'}
           </button>
           {canAct && (
             <button
               onClick={onConfirm}
               disabled={busy}
-              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, border: 'none', background: '#5e4dbb', cursor: busy ? 'wait' : 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, color: '#fff', opacity: busy ? 0.7 : 1 }}>
-              {busy && <Icon name="progress_activity" size={15} color="#fff" />}
+              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10, border: 'none', background: 'var(--color-primary)', cursor: busy ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-white)', opacity: busy ? 0.7 : 1 }}>
+              {busy && <Icon name="progress_activity" size={15} color="var(--color-white)" />}
               {confirmLabel}
             </button>
           )}

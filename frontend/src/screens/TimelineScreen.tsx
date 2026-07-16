@@ -39,12 +39,12 @@ function fmtAttSize(bytes: number): string {
 }
 
 const STATUSES: Array<{ key: MilestoneStatus; label: string; color: string; icon: string }> = [
-  { key: 'upcoming', label: 'Upcoming', color: '#9d8dff', icon: 'schedule' },
-  { key: 'in-progress', label: 'In progress', color: '#ea580c', icon: 'pending' },
-  { key: 'done', label: 'Done', color: '#10B981', icon: 'check_circle' },
+  { key: 'upcoming', label: 'Upcoming', color: 'var(--color-accent-purple-light)', icon: 'schedule' },
+  { key: 'in-progress', label: 'In progress', color: 'var(--color-orange)', icon: 'pending' },
+  { key: 'done', label: 'Done', color: 'var(--color-success)', icon: 'check_circle' },
 ];
 
-const MILESTONE_COLORS = ['#5e4dbb', '#1D4ED8', '#10B981', '#ea580c', '#f59e0b', '#ba1a1a', '#db2777', '#0d9488'];
+const MILESTONE_COLORS = ['var(--color-primary)', 'var(--color-blue-mid-7)', 'var(--color-success)', 'var(--color-orange)', 'var(--color-warning-alt)', 'var(--color-error)', 'var(--color-pink-mid-3)', 'var(--color-teal-deep-2)'];
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -76,10 +76,10 @@ function sortMilestones(ms: Milestone[]): Milestone[] {
 // reads like the item dialog.
 function PropRow({ icon, label, children, last = false, first = false, isMobile = false }: { icon: string; label: string; children: ReactNode; last?: boolean; first?: boolean; isMobile?: boolean }) {
   return (
-    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', padding: '11px 16px', borderBottom: last ? 'none' : '1px solid rgba(229,231,235,0.5)', borderRadius: first ? '11px 11px 0 0' : last ? '0 0 11px 11px' : 0 }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', padding: '11px 16px', borderBottom: last ? 'none' : '1px solid rgba(var(--color-border-alt-rgb), 0.5)', borderRadius: first ? '11px 11px 0 0' : last ? '0 0 11px 11px' : 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: isMobile ? undefined : 130, flexShrink: 0, marginBottom: isMobile ? 6 : 0 }}>
-        <Icon name={icon} size={14} color="#b9b3cb" />
-        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584' }}>{label}</span>
+        <Icon name={icon} size={14} color="var(--color-purple-tint-11)" />
+        <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)' }}>{label}</span>
       </div>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
         {children}
@@ -229,10 +229,10 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
   return createPortal(
     <>
     <div onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : '24px 20px', animation: 'backdropIn 200ms ease both' }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : '24px 20px', animation: 'backdropIn 200ms ease both' }}>
       <div onClick={e => e.stopPropagation()}
         {...dropHandlers}
-        style={{ background: '#fff', borderRadius: isMobile ? '16px 16px 0 0' : 18, width: '100%', maxWidth: 800, maxHeight: isMobile ? '94vh' : '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: '0 32px 80px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.08)', animation: isMobile ? 'slideUp 280ms cubic-bezier(0.22,1,0.36,1) both' : 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+        style={{ background: 'var(--color-white)', borderRadius: isMobile ? '16px 16px 0 0' : 18, width: '100%', maxWidth: 800, maxHeight: isMobile ? '94vh' : '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: '0 32px 80px rgba(var(--color-black-rgb), 0.22), 0 2px 8px rgba(var(--color-black-rgb), 0.08)', animation: isMobile ? 'slideUp 280ms cubic-bezier(0.22,1,0.36,1) both' : 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
 
         <AttachDropOverlay visible={dragging} subtitle="Files will be uploaded and attached to this milestone" />
 
@@ -248,35 +248,35 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
               <EmojiSelector value={emoji} onChange={setEmoji} direction="down" size={40} allowRemove={false} />
             </div>
             <input autoFocus value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => e.key === 'Enter' && save()} placeholder="Milestone title"
-              style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22', background: 'transparent', border: 'none', outline: 'none', lineHeight: 1.3, padding: '6px 0', marginTop: 2 }} />
+              style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', outline: 'none', lineHeight: 1.3, padding: '6px 0', marginTop: 2 }} />
             <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginTop: 4 }}>
               {initial && onDelete && (
                 <button onClick={() => setShowDelete(true)} title="Delete milestone"
                   style={{ width: 34, height: 34, borderRadius: 9, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 120ms' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#ffdad6')}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-error-bg)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                  <Icon name="delete" size={17} color="#ba1a1a" />
+                  <Icon name="delete" size={17} color="var(--color-error)" />
                 </button>
               )}
               <button onClick={onClose} title="Close"
                 style={{ width: 34, height: 34, borderRadius: 9, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 120ms' }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#F5F3FF')}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <Icon name="close" size={18} color="#787584" />
+                <Icon name="close" size={18} color="var(--color-text-tertiary)" />
               </button>
             </div>
           </div>
 
           {/* Properties panel */}
-          <div style={{ background: '#faf9ff', borderRadius: 12, marginBottom: 28, border: '1px solid #F0EEF8' }}>
+          <div style={{ background: 'var(--color-surface-tint-3)', borderRadius: 12, marginBottom: 28, border: '1px solid var(--color-purple-pale-23)' }}>
             <PropRow icon="calendar_today" label="Date" first isMobile={isMobile}>
               <div style={{ position: 'relative' }} ref={calRef}>
                 <button type="button" onClick={() => { setShowCal(v => !v); setDateError(false); }}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 8, border: `1px solid ${dateError ? '#ba1a1a' : showCal ? effectiveAccent : (date ? '#c4b5fd' : 'transparent')}`, background: dateError ? '#fff8f7' : (date ? '#F5F3FF' : 'transparent'), cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: date ? '#5e4dbb' : '#c9c4d5', transition: 'all 120ms', textAlign: 'left' }}>
-                  <Icon name="calendar_today" size={13} color={date ? effectiveAccent : '#c9c4d5'} />
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 8, border: `1px solid ${dateError ? 'var(--color-error)' : showCal ? effectiveAccent : (date ? 'var(--color-accent-purple-soft-alt)' : 'transparent')}`, background: dateError ? 'var(--color-red-pale-2)' : (date ? 'var(--color-surface-tint)' : 'transparent'), cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: date ? 'var(--color-primary)' : 'var(--color-border-strong)', transition: 'all 120ms', textAlign: 'left' }}>
+                  <Icon name="calendar_today" size={13} color={date ? effectiveAccent : 'var(--color-border-strong)'} />
                   {date ? fmtDate(date) : 'Pick a date…'}
                 </button>
-                {dateError && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a', marginLeft: 10 }}>A date is required.</span>}
+                {dateError && <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginLeft: 10 }}>A date is required.</span>}
                 {showCal && (
                   <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50 }}>
                     <CalendarPicker
@@ -292,8 +292,8 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
             <PropRow icon="schedule" label="Time" isMobile={isMobile}>
               <div style={{ position: 'relative' }} ref={timeRef}>
                 <button type="button" onClick={() => setShowTime(v => !v)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 8, border: `1px solid ${showTime ? effectiveAccent : (time ? '#c4b5fd' : 'transparent')}`, background: time ? '#F5F3FF' : 'transparent', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13, color: time ? '#5e4dbb' : '#c9c4d5', transition: 'all 120ms', textAlign: 'left' }}>
-                  <Icon name="schedule" size={13} color={time ? effectiveAccent : '#c9c4d5'} />
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 8, border: `1px solid ${showTime ? effectiveAccent : (time ? 'var(--color-accent-purple-soft-alt)' : 'transparent')}`, background: time ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: time ? 'var(--color-primary)' : 'var(--color-border-strong)', transition: 'all 120ms', textAlign: 'left' }}>
+                  <Icon name="schedule" size={13} color={time ? effectiveAccent : 'var(--color-border-strong)'} />
                   {time || 'Set a time…'}
                 </button>
                 {showTime && (
@@ -314,8 +314,8 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
                   const sel = status === s.key;
                   return (
                     <button key={s.key} onClick={() => setStatus(s.key)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 8, border: `1px solid ${sel ? s.color : '#E5E7EB'}`, background: sel ? `${s.color}18` : 'transparent', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: sel ? s.color : '#787584', transition: 'all 120ms' }}>
-                      <Icon name={s.icon} size={13} color={sel ? s.color : '#9d8dff'} />{s.label}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 8, border: `1px solid ${sel ? s.color : 'var(--color-border-alt)'}`, background: sel ? `${s.color}18` : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: sel ? s.color : 'var(--color-text-tertiary)', transition: 'all 120ms' }}>
+                      <Icon name={s.icon} size={13} color={sel ? s.color : 'var(--color-accent-purple-light)'} />{s.label}
                     </button>
                   );
                 })}
@@ -325,12 +325,12 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
             <PropRow icon="palette" label="Accent" last={!ownerId} isMobile={isMobile}>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, alignItems: 'center' }}>
                 <button onClick={() => setColor(null)} title="Match status"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 24, padding: '0 10px', borderRadius: 9999, background: color === null ? '#f0edff' : '#fff', border: `1.5px solid ${color === null ? accent : '#e8e4f0'}`, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: color === null ? accent : '#787584' }}>
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 24, padding: '0 10px', borderRadius: 9999, background: color === null ? 'var(--color-surface-tint-alt)' : 'var(--color-white)', border: `1.5px solid ${color === null ? accent : 'var(--color-border)'}`, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: color === null ? accent : 'var(--color-text-tertiary)' }}>
                   Auto
                 </button>
                 {MILESTONE_COLORS.map(c => (
                   <button key={c} onClick={() => setColor(c)} title={c}
-                    style={{ width: 24, height: 24, borderRadius: '50%', background: c, border: color === c ? '2.5px solid #1c1b22' : '2px solid transparent', cursor: 'pointer', padding: 0 }} />
+                    style={{ width: 24, height: 24, borderRadius: '50%', background: c, border: color === c ? '2.5px solid var(--color-text-primary)' : '2px solid transparent', cursor: 'pointer', padding: 0 }} />
                 ))}
               </div>
             </PropRow>
@@ -339,7 +339,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
               <PropRow icon="account_circle" label="Owner" last isMobile={isMobile}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <CreatorBubble creatorId={ownerId} taskHovered />
-                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#484552' }}>
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-secondary)' }}>
                     {owner ? (owner.fullName || owner.username) : 'Unknown'}
                   </span>
                 </div>
@@ -359,70 +359,70 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
           {/* Attachments — only once the milestone exists (edit mode) */}
           {milestoneId && (
             <>
-              <div style={{ height: 1, background: '#F0EEF8', margin: '24px 0' }} />
+              <div style={{ height: 1, background: 'var(--color-purple-pale-23)', margin: '24px 0' }} />
               <div>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Attachments{attachments.length > 0 && <span style={{ fontWeight: 400, color: '#c9c4d5', marginLeft: 6 }}>{attachments.length}</span>}
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-border-strong)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Attachments{attachments.length > 0 && <span style={{ fontWeight: 400, color: 'var(--color-border-strong)', marginLeft: 6 }}>{attachments.length}</span>}
                 </div>
 
                 {attachLoading ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', opacity: 0.5 }}>
-                    <div style={{ width: 13, height: 13, border: '2px solid #c9c4d5', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
-                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Loading…</span>
+                    <div style={{ width: 13, height: 13, border: '2px solid var(--color-border-strong)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Loading…</span>
                   </div>
                 ) : attachments.map(att => {
                   const canPreview = isPreviewable(att.mimeType, att.name);
                   return (
-                  <div key={att.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: '#faf9ff', marginBottom: 6, border: '1px solid #F0EEF8' }}>
+                  <div key={att.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: 'var(--color-surface-tint-3)', marginBottom: 6, border: '1px solid var(--color-purple-pale-23)' }}>
                     <div
                       onClick={() => canPreview ? setPreviewAtt(att) : handleDownloadAttachment(att)}
                       title={canPreview ? 'Click to preview' : 'Download'}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, cursor: 'pointer', borderRadius: 8 }}>
                       <AttachBadge mime={att.mimeType} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 500, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{att.name}</div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{att.name}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
-                          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe' }}>{fmtAttSize(att.size)}</span>
+                          <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)' }}>{fmtAttSize(att.size)}</span>
                           {canPreview && (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#5e4dbb' }}>
-                              <Icon name="visibility" size={11} color="#5e4dbb" /> Preview
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, color: 'var(--color-primary)' }}>
+                              <Icon name="visibility" size={11} color="var(--color-primary)" /> Preview
                             </span>
                           )}
                           {att.attachmentType === 'linked' && (
-                            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', borderRadius: 99, padding: '1px 6px' }}>from Files</span>
+                            <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', borderRadius: 99, padding: '1px 6px' }}>from Files</span>
                           )}
                         </div>
                       </div>
                     </div>
                     <button onClick={() => handleDownloadAttachment(att)} disabled={downloadingAttId === att.id} title="Download"
                       style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: 'transparent', cursor: downloadingAttId === att.id ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                      onMouseEnter={e => { if (downloadingAttId !== att.id) e.currentTarget.style.background = '#F5F3FF'; }}
+                      onMouseEnter={e => { if (downloadingAttId !== att.id) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                       {downloadingAttId === att.id
-                        ? <div style={{ width: 12, height: 12, border: '2px solid #c4b5fd', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
-                        : <Icon name="download" size={15} color="#5e4dbb" />}
+                        ? <div style={{ width: 12, height: 12, border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                        : <Icon name="download" size={15} color="var(--color-primary)" />}
                     </button>
                     <button onClick={() => handleRemoveAttachment(att)} disabled={removingAttId === att.id} title="Remove"
                       style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: 'transparent', cursor: removingAttId === att.id ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                      onMouseEnter={e => { if (removingAttId !== att.id) e.currentTarget.style.background = '#ffdad6'; }}
+                      onMouseEnter={e => { if (removingAttId !== att.id) e.currentTarget.style.background = 'var(--color-error-bg)'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                       {removingAttId === att.id
-                        ? <div style={{ width: 12, height: 12, border: '2px solid #e87575', borderTopColor: '#ba1a1a', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
-                        : <Icon name="close" size={14} color="#ba1a1a" />}
+                        ? <div style={{ width: 12, height: 12, border: '2px solid var(--color-red-mid-1)', borderTopColor: 'var(--color-error)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                        : <Icon name="close" size={14} color="var(--color-error)" />}
                     </button>
                   </div>
                   );
                 })}
 
                 {uploadProgress !== null && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: '#faf9ff', marginBottom: 6, border: '1px solid #F0EEF8' }}>
-                    <div style={{ width: 34, height: 34, borderRadius: 8, background: '#F5F3FF', border: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <div style={{ width: 14, height: 14, border: '2px solid #c4b5fd', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: 'var(--color-surface-tint-3)', marginBottom: 6, border: '1px solid var(--color-purple-pale-23)' }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--color-surface-tint)', border: '1px solid var(--color-border-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <div style={{ width: 14, height: 14, border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#5e4dbb', marginBottom: 4 }}>Uploading… {uploadProgress}%</div>
-                      <div style={{ background: '#E5E7EB', borderRadius: 99, height: 3, overflow: 'hidden' }}>
-                        <div style={{ width: `${uploadProgress}%`, height: '100%', background: '#5e4dbb', borderRadius: 99, transition: 'width 150ms' }} />
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-primary)', marginBottom: 4 }}>Uploading… {uploadProgress}%</div>
+                      <div style={{ background: 'var(--color-border-alt)', borderRadius: 99, height: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${uploadProgress}%`, height: '100%', background: 'var(--color-primary)', borderRadius: 99, transition: 'width 150ms' }} />
                       </div>
                     </div>
                   </div>
@@ -430,16 +430,16 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                   <button onClick={() => fileInputRef.current?.click()} disabled={uploadProgress !== null}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1.5px dashed #d1d5db', borderRadius: 9, padding: '7px 14px', cursor: uploadProgress !== null ? 'not-allowed' : 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', transition: 'all 120ms', opacity: uploadProgress !== null ? 0.5 : 1 }}
-                    onMouseEnter={e => { if (uploadProgress === null) { e.currentTarget.style.borderColor = '#5e4dbb'; e.currentTarget.style.color = '#5e4dbb'; e.currentTarget.style.background = '#faf9ff'; } }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1d5db'; e.currentTarget.style.color = '#787584'; e.currentTarget.style.background = 'transparent'; }}>
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1.5px dashed var(--color-blue-tint-3)', borderRadius: 9, padding: '7px 14px', cursor: uploadProgress !== null ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', transition: 'all 120ms', opacity: uploadProgress !== null ? 0.5 : 1 }}
+                    onMouseEnter={e => { if (uploadProgress === null) { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--color-surface-tint-3)'; } }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-blue-tint-3)'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; e.currentTarget.style.background = 'transparent'; }}>
                     <Icon name="upload" size={14} color="currentColor" />
                     Upload file
                   </button>
                   <button onClick={() => setShowFilePicker(true)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1.5px dashed #d1d5db', borderRadius: 9, padding: '7px 14px', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: '#787584', transition: 'all 120ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#5e4dbb'; e.currentTarget.style.color = '#5e4dbb'; e.currentTarget.style.background = '#faf9ff'; }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#d1d5db'; e.currentTarget.style.color = '#787584'; e.currentTarget.style.background = 'transparent'; }}>
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1.5px dashed var(--color-blue-tint-3)', borderRadius: 9, padding: '7px 14px', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', transition: 'all 120ms' }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-blue-tint-3)'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; e.currentTarget.style.background = 'transparent'; }}>
                     <Icon name="folder_open" size={14} color="currentColor" />
                     Attach from Files
                   </button>
@@ -453,10 +453,10 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
         </div>
 
         {/* Footer */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 32px', borderTop: '1px solid #f1ecf6', flexShrink: 0 }}>
-          <button onClick={onClose} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: '1px solid #E5E7EB', borderRadius: 8, padding: '9px 18px', cursor: 'pointer' }}>Cancel</button>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '14px 32px', borderTop: '1px solid var(--color-surface-tint-2)', flexShrink: 0 }}>
+          <button onClick={onClose} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '9px 18px', cursor: 'pointer' }}>Cancel</button>
           <button onClick={save} disabled={!title.trim()}
-            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: title.trim() ? effectiveAccent : '#c9c4d5', border: 'none', borderRadius: 8, padding: '9px 22px', cursor: title.trim() ? 'pointer' : 'default' }}>
+            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: title.trim() ? effectiveAccent : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '9px 22px', cursor: title.trim() ? 'pointer' : 'default' }}>
             {initial ? 'Save' : 'Add'}
           </button>
         </div>
@@ -467,7 +467,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
       <DeleteConfirmModal
         name={title.trim() || initial?.title || 'this milestone'}
         heading="Delete milestone?"
-        description={<>"<span style={{ color: '#1c1b22', fontWeight: 500 }}>{title.trim() || initial?.title}</span>" will be moved to trash.</>}
+        description={<>"<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{title.trim() || initial?.title}</span>" will be moved to trash.</>}
         onConfirm={() => { setShowDelete(false); onDelete(); }}
         onCancel={() => setShowDelete(false)}
       />
@@ -535,22 +535,22 @@ export default function TimelineScreen() {
     if (listsLoading) {
       return (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 32, height: 32, border: '3px solid #e8e4f0', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+          <div style={{ width: 32, height: 32, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
         </div>
       );
     }
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 18, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>Timeline not found</div>
-          <button onClick={() => navigate('/dashboard')} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Go to Dashboard</button>
+          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Timeline not found</div>
+          <button onClick={() => navigate('/dashboard')} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Go to Dashboard</button>
         </div>
       </div>
     );
   }
 
-  const accent = timeline.color ?? '#5e4dbb';
-  const bg = timeline.colorBg ?? '#F9FAFB';
+  const accent = timeline.color ?? 'var(--color-primary)';
+  const bg = timeline.colorBg ?? 'var(--color-surface-gray)';
   const layout: TimelineLayout = timeline.layout ?? 'vertical';
   const isOwner = timeline.userId === currentUserId;
   const milestones = sortMilestones(timeline.milestones);
@@ -626,36 +626,36 @@ export default function TimelineScreen() {
   };
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: '#fff' }}>
+    <div style={{ flex: 1, overflowY: 'auto', background: 'var(--color-white)' }}>
       {/* Hero */}
-      <div style={{ background: bg, borderBottom: '1px solid #f0ecf8', padding: isMobile ? '20px 16px 16px' : '32px 40px 26px' }}>
+      <div style={{ background: bg, borderBottom: '1px solid var(--color-divider)', padding: isMobile ? '20px 16px 16px' : '32px 40px 26px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, maxWidth: 860, margin: '0 auto' }}>
-          <div style={{ width: 56, height: 56, borderRadius: 16, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, boxShadow: '0 2px 10px rgba(0,0,0,0.06)', flexShrink: 0 }}>
+          <div style={{ width: 56, height: 56, borderRadius: 16, background: 'var(--color-white)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, boxShadow: '0 2px 10px rgba(var(--color-black-rgb), 0.06)', flexShrink: 0 }}>
             {timeline.emoji ?? <Icon name="timeline" size={28} color={accent} />}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <h1 style={{ margin: 0, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 26, fontWeight: 800, color: '#1c1b22' }}>{timeline.name}</h1>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: accent, background: '#fff', padding: '3px 9px', borderRadius: 9999, border: `1px solid ${accent}33` }}>
+              <h1 style={{ margin: 0, fontFamily: 'var(--font-heading)', fontSize: 26, fontWeight: 800, color: 'var(--color-text-primary)' }}>{timeline.name}</h1>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: accent, background: 'var(--color-white)', padding: '3px 9px', borderRadius: 9999, border: `1px solid ${accent}33` }}>
                 <Icon name="timeline" size={13} color={accent} /> Timeline
               </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#787584' }}>
-                <Icon name={timeline.isPublic ? 'public' : 'lock'} size={13} color="#787584" />{timeline.isPublic ? 'Public' : 'Private'}
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>
+                <Icon name={timeline.isPublic ? 'public' : 'lock'} size={13} color="var(--color-text-tertiary)" />{timeline.isPublic ? 'Public' : 'Private'}
               </span>
             </div>
-            {timeline.subtitle && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: '#787584', marginTop: 4 }}>{timeline.subtitle}</div>}
+            {timeline.subtitle && <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)', marginTop: 4 }}>{timeline.subtitle}</div>}
             {/* Progress */}
             <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ flex: 1, maxWidth: 320, height: 8, borderRadius: 9999, background: 'rgba(0,0,0,0.07)', overflow: 'hidden' }}>
+              <div style={{ flex: 1, maxWidth: 320, height: 8, borderRadius: 9999, background: 'rgba(var(--color-black-rgb), 0.07)', overflow: 'hidden' }}>
                 <div style={{ width: `${pct}%`, height: '100%', borderRadius: 9999, background: accent, transition: 'width 400ms ease' }} />
               </div>
-              <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#484552' }}>{done}/{total} done · {pct}%</span>
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)' }}>{done}/{total} done · {pct}%</span>
             </div>
           </div>
           {isOwner && (
             <button onClick={() => setAdding(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 10, border: 'none', background: accent, color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0, boxShadow: `0 4px 14px ${accent}40` }}>
-              <Icon name="add" size={17} color="#fff" /> Milestone
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 10, border: 'none', background: accent, color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0, boxShadow: `0 4px 14px ${accent}40` }}>
+              <Icon name="add" size={17} color="var(--color-white)" /> Milestone
             </button>
           )}
         </div>
@@ -668,21 +668,21 @@ export default function TimelineScreen() {
             <div style={{ width: 64, height: 64, borderRadius: 18, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Icon name="timeline" size={32} color={accent} />
             </div>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 18, fontWeight: 700, color: '#1c1b22' }}>No milestones yet</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#787584', maxWidth: 300, lineHeight: 1.6 }}>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700, color: 'var(--color-text-primary)' }}>No milestones yet</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', maxWidth: 300, lineHeight: 1.6 }}>
               {isOwner ? 'Add your first milestone to start building this timeline.' : 'This timeline has no milestones yet.'}
             </div>
             {isOwner && (
               <button onClick={() => setAdding(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 20px', borderRadius: 10, border: 'none', background: accent, color: '#fff', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-                <Icon name="add" size={17} color="#fff" /> Add Milestone
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 20px', borderRadius: 10, border: 'none', background: accent, color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                <Icon name="add" size={17} color="var(--color-white)" /> Add Milestone
               </button>
             )}
           </div>
         ) : (
           <div style={{ position: 'relative', paddingLeft: 8 }}>
             {/* Vertical rail — grey background track */}
-            <div style={{ position: 'absolute', left: 8 + nodeSize / 2 - 1, top: nodeSize / 2, bottom: nodeSize / 2, width: 2, background: '#e8e4f0', borderRadius: 2 }} />
+            <div style={{ position: 'absolute', left: 8 + nodeSize / 2 - 1, top: nodeSize / 2, bottom: nodeSize / 2, width: 2, background: 'var(--color-border)', borderRadius: 2 }} />
             {/* Accent progress fill — grows toward the leading milestone, partially
                 into the segment of the one that's still in progress today. */}
             {fillIndex > -1 && (
@@ -695,7 +695,7 @@ export default function TimelineScreen() {
                 borderRadius: 2,
                 zIndex: 0,
                 backgroundColor: accent,
-                backgroundImage: railActive ? 'linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%)' : undefined,
+                backgroundImage: railActive ? 'linear-gradient(180deg, transparent 0%, rgba(var(--color-white-rgb), 0.6) 50%, transparent 100%)' : undefined,
                 backgroundSize: '100% 50%',
                 backgroundRepeat: 'repeat-y',
                 transition: 'height 600ms cubic-bezier(0.4,0,0.2,1)',
@@ -737,34 +737,34 @@ export default function TimelineScreen() {
                     <button
                       onClick={() => cycleStatus(m)}
                       title={isOwner ? `Status: ${st.label} — click to change` : st.label}
-                      style={{ position: 'relative', zIndex: 1, width: nodeSize, height: nodeSize, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: effectivelyDone ? dot : '#fff', border: `2.5px solid ${dot}`, cursor: isOwner ? 'pointer' : 'default', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 4px #fff', transition: 'all 300ms' }}>
-                      {effectivelyDone && <Icon name="check" size={nodeSize - 7} color="#fff" />}
+                      style={{ position: 'relative', zIndex: 1, width: nodeSize, height: nodeSize, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: effectivelyDone ? dot : 'var(--color-white)', border: `2.5px solid ${dot}`, cursor: isOwner ? 'pointer' : 'default', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 4px var(--color-white)', transition: 'all 300ms' }}>
+                      {effectivelyDone && <Icon name="check" size={nodeSize - 7} color="var(--color-white)" />}
                       {!effectivelyDone && effectiveStatus === 'in-progress' && <div style={{ width: nodeSize / 3, height: nodeSize / 3, borderRadius: '50%', background: dot }} />}
                     </button>
 
                     {/* Card */}
-                    <div style={{ flex: 1, minWidth: 0, background: effectivelyDone ? `${dot}08` : '#fff', border: `1px solid ${effectivelyDone ? dot + '30' : '#ece8f4'}`, borderLeft: `3px solid ${dot}`, borderRadius: 12, padding: cardPad, transition: 'box-shadow 150ms, background 300ms', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}
-                      onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.07)')}
-                      onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)')}
+                    <div style={{ flex: 1, minWidth: 0, background: effectivelyDone ? `${dot}08` : 'var(--color-white)', border: `1px solid ${effectivelyDone ? dot + '30' : 'var(--color-purple-pale-34)'}`, borderLeft: `3px solid ${dot}`, borderRadius: 12, padding: cardPad, transition: 'box-shadow 150ms, background 300ms', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.03)' }}
+                      onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(var(--color-black-rgb), 0.07)')}
+                      onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 1px 3px rgba(var(--color-black-rgb), 0.03)')}
                       onContextMenu={e => { if (!isOwner) return; e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, milestone: m }); }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                         {m.emoji && <span style={{ fontSize: layout === 'detailed' ? 20 : 16, lineHeight: 1.2, flexShrink: 0 }}>{m.emoji}</span>}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: titleSize, fontWeight: 700, color: effectivelyDone ? '#787584' : '#1c1b22', textDecoration: effectivelyDone && m.status === 'done' ? 'line-through' : 'none', transition: 'color 300ms' }}>{m.title}</span>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: st.color, background: `${st.color}1a`, padding: '2px 8px', borderRadius: 9999, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                            <span style={{ fontFamily: 'var(--font-heading)', fontSize: titleSize, fontWeight: 700, color: effectivelyDone ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)', textDecoration: effectivelyDone && m.status === 'done' ? 'line-through' : 'none', transition: 'color 300ms' }}>{m.title}</span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 700, color: st.color, background: `${st.color}1a`, padding: '2px 8px', borderRadius: 9999, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                               <Icon name={st.icon} size={11} color={st.color} />{st.label}
                             </span>
-                            {isToday && <span style={{ display: 'inline-flex', alignItems: 'center', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#ea580c', background: '#fff7ed', padding: '2px 8px', borderRadius: 9999, letterSpacing: '0.04em' }}>TODAY</span>}
+                            {isToday && <span style={{ display: 'inline-flex', alignItems: 'center', fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 700, color: 'var(--color-orange)', background: 'var(--color-orange-pale-3)', padding: '2px 8px', borderRadius: 9999, letterSpacing: '0.04em' }}>TODAY</span>}
                             {(m.attachmentCount ?? 0) > 0 && (
-                              <span title={`${m.attachmentCount} attachment${m.attachmentCount === 1 ? '' : 's'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600, color: '#b0acbe' }}>
-                                <Icon name="attach_file" size={12} color="#b0acbe" />{m.attachmentCount}
+                              <span title={`${m.attachmentCount} attachment${m.attachmentCount === 1 ? '' : 's'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: 'var(--font-body)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)' }}>
+                                <Icon name="attach_file" size={12} color="var(--color-text-quaternary)" />{m.attachmentCount}
                               </span>
                             )}
                           </div>
                           {(dateLabel || m.time) && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontFamily: 'Inter, sans-serif', fontSize: 12, color: isPast && !isToday ? '#10B981' : '#787584' }}>
-                              <Icon name="event" size={13} color={isPast && !isToday ? '#10B981' : '#9d8dff'} />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontFamily: 'var(--font-body)', fontSize: 12, color: isPast && !isToday ? 'var(--color-success)' : 'var(--color-text-tertiary)' }}>
+                              <Icon name="event" size={13} color={isPast && !isToday ? 'var(--color-success)' : 'var(--color-accent-purple-light)'} />
                               {dateLabel}{m.time ? `${dateLabel ? ' · ' : ''}${m.time}` : ''}
                             </div>
                           )}
@@ -778,15 +778,15 @@ export default function TimelineScreen() {
                           <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
                             <button onClick={() => setEditing(m)} title="Edit milestone"
                               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 7, border: 'none', background: 'transparent', cursor: 'pointer' }}
-                              onMouseEnter={e => (e.currentTarget.style.background = '#f5f3ff')}
+                              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
                               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                              <Icon name="edit" size={15} color="#787584" />
+                              <Icon name="edit" size={15} color="var(--color-text-tertiary)" />
                             </button>
                             <button onClick={() => setDeleting(m)} title="Delete milestone"
                               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 7, border: 'none', background: 'transparent', cursor: 'pointer' }}
-                              onMouseEnter={e => (e.currentTarget.style.background = '#fff0ef')}
+                              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-red-pale-5)')}
                               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                              <Icon name="delete" size={15} color="#ba1a1a" />
+                              <Icon name="delete" size={15} color="var(--color-error)" />
                             </button>
                           </div>
                         )}
@@ -800,9 +800,9 @@ export default function TimelineScreen() {
             {/* Add milestone footer (owner) */}
             {isOwner && (
               <button onClick={() => setAdding(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: gap, marginLeft: nodeSize + 18 + 8, padding: '10px 14px', borderRadius: 10, border: '1.5px dashed #d8d2e8', background: '#fcfbff', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: accent }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: gap, marginLeft: nodeSize + 18 + 8, padding: '10px 14px', borderRadius: 10, border: '1.5px dashed var(--color-purple-tint-3)', background: 'var(--color-purple-pale-2)', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: accent }}
                 onMouseEnter={e => (e.currentTarget.style.background = bg)}
-                onMouseLeave={e => (e.currentTarget.style.background = '#fcfbff')}>
+                onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-purple-pale-2)')}>
                 <Icon name="add" size={16} color={accent} /> Add milestone
               </button>
             )}
@@ -816,7 +816,7 @@ export default function TimelineScreen() {
         <DeleteConfirmModal
           name={deleting.title}
           heading="Delete milestone?"
-          description={<>"<span style={{ color: '#1c1b22', fontWeight: 500 }}>{deleting.title}</span>" will be moved to trash.</>}
+          description={<>"<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{deleting.title}</span>" will be moved to trash.</>}
           onConfirm={() => { handleDelete(deleting.id); setDeleting(null); }}
           onCancel={() => setDeleting(null)}
         />

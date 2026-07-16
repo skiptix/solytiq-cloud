@@ -302,7 +302,7 @@ Guidelines:
 - GPS FILES: list_gps_files/rename_gps_file/delete_gps_file work on the user's uploaded GPX/FIT route files from any view (not just the GPS page).
 - TRASH: list_trash shows recently deleted tasks/lists/folders/timelines (30-day recovery window) — restoring itself must be done from the Trash view in the app, so point the user there if they want something back.
 - TIMELINES: You can create timelines (create_timeline), update/rename them (update_timeline), delete them (delete_timeline — ALWAYS confirm first). Navigate to a specific timeline with navigate_to_timeline using its ID from available_timelines. When on a timeline page you can add milestones (add_milestone), edit them (update_milestone), delete them (delete_milestone — confirm first), and reorder them (reorder_milestones).
-- MILESTONE STATUS: valid values are 'upcoming', 'in-progress', 'done'. Milestone dates use YYYY-MM-DD format. Color can be a hex string (e.g. "#10B981") or null for auto.
+- MILESTONE STATUS: valid values are 'upcoming', 'in-progress', 'done'. Milestone dates use YYYY-MM-DD format. Color can be a hex string (e.g. "var(--color-success)") or null for auto.
 - TIMELINE IDs: Always use exact timeline_id strings from available_timelines. Milestone IDs come from the milestones array in the current context.
 - If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}`;
 }
@@ -999,7 +999,7 @@ export function buildTools(ctx: AIContext, workspaceId?: string | null, workspac
           name: { type: 'string', description: 'Timeline name' },
           emoji: { type: 'string', description: 'Optional emoji icon (e.g. 🚀)' },
           subtitle: { type: 'string', description: 'Optional subtitle / description shown below the name' },
-          color: { type: 'string', description: 'Accent color hex (e.g. "#5e4dbb")' },
+          color: { type: 'string', description: 'Accent color hex (e.g. "var(--color-primary)")' },
           layout: { type: 'string', enum: ['vertical', 'compact', 'detailed'], description: 'Display density (default: vertical)' },
           is_public: { type: 'boolean', description: 'true = public, false = private (default: false)' },
           folder_id: { type: 'string', description: `Optional folder ID to place the timeline in. Available folders: ${folderList}` },

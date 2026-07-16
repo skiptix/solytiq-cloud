@@ -67,16 +67,16 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
   const elevVals = elevProf.map(p => p.elevation);
   const elevMin = Math.min(...elevVals);
   const elevMax = Math.max(...elevVals);
-  metrics.push({ key: 'elevation', color: '#5e4dbb', label: 'Elevation', unit: 'm', values: elevVals });
+  metrics.push({ key: 'elevation', color: 'var(--color-primary)', label: 'Elevation', unit: 'm', values: elevVals });
 
   if (trackData.metricsAvailable.hr && trackData.hrProfile) {
-    metrics.push({ key: 'hr', color: '#ef4444', label: 'HR', unit: 'bpm', values: trackData.hrProfile.map((p: GpsMetricPoint) => p.value) });
+    metrics.push({ key: 'hr', color: 'var(--color-red-mid-2)', label: 'HR', unit: 'bpm', values: trackData.hrProfile.map((p: GpsMetricPoint) => p.value) });
   }
   if (trackData.metricsAvailable.cadence && trackData.cadenceProfile) {
-    metrics.push({ key: 'cadence', color: '#10b981', label: 'Cadence', unit: 'rpm', values: trackData.cadenceProfile.map((p: GpsMetricPoint) => p.value) });
+    metrics.push({ key: 'cadence', color: 'var(--color-success)', label: 'Cadence', unit: 'rpm', values: trackData.cadenceProfile.map((p: GpsMetricPoint) => p.value) });
   }
   if (trackData.metricsAvailable.power && trackData.powerProfile) {
-    metrics.push({ key: 'power', color: '#f59e0b', label: 'Power', unit: 'W', values: trackData.powerProfile.map((p: GpsMetricPoint) => p.value) });
+    metrics.push({ key: 'power', color: 'var(--color-warning-alt)', label: 'Power', unit: 'W', values: trackData.powerProfile.map((p: GpsMetricPoint) => p.value) });
   }
 
   const normalizedMetrics = metrics.map(m => {
@@ -140,50 +140,50 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
         {metrics.map(m => (
           <div key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <div style={{ width: 10, height: 3, borderRadius: 2, background: m.color }} />
-            <span style={{ fontSize: 10, color: '#5e4dbb', fontFamily: 'Inter, sans-serif', fontWeight: 600 }}>{m.label}</span>
+            <span style={{ fontSize: 10, color: 'var(--color-primary)', fontFamily: 'var(--font-body)', fontWeight: 600 }}>{m.label}</span>
           </div>
         ))}
       </div>
       <svg ref={svgRef} width={dims.w} height={dims.h} style={{ display: 'block', cursor: 'crosshair' }} onMouseMove={handleMouseMove} onMouseLeave={() => onHover(null)}>
         <defs>
           <linearGradient id="gps-elev-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#5e4dbb" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="#5e4dbb" stopOpacity="0.03" />
+            <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.03" />
           </linearGradient>
         </defs>
         {[0, 0.25, 0.5, 0.75, 1].map(frac => {
           const y = PAD.t + (1 - frac) * ch;
-          return <line key={frac} x1={PAD.l} y1={y} x2={PAD.l + cw} y2={y} stroke="rgba(94,77,187,0.10)" strokeWidth={0.8} />;
+          return <line key={frac} x1={PAD.l} y1={y} x2={PAD.l + cw} y2={y} stroke="rgba(var(--color-primary-rgb), 0.10)" strokeWidth={0.8} />;
         })}
         {Array.from({ length: 6 }, (_, i) => {
           const dist = (i / 5) * maxDist;
           const x = toX(dist);
           return (
-            <text key={i} x={x} y={dims.h - 5} textAnchor="middle" style={{ fontSize: 9, fill: 'rgba(80,60,140,0.55)', fontFamily: 'Inter, sans-serif' }}>
+            <text key={i} x={x} y={dims.h - 5} textAnchor="middle" style={{ fontSize: 9, fill: 'rgba(var(--color-purple-deep-1-rgb), 0.55)', fontFamily: 'var(--font-body)' }}>
               {dist >= 1000 ? `${(dist / 1000).toFixed(1)}k` : Math.round(dist)}m
             </text>
           );
         })}
         {areaD && <path d={areaD} fill="url(#gps-elev-grad)" />}
         {paths.map(p => p.pathD ? <path key={p.key} d={p.pathD} fill="none" stroke={p.color} strokeWidth={p.key === 'elevation' ? 2 : 1.5} opacity={0.9} /> : null)}
-        {hovX != null && <line x1={hovX} y1={PAD.t} x2={hovX} y2={PAD.t + ch} stroke="rgba(94,77,187,0.45)" strokeWidth={1.5} strokeDasharray="4,3" />}
+        {hovX != null && <line x1={hovX} y1={PAD.t} x2={hovX} y2={PAD.t + ch} stroke="rgba(var(--color-primary-rgb), 0.45)" strokeWidth={1.5} strokeDasharray="4,3" />}
         {hovX != null && hoveredIdx != null && normalizedMetrics.map(m => {
           const norm = m.normalized[hoveredIdx];
           const y = toY(norm);
           if (y == null) return null;
-          return <circle key={m.key} cx={hovX} cy={y} r={4} fill={m.color} stroke="rgba(255,255,255,0.90)" strokeWidth={2} />;
+          return <circle key={m.key} cx={hovX} cy={y} r={4} fill={m.color} stroke="rgba(var(--color-white-rgb), 0.90)" strokeWidth={2} />;
         })}
       </svg>
       {hovX != null && hoveredIdx != null && (
         <div style={{
           position: 'absolute', top: PAD.t, left: Math.min(hovX + 10, dims.w - 140),
-          background: 'rgba(255,255,255,0.75)', backdropFilter: 'blur(16px) saturate(160%)',
-          WebkitBackdropFilter: 'blur(16px) saturate(160%)', border: '1px solid rgba(255,255,255,0.70)',
+          background: 'rgba(var(--color-white-rgb), 0.75)', backdropFilter: 'blur(16px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(16px) saturate(160%)', border: '1px solid rgba(var(--color-white-rgb), 0.70)',
           borderRadius: 10, padding: '6px 10px', pointerEvents: 'none', zIndex: 10,
-          fontFamily: 'Inter, sans-serif', fontSize: 11, minWidth: 110,
-          boxShadow: '0 4px 20px rgba(94,77,187,0.12), inset 0 1px 0 rgba(255,255,255,0.90)',
+          fontFamily: 'var(--font-body)', fontSize: 11, minWidth: 110,
+          boxShadow: '0 4px 20px rgba(var(--color-primary-rgb), 0.12), inset 0 1px 0 rgba(var(--color-white-rgb), 0.90)',
         }}>
-          <div style={{ color: 'rgba(80,60,140,0.65)', marginBottom: 4, fontSize: 10 }}>{fmtDist(elevProf[hoveredIdx]?.distance)}</div>
+          <div style={{ color: 'rgba(var(--color-purple-deep-1-rgb), 0.65)', marginBottom: 4, fontSize: 10 }}>{fmtDist(elevProf[hoveredIdx]?.distance)}</div>
           {normalizedMetrics.map(m => {
             const val = m.values[hoveredIdx];
             if (val == null) return null;
@@ -195,7 +195,7 @@ function MultiLineMapChart({ trackData, hoveredIdx, onHover }: MultiLineMapChart
             );
           })}
           {elevVals.length > 0 && (
-            <div style={{ color: 'rgba(80,60,140,0.50)', fontSize: 9, marginTop: 3 }}>
+            <div style={{ color: 'rgba(var(--color-purple-deep-1-rgb), 0.50)', fontSize: 9, marginTop: 3 }}>
               Range: {Math.round(elevMin)}–{Math.round(elevMax)}m
             </div>
           )}
@@ -423,8 +423,8 @@ export default function GPSScreen() {
         marker.bindPopup(
           `<div style="font-family:Inter,sans-serif;min-width:160px;max-width:240px;">`
           + (cfg ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><span style="background:${cfg.bg};color:${cfg.fg};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Hanken Grotesk',sans-serif;white-space:nowrap;">${cfg.label}</span></div>` : '')
-          + `<div style="font-size:13px;font-weight:700;color:#1c1b22;font-family:'Hanken Grotesk',sans-serif;">${poi.name.replace(/</g, '&lt;')}</div>`
-          + (poi.description ? `<div style="font-size:11px;color:#787584;margin-top:4px;">${String(poi.description).replace(/</g, '&lt;')}</div>` : '')
+          + `<div style="font-size:13px;font-weight:700;color:var(--color-text-primary);font-family:'Hanken Grotesk',sans-serif;">${poi.name.replace(/</g, '&lt;')}</div>`
+          + (poi.description ? `<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px;">${String(poi.description).replace(/</g, '&lt;')}</div>` : '')
           + `</div>`,
           { maxWidth: 260, className: 'solytiq-poi-popup' },
         );
@@ -515,7 +515,7 @@ export default function GPSScreen() {
           tags['addr:city'] || tags['addr:town'],
         ].filter(Boolean).join(', ');
         const cfg = POI_CATEGORY_CONFIG[poi.category as PoiCategory];
-        marker.bindPopup(`<div style="font-family:Inter,sans-serif;min-width:180px;max-width:240px;"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><span style="background:${cfg.bg};color:${cfg.fg};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Hanken Grotesk',sans-serif;white-space:nowrap;">${cfg.label}</span></div><div style="font-size:13px;font-weight:700;color:#1c1b22;font-family:'Hanken Grotesk',sans-serif;margin-bottom:6px;">${poi.name}</div>${address ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">📍 ${address}</div>` : ''}${tags['opening_hours'] ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">🕐 ${tags['opening_hours']}</div>` : ''}${tags['phone'] || tags['contact:phone'] ? `<div style="font-size:11px;color:#787584;margin-bottom:4px;">📞 ${tags['phone'] || tags['contact:phone']}</div>` : ''}${tags['website'] || tags['contact:website'] ? `<div style="font-size:11px;margin-top:4px;"><a href="${tags['website'] || tags['contact:website']}" target="_blank" rel="noopener" style="color:#5e4dbb;text-decoration:none;">🌐 Website</a></div>` : ''}</div>`, { maxWidth: 260, className: 'solytiq-poi-popup' });
+        marker.bindPopup(`<div style="font-family:Inter,sans-serif;min-width:180px;max-width:240px;"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><span style="background:${cfg.bg};color:${cfg.fg};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Hanken Grotesk',sans-serif;white-space:nowrap;">${cfg.label}</span></div><div style="font-size:13px;font-weight:700;color:var(--color-text-primary);font-family:'Hanken Grotesk',sans-serif;margin-bottom:6px;">${poi.name}</div>${address ? `<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px;">📍 ${address}</div>` : ''}${tags['opening_hours'] ? `<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px;">🕐 ${tags['opening_hours']}</div>` : ''}${tags['phone'] || tags['contact:phone'] ? `<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px;">📞 ${tags['phone'] || tags['contact:phone']}</div>` : ''}${tags['website'] || tags['contact:website'] ? `<div style="font-size:11px;margin-top:4px;"><a href="${tags['website'] || tags['contact:website']}" target="_blank" rel="noopener" style="color:var(--color-primary);text-decoration:none;">🌐 Website</a></div>` : ''}</div>`, { maxWidth: 260, className: 'solytiq-poi-popup' });
         layer.addLayer(marker);
         poiMarkersRef.current.set(poi.id, marker);
       });
@@ -554,7 +554,7 @@ export default function GPSScreen() {
     const map = leafletRef.current;
     if (!map) return;
     searchPinRef.current?.remove();
-    const icon = L.divIcon({ className: '', html: `<div style="background:#5e4dbb;color:#fff;border:2px solid #fff;border-radius:50%;width:14px;height:14px;box-shadow:0 2px 8px rgba(94,77,187,0.4);"></div>`, iconSize: [14, 14], iconAnchor: [7, 7] });
+    const icon = L.divIcon({ className: '', html: `<div style="background:var(--color-primary);color:var(--color-white);border:2px solid var(--color-white);border-radius:50%;width:14px;height:14px;box-shadow:0 2px 8px rgba(var(--color-primary-rgb), 0.4);"></div>`, iconSize: [14, 14], iconAnchor: [7, 7] });
     searchPinRef.current = L.marker([lat, lon], { icon }).bindTooltip(label, { permanent: false, direction: 'top' }).addTo(map);
   }
 
@@ -722,11 +722,11 @@ export default function GPSScreen() {
   // Shared glassmorphic button style for map controls
   const mapCtrlBtn = (enabled = true): React.CSSProperties => ({
     width: 36, height: 36, borderRadius: 9,
-    background: 'rgba(255,255,255,0.88)',
+    background: 'rgba(var(--color-white-rgb), 0.88)',
     backdropFilter: 'blur(16px)',
     WebkitBackdropFilter: 'blur(16px)',
-    border: '1px solid rgba(255,255,255,0.75)',
-    boxShadow: '0 2px 12px rgba(94,77,187,0.10)',
+    border: '1px solid rgba(var(--color-white-rgb), 0.75)',
+    boxShadow: '0 2px 12px rgba(var(--color-primary-rgb), 0.10)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     cursor: enabled ? 'pointer' : 'default',
     opacity: enabled ? 1 : 0.45,
@@ -738,14 +738,14 @@ export default function GPSScreen() {
       <style>{`
         @keyframes gpsPageIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes mapFadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .gps-map-ctrl:hover { box-shadow: 0 4px 18px rgba(94,77,187,0.18) !important; background: rgba(255,255,255,0.97) !important; }
+        .gps-map-ctrl:hover { box-shadow: 0 4px 18px rgba(var(--color-primary-rgb), 0.18) !important; background: rgba(var(--color-white-rgb), 0.97) !important; }
       `}</style>
 
       <div style={{
         flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
         height: '100%', overflow: 'hidden', position: 'relative',
         animation: 'gpsPageIn 380ms cubic-bezier(0.23,1,0.32,1) both',
-        fontFamily: 'Inter, sans-serif',
+        fontFamily: 'var(--font-body)',
       }}>
         {/* ── Map fills full area ─────────────────────────────────────────────── */}
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden', isolation: 'isolate' }}>
@@ -757,28 +757,28 @@ export default function GPSScreen() {
             <div style={{
               position: 'absolute', top: 16, left: 16, zIndex: 1000,
               width: 300, boxSizing: 'border-box',
-              background: 'rgba(255,255,255,0.88)',
+              background: 'rgba(var(--color-white-rgb), 0.88)',
               backdropFilter: 'blur(20px) saturate(180%)',
               WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              border: '1px solid rgba(255,255,255,0.75)',
+              border: '1px solid rgba(var(--color-white-rgb), 0.75)',
               borderRadius: 14, padding: '14px 16px',
-              boxShadow: '0 4px 32px rgba(94,77,187,0.12), inset 0 1px 0 rgba(255,255,255,0.90)',
+              boxShadow: '0 4px 32px rgba(var(--color-primary-rgb), 0.12), inset 0 1px 0 rgba(var(--color-white-rgb), 0.90)',
               animation: 'mapFadeIn 300ms ease both',
             }}>
               {/* File type badge + name */}
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
                 <span style={{
-                  background: selectedFile.fileType === 'gpx' ? '#ede9ff' : '#ccfbf1',
-                  color: selectedFile.fileType === 'gpx' ? '#5e4dbb' : '#0d9488',
+                  background: selectedFile.fileType === 'gpx' ? 'var(--color-surface-tint-4)' : 'var(--color-teal-tint-1)',
+                  color: selectedFile.fileType === 'gpx' ? 'var(--color-primary)' : 'var(--color-teal-deep-2)',
                   borderRadius: 4, padding: '2px 6px', fontSize: 9,
                   fontWeight: 700, letterSpacing: '0.04em',
-                  fontFamily: 'Hanken Grotesk, sans-serif', flexShrink: 0, marginTop: 2,
+                  fontFamily: 'var(--font-heading)', flexShrink: 0, marginTop: 2,
                 }}>
                   {selectedFile.fileType.toUpperCase()}
                 </span>
                 <span style={{
-                  fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13,
-                  fontWeight: 700, color: '#1c1b22', lineHeight: 1.3, wordBreak: 'break-word',
+                  fontFamily: 'var(--font-heading)', fontSize: 13,
+                  fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.3, wordBreak: 'break-word',
                 }}>
                   {selectedFile.name.replace(/\.(gpx|fit)$/i, '')}
                 </span>
@@ -787,21 +787,21 @@ export default function GPSScreen() {
               {/* Stats row */}
               <div style={{ display: 'flex', gap: 14, marginBottom: 12, flexWrap: 'wrap' }}>
                 <div>
-                  <div style={{ fontSize: 10, color: '#b0acbe', fontFamily: 'Inter', marginBottom: 2 }}>Distance</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>
+                  <div style={{ fontSize: 10, color: 'var(--color-text-quaternary)', fontFamily: 'var(--font-body)', marginBottom: 2 }}>Distance</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)' }}>
                     {fmtDist(selectedFile.metadata?.totalDistance)}
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 10, color: '#b0acbe', fontFamily: 'Inter', marginBottom: 2 }}>Elev Gain</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>
+                  <div style={{ fontSize: 10, color: 'var(--color-text-quaternary)', fontFamily: 'var(--font-body)', marginBottom: 2 }}>Elev Gain</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)' }}>
                     {fmtElev(selectedFile.metadata?.totalElevationGain)}
                   </div>
                 </div>
                 {selectedFile.metadata?.duration != null && (
                   <div>
-                    <div style={{ fontSize: 10, color: '#b0acbe', fontFamily: 'Inter', marginBottom: 2 }}>Time</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>
+                    <div style={{ fontSize: 10, color: 'var(--color-text-quaternary)', fontFamily: 'var(--font-body)', marginBottom: 2 }}>Time</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)' }}>
                       {fmtDuration(selectedFile.metadata.duration)}
                     </div>
                   </div>
@@ -810,17 +810,17 @@ export default function GPSScreen() {
 
               {/* Action buttons — 3 columns, unless delete confirm shown */}
               {deleteConfirm === 'selected' ? (
-                <div style={{ background: '#fff5f5', border: '1px solid #fca5a5', borderRadius: 10, padding: '10px 12px' }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#ba1a1a', marginBottom: 4, fontFamily: 'Hanken Grotesk, sans-serif' }}>Delete this route?</div>
-                  <div style={{ fontSize: 11, color: '#9e7070', marginBottom: 10, fontFamily: 'Inter, sans-serif' }}>This action cannot be undone.</div>
+                <div style={{ background: 'var(--color-error-bg-alt)', border: '1px solid var(--color-red-tint-1)', borderRadius: 10, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-error)', marginBottom: 4, fontFamily: 'var(--font-heading)' }}>Delete this route?</div>
+                  <div style={{ fontSize: 11, color: 'var(--color-red-mid-3)', marginBottom: 10, fontFamily: 'var(--font-body)' }}>This action cannot be undone.</div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button
                       onClick={() => setDeleteConfirm(null)}
-                      style={{ flex: 1, padding: '6px 0', borderRadius: 7, border: '1px solid #e8e4f0', background: '#fff', color: '#484552', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
+                      style={{ flex: 1, padding: '6px 0', borderRadius: 7, border: '1px solid var(--color-border)', background: 'var(--color-white)', color: 'var(--color-text-secondary)', fontSize: 11, fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--font-body)' }}
                     >Cancel</button>
                     <button
                       onClick={handleDeleteSelected}
-                      style={{ flex: 1, padding: '6px 0', borderRadius: 7, border: 'none', background: '#ba1a1a', color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif' }}
+                      style={{ flex: 1, padding: '6px 0', borderRadius: 7, border: 'none', background: 'var(--color-error)', color: 'var(--color-white)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-heading)' }}
                     >Delete</button>
                   </div>
                 </div>
@@ -831,15 +831,15 @@ export default function GPSScreen() {
                     onClick={() => navigate(`/gps/${selectedId}/edit`)}
                     style={{
                       height: 32, borderRadius: 8, border: 'none',
-                      background: '#5e4dbb', color: '#fff',
+                      background: 'var(--color-primary)', color: 'var(--color-white)',
                       fontSize: 11, fontWeight: 600, cursor: 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                      fontFamily: 'Hanken Grotesk, sans-serif', transition: 'background 150ms',
+                      fontFamily: 'var(--font-heading)', transition: 'background 150ms',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#4d3da8'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#5e4dbb'; }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-primary)'; }}
                   >
-                    <Icon name="edit" size={12} color="#fff" />
+                    <Icon name="edit" size={12} color="var(--color-white)" />
                     Edit
                   </button>
                   {/* Download */}
@@ -847,34 +847,34 @@ export default function GPSScreen() {
                     onClick={downloadOriginal}
                     disabled={downloading}
                     style={{
-                      height: 32, borderRadius: 8, border: '1px solid #e8e4f0',
-                      background: '#fff', color: '#484552',
+                      height: 32, borderRadius: 8, border: '1px solid var(--color-border)',
+                      background: 'var(--color-white)', color: 'var(--color-text-secondary)',
                       fontSize: 11, fontWeight: 600,
                       cursor: downloading ? 'default' : 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                      fontFamily: 'Hanken Grotesk, sans-serif', transition: 'background 150ms',
+                      fontFamily: 'var(--font-heading)', transition: 'background 150ms',
                       opacity: downloading ? 0.6 : 1,
                     }}
-                    onMouseEnter={e => { if (!downloading) e.currentTarget.style.background = '#f5f3ff'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#fff'; }}
+                    onMouseEnter={e => { if (!downloading) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
                   >
-                    <Icon name="download" size={12} color="#787584" />
+                    <Icon name="download" size={12} color="var(--color-text-tertiary)" />
                     Save
                   </button>
                   {/* Delete */}
                   <button
                     onClick={() => setDeleteConfirm('selected')}
                     style={{
-                      height: 32, borderRadius: 8, border: '1px solid #fca5a5',
-                      background: 'transparent', color: '#ba1a1a',
+                      height: 32, borderRadius: 8, border: '1px solid var(--color-red-tint-1)',
+                      background: 'transparent', color: 'var(--color-error)',
                       fontSize: 11, fontWeight: 600, cursor: 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                      fontFamily: 'Hanken Grotesk, sans-serif', transition: 'background 150ms',
+                      fontFamily: 'var(--font-heading)', transition: 'background 150ms',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#fff5f5'; }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <Icon name="delete" size={12} color="#ba1a1a" />
+                    <Icon name="delete" size={12} color="var(--color-error)" />
                     Delete
                   </button>
                 </div>
@@ -883,10 +883,10 @@ export default function GPSScreen() {
               {/* Upload progress */}
               {uploading && (
                 <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ flex: 1, height: 4, borderRadius: 4, background: '#ede9ff', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${uploadProgress}%`, background: '#5e4dbb', borderRadius: 4, transition: 'width 200ms' }} />
+                  <div style={{ flex: 1, height: 4, borderRadius: 4, background: 'var(--color-surface-tint-4)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${uploadProgress}%`, background: 'var(--color-primary)', borderRadius: 4, transition: 'width 200ms' }} />
                   </div>
-                  <span style={{ fontSize: 10, color: '#787584', whiteSpace: 'nowrap' }}>{uploadProgress}%</span>
+                  <span style={{ fontSize: 10, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>{uploadProgress}%</span>
                 </div>
               )}
             </div>
@@ -895,49 +895,49 @@ export default function GPSScreen() {
           {/* ── Search + POI toggles (unified card, top-center) ─────────────── */}
           <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 1001, width: 340 }}>
             <div style={{
-              background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px) saturate(180%)',
-              border: `1px solid ${searchOpen ? '#c4b8f0' : 'rgba(255,255,255,0.75)'}`,
-              borderRadius: 14, boxShadow: '0 4px 20px rgba(94,77,187,0.12)',
+              background: 'rgba(var(--color-white-rgb), 0.95)', backdropFilter: 'blur(20px) saturate(180%)',
+              border: `1px solid ${searchOpen ? 'var(--color-accent-purple-soft)' : 'rgba(var(--color-white-rgb), 0.75)'}`,
+              borderRadius: 14, boxShadow: '0 4px 20px rgba(var(--color-primary-rgb), 0.12)',
               transition: 'border-color 150ms', overflow: 'hidden',
             }}>
               {/* Search row */}
               <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', gap: 8 }}>
-                <Icon name={searchLoading ? 'progress_activity' : 'search'} size={16} color="#787584" />
+                <Icon name={searchLoading ? 'progress_activity' : 'search'} size={16} color="var(--color-text-tertiary)" />
                 <input
                   value={searchQuery}
                   onChange={e => { setSearchQuery(e.target.value); handleSearchChange(e.target.value); }}
                   onFocus={() => setSearchOpen(true)}
                   onBlur={() => setTimeout(() => setSearchOpen(false), 200)}
                   placeholder="Place, address or 53.123, 10.456"
-                  style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: '#1c1b22', fontFamily: 'Inter, sans-serif', padding: '10px 0' }}
+                  style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: 'var(--color-text-primary)', fontFamily: 'var(--font-body)', padding: '10px 0' }}
                 />
                 {searchQuery && (
                   <button onMouseDown={e => { e.preventDefault(); setSearchQuery(''); setSearchResults([]); searchPinRef.current?.remove(); searchPinRef.current = null; }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                    <Icon name="close" size={14} color="#b0acbe" />
+                    <Icon name="close" size={14} color="var(--color-text-quaternary)" />
                   </button>
                 )}
               </div>
               {/* Divider */}
-              <div style={{ height: 1, background: '#ede9ff', margin: '0 10px' }} />
+              <div style={{ height: 1, background: 'var(--color-surface-tint-4)', margin: '0 10px' }} />
               {/* POI category toggles row */}
               <div style={{ display: 'flex', alignItems: 'center', padding: '6px 10px', gap: 4 }}>
                 {(Object.entries(POI_CATEGORY_CONFIG) as Array<[PoiCategory, typeof POI_CATEGORY_CONFIG[PoiCategory]]>).map(([cat, cfg]) => {
                   const active = activePoi.has(cat);
                   return (
-                    <button key={cat} title={cfg.label} onClick={() => setActivePoi(prev => { const next = new Set(prev); active ? next.delete(cat) : next.add(cat); return next; })} style={{ flex: 1, height: 30, borderRadius: 7, background: active ? cfg.bg : 'transparent', border: active ? `1.5px solid ${cfg.borderColor}` : '1.5px solid #f0ecfa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', opacity: active ? 1 : 0.5 }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 15, color: active ? cfg.fg : '#b0acbe', lineHeight: 1, fontVariationSettings: "'FILL' 1, 'wght' 400" }}>{cfg.icon}</span>
+                    <button key={cat} title={cfg.label} onClick={() => setActivePoi(prev => { const next = new Set(prev); active ? next.delete(cat) : next.add(cat); return next; })} style={{ flex: 1, height: 30, borderRadius: 7, background: active ? cfg.bg : 'transparent', border: active ? `1.5px solid ${cfg.borderColor}` : '1.5px solid var(--color-purple-pale-24)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', opacity: active ? 1 : 0.5 }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 15, color: active ? cfg.fg : 'var(--color-text-quaternary)', lineHeight: 1, fontVariationSettings: "'FILL' 1, 'wght' 400" }}>{cfg.icon}</span>
                     </button>
                   );
                 })}
-                {poiLoading && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#5e4dbb', opacity: 0.7, animation: 'pulse 1s ease-in-out infinite', marginLeft: 4, flexShrink: 0 }} />}
+                {poiLoading && <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-primary)', opacity: 0.7, animation: 'pulse 1s ease-in-out infinite', marginLeft: 4, flexShrink: 0 }} />}
               </div>
               {/* Search results dropdown */}
               {searchOpen && searchResults.length > 0 && (
-                <div style={{ borderTop: '1px solid #e8e4f0', maxHeight: 240, overflowY: 'auto' }}>
+                <div style={{ borderTop: '1px solid var(--color-border)', maxHeight: 240, overflowY: 'auto' }}>
                   {searchResults.map(r => (
-                    <button key={r.place_id} onMouseDown={() => handleSearchSelect(r)} style={{ width: '100%', padding: '8px 14px', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: '1px solid #f5f3ff', transition: 'background 100ms' }} onMouseEnter={e => { e.currentTarget.style.background = '#faf9ff'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1c1b22', fontFamily: 'Hanken Grotesk, sans-serif' }}>{r.display_name.split(',')[0]}</div>
-                      <div style={{ fontSize: 10, color: '#b0acbe', marginTop: 1 }}>{r.display_name.split(',').slice(1, 3).join(',').trim()}</div>
+                    <button key={r.place_id} onMouseDown={() => handleSearchSelect(r)} style={{ width: '100%', padding: '8px 14px', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: '1px solid var(--color-surface-tint)', transition: 'background 100ms' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)' }}>{r.display_name.split(',')[0]}</div>
+                      <div style={{ fontSize: 10, color: 'var(--color-text-quaternary)', marginTop: 1 }}>{r.display_name.split(',').slice(1, 3).join(',').trim()}</div>
                     </button>
                   ))}
                 </div>
@@ -945,7 +945,7 @@ export default function GPSScreen() {
             </div>
           </div>
           {activePoi.size > 0 && mapZoom < 13 && (
-            <div style={{ position: 'absolute', top: 110, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(12px)', border: '1px solid #e8e4f0', borderRadius: 8, padding: '6px 14px', fontSize: 11, color: '#787584', fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>
+            <div style={{ position: 'absolute', top: 110, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(var(--color-white-rgb), 0.88)', backdropFilter: 'blur(12px)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '6px 14px', fontSize: 11, color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}>
               Zoom in to see POIs
             </div>
           )}
@@ -959,7 +959,7 @@ export default function GPSScreen() {
               title={selectedFile?.smoothed ? 'Elevation already smoothed' : 'Smooth Elevation'}
               style={mapCtrlBtn(!!selectedId && !selectedFile?.smoothed)}
             >
-              <Icon name="auto_fix_high" size={16} color={selectedFile?.smoothed ? '#b0acbe' : '#5e4dbb'} />
+              <Icon name="auto_fix_high" size={16} color={selectedFile?.smoothed ? 'var(--color-text-quaternary)' : 'var(--color-primary)'} />
             </button>
             <button
               className="gps-map-ctrl"
@@ -967,7 +967,7 @@ export default function GPSScreen() {
               title="Merge Routes"
               style={mapCtrlBtn()}
             >
-              <Icon name="merge" size={16} color="#5e4dbb" />
+              <Icon name="merge" size={16} color="var(--color-primary)" />
             </button>
             <button
               className="gps-map-ctrl"
@@ -975,15 +975,15 @@ export default function GPSScreen() {
               title="Upload Route"
               style={mapCtrlBtn()}
             >
-              <Icon name="upload" size={16} color="#5e4dbb" />
+              <Icon name="upload" size={16} color="var(--color-primary)" />
             </button>
             <button
               className="gps-map-ctrl"
               onClick={handleMapTypeToggle}
               title={mapType === 'street' ? 'Satellite View' : 'Street Map'}
-              style={{ ...mapCtrlBtn(), ...(mapType === 'satellite' ? { background: '#5e4dbb', border: '1px solid #4a3da8' } : {}) }}
+              style={{ ...mapCtrlBtn(), ...(mapType === 'satellite' ? { background: 'var(--color-primary)', border: '1px solid var(--color-purple-mid-12)' } : {}) }}
             >
-              <Icon name={mapType === 'street' ? 'satellite_alt' : 'map'} size={16} color={mapType === 'satellite' ? '#fff' : '#5e4dbb'} />
+              <Icon name={mapType === 'street' ? 'satellite_alt' : 'map'} size={16} color={mapType === 'satellite' ? 'var(--color-white)' : 'var(--color-primary)'} />
             </button>
             <button
               className="gps-map-ctrl"
@@ -992,18 +992,18 @@ export default function GPSScreen() {
               title="Plan new route"
               style={{ ...mapCtrlBtn(!planningNew) }}
             >
-              <Icon name={planningNew ? 'progress_activity' : 'add_road'} size={16} color="#5e4dbb" />
+              <Icon name={planningNew ? 'progress_activity' : 'add_road'} size={16} color="var(--color-primary)" />
             </button>
 
             {/* Zoom controls — replaces the default Leaflet control (was hidden under the info card) */}
-            <div style={{ height: 1, background: 'rgba(94,77,187,0.18)', margin: '4px 6px' }} />
+            <div style={{ height: 1, background: 'rgba(var(--color-primary-rgb), 0.18)', margin: '4px 6px' }} />
             <button
               className="gps-map-ctrl"
               onClick={() => leafletRef.current?.zoomIn()}
               title="Zoom In"
               style={mapCtrlBtn()}
             >
-              <Icon name="add" size={16} color="#5e4dbb" />
+              <Icon name="add" size={16} color="var(--color-primary)" />
             </button>
             <button
               className="gps-map-ctrl"
@@ -1011,7 +1011,7 @@ export default function GPSScreen() {
               title="Zoom Out"
               style={mapCtrlBtn()}
             >
-              <Icon name="remove" size={16} color="#5e4dbb" />
+              <Icon name="remove" size={16} color="var(--color-primary)" />
             </button>
           </div>
 
@@ -1024,25 +1024,25 @@ export default function GPSScreen() {
               zIndex: 5, pointerEvents: 'none',
             }}>
               <div style={{
-                background: 'rgba(255,255,255,0.82)',
+                background: 'rgba(var(--color-white-rgb), 0.82)',
                 backdropFilter: 'blur(16px)',
                 WebkitBackdropFilter: 'blur(16px)',
-                border: '1px solid rgba(255,255,255,0.75)',
+                border: '1px solid rgba(var(--color-white-rgb), 0.75)',
                 borderRadius: 16, padding: '24px 32px',
                 textAlign: 'center',
-                boxShadow: '0 4px 24px rgba(94,77,187,0.10)',
+                boxShadow: '0 4px 24px rgba(var(--color-primary-rgb), 0.10)',
               }}>
                 <div style={{
                   width: 48, height: 48, borderRadius: 14,
-                  background: '#ede9ff', display: 'flex',
+                  background: 'var(--color-surface-tint-4)', display: 'flex',
                   alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px',
                 }}>
-                  <Icon name="route" size={24} color="#5e4dbb" />
+                  <Icon name="route" size={24} color="var(--color-primary)" />
                 </div>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22', marginBottom: 6 }}>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 6 }}>
                   {files.length === 0 ? 'No routes yet' : 'Select a route'}
                 </div>
-                <div style={{ fontSize: 12, color: '#787584', fontFamily: 'Inter, sans-serif' }}>
+                <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)' }}>
                   {files.length === 0
                     ? 'Upload a GPX or FIT file from the sidebar'
                     : 'Click a route in the sidebar to preview it'}
@@ -1055,9 +1055,9 @@ export default function GPSScreen() {
           {trackLoading && (
             <div style={{
               position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(253,248,255,0.65)', backdropFilter: 'blur(4px)', zIndex: 10,
+              background: 'rgba(var(--color-page-bg-rgb), 0.65)', backdropFilter: 'blur(4px)', zIndex: 10,
             }}>
-              <div style={{ fontSize: 13, color: '#787584', fontFamily: 'Inter, sans-serif' }}>Loading route…</div>
+              <div style={{ fontSize: 13, color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)' }}>Loading route…</div>
             </div>
           )}
 
@@ -1070,19 +1070,19 @@ export default function GPSScreen() {
                 bottom: chartVisible ? CHART_H + 10 : 12,
                 left: '50%', transform: 'translateX(-50%)',
                 zIndex: 1001, height: 24, padding: '0 12px',
-                background: 'rgba(255,255,255,0.88)',
+                background: 'rgba(var(--color-white-rgb), 0.88)',
                 backdropFilter: 'blur(12px)',
                 WebkitBackdropFilter: 'blur(12px)',
-                border: '1px solid rgba(255,255,255,0.75)',
+                border: '1px solid rgba(var(--color-white-rgb), 0.75)',
                 borderRadius: 20, fontSize: 11, fontWeight: 600,
-                color: '#5e4dbb', cursor: 'pointer',
+                color: 'var(--color-primary)', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: 4,
                 transition: 'bottom 280ms cubic-bezier(0.23,1,0.32,1)',
-                boxShadow: '0 2px 10px rgba(94,77,187,0.10)',
-                fontFamily: 'Inter, sans-serif',
+                boxShadow: '0 2px 10px rgba(var(--color-primary-rgb), 0.10)',
+                fontFamily: 'var(--font-body)',
               }}
             >
-              <Icon name={chartCollapsed ? 'expand_less' : 'expand_more'} size={14} color="#5e4dbb" />
+              <Icon name={chartCollapsed ? 'expand_less' : 'expand_more'} size={14} color="var(--color-primary)" />
               {chartCollapsed ? 'Elevation' : 'Hide'}
             </button>
           )}
@@ -1095,11 +1095,11 @@ export default function GPSScreen() {
               overflow: 'hidden',
               transition: 'height 280ms cubic-bezier(0.23,1,0.32,1)',
               zIndex: 1000,
-              background: 'rgba(255,255,255,0.70)',
+              background: 'rgba(var(--color-white-rgb), 0.70)',
               backdropFilter: 'blur(20px) saturate(180%)',
               WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              borderTop: '1px solid rgba(255,255,255,0.68)',
-              boxShadow: '0 -6px 32px rgba(94,77,187,0.08)',
+              borderTop: '1px solid rgba(var(--color-white-rgb), 0.68)',
+              boxShadow: '0 -6px 32px rgba(var(--color-primary-rgb), 0.08)',
             }}>
               <MultiLineMapChart
                 trackData={trackData}
@@ -1124,15 +1124,15 @@ export default function GPSScreen() {
         {isDragOver && (
           <div style={{
             position: 'fixed', inset: 0, zIndex: 500, pointerEvents: 'none',
-            background: 'rgba(94,77,187,0.10)', backdropFilter: 'blur(3px)',
+            background: 'rgba(var(--color-primary-rgb), 0.10)', backdropFilter: 'blur(3px)',
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16,
           }}>
-            <div style={{ border: '3px dashed #5e4dbb', borderRadius: 24, padding: '48px 72px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, background: 'rgba(253,248,255,0.85)' }}>
-              <div style={{ width: 72, height: 72, borderRadius: 22, background: '#ede9ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name="upload" size={34} color="#5e4dbb" />
+            <div style={{ border: '3px dashed var(--color-primary)', borderRadius: 24, padding: '48px 72px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, background: 'rgba(var(--color-page-bg-rgb), 0.85)' }}>
+              <div style={{ width: 72, height: 72, borderRadius: 22, background: 'var(--color-surface-tint-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon name="upload" size={34} color="var(--color-primary)" />
               </div>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#5e4dbb' }}>Drop to upload route</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#9d8dff' }}>.GPX and .FIT files supported</div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700, color: 'var(--color-primary)' }}>Drop to upload route</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-accent-purple-light)' }}>.GPX and .FIT files supported</div>
             </div>
           </div>
         )}
@@ -1149,24 +1149,24 @@ export default function GPSScreen() {
         {/* Smooth wizard modal */}
         {smoothWizardOpen && createPortal(
           <div
-            style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(8,5,18,0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(var(--color-purple-deep-6-rgb), 0.45)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onClick={e => { if (e.target === e.currentTarget) setSmoothWizardOpen(false); }}
           >
-            <div style={{ background: '#fff', borderRadius: 16, padding: '24px', width: 380, boxShadow: '0 20px 60px rgba(0,0,0,0.18)', border: '1px solid #e8e4f0', fontFamily: 'Inter, sans-serif' }}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 4 }}>Smooth Elevation</div>
-              <div style={{ fontSize: 12, color: '#787584', marginBottom: 20 }}>Apply Gaussian smoothing to reduce GPS noise in the elevation profile.</div>
+            <div style={{ background: 'var(--color-white)', borderRadius: 16, padding: '24px', width: 380, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', fontFamily: 'var(--font-body)' }}>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>Smooth Elevation</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 20 }}>Apply Gaussian smoothing to reduce GPS noise in the elevation profile.</div>
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#484552', fontFamily: 'Hanken Grotesk, sans-serif' }}>Smoothing Strength</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#5e4dbb', fontFamily: 'Hanken Grotesk, sans-serif' }}>σ = {smoothSigma}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)' }}>Smoothing Strength</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-primary)', fontFamily: 'var(--font-heading)' }}>σ = {smoothSigma}</span>
                 </div>
-                <input type="range" min={1} max={30} value={smoothSigma} onChange={e => setSmoothSigma(Number(e.target.value))} style={{ width: '100%', accentColor: '#5e4dbb', cursor: 'pointer' }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#b0acbe', marginTop: 3 }}>
+                <input type="range" min={1} max={30} value={smoothSigma} onChange={e => setSmoothSigma(Number(e.target.value))} style={{ width: '100%', accentColor: 'var(--color-primary)', cursor: 'pointer' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--color-text-quaternary)', marginTop: 3 }}>
                   <span>Subtle (1)</span><span>Heavy (30)</span>
                 </div>
               </div>
               <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#484552', fontFamily: 'Hanken Grotesk, sans-serif', marginBottom: 8 }}>Save As</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)', marginBottom: 8 }}>Save As</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   {([
                     { value: 'new', label: 'Save as New Route', icon: 'add_circle', desc: 'Keep the original' },
@@ -1177,53 +1177,53 @@ export default function GPSScreen() {
                       onClick={() => setSmoothMode(opt.value)}
                       style={{
                         padding: '12px 10px', borderRadius: 10, cursor: 'pointer',
-                        border: `2px solid ${smoothMode === opt.value ? '#5e4dbb' : '#e8e4f0'}`,
-                        background: smoothMode === opt.value ? '#F5F3FF' : '#fff',
+                        border: `2px solid ${smoothMode === opt.value ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                        background: smoothMode === opt.value ? 'var(--color-surface-tint)' : 'var(--color-white)',
                         textAlign: 'left', transition: 'all 150ms',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <Icon name={opt.icon} size={14} color={smoothMode === opt.value ? '#5e4dbb' : '#b0acbe'} />
-                        <span style={{ fontSize: 11.5, fontWeight: 700, color: smoothMode === opt.value ? '#5e4dbb' : '#484552', fontFamily: 'Hanken Grotesk, sans-serif' }}>{opt.label}</span>
+                        <Icon name={opt.icon} size={14} color={smoothMode === opt.value ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: smoothMode === opt.value ? 'var(--color-primary)' : 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)' }}>{opt.label}</span>
                       </div>
-                      <div style={{ fontSize: 10.5, color: '#b0acbe', fontFamily: 'Inter, sans-serif' }}>{opt.desc}</div>
+                      <div style={{ fontSize: 10.5, color: 'var(--color-text-quaternary)', fontFamily: 'var(--font-body)' }}>{opt.desc}</div>
                     </button>
                   ))}
                 </div>
               </div>
               {smoothMode === 'new' && (
                 <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#484552', fontFamily: 'Hanken Grotesk, sans-serif', marginBottom: 6 }}>
-                    New File Name <span style={{ fontWeight: 400, color: '#b0acbe' }}>(optional)</span>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)', marginBottom: 6 }}>
+                    New File Name <span style={{ fontWeight: 400, color: 'var(--color-text-quaternary)' }}>(optional)</span>
                   </div>
                   <input
                     type="text" value={smoothName} onChange={e => setSmoothName(e.target.value)}
                     placeholder={`${(selectedFile?.name ?? 'route').replace(/\.(gpx|fit)$/i, '')}_smoothed`}
-                    style={{ width: '100%', padding: '8px 12px', borderRadius: 8, boxSizing: 'border-box', border: '1px solid #e8e4f0', fontSize: 12, fontFamily: 'Inter, sans-serif', color: '#1c1b22', outline: 'none', background: '#faf9ff' }}
-                    onFocus={e => { e.currentTarget.style.borderColor = '#5e4dbb'; }}
-                    onBlur={e => { e.currentTarget.style.borderColor = '#e8e4f0'; }}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: 8, boxSizing: 'border-box', border: '1px solid var(--color-border)', fontSize: 12, fontFamily: 'var(--font-body)', color: 'var(--color-text-primary)', outline: 'none', background: 'var(--color-surface-tint-3)' }}
+                    onFocus={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+                    onBlur={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
                   />
                 </div>
               )}
               <div style={{ display: 'flex', gap: 10 }}>
                 <button
                   onClick={() => setSmoothWizardOpen(false)}
-                  style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: '1px solid #e8e4f0', background: '#fff', color: '#484552', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif' }}
+                  style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: '1px solid var(--color-border)', background: 'var(--color-white)', color: 'var(--color-text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-heading)' }}
                 >Cancel</button>
                 <button
                   onClick={handleSmoothApply}
                   disabled={smoothSaving}
                   style={{
                     flex: 2, padding: '9px 0', borderRadius: 9, border: 'none',
-                    background: smoothSaving ? '#c4b8f0' : '#5e4dbb', color: '#fff',
+                    background: smoothSaving ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)', color: 'var(--color-white)',
                     fontSize: 13, fontWeight: 600, cursor: smoothSaving ? 'default' : 'pointer',
-                    fontFamily: 'Hanken Grotesk, sans-serif', transition: 'background 150ms',
+                    fontFamily: 'var(--font-heading)', transition: 'background 150ms',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                   }}
-                  onMouseEnter={e => { if (!smoothSaving) e.currentTarget.style.background = '#4d3da8'; }}
-                  onMouseLeave={e => { if (!smoothSaving) e.currentTarget.style.background = '#5e4dbb'; }}
+                  onMouseEnter={e => { if (!smoothSaving) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
+                  onMouseLeave={e => { if (!smoothSaving) e.currentTarget.style.background = 'var(--color-primary)'; }}
                 >
-                  <Icon name="auto_fix_high" size={14} color="#fff" />
+                  <Icon name="auto_fix_high" size={14} color="var(--color-white)" />
                   {smoothSaving ? 'Applying…' : 'Apply'}
                 </button>
               </div>

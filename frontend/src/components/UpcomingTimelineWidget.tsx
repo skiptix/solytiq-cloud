@@ -8,9 +8,9 @@ import Icon from './Icon';
 
 // Mirror the milestone status palette used in TimelineScreen.
 const STATUS_META: Record<MilestoneStatus, { label: string; color: string }> = {
-  upcoming: { label: 'Upcoming', color: '#9d8dff' },
-  'in-progress': { label: 'In progress', color: '#ea580c' },
-  done: { label: 'Done', color: '#10B981' },
+  upcoming: { label: 'Upcoming', color: 'var(--color-accent-purple-light)' },
+  'in-progress': { label: 'In progress', color: 'var(--color-orange)' },
+  done: { label: 'Done', color: 'var(--color-success)' },
 };
 
 function todayIso(): string {
@@ -44,26 +44,26 @@ function EventRow({ m, onOpen }: { m: UpcomingMilestone; onOpen: () => void }) {
   const soon = days != null && days <= 2;
   return (
     <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={onOpen}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: hov ? '#F5F3FF' : 'transparent', cursor: 'pointer', transition: 'background 150ms' }}>
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: hov ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', transition: 'background 150ms' }}>
       <div style={{ width: 9, height: 9, minWidth: 9, borderRadius: '50%', background: accent, boxShadow: `0 0 0 3px ${accent}22`, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {m.emoji && <span style={{ fontSize: 13, lineHeight: 1, flexShrink: 0 }}>{m.emoji}</span>}
-          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.title}</span>
+          <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.title}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
           {m.timelineEmoji
             ? <span style={{ fontSize: 11, lineHeight: 1 }}>{m.timelineEmoji}</span>
-            : <Icon name="timeline" size={11} color="#b0acbe" />}
-          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#787584', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.timelineName}</span>
+            : <Icon name="timeline" size={11} color="var(--color-text-quaternary)" />}
+          <span style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.timelineName}</span>
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, flexShrink: 0 }}>
-        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 600, color: soon ? '#ea580c' : '#484552' }}>
+        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: soon ? 'var(--color-orange)' : 'var(--color-text-secondary)' }}>
           {friendlyDate(m.date)}{m.time ? ` · ${m.time}` : ''}
         </span>
         {days != null && days > 2 && (
-          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: '#b0acbe' }}>in {days} days</span>
+          <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--color-text-quaternary)' }}>in {days} days</span>
         )}
       </div>
     </div>
@@ -73,7 +73,7 @@ function EventRow({ m, onOpen }: { m: UpcomingMilestone; onOpen: () => void }) {
 // ── Upcoming Timeline Widget ───────────────────────────────────
 // Compact card listing the next few upcoming timeline milestones. Used at the
 // top of the Dashboard (all timelines) and Folder overviews (scoped to folder).
-export default function UpcomingTimelineWidget({ folderId, accent = '#1D4ED8', limit = 3 }: { folderId?: string; accent?: string; limit?: number }) {
+export default function UpcomingTimelineWidget({ folderId, accent = 'var(--color-blue-mid-7)', limit = 3 }: { folderId?: string; accent?: string; limit?: number }) {
   const navigate = useNavigate();
   const currentWorkspaceId = useWorkspaceStore(s => s.currentWorkspaceId);
   // Re-fetch whenever timelines change (edits, SSE refresh) so the widget stays live.
@@ -95,14 +95,14 @@ export default function UpcomingTimelineWidget({ folderId, accent = '#1D4ED8', l
   const accentBg = `${accent}14`;
 
   return (
-    <section style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 14, padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <section style={{ background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 14, padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px 6px' }}>
         <div style={{ width: 28, height: 28, borderRadius: 8, background: accentBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="timeline" size={15} color={accent} />
         </div>
-        <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22' }}>Upcoming on the timeline</div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>Upcoming on the timeline</div>
         <div style={{ flex: 1 }} />
-        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: accent, background: accentBg, borderRadius: 9999, padding: '2px 9px' }}>{milestones.length}</span>
+        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, color: accent, background: accentBg, borderRadius: 9999, padding: '2px 9px' }}>{milestones.length}</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {milestones.map(m => (

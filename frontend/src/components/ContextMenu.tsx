@@ -66,15 +66,15 @@ export default function ContextMenu({ x, y, items, onClose, minWidth = 190 }: Co
       onContextMenu={e => e.preventDefault()}
       style={{
         position: 'fixed', top: pos.top, left: pos.left, zIndex: 2000,
-        background: '#fff', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.13)',
-        border: '1px solid #e8e4f0', minWidth, padding: '4px 0',
+        background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)',
+        border: '1px solid var(--color-border)', minWidth, padding: '4px 0',
         animation: 'menuIn 140ms ease both', transformOrigin: 'top left',
         visibility: pos.visible ? 'visible' : 'hidden',
       }}
     >
       {items.map((item, i) =>
         'divider' in item ? (
-          <div key={item.key} style={{ height: 1, background: '#f0ecf8', margin: '3px 0' }} />
+          <div key={item.key} style={{ height: 1, background: 'var(--color-divider)', margin: '3px 0' }} />
         ) : (
           <button
             key={item.key}
@@ -83,15 +83,15 @@ export default function ContextMenu({ x, y, items, onClose, minWidth = 190 }: Co
             style={{
               display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px',
               border: 'none', background: 'transparent', cursor: item.disabled ? 'default' : 'pointer',
-              fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500,
-              color: item.disabled ? '#c9c4d5' : (item.danger ? '#ba1a1a' : '#1c1b22'),
+              fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500,
+              color: item.disabled ? 'var(--color-border-strong)' : (item.danger ? 'var(--color-error)' : 'var(--color-text-primary)'),
               textAlign: 'left', opacity: item.disabled ? 0.6 : 1,
               animation: 'menuItemIn 160ms ease both', animationDelay: `${i * 20}ms`,
             }}
-            onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.background = item.danger ? '#fff0ef' : '#f5f3ff'; }}
+            onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.background = item.danger ? 'var(--color-red-pale-5)' : 'var(--color-surface-tint)'; }}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
-            <Icon name={item.icon} size={15} color={item.disabled ? '#c9c4d5' : (item.danger ? '#ba1a1a' : '#787584')} />
+            <Icon name={item.icon} size={15} color={item.disabled ? 'var(--color-border-strong)' : (item.danger ? 'var(--color-error)' : 'var(--color-text-tertiary)')} />
             {item.label}
           </button>
         )

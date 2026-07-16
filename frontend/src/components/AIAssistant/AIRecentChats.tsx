@@ -37,7 +37,7 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
       style={{
         position: 'absolute',
         inset: 0,
-        background: '#fff',
+        background: 'var(--color-white)',
         borderRadius: 20,
         display: 'flex',
         flexDirection: 'column',
@@ -49,7 +49,7 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
       {/* Header */}
       <div
         style={{
-          background: 'linear-gradient(135deg, #6b5bcc 0%, #4a39aa 100%)',
+          background: 'linear-gradient(135deg, var(--color-purple-mid-8) 0%, var(--color-purple-mid-13) 100%)',
           padding: '14px 16px 12px',
           flexShrink: 0,
           display: 'flex',
@@ -63,7 +63,7 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
             width: 30,
             height: 30,
             borderRadius: 8,
-            background: 'rgba(255,255,255,0.12)',
+            background: 'rgba(var(--color-white-rgb), 0.12)',
             border: 'none',
             cursor: 'pointer',
             display: 'flex',
@@ -72,18 +72,18 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
             flexShrink: 0,
             transition: 'background 180ms ease, transform 150ms ease',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.24)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; e.currentTarget.style.transform = 'scale(1)'; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(var(--color-white-rgb), 0.24)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(var(--color-white-rgb), 0.12)'; e.currentTarget.style.transform = 'scale(1)'; }}
         >
-          <Icon name="arrow_back" size={15} color="rgba(255,255,255,0.85)" />
+          <Icon name="arrow_back" size={15} color="rgba(var(--color-white-rgb), 0.85)" />
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
-              fontFamily: 'Hanken Grotesk, sans-serif',
+              fontFamily: 'var(--font-heading)',
               fontSize: 15,
               fontWeight: 700,
-              color: '#fff',
+              color: 'var(--color-white)',
               lineHeight: 1.2,
               letterSpacing: '-0.01em',
             }}
@@ -92,9 +92,9 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
           </div>
           <div
             style={{
-              fontFamily: 'Inter, sans-serif',
+              fontFamily: 'var(--font-body)',
               fontSize: 11,
-              color: 'rgba(255,255,255,0.6)',
+              color: 'rgba(var(--color-white-rgb), 0.6)',
               marginTop: 1,
             }}
           >
@@ -123,20 +123,20 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
                 width: 52,
                 height: 52,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, #ede9ff 0%, #f5f3ff 100%)',
+                background: 'linear-gradient(135deg, var(--color-surface-tint-4) 0%, var(--color-surface-tint) 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                boxShadow: '0 4px 16px rgba(107,91,204,0.12)',
+                boxShadow: '0 4px 16px rgba(var(--color-purple-mid-8-rgb), 0.12)',
               }}
             >
-              <Icon name="chat_bubble_outline" size={22} color="#9d8dff" />
+              <Icon name="chat_bubble_outline" size={22} color="var(--color-accent-purple-light)" />
             </div>
             <div
               style={{
-                fontFamily: 'Inter, sans-serif',
+                fontFamily: 'var(--font-body)',
                 fontSize: 13,
-                color: '#787584',
+                color: 'var(--color-text-tertiary)',
                 textAlign: 'center',
                 lineHeight: 1.5,
               }}
@@ -149,10 +149,10 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
             <div key={label}>
               <div
                 style={{
-                  fontFamily: 'Inter, sans-serif',
+                  fontFamily: 'var(--font-body)',
                   fontSize: 10.5,
                   fontWeight: 600,
-                  color: '#b0acbe',
+                  color: 'var(--color-text-quaternary)',
                   textTransform: 'uppercase',
                   letterSpacing: '0.07em',
                   padding: '10px 8px 4px',
@@ -177,7 +177,7 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
                       animation: `aiItemIn 280ms ease ${delay}ms both`,
                     }}
                     onClick={() => onSelect(session.id)}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#F5F3FF'; (e.currentTarget as HTMLDivElement).style.transform = 'translateX(2px)'; }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--color-surface-tint)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateX(2px)'; }}
                     onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; (e.currentTarget as HTMLDivElement).style.transform = 'translateX(0)'; }}
                   >
                     <div
@@ -185,21 +185,21 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
                         width: 32,
                         height: 32,
                         borderRadius: 10,
-                        background: 'linear-gradient(135deg, #ede9ff 0%, #e4dfff 100%)',
+                        background: 'linear-gradient(135deg, var(--color-surface-tint-4) 0%, var(--color-purple-pale-33) 100%)',
                         flexShrink: 0,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                       }}
                     >
-                      <Icon name="chat" size={15} color="#7c6de8" />
+                      <Icon name="chat" size={15} color="var(--color-purple-mid-2)" />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div
                         style={{
-                          fontFamily: 'Inter, sans-serif',
+                          fontFamily: 'var(--font-body)',
                           fontSize: 13,
-                          color: '#1c1b22',
+                          color: 'var(--color-text-primary)',
                           fontWeight: 500,
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
@@ -211,9 +211,9 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
                       </div>
                       <div
                         style={{
-                          fontFamily: 'Inter, sans-serif',
+                          fontFamily: 'var(--font-body)',
                           fontSize: 11,
-                          color: '#b0acbe',
+                          color: 'var(--color-text-quaternary)',
                           marginTop: 2,
                         }}
                       >
@@ -237,14 +237,14 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
                         opacity: 0,
                         transition: 'opacity 180ms ease, background 180ms ease, transform 150ms ease',
                       }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = '#fff0f0'; e.currentTarget.style.transform = 'scale(1.1)'; }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-red-pale-4)'; e.currentTarget.style.transform = 'scale(1.1)'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'scale(1)'; }}
                       // Show delete on parent hover via CSS would need a class; instead show always with low opacity
                       ref={(el) => {
                         if (el) el.style.opacity = '0.4';
                       }}
                     >
-                      <Icon name="delete" size={14} color="#ba1a1a" />
+                      <Icon name="delete" size={14} color="var(--color-error)" />
                     </button>
                   </div>
                 );

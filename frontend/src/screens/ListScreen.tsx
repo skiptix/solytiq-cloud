@@ -89,15 +89,15 @@ export default function ListScreen() {
     if (listsLoading) {
       return (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 32, height: 32, border: '3px solid #e8e4f0', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+          <div style={{ width: 32, height: 32, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
         </div>
       );
     }
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 18, fontWeight: 700, color: '#1c1b22', marginBottom: 8 }}>To-Do not found</div>
-          <button onClick={() => navigate('/dashboard')} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Go to Dashboard</button>
+          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>To-Do not found</div>
+          <button onClick={() => navigate('/dashboard')} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Go to Dashboard</button>
         </div>
       </div>
     );
@@ -352,27 +352,27 @@ export default function ListScreen() {
       <div style={{ maxWidth: viewMode === 'list' ? 680 : 1400, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
 
         {/* View switcher — List / Kanban / Timeline, top-left */}
-        <div style={{ display: 'inline-flex', alignSelf: 'flex-start', background: '#F5F3FF', borderRadius: 10, padding: 3, gap: 2, flexWrap: 'wrap', maxWidth: '100%' }}>
+        <div style={{ display: 'inline-flex', alignSelf: 'flex-start', background: 'var(--color-surface-tint)', borderRadius: 10, padding: 3, gap: 2, flexWrap: 'wrap', maxWidth: '100%' }}>
           {(['list', 'kanban', 'timeline'] as const).map(v => (
             <button
               key={v}
               onClick={() => setViewMode(v)}
               style={{
                 display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 6,
-                fontFamily: 'Hanken Grotesk, sans-serif', fontSize: isMobile ? 11.5 : 12.5, fontWeight: 600,
-                color: viewMode === v ? '#5e4dbb' : '#787584',
-                background: viewMode === v ? '#fff' : 'transparent',
-                boxShadow: viewMode === v ? '0 1px 4px rgba(94,77,187,0.18)' : 'none',
+                fontFamily: 'var(--font-heading)', fontSize: isMobile ? 11.5 : 12.5, fontWeight: 600,
+                color: viewMode === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                background: viewMode === v ? 'var(--color-white)' : 'transparent',
+                boxShadow: viewMode === v ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none',
                 border: 'none', borderRadius: 8, padding: isMobile ? '6px 9px' : '7px 14px', cursor: 'pointer', transition: 'all 150ms', whiteSpace: 'nowrap',
               }}>
-              <Icon name={v === 'list' ? 'format_list_bulleted' : v === 'kanban' ? 'view_kanban' : 'view_timeline'} size={15} color={viewMode === v ? '#5e4dbb' : '#787584'} />
+              <Icon name={v === 'list' ? 'format_list_bulleted' : v === 'kanban' ? 'view_kanban' : 'view_timeline'} size={15} color={viewMode === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
               {v === 'list' ? 'List' : v === 'kanban' ? 'Kanban' : 'Timeline'}
             </button>
           ))}
         </div>
 
         {/* Hero */}
-        <div style={{ background: list.colorBg ?? '#F9FAFB', border: `1px solid ${list.color ?? '#E5E7EB'}40`, borderRadius: 16, padding: '20px 24px', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ background: list.colorBg ?? 'var(--color-surface-gray)', border: `1px solid ${list.color ?? 'var(--color-border-alt)'}40`, borderRadius: 16, padding: '20px 24px', position: 'relative', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
@@ -387,29 +387,29 @@ export default function ListScreen() {
                       if (e.key === 'Enter') handleUpdateTitle();
                       if (e.key === 'Escape') setEditingTitle(false);
                     }}
-                    style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22', border: 'none', borderBottom: `2px solid ${list.color || '#5e4dbb'}`, outline: 'none', background: 'transparent', padding: '0 0 2px', width: '100%', maxWidth: isMobile ? '100%' : 400 }}
+                    style={{ fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)', border: 'none', borderBottom: `2px solid ${list.color || 'var(--color-primary)'}`, outline: 'none', background: 'transparent', padding: '0 0 2px', width: '100%', maxWidth: isMobile ? '100%' : 400 }}
                   />
                 ) : (
                   <h1
                     onClick={() => { if (isOwner) { setEditingTitle(true); setNewTitle(list.name); } }}
-                    style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 22, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.02em', cursor: isOwner ? 'pointer' : 'default' }}>
+                    style={{ fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.02em', cursor: isOwner ? 'pointer' : 'default' }}>
                     {list.name}
                   </h1>
                 )}
               </div>
-              {list.subtitle && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#787584', marginBottom: 6 }}>{list.subtitle}</div>}
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584' }}>{completedCount} of {totalCount} done</div>
+              {list.subtitle && <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: 6 }}>{list.subtitle}</div>}
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>{completedCount} of {totalCount} done</div>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 40, fontWeight: 700, color: list.color ?? '#5e4dbb', lineHeight: 1 }}>{pct}%</div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 40, fontWeight: 700, color: list.color ?? 'var(--color-primary)', lineHeight: 1 }}>{pct}%</div>
             </div>
           </div>
-          <div style={{ marginTop: 14, height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 9999, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? '#10B981' : (list.color ?? '#5e4dbb'), borderRadius: 9999, transition: 'width 600ms ease-in-out' }} />
+          <div style={{ marginTop: 14, height: 6, background: 'rgba(var(--color-black-rgb), 0.08)', borderRadius: 9999, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? 'var(--color-success)' : (list.color ?? 'var(--color-primary)'), borderRadius: 9999, transition: 'width 600ms ease-in-out' }} />
           </div>
           <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584' }}><strong style={{ color: '#1c1b22' }}>{completedCount}</strong> completed</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584' }}><strong style={{ color: '#1c1b22' }}>{totalCount - completedCount}</strong> remaining</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)' }}><strong style={{ color: 'var(--color-text-primary)' }}>{completedCount}</strong> completed</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)' }}><strong style={{ color: 'var(--color-text-primary)' }}>{totalCount - completedCount}</strong> remaining</div>
           </div>
         </div>
 
@@ -425,7 +425,7 @@ export default function ListScreen() {
             style={{
               display: 'flex', flexDirection: 'column', gap: 8,
               opacity: isBeingDraggedSection ? 0.4 : 1,
-              borderTop: isSectionReorderTarget ? '2px solid #9d8dff' : '2px solid transparent',
+              borderTop: isSectionReorderTarget ? '2px solid var(--color-accent-purple-light)' : '2px solid transparent',
               borderRadius: isSectionReorderTarget ? 4 : 0,
               transition: 'opacity 150ms, border-color 120ms',
             }}
@@ -454,7 +454,7 @@ export default function ListScreen() {
                     pointerEvents: hoverSectionId === section.id ? 'auto' : 'none',
                     transition: 'opacity 180ms ease',
                   }}>
-                  <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+                  <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
                 </button>
               )}
               {section.emoji && editingSection?.id !== section.id && <span key={section.emoji} style={{ fontSize: 14, animation: 'modalIn 200ms cubic-bezier(0.34,1.56,0.64,1) both' }}>{section.emoji}</span>}
@@ -477,15 +477,15 @@ export default function ListScreen() {
                       if (e.key === 'Enter') handleUpdateSection(section.id, editingSection.label, editingSection.emoji);
                       if (e.key === 'Escape') setEditingSection(null);
                     }}
-                    style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5e5e5e', border: 'none', borderBottom: '1.5px solid #5e4dbb', outline: 'none', background: 'transparent', padding: '0 2px 1px', minWidth: 80 }}
+                    style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-gray-deep-1)', border: 'none', borderBottom: '1.5px solid var(--color-primary)', outline: 'none', background: 'transparent', padding: '0 2px 1px', minWidth: 80 }}
                   />
-                  <div style={{ flex: 1, height: 1, background: '#E5E7EB' }} />
+                  <div style={{ flex: 1, height: 1, background: 'var(--color-border-alt)' }} />
                 </div>
               ) : (
                 /* Normal label */
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5e5e5e' }}>{section.label}</span>
-                  <div style={{ flex: 1, height: 1, background: '#E5E7EB' }} />
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-gray-deep-1)' }}>{section.label}</span>
+                  <div style={{ flex: 1, height: 1, background: 'var(--color-border-alt)' }} />
                 </div>
               )}
 
@@ -504,17 +504,17 @@ export default function ListScreen() {
                       onClick={() => setEditingSection({ id: section.id, label: section.label, emoji: section.emoji ?? '' })}
                       title="Edit section"
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'background 120ms' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#ebe6f0')}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-pale-39)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                      <Icon name="edit" size={13} color="#9d8dff" />
+                      <Icon name="edit" size={13} color="var(--color-accent-purple-light)" />
                     </button>
                     <button
                       onClick={() => handleDeleteSection(section.id)}
                       title="Delete section"
                       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'background 120ms' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#ffeaea')}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-red-pale-6)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                      <Icon name="delete" size={13} color="#ba1a1a" />
+                      <Icon name="delete" size={13} color="var(--color-error)" />
                     </button>
                   </div>
                 );
@@ -523,13 +523,13 @@ export default function ListScreen() {
 
             {/* Tasks */}
             <div style={{
-              display: 'flex', flexDirection: 'column', gap: 2, background: '#F9FAFB', borderRadius: 12,
-              border: isSectionDropTarget ? '1.5px solid #9d8dff' : '1px solid #E5E7EB',
+              display: 'flex', flexDirection: 'column', gap: 2, background: 'var(--color-surface-gray)', borderRadius: 12,
+              border: isSectionDropTarget ? '1.5px solid var(--color-accent-purple-light)' : '1px solid var(--color-border-alt)',
               overflow: 'hidden', transition: 'border-color 120ms',
-              boxShadow: isSectionDropTarget ? '0 0 0 3px rgba(157,141,255,0.15)' : 'none',
+              boxShadow: isSectionDropTarget ? '0 0 0 3px rgba(var(--color-accent-purple-light-rgb), 0.15)' : 'none',
             }}>
               {section.tasks.length === 0 ? (
-                <div style={{ padding: '16px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: isSectionDropTarget ? '#9d8dff' : '#b0acbe', textAlign: 'center', transition: 'color 120ms' }}>
+                <div style={{ padding: '16px', fontFamily: 'var(--font-body)', fontSize: 13, color: isSectionDropTarget ? 'var(--color-accent-purple-light)' : 'var(--color-text-quaternary)', textAlign: 'center', transition: 'color 120ms' }}>
                   {isSectionDropTarget ? 'Drop here to move' : 'No tasks in this section.'}
                 </div>
               ) : (
@@ -554,7 +554,7 @@ export default function ListScreen() {
                   })}
                 </div>
               )}
-              <div data-quickadd-root style={{ borderTop: section.tasks.length > 0 ? '1px solid #f1ecf6' : 'none' }}>
+              <div data-quickadd-root style={{ borderTop: section.tasks.length > 0 ? '1px solid var(--color-surface-tint-2)' : 'none' }}>
                 <QuickAdd placeholder="Add new item… (type / for commands)" onAdd={data => handleAddTask(section.id, data)} availableLists={lists} currentListId={listId} />
               </div>
             </div>
@@ -563,7 +563,7 @@ export default function ListScreen() {
         })}
 
         {list.sections.length === 0 && !addingSection && (
-          <div style={{ textAlign: 'center', padding: '32px 16px 8px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>
+          <div style={{ textAlign: 'center', padding: '32px 16px 8px', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>
             No sections yet. Add one below.
           </div>
         )}
@@ -580,22 +580,22 @@ export default function ListScreen() {
               onChange={e => setNewSectionLabel(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleAddSection(); if (e.key === 'Escape') { setAddingSection(false); setNewSectionLabel(''); setNewSectionEmoji(''); } }}
               placeholder="Section name…"
-              style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1.5px solid #5e4dbb', borderRadius: 8, padding: '7px 12px', outline: 'none', color: '#1c1b22', background: '#fff' }}
+              style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-primary)', borderRadius: 8, padding: '7px 12px', outline: 'none', color: 'var(--color-text-primary)', background: 'var(--color-white)' }}
             />
             <button onClick={handleAddSection} disabled={!newSectionLabel.trim()}
-              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#fff', background: newSectionLabel.trim() ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: newSectionLabel.trim() ? 'pointer' : 'default' }}>
+              style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-white)', background: newSectionLabel.trim() ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: newSectionLabel.trim() ? 'pointer' : 'default' }}>
               Add
             </button>
             <button onClick={() => { setAddingSection(false); setNewSectionLabel(''); setNewSectionEmoji(''); }}
-              style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 500, color: '#787584', background: 'transparent', border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
+              style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 500, color: 'var(--color-text-tertiary)', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
               Cancel
             </button>
           </div>
         ) : (
           <button onClick={() => setAddingSection(true)}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#787584', background: '#f1f0f4', border: '1.5px dashed #d4cfe8', borderRadius: 10, padding: '11px', cursor: 'pointer', width: '100%', transition: 'all 150ms' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#ebe6f5'; e.currentTarget.style.color = '#5e4dbb'; e.currentTarget.style.borderColor = '#9d8dff'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = '#f1f0f4'; e.currentTarget.style.color = '#787584'; e.currentTarget.style.borderColor = '#d4cfe8'; }}>
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'var(--color-purple-pale-28)', border: '1.5px dashed var(--color-purple-tint-6)', borderRadius: 10, padding: '11px', cursor: 'pointer', width: '100%', transition: 'all 150ms' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-pale-35)'; e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-light)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-purple-pale-28)'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; e.currentTarget.style.borderColor = 'var(--color-purple-tint-6)'; }}>
             <Icon name="add" size={15} color="inherit" />
             Add section
           </button>
@@ -615,7 +615,7 @@ export default function ListScreen() {
                   style={{
                     display: 'flex', flexDirection: 'column', gap: 8, width: 280, flexShrink: 0,
                     opacity: isBeingDraggedSection ? 0.4 : 1,
-                    borderLeft: isSectionReorderTarget ? '2px solid #9d8dff' : '2px solid transparent',
+                    borderLeft: isSectionReorderTarget ? '2px solid var(--color-accent-purple-light)' : '2px solid transparent',
                     borderRadius: isSectionReorderTarget ? 4 : 0,
                     transition: 'opacity 150ms, border-color 120ms',
                     animation: `cardIn 240ms ease ${idx * 40}ms both`,
@@ -645,7 +645,7 @@ export default function ListScreen() {
                           pointerEvents: hoverSectionId === section.id ? 'auto' : 'none',
                           transition: 'opacity 180ms ease',
                         }}>
-                        <Icon name="drag_indicator" size={15} color="#c9c4d5" />
+                        <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
                       </button>
                     )}
                     {section.emoji && editingSection?.id !== section.id && <span style={{ fontSize: 14 }}>{section.emoji}</span>}
@@ -667,13 +667,13 @@ export default function ListScreen() {
                             if (e.key === 'Enter') handleUpdateSection(section.id, editingSection.label, editingSection.emoji);
                             if (e.key === 'Escape') setEditingSection(null);
                           }}
-                          style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5e5e5e', border: 'none', borderBottom: '1.5px solid #5e4dbb', outline: 'none', background: 'transparent', padding: '0 2px 1px', minWidth: 80 }}
+                          style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-gray-deep-1)', border: 'none', borderBottom: '1.5px solid var(--color-primary)', outline: 'none', background: 'transparent', padding: '0 2px 1px', minWidth: 80 }}
                         />
                       </div>
                     ) : (
                       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#5e5e5e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{section.label}</span>
-                        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', flexShrink: 0 }}>{section.tasks.length}</span>
+                        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-gray-deep-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{section.label}</span>
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', flexShrink: 0 }}>{section.tasks.length}</span>
                       </div>
                     )}
 
@@ -690,13 +690,13 @@ export default function ListScreen() {
                             onClick={() => setEditingSection({ id: section.id, label: section.label, emoji: section.emoji ?? '' })}
                             title="Edit column"
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer' }}>
-                            <Icon name="edit" size={13} color="#9d8dff" />
+                            <Icon name="edit" size={13} color="var(--color-accent-purple-light)" />
                           </button>
                           <button
                             onClick={() => handleDeleteSection(section.id)}
                             title="Delete column"
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer' }}>
-                            <Icon name="delete" size={13} color="#ba1a1a" />
+                            <Icon name="delete" size={13} color="var(--color-error)" />
                           </button>
                         </div>
                       );
@@ -705,14 +705,14 @@ export default function ListScreen() {
 
                   {/* Cards — scroll independently within the column */}
                   <div style={{
-                    display: 'flex', flexDirection: 'column', gap: 2, background: '#F9FAFB', borderRadius: 12,
-                    border: isSectionDropTarget ? '1.5px solid #9d8dff' : '1px solid #E5E7EB',
+                    display: 'flex', flexDirection: 'column', gap: 2, background: 'var(--color-surface-gray)', borderRadius: 12,
+                    border: isSectionDropTarget ? '1.5px solid var(--color-accent-purple-light)' : '1px solid var(--color-border-alt)',
                     overflowY: 'auto', maxHeight: 'calc(100vh - 340px)',
-                    boxShadow: isSectionDropTarget ? '0 0 0 3px rgba(157,141,255,0.15)' : 'none',
+                    boxShadow: isSectionDropTarget ? '0 0 0 3px rgba(var(--color-accent-purple-light-rgb), 0.15)' : 'none',
                     transition: 'border-color 120ms',
                   }}>
                     {section.tasks.length === 0 ? (
-                      <div style={{ padding: '16px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: isSectionDropTarget ? '#9d8dff' : '#b0acbe', textAlign: 'center', transition: 'color 120ms' }}>
+                      <div style={{ padding: '16px', fontFamily: 'var(--font-body)', fontSize: 13, color: isSectionDropTarget ? 'var(--color-accent-purple-light)' : 'var(--color-text-quaternary)', textAlign: 'center', transition: 'color 120ms' }}>
                         {isSectionDropTarget ? 'Drop here to move' : 'No tasks.'}
                       </div>
                     ) : (
@@ -737,7 +737,7 @@ export default function ListScreen() {
                         })}
                       </div>
                     )}
-                    <div data-quickadd-root style={{ borderTop: section.tasks.length > 0 ? '1px solid #f1ecf6' : 'none' }}>
+                    <div data-quickadd-root style={{ borderTop: section.tasks.length > 0 ? '1px solid var(--color-surface-tint-2)' : 'none' }}>
                       <QuickAdd placeholder="Add task…" onAdd={data => handleAddTask(section.id, data)} availableLists={lists} currentListId={listId} />
                     </div>
                   </div>
@@ -748,7 +748,7 @@ export default function ListScreen() {
             {/* Add column */}
             <div style={{ width: 280, flexShrink: 0, animation: `cardIn 240ms ease ${list.sections.length * 40}ms both` }}>
               {addingSection ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: '#F9FAFB', border: '1.5px solid #5e4dbb', borderRadius: 12, padding: 10, animation: 'sectionFadeUp 220ms ease both' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--color-surface-gray)', border: '1.5px solid var(--color-primary)', borderRadius: 12, padding: 10, animation: 'sectionFadeUp 220ms ease both' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <EmojiSelector value={newSectionEmoji} onChange={setNewSectionEmoji} direction="down" />
                     <input
@@ -758,25 +758,25 @@ export default function ListScreen() {
                       onChange={e => setNewSectionLabel(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') handleAddSection(); if (e.key === 'Escape') { setAddingSection(false); setNewSectionLabel(''); setNewSectionEmoji(''); } }}
                       placeholder="Column name…"
-                      style={{ flex: 1, fontFamily: 'Inter, sans-serif', fontSize: 13, border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 10px', outline: 'none', color: '#1c1b22', background: '#fff' }}
+                      style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 8, padding: '7px 10px', outline: 'none', color: 'var(--color-text-primary)', background: 'var(--color-white)' }}
                     />
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={handleAddSection} disabled={!newSectionLabel.trim()}
-                      style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#fff', background: newSectionLabel.trim() ? '#5e4dbb' : '#c9c4d5', border: 'none', borderRadius: 8, padding: '8px', cursor: newSectionLabel.trim() ? 'pointer' : 'default' }}>
+                      style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-white)', background: newSectionLabel.trim() ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '8px', cursor: newSectionLabel.trim() ? 'pointer' : 'default' }}>
                       Add
                     </button>
                     <button onClick={() => { setAddingSection(false); setNewSectionLabel(''); setNewSectionEmoji(''); }}
-                      style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 500, color: '#787584', background: 'transparent', border: '1px solid #e8e4f0', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
+                      style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 500, color: 'var(--color-text-tertiary)', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
                       Cancel
                     </button>
                   </div>
                 </div>
               ) : (
                 <button onClick={() => setAddingSection(true)}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#787584', background: '#f1f0f4', border: '1.5px dashed #d4cfe8', borderRadius: 10, padding: '11px', cursor: 'pointer', width: '100%', transition: 'all 150ms' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#ebe6f5'; e.currentTarget.style.color = '#5e4dbb'; e.currentTarget.style.borderColor = '#9d8dff'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = '#f1f0f4'; e.currentTarget.style.color = '#787584'; e.currentTarget.style.borderColor = '#d4cfe8'; }}>
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'var(--color-purple-pale-28)', border: '1.5px dashed var(--color-purple-tint-6)', borderRadius: 10, padding: '11px', cursor: 'pointer', width: '100%', transition: 'all 150ms' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-pale-35)'; e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-light)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-purple-pale-28)'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; e.currentTarget.style.borderColor = 'var(--color-purple-tint-6)'; }}>
                   <Icon name="add" size={15} color="inherit" />
                   Add column
                 </button>

@@ -28,14 +28,14 @@ export default function CopyButton({ text, title = 'Copy to clipboard', size = 1
       style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         width: 26, height: 26, borderRadius: 7, border: 'none',
-        background: copied ? 'rgba(16,185,129,0.1)' : 'transparent',
+        background: copied ? 'rgba(var(--color-success-rgb), 0.1)' : 'transparent',
         cursor: 'pointer', transition: 'background 150ms', flexShrink: 0,
       }}
-      onMouseEnter={e => { if (!copied) e.currentTarget.style.background = '#F5F3FF'; }}
+      onMouseEnter={e => { if (!copied) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
       onMouseLeave={e => { if (!copied) e.currentTarget.style.background = 'transparent'; }}
     >
       <span key={copied ? 'copied' : 'idle'} style={{ display: 'inline-flex', animation: copied ? 'savedPop 280ms cubic-bezier(0.34,1.56,0.64,1) both' : undefined }}>
-        <Icon name={copied ? 'check' : 'content_copy'} size={size} color={copied ? '#10B981' : '#9d8dff'} />
+        <Icon name={copied ? 'check' : 'content_copy'} size={size} color={copied ? 'var(--color-success)' : 'var(--color-accent-purple-light)'} />
       </span>
     </button>
   );

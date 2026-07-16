@@ -42,37 +42,37 @@ export function SharedTaskRow({ task, accent, onClick }: { task: SharedTask; acc
     <div
       onClick={() => onClick(task)}
       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 8, cursor: 'pointer', transition: 'background 150ms' }}
-      onMouseEnter={e => { e.currentTarget.style.background = '#F5F3FF'; }}
+      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
     >
       {isLinked ? (
         <div style={{ width: 20, height: 20, minWidth: 20, borderRadius: '50%', border: `2px solid ${accent}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
           {linkedComplete
             ? <Icon name="check" size={12} color={accent} />
-            : <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 8, fontWeight: 700, color: accent }}>{lp ? `${lp.completed}/${lp.total}` : ''}</span>}
+            : <span style={{ fontFamily: 'var(--font-heading)', fontSize: 8, fontWeight: 700, color: accent }}>{lp ? `${lp.completed}/${lp.total}` : ''}</span>}
         </div>
       ) : (
-        <div style={{ width: 20, height: 20, minWidth: 20, borderRadius: 5, border: '1.5px solid', borderColor: task.checked ? accent : '#c9c4d5', background: task.checked ? accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          {task.checked && <Icon name="check" size={13} color="#fff" />}
+        <div style={{ width: 20, height: 20, minWidth: 20, borderRadius: 5, border: '1.5px solid', borderColor: task.checked ? accent : 'var(--color-border-strong)', background: task.checked ? accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {task.checked && <Icon name="check" size={13} color="var(--color-white)" />}
         </div>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: isLinked ? accent : '#1c1b22', lineHeight: 1.4, opacity: done ? 0.45 : 1, textDecoration: done ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</span>
-          {task.badge && <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 10, fontWeight: 700, color: '#5e4dbb', background: '#F5F3FF', padding: '2px 7px', borderRadius: 9999, flexShrink: 0 }}>{task.badge}</span>}
+          <span style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: isLinked ? accent : 'var(--color-text-primary)', lineHeight: 1.4, opacity: done ? 0.45 : 1, textDecoration: done ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</span>
+          {task.badge && <span style={{ fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', padding: '2px 7px', borderRadius: 9999, flexShrink: 0 }}>{task.badge}</span>}
         </div>
         {task.note && (() => {
           const plain = markdownToPlainText(task.note);
           return (
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {plain.length > 40 ? `${plain.slice(0, 40).trimEnd()}…` : plain}
             </div>
           );
         })()}
       </div>
-      {task.deadline && <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe', flexShrink: 0 }}>{fmtDate(task.deadline)}</span>}
-      {navigable && <Icon name="chevron_right" size={18} color="#b0acbe" />}
-      {isLinked && !navigable && <Icon name="lock" size={14} color="#d1d5db" />}
+      {task.deadline && <span style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', flexShrink: 0 }}>{fmtDate(task.deadline)}</span>}
+      {navigable && <Icon name="chevron_right" size={18} color="var(--color-text-quaternary)" />}
+      {isLinked && !navigable && <Icon name="lock" size={14} color="var(--color-blue-tint-3)" />}
     </div>
   );
 }
@@ -89,12 +89,12 @@ export function SharedKanbanView({ sections, accent, onTaskClick }: {
         <div key={section.id} style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 260, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 4px' }}>
             {section.emoji && <span style={{ fontSize: 13 }}>{section.emoji}</span>}
-            <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#5e5e5e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{section.label}</span>
-            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe', flexShrink: 0 }}>{section.tasks.length}</span>
+            <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--color-gray-deep-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{section.label}</span>
+            <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', flexShrink: 0 }}>{section.tasks.length}</span>
           </div>
-          <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 12, padding: 4, minHeight: 60 }}>
+          <div style={{ background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 12, padding: 4, minHeight: 60 }}>
             {section.tasks.length === 0 ? (
-              <div style={{ padding: '16px', fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#b0acbe', textAlign: 'center' }}>No items.</div>
+              <div style={{ padding: '16px', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)', textAlign: 'center' }}>No items.</div>
             ) : (
               section.tasks.map(task => <SharedTaskRow key={task.id} task={task} accent={accent} onClick={onTaskClick} />)
             )}
@@ -303,18 +303,18 @@ export function SharedTaskTimelineView({ sections, accent, isMobile, onTaskClick
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
         <button onClick={jumpToToday}
-          style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
-          <Icon name="today" size={14} color="#5e4dbb" />
+          style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
+          <Icon name="today" size={14} color="var(--color-primary)" />
           Today
         </button>
-        <div style={{ display: 'inline-flex', background: '#F5F3FF', borderRadius: 10, padding: 3, gap: 2 }}>
+        <div style={{ display: 'inline-flex', background: 'var(--color-surface-tint)', borderRadius: 10, padding: 3, gap: 2 }}>
           {(['day', 'week', 'month'] as const).map(z => (
             <button key={z} onClick={() => setZoom(z)}
               style={{
-                fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, textTransform: 'capitalize',
-                color: zoom === z ? '#5e4dbb' : '#787584',
-                background: zoom === z ? '#fff' : 'transparent',
-                boxShadow: zoom === z ? '0 1px 4px rgba(94,77,187,0.18)' : 'none',
+                fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, textTransform: 'capitalize',
+                color: zoom === z ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                background: zoom === z ? 'var(--color-white)' : 'transparent',
+                boxShadow: zoom === z ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none',
                 border: 'none', borderRadius: 8, padding: '7px 13px', cursor: 'pointer', transition: 'all 150ms',
               }}>
               {z}
@@ -324,37 +324,37 @@ export function SharedTaskTimelineView({ sections, accent, isMobile, onTaskClick
       </div>
 
       {!range ? (
-        <div style={{ textAlign: 'center', padding: '48px 16px', fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 12 }}>
+        <div style={{ textAlign: 'center', padding: '48px 16px', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 12 }}>
           No tasks yet.
         </div>
       ) : (
-        <div style={{ display: 'flex', border: '1px solid #E5E7EB', borderRadius: 12, background: '#F9FAFB', overflow: 'hidden' }}>
-          <div style={{ width: LEFT_COL_WIDTH, flexShrink: 0, borderRight: '1px solid #E5E7EB', background: '#fff' }}>
-            <div style={{ height: RULER_H, borderBottom: '1px solid #E5E7EB' }} />
+        <div style={{ display: 'flex', border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', overflow: 'hidden' }}>
+          <div style={{ width: LEFT_COL_WIDTH, flexShrink: 0, borderRight: '1px solid var(--color-border-alt)', background: 'var(--color-white)' }}>
+            <div style={{ height: RULER_H, borderBottom: '1px solid var(--color-border-alt)' }} />
             {rows.map(row => row.kind === 'section' ? (
               <div key={row.id} style={{
                 height: SECTION_HEADER_HEIGHT, display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px',
-                background: '#fbfaff', borderBottom: '1px solid #f1ecf6',
+                background: 'var(--color-purple-pale-3)', borderBottom: '1px solid var(--color-surface-tint-2)',
               }}>
                 {row.emoji && <span style={{ fontSize: 12 }}>{row.emoji}</span>}
-                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#5e5e5e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-gray-deep-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {row.label}
                 </span>
               </div>
             ) : (
               <div key={row.id} onClick={() => onTaskClick(row.task)} style={{
                 height: ROW_HEIGHT, display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', cursor: 'pointer',
-                borderBottom: '1px solid #f1ecf6',
+                borderBottom: '1px solid var(--color-surface-tint-2)',
               }}>
                 <div style={{
                   width: 16, height: 16, minWidth: 16, borderRadius: 4, border: '1.5px solid',
-                  borderColor: row.task.checked ? barColor : '#c9c4d5', background: row.task.checked ? barColor : 'transparent',
+                  borderColor: row.task.checked ? barColor : 'var(--color-border-strong)', background: row.task.checked ? barColor : 'transparent',
                   flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
-                  {row.task.checked && <Icon name="check" size={11} color="#fff" />}
+                  {row.task.checked && <Icon name="check" size={11} color="var(--color-white)" />}
                 </div>
                 <span style={{
-                  fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: '#1c1b22',
+                  fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)',
                   opacity: row.task.checked ? 0.45 : 1, textDecoration: row.task.checked ? 'line-through' : 'none',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>
@@ -366,13 +366,13 @@ export function SharedTaskTimelineView({ sections, accent, isMobile, onTaskClick
 
           <div ref={scrollRef} style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden' }}>
             <div style={{ width: totalWidth, minWidth: '100%', position: 'relative' }}>
-              <div style={{ borderBottom: '1px solid #E5E7EB', background: '#fff' }}>
-                <div style={{ display: 'flex', height: MAJOR_H, borderBottom: '1px solid #f1ecf6' }}>
+              <div style={{ borderBottom: '1px solid var(--color-border-alt)', background: 'var(--color-white)' }}>
+                <div style={{ display: 'flex', height: MAJOR_H, borderBottom: '1px solid var(--color-surface-tint-2)' }}>
                   {majorTicks.map((t, i) => (
                     <div key={i} style={{
                       width: t.days * pxPerDay, flexShrink: 0, display: 'flex', alignItems: 'center', paddingLeft: 8,
-                      fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#787584',
-                      borderRight: '1px solid #f1ecf6', overflow: 'hidden', whiteSpace: 'nowrap',
+                      fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-text-tertiary)',
+                      borderRight: '1px solid var(--color-surface-tint-2)', overflow: 'hidden', whiteSpace: 'nowrap',
                     }}>
                       {t.label}
                     </div>
@@ -382,10 +382,10 @@ export function SharedTaskTimelineView({ sections, accent, isMobile, onTaskClick
                   {minorTicks.map((t, i) => (
                     <div key={i} style={{
                       width: t.days * pxPerDay, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: t.isToday ? 700 : 500,
-                      color: t.isToday ? '#5e4dbb' : (t.isWeekend ? '#b0acbe' : '#787584'),
-                      background: t.isToday ? '#F5F3FF' : (t.isWeekend ? '#f5f4f8' : 'transparent'),
-                      borderRight: '1px solid #f1ecf6',
+                      fontFamily: 'var(--font-body)', fontSize: 11, fontWeight: t.isToday ? 700 : 500,
+                      color: t.isToday ? 'var(--color-primary)' : (t.isWeekend ? 'var(--color-text-quaternary)' : 'var(--color-text-tertiary)'),
+                      background: t.isToday ? 'var(--color-surface-tint)' : (t.isWeekend ? 'var(--color-purple-pale-16)' : 'transparent'),
+                      borderRight: '1px solid var(--color-surface-tint-2)',
                     }}>
                       {t.label}
                     </div>
@@ -393,10 +393,10 @@ export function SharedTaskTimelineView({ sections, accent, isMobile, onTaskClick
                 </div>
               </div>
 
-              <div style={{ position: 'absolute', left: todayOffsetPx, top: 0, bottom: 0, borderLeft: '2px dashed #9d8dff', zIndex: 2, pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', left: todayOffsetPx, top: 0, bottom: 0, borderLeft: '2px dashed var(--color-accent-purple-light)', zIndex: 2, pointerEvents: 'none' }} />
 
               {rows.map(row => row.kind === 'section' ? (
-                <div key={row.id} style={{ height: SECTION_HEADER_HEIGHT, borderBottom: '1px solid #f1ecf6', background: '#fbfaff' }} />
+                <div key={row.id} style={{ height: SECTION_HEADER_HEIGHT, borderBottom: '1px solid var(--color-surface-tint-2)', background: 'var(--color-purple-pale-3)' }} />
               ) : (
                 (() => {
                   const t = row.task;
@@ -422,7 +422,7 @@ export function SharedTaskTimelineView({ sections, accent, isMobile, onTaskClick
                   ].filter(Boolean).join('\n');
 
                   return (
-                    <div key={row.id} style={{ height: ROW_HEIGHT, position: 'relative', borderBottom: '1px solid #f1ecf6' }}>
+                    <div key={row.id} style={{ height: ROW_HEIGHT, position: 'relative', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
                       <div
                         onClick={() => onTaskClick(t)}
                         title={tooltip}
@@ -431,9 +431,9 @@ export function SharedTaskTimelineView({ sections, accent, isMobile, onTaskClick
                           height: BAR_HEIGHT, borderRadius: BAR_HEIGHT / 2, cursor: 'pointer',
                           background: t.checked ? `${barColor}80` : barColor,
                           display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 4,
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                          boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.12)',
                         }}>
-                        {t.checked && <Icon name="check" size={11} color="#fff" />}
+                        {t.checked && <Icon name="check" size={11} color="var(--color-white)" />}
                       </div>
                       {deadlineLeft !== null && (
                         <div
@@ -442,7 +442,7 @@ export function SharedTaskTimelineView({ sections, accent, isMobile, onTaskClick
                             position: 'absolute', left: deadlineLeft - 6, top: '50%', transform: 'translateY(-50%)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', width: 12, height: 12, zIndex: 1,
                           }}>
-                          <Icon name="flag" size={13} color={deadlineOverdue ? '#ba1a1a' : '#484552'} />
+                          <Icon name="flag" size={13} color={deadlineOverdue ? 'var(--color-error)' : 'var(--color-text-secondary)'} />
                         </div>
                       )}
                     </div>

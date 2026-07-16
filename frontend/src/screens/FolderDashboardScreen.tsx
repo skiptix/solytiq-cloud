@@ -30,7 +30,7 @@ function AnimatedBar({ pct, color, height = 8, delay = 150 }: { pct: number; col
   const [w, setW] = useState(0);
   useEffect(() => { const t = setTimeout(() => setW(pct), delay); return () => clearTimeout(t); }, [pct, delay]);
   return (
-    <div style={{ background: '#f0ecf8', borderRadius: 9999, height, overflow: 'hidden' }}>
+    <div style={{ background: 'var(--color-divider)', borderRadius: 9999, height, overflow: 'hidden' }}>
       <div style={{ height: '100%', width: `${w}%`, background: color, borderRadius: 9999, transition: 'width 900ms cubic-bezier(0.34,1.56,0.64,1)' }} />
     </div>
   );
@@ -41,15 +41,15 @@ function StatCard({ num, label, sub, icon, iconBg, iconColor, accent }: { num: n
   const [hov, setHov] = useState(false);
   return (
     <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ background: '#F9FAFB', border: `1px solid ${hov ? '#d8d0eb' : '#E5E7EB'}`, borderRadius: 12, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'all 180ms', minWidth: 0 }}>
+      style={{ background: 'var(--color-surface-gray)', border: `1px solid ${hov ? 'var(--color-purple-tint-2)' : 'var(--color-border-alt)'}`, borderRadius: 12, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'all 180ms', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ width: 34, height: 34, borderRadius: 10, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name={icon} size={17} color={iconColor} />
         </div>
-        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, fontWeight: 600, color: accent ?? '#787584', background: accent ? `${accent}14` : '#f1ecf6', borderRadius: 9999, padding: '2px 8px', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>{sub}</span>
+        <span style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, fontWeight: 600, color: accent ?? 'var(--color-text-tertiary)', background: accent ? `${accent}14` : 'var(--color-surface-tint-2)', borderRadius: 9999, padding: '2px 8px', textTransform: 'uppercase' as const, letterSpacing: '0.04em' }}>{sub}</span>
       </div>
-      <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontWeight: 700, color: '#1c1b22', fontSize: 30, lineHeight: 1, letterSpacing: '-0.02em' }}>{num}</span>
-      <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552' }}>{label}</div>
+      <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text-primary)', fontSize: 30, lineHeight: 1, letterSpacing: '-0.02em' }}>{num}</span>
+      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)' }}>{label}</div>
     </div>
   );
 }
@@ -57,18 +57,18 @@ function StatCard({ num, label, sub, icon, iconBg, iconColor, accent }: { num: n
 // ── Mini task row ───────────────────────────────────────────────
 function MiniTask({ task, onGo }: { task: Task; onGo: () => void }) {
   const [hov, setHov] = useState(false);
-  const PCOLS: Record<string, string> = { High: '#ea580c', Medium: '#f59e0b', Low: '#787584' };
+  const PCOLS: Record<string, string> = { High: 'var(--color-orange)', Medium: 'var(--color-warning-alt)', Low: 'var(--color-text-tertiary)' };
   return (
     <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={onGo}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: hov ? '#F5F3FF' : 'transparent', cursor: 'pointer', transition: 'background 150ms' }}>
-      <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#c9c4d5', flexShrink: 0 }} />
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: hov ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', transition: 'background 150ms' }}>
+      <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--color-border-strong)', flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</div>
-        {task._listName && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10.5, color: '#787584', marginTop: 1 }}>in {task._listName}</div>}
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</div>
+        {task._listName && <div style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-tertiary)', marginTop: 1 }}>in {task._listName}</div>}
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-        {task.priority && <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Inter, sans-serif', color: PCOLS[task.priority] }}>{task.priority}</span>}
-        <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe' }}>{friendlyDate(task.deadline)}</span>
+        {task.priority && <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'var(--font-body)', color: PCOLS[task.priority] }}>{task.priority}</span>}
+        <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)' }}>{friendlyDate(task.deadline)}</span>
       </div>
     </div>
   );
@@ -81,20 +81,20 @@ function TaskPanel({ title, icon, accent, accentBg, tasks, emptyText, onGo }: {
   const visible = tasks.slice(0, 6);
   const more = tasks.length - visible.length;
   return (
-    <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 14, padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 14, padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px 6px' }}>
         <div style={{ width: 28, height: 28, borderRadius: 8, background: accentBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name={icon} size={15} color={accent} />
         </div>
-        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 700, color: '#1c1b22' }}>{title}</span>
+        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>{title}</span>
         <div style={{ flex: 1 }} />
-        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color: accent, background: accentBg, borderRadius: 9999, padding: '2px 9px' }}>{tasks.length}</span>
+        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, color: accent, background: accentBg, borderRadius: 9999, padding: '2px 9px' }}>{tasks.length}</span>
       </div>
       {tasks.length === 0
-        ? <div style={{ padding: '24px 12px', textAlign: 'center', fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>{emptyText}</div>
+        ? <div style={{ padding: '24px 12px', textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>{emptyText}</div>
         : <>
             {visible.map(t => <MiniTask key={`${t._listId}-${t.id}`} task={t} onGo={() => t._listId && onGo(t._listId)} />)}
-            {more > 0 && <div style={{ padding: '6px 10px', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, color: '#b0acbe', textAlign: 'center' }}>+{more} more</div>}
+            {more > 0 && <div style={{ padding: '6px 10px', fontFamily: 'var(--font-heading)', fontSize: 12, color: 'var(--color-text-quaternary)', textAlign: 'center' }}>+{more} more</div>}
           </>
       }
     </div>
@@ -118,8 +118,8 @@ function ListCard({ list, onClick, index, folderColor }: { list: List; onClick: 
       onClick={onClick} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && onClick()}
       aria-label={`Open ${list.name} list`}
       style={{
-        background: hov ? (list.colorBg ?? `${color}12`) : '#F9FAFB',
-        border: `1px solid ${hov ? color + '55' : '#E5E7EB'}`,
+        background: hov ? (list.colorBg ?? `${color}12`) : 'var(--color-surface-gray)',
+        border: `1px solid ${hov ? color + '55' : 'var(--color-border-alt)'}`,
         borderRadius: 14, padding: '18px 16px', cursor: 'pointer',
         transition: 'all 220ms cubic-bezier(0.34,1.56,0.64,1)',
         transform: hov ? 'translateY(-3px)' : 'none',
@@ -138,25 +138,25 @@ function ListCard({ list, onClick, index, folderColor }: { list: List; onClick: 
           }
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</div>
-          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#787584', marginTop: 3 }}>{done}/{total} done</div>
+          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</div>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 3 }}>{done}/{total} done</div>
         </div>
-        <Icon name={list.isPublic !== false ? 'public' : 'lock'} size={12} color="#c9c4d5" />
+        <Icon name={list.isPublic !== false ? 'public' : 'lock'} size={12} color="var(--color-border-strong)" />
       </div>
 
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-          <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 700, color }}>{pct}%</span>
-          <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: '#b0acbe' }}>{total - done} left</span>
+          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, color }}>{pct}%</span>
+          <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)' }}>{total - done} left</span>
         </div>
-        <div style={{ background: '#f0ecf8', borderRadius: 9999, height: 5, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--color-divider)', borderRadius: 9999, height: 5, overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${barW}%`, background: color, borderRadius: 9999, transition: 'width 900ms cubic-bezier(0.34,1.56,0.64,1)' }} />
         </div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: hov ? color : '#b0acbe', display: 'flex', alignItems: 'center', gap: 4, transition: 'color 200ms' }}>
-          Open list <Icon name="arrow_forward" size={13} color={hov ? color : '#b0acbe'} />
+        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: hov ? color : 'var(--color-text-quaternary)', display: 'flex', alignItems: 'center', gap: 4, transition: 'color 200ms' }}>
+          Open list <Icon name="arrow_forward" size={13} color={hov ? color : 'var(--color-text-quaternary)'} />
         </span>
       </div>
     </div>
@@ -197,14 +197,14 @@ export default function FolderDashboardScreen() {
     if (listsLoading || !graceElapsed) {
       return (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 32, height: 32, border: '3px solid #e8e4f0', borderTopColor: '#5e4dbb', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+          <div style={{ width: 32, height: 32, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
         </div>
       );
     }
     return <Navigate to="/dashboard" replace />;
   }
 
-  const ac = folder.color ?? '#5e4dbb';
+  const ac = folder.color ?? 'var(--color-primary)';
   const acBg = `${ac}15`;
 
   const folderLists = lists
@@ -230,49 +230,49 @@ export default function FolderDashboardScreen() {
         <header style={{ animation: 'folderDashIn 420ms ease both' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
             {folder.emoji
-              ? <span style={{ fontSize: 40, lineHeight: 1, filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.10))' }}>{folder.emoji}</span>
+              ? <span style={{ fontSize: 40, lineHeight: 1, filter: 'drop-shadow(0 2px 8px rgba(var(--color-black-rgb), 0.10))' }}>{folder.emoji}</span>
               : <div style={{ width: 52, height: 52, borderRadius: 14, background: acBg, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 4px 14px ${ac}22` }}>
                   <Icon name="folder" size={28} color={ac} />
                 </div>
             }
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <h1 style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 28, fontWeight: 700, color: '#1c1b22', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 28, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.02em', lineHeight: 1.15 }}>
                   {folder.name}
                 </h1>
                 <span style={{
-                  fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600,
-                  color: folder.isPublic !== false ? '#15803d' : '#787584',
-                  background: folder.isPublic !== false ? 'rgba(21,128,61,0.09)' : '#f1ecf6',
+                  fontFamily: 'var(--font-body)', fontSize: 11, fontWeight: 600,
+                  color: folder.isPublic !== false ? 'var(--color-green-deep-3)' : 'var(--color-text-tertiary)',
+                  background: folder.isPublic !== false ? 'rgba(var(--color-green-deep-3-rgb), 0.09)' : 'var(--color-surface-tint-2)',
                   borderRadius: 9999, padding: '3px 10px',
                   display: 'inline-flex', alignItems: 'center', gap: 4,
                 }}>
-                  <Icon name={folder.isPublic !== false ? 'public' : 'lock'} size={11} color={folder.isPublic !== false ? '#15803d' : '#787584'} />
+                  <Icon name={folder.isPublic !== false ? 'public' : 'lock'} size={11} color={folder.isPublic !== false ? 'var(--color-green-deep-3)' : 'var(--color-text-tertiary)'} />
                   {folder.isPublic !== false ? 'Public' : 'Private'}
                 </span>
               </div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: '#787584', marginTop: 5 }}>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', marginTop: 5 }}>
                 {folderLists.length} to-do{folderLists.length !== 1 ? 's' : ''} · {total} task{total !== 1 ? 's' : ''}
               </div>
             </div>
           </div>
 
           {/* Overall progress card */}
-          <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 14, padding: '20px 22px' }}>
+          <div style={{ background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 14, padding: '20px 22px' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
               <div>
-                <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#484552', marginBottom: 3 }}>Overall Progress</div>
-                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#b0acbe' }}>{done} of {total} tasks complete</div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 3 }}>Overall Progress</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>{done} of {total} tasks complete</div>
               </div>
               <div>
-                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 34, fontWeight: 700, color: ac, letterSpacing: '-0.03em', lineHeight: 1 }}>{pct}</span>
-                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 18, fontWeight: 600, color: ac }}>%</span>
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 34, fontWeight: 700, color: ac, letterSpacing: '-0.03em', lineHeight: 1 }}>{pct}</span>
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 600, color: ac }}>%</span>
               </div>
             </div>
             <AnimatedBar pct={pct} color={ac} height={10} />
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#10B981', fontWeight: 600 }}>✓ {done} done</span>
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#b0acbe' }}>{open} remaining</span>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-success)', fontWeight: 600 }}>✓ {done} done</span>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)' }}>{open} remaining</span>
             </div>
           </div>
         </header>
@@ -282,16 +282,16 @@ export default function FolderDashboardScreen() {
 
         {/* ── Stat cards ─────────────────────────────────────── */}
         <section style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 12, animation: 'folderDashIn 420ms 80ms ease both' }}>
-          <StatCard num={open} label="Open Tasks" sub="remaining" icon="inventory_2" iconBg="#F5F3FF" iconColor="#5e4dbb" />
-          <StatCard num={done} label="Completed" sub={total > 0 ? `${pct}%` : 'none yet'} icon="check_circle" iconBg="rgba(16,185,129,0.10)" iconColor="#10B981" accent="#10B981" />
-          <StatCard num={todayTasks.length} label="Due Today" sub="urgent" icon="today" iconBg="rgba(234,88,12,0.10)" iconColor="#ea580c" accent="#ea580c" />
+          <StatCard num={open} label="Open Tasks" sub="remaining" icon="inventory_2" iconBg="var(--color-surface-tint)" iconColor="var(--color-primary)" />
+          <StatCard num={done} label="Completed" sub={total > 0 ? `${pct}%` : 'none yet'} icon="check_circle" iconBg="rgba(var(--color-success-rgb), 0.10)" iconColor="var(--color-success)" accent="var(--color-success)" />
+          <StatCard num={todayTasks.length} label="Due Today" sub="urgent" icon="today" iconBg="rgba(var(--color-orange-rgb), 0.10)" iconColor="var(--color-orange)" accent="var(--color-orange)" />
           <StatCard num={folderLists.length} label="To-Dos" sub="in folder" icon="folder_open" iconBg={acBg} iconColor={ac} accent={ac} />
         </section>
 
         {/* ── Task panels ─────────────────────────────────────── */}
         <section style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, animation: 'folderDashIn 420ms 160ms ease both' }}>
           <TaskPanel
-            title="Due Today" icon="today" accent="#ea580c" accentBg="rgba(234,88,12,0.08)"
+            title="Due Today" icon="today" accent="var(--color-orange)" accentBg="rgba(var(--color-orange-rgb), 0.08)"
             tasks={todayTasks} emptyText="Nothing due today — you're on track!"
             onGo={id => navigate(`/list/${id}`)}
           />
@@ -304,15 +304,15 @@ export default function FolderDashboardScreen() {
 
         {/* ── Lists grid ─────────────────────────────────────── */}
         <section style={{ animation: 'folderDashIn 420ms 240ms ease both' }}>
-          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Icon name="folder_open" size={18} color={ac} />
             To-Dos in {folder.name}
           </div>
           {folderLists.length === 0 ? (
-            <div style={{ background: '#F9FAFB', border: '1px dashed #E5E7EB', borderRadius: 14, padding: '56px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-              <Icon name="playlist_add" size={36} color="#b0acbe" />
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 600, color: '#b0acbe' }}>No to-dos yet</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe' }}>Move or add a to-do to this folder from the sidebar</div>
+            <div style={{ background: 'var(--color-surface-gray)', border: '1px dashed var(--color-border-alt)', borderRadius: 14, padding: '56px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <Icon name="playlist_add" size={36} color="var(--color-text-quaternary)" />
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, color: 'var(--color-text-quaternary)' }}>No to-dos yet</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Move or add a to-do to this folder from the sidebar</div>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>

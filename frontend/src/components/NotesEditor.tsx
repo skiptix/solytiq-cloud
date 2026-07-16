@@ -65,9 +65,9 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
       onMouseDown={e => e.preventDefault() /* keep the textarea selection */}
       onClick={() => applyFormat(marker)}
       style={{ width: 26, height: 26, borderRadius: 7, border: 'none', background: 'transparent', cursor: showPreview ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: showPreview ? 0.35 : 1, transition: 'background 120ms' }}
-      onMouseEnter={e => { if (!showPreview) e.currentTarget.style.background = '#F5F3FF'; }}
+      onMouseEnter={e => { if (!showPreview) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-      <Icon name={icon} size={16} color="#787584" />
+      <Icon name={icon} size={16} color="var(--color-text-tertiary)" />
     </button>
   );
 
@@ -76,14 +76,14 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 700, color: '#c9c4d5', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</div>
-          <div style={{ display: 'inline-flex', background: '#faf9ff', border: '1px solid #F0EEF8', borderRadius: 8, padding: 2 }}>
+          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-border-strong)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</div>
+          <div style={{ display: 'inline-flex', background: 'var(--color-surface-tint-3)', border: '1px solid var(--color-purple-pale-23)', borderRadius: 8, padding: 2 }}>
             {(['write', 'preview'] as const).map(t => (
               <button
                 key={t}
                 type="button"
                 onClick={() => setTab(t)}
-                style={{ padding: '3px 10px', borderRadius: 6, border: 'none', background: tab === t ? '#fff' : 'transparent', boxShadow: tab === t ? '0 1px 3px rgba(0,0,0,0.08)' : 'none', cursor: 'pointer', fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 11, fontWeight: 600, color: tab === t ? '#5e4dbb' : '#787584', transition: 'all 120ms', textTransform: 'capitalize' }}>
+                style={{ padding: '3px 10px', borderRadius: 6, border: 'none', background: tab === t ? 'var(--color-white)' : 'transparent', boxShadow: tab === t ? '0 1px 3px rgba(var(--color-black-rgb), 0.08)' : 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: tab === t ? 'var(--color-primary)' : 'var(--color-text-tertiary)', transition: 'all 120ms', textTransform: 'capitalize' }}>
                 {t}
               </button>
             ))}
@@ -102,7 +102,7 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
         <div style={{ minHeight, padding: '2px 0' }}>
           {value.trim()
             ? <MarkdownView source={value} />
-            : <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: '#b0acbe', fontStyle: 'italic' }}>Nothing to preview yet.</div>}
+            : <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', fontStyle: 'italic' }}>Nothing to preview yet.</div>}
         </div>
       ) : (
         <textarea
@@ -112,8 +112,8 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
           onKeyDown={onKeyDown}
           placeholder={placeholder}
           style={{
-            width: '100%', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-            fontSize: 13, color: '#484552',
+            width: '100%', fontFamily: 'var(--font-mono)',
+            fontSize: 13, color: 'var(--color-text-secondary)',
             background: 'transparent', border: 'none', outline: 'none', resize: 'none',
             lineHeight: 1.75, padding: 0, overflowY: 'hidden', minHeight,
           }}

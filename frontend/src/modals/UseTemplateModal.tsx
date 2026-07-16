@@ -26,8 +26,8 @@ export default function UseTemplateModal({ template, onClose, onCreatedList, onC
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const { setLists, setTimelines } = useAppStore();
 
-  const accent = template.color ?? '#5e4dbb';
-  const bg = template.colorBg ?? '#F5F3FF';
+  const accent = template.color ?? 'var(--color-primary)';
+  const bg = template.colorBg ?? 'var(--color-surface-tint)';
 
   const handleCreate = async () => {
     if (!name.trim()) return;
@@ -54,17 +54,17 @@ export default function UseTemplateModal({ template, onClose, onCreatedList, onC
   };
 
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 440, boxShadow: '0 12px 40px rgba(0,0,0,0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+      <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 440, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
         onClick={(e) => e.stopPropagation()}>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid #f1ecf6' }}>
-          <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 16, fontWeight: 700, color: '#1c1b22' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
+          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>
             New {template.type === 'list' ? 'To-Do' : 'Timeline'} from Template
           </span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}>
-            <Icon name="close" size={18} color="#787584" />
+            <Icon name="close" size={18} color="var(--color-text-tertiary)" />
           </button>
         </div>
 
@@ -72,8 +72,8 @@ export default function UseTemplateModal({ template, onClose, onCreatedList, onC
           <div style={{ background: bg, border: `1px solid ${accent}40`, borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, animation: 'previewReveal 320ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
             <span style={{ fontSize: 20 }}>{template.emoji ?? (template.type === 'list' ? '📋' : '🗓️')}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 14, fontWeight: 700, color: '#1c1b22', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{template.name}</div>
-              <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: '#787584' }}>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{template.name}</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>
                 {template.type === 'list'
                   ? `${template.summary.sectionCount ?? 0} section${template.summary.sectionCount === 1 ? '' : 's'} · ${template.summary.taskCount ?? 0} task${template.summary.taskCount === 1 ? '' : 's'}`
                   : `${template.summary.milestoneCount ?? 0} milestone${template.summary.milestoneCount === 1 ? '' : 's'}`}
@@ -82,55 +82,55 @@ export default function UseTemplateModal({ template, onClose, onCreatedList, onC
           </div>
 
           <div style={{ animation: 'wizardStepIn 260ms cubic-bezier(0.22,1,0.36,1) 40ms both' }}>
-            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 6 }}>
+            <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 6 }}>
               {template.type === 'list' ? 'To-Do' : 'Timeline'} Name *
             </label>
             <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
-              style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 14, border: 'none', borderBottom: '1.5px solid #E5E7EB', padding: '8px 0', outline: 'none', color: '#1c1b22', background: 'transparent' }}
-              onFocus={(e) => (e.target.style.borderBottomColor = '#5e4dbb')}
-              onBlur={(e) => (e.target.style.borderBottomColor = '#E5E7EB')} />
+              style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, border: 'none', borderBottom: '1.5px solid var(--color-border-alt)', padding: '8px 0', outline: 'none', color: 'var(--color-text-primary)', background: 'transparent' }}
+              onFocus={(e) => (e.target.style.borderBottomColor = 'var(--color-primary)')}
+              onBlur={(e) => (e.target.style.borderBottomColor = 'var(--color-border-alt)')} />
           </div>
 
           <div style={{ animation: 'wizardStepIn 260ms cubic-bezier(0.22,1,0.36,1) 80ms both' }}>
-            <label style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', display: 'block', marginBottom: 8 }}>Privacy</label>
+            <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 8 }}>Privacy</label>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setIsPublic(false)}
-                style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${!isPublic ? '#5e4dbb' : '#E5E7EB'}`, background: !isPublic ? '#F5F3FF' : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'border-color 150ms, background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)' }}
+                style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${!isPublic ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: !isPublic ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'border-color 150ms, background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)' }}
                 onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-1px)')}
                 onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}>
-                <Icon name="lock" size={16} color={!isPublic ? '#5e4dbb' : '#787584'} />
-                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: !isPublic ? '#5e4dbb' : '#787584' }}>Private</span>
+                <Icon name="lock" size={16} color={!isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: !isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>Private</span>
               </button>
               <button onClick={() => setIsPublic(true)}
-                style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${isPublic ? '#5e4dbb' : '#E5E7EB'}`, background: isPublic ? '#F5F3FF' : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'border-color 150ms, background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)' }}
+                style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${isPublic ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: isPublic ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'border-color 150ms, background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)' }}
                 onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-1px)')}
                 onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}>
-                <Icon name="public" size={16} color={isPublic ? '#5e4dbb' : '#787584'} />
-                <span style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: isPublic ? '#5e4dbb' : '#787584' }}>Public</span>
+                <Icon name="public" size={16} color={isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>Public</span>
               </button>
             </div>
           </div>
 
           {!template.isOwner && (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, animation: 'wizardStepIn 260ms cubic-bezier(0.22,1,0.36,1) 120ms both' }}>
-              <Icon name="info" size={15} color="#d97706" />
-              <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', background: 'var(--color-yellow-pale-1)', border: '1px solid var(--color-yellow-tint-2)', borderRadius: 10, animation: 'wizardStepIn 260ms cubic-bezier(0.22,1,0.36,1) 120ms both' }}>
+              <Icon name="info" size={15} color="var(--color-warning)" />
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-orange-deep-1)', lineHeight: 1.5 }}>
                 This template was shared by {template.ownerName ?? 'another user'}. Any attached files won't carry over — you'll need to attach your own.
               </span>
             </div>
           )}
 
           {error && (
-            <div style={{ padding: '8px 12px', background: '#ffdad6', borderRadius: 8, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#ba1a1a' }}>{error}</div>
+            <div style={{ padding: '8px 12px', background: 'var(--color-error-bg)', borderRadius: 8, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>{error}</div>
           )}
         </div>
 
         <div style={{ display: 'flex', gap: 10, padding: '0 24px 24px', justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 500, color: '#484552', background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 16px' }}>
+          <button onClick={onClose} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 16px' }}>
             Cancel
           </button>
           <button onClick={handleCreate} disabled={loading || !name.trim()}
-            style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 13, fontWeight: 600, color: '#fff', background: (loading || !name.trim()) ? '#c9c4d5' : '#5e4dbb', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: (loading || !name.trim()) ? 'not-allowed' : 'pointer', transition: 'background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)' }}
+            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: (loading || !name.trim()) ? 'var(--color-border-strong)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: (loading || !name.trim()) ? 'not-allowed' : 'pointer', transition: 'background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)' }}
             onMouseEnter={(e) => { if (!loading && name.trim()) e.currentTarget.style.transform = 'scale(1.04)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}>
             {loading ? 'Creating…' : 'Create'}

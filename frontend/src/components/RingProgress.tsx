@@ -6,7 +6,7 @@ interface RingProgressProps {
   color?: string;
 }
 
-export default function RingProgress({ total, completed, color = '#5e4dbb' }: RingProgressProps) {
+export default function RingProgress({ total, completed, color = 'var(--color-primary)' }: RingProgressProps) {
   const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const pct = total === 0 ? 0 : completed / total;
@@ -14,7 +14,7 @@ export default function RingProgress({ total, completed, color = '#5e4dbb' }: Ri
   const CIRC = 2 * Math.PI * R;
   const offset = CIRC * (1 - pct);
   const done = total > 0 && completed === total;
-  const ringColor = done ? '#10B981' : color;
+  const ringColor = done ? 'var(--color-success)' : color;
 
   return (
     <div
@@ -27,7 +27,7 @@ export default function RingProgress({ total, completed, color = '#5e4dbb' }: Ri
       onMouseLeave={() => setTooltipPos(null)}
     >
       <svg width="20" height="20" viewBox="0 0 20 20">
-        <circle cx="10" cy="10" r={R} fill="none" stroke="#e8e4f0" strokeWidth="2.5" />
+        <circle cx="10" cy="10" r={R} fill="none" stroke="var(--color-border)" strokeWidth="2.5" />
         <circle
           cx="10" cy="10" r={R}
           fill="none"
@@ -45,11 +45,11 @@ export default function RingProgress({ total, completed, color = '#5e4dbb' }: Ri
           top: tooltipPos.top,
           left: tooltipPos.left,
           transform: 'translateX(-50%)',
-          background: '#1c1b22',
-          color: '#fff',
+          background: 'var(--color-text-primary)',
+          color: 'var(--color-white)',
           borderRadius: 5,
           padding: '3px 8px',
-          fontFamily: 'Inter, sans-serif',
+          fontFamily: 'var(--font-body)',
           fontSize: 11,
           fontWeight: 500,
           whiteSpace: 'nowrap',

@@ -5,7 +5,7 @@ import CreatorBubble from './CreatorBubble';
 import MarkdownView from './MarkdownView';
 import useMembersStore from '../store/useMembersStore';
 
-const PRIORITY_COLORS: Record<string, string> = { High: '#ea580c', Medium: '#f59e0b', Low: '#787584' };
+const PRIORITY_COLORS: Record<string, string> = { High: 'var(--color-orange)', Medium: 'var(--color-warning-alt)', Low: 'var(--color-text-tertiary)' };
 
 interface TaskDetailPopupProps {
   task: Task;
@@ -18,7 +18,7 @@ interface TaskDetailPopupProps {
 export default function TaskDetailPopup({ task, anchor, onEdit, onGoToList, onClose }: TaskDetailPopupProps) {
   const popupRef = useRef<HTMLDivElement>(null);
   const creator = useMembersStore(s => task.creatorId ? s.members[task.creatorId] : undefined);
-  const stripeColor = task.priority ? PRIORITY_COLORS[task.priority] : '#5e4dbb';
+  const stripeColor = task.priority ? PRIORITY_COLORS[task.priority] : 'var(--color-primary)';
 
   const pos = (() => {
     if (!anchor) return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
@@ -57,51 +57,51 @@ export default function TaskDetailPopup({ task, anchor, onEdit, onGoToList, onCl
     <>
       <div style={{ position: 'fixed', inset: 0, zIndex: 1099 }} onClick={onClose} />
       <div ref={popupRef}
-        style={{ position: 'fixed', ...pos, zIndex: 1100, width: 320, background: '#fff', borderRadius: 12, boxShadow: '0 8px 32px rgba(0,0,0,0.14)', overflow: 'hidden', animation: 'modalIn 200ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+        style={{ position: 'fixed', ...pos, zIndex: 1100, width: 320, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', overflow: 'hidden', animation: 'modalIn 200ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
         <div style={{ height: 4, background: stripeColor }} />
         <div style={{ padding: '14px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
-            <div style={{ fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 15, fontWeight: 700, color: '#1c1b22', lineHeight: 1.35, flex: 1 }}>{task.title}</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1.35, flex: 1 }}>{task.title}</div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, display: 'flex', padding: 2 }}>
-              <Icon name="close" size={16} color="#787584" />
+              <Icon name="close" size={16} color="var(--color-text-tertiary)" />
             </button>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {task.deadline && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Icon name="calendar_today" size={13} color="#787584" />
-                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#484552' }}>{friendlyDate(task.deadline)}</span>
+                <Icon name="calendar_today" size={13} color="var(--color-text-tertiary)" />
+                <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-secondary)' }}>{friendlyDate(task.deadline)}</span>
               </div>
             )}
             {task.priority && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon name="flag" size={13} color={PRIORITY_COLORS[task.priority]} />
-                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: PRIORITY_COLORS[task.priority], fontWeight: 600 }}>{task.priority} priority</span>
+                <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: PRIORITY_COLORS[task.priority], fontWeight: 600 }}>{task.priority} priority</span>
               </div>
             )}
             {task.badge && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Icon name="label" size={13} color="#787584" />
-                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#484552' }}>{task.badge}</span>
+                <Icon name="label" size={13} color="var(--color-text-tertiary)" />
+                <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-secondary)' }}>{task.badge}</span>
               </div>
             )}
             {task._listName && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Icon name="format_list_bulleted" size={13} color="#787584" />
-                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#484552' }}>{task._listName}</span>
+                <Icon name="format_list_bulleted" size={13} color="var(--color-text-tertiary)" />
+                <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-secondary)' }}>{task._listName}</span>
               </div>
             )}
             {task.creatorId && creator && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <CreatorBubble creatorId={task.creatorId} taskHovered={true} />
-                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#484552' }}>
+                <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-secondary)' }}>
                   {creator.fullName || creator.username}
                 </span>
               </div>
             )}
             {task.note && (
-              <div style={{ marginTop: 4, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#787584', lineHeight: 1.5, background: '#faf9ff', borderRadius: 8, padding: '8px 10px' }}>
+              <div style={{ marginTop: 4, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', lineHeight: 1.5, background: 'var(--color-surface-tint-3)', borderRadius: 8, padding: '8px 10px' }}>
                 <MarkdownView source={task.note} fontSize={12} />
               </div>
             )}
@@ -109,12 +109,12 @@ export default function TaskDetailPopup({ task, anchor, onEdit, onGoToList, onCl
 
           <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
             <button onClick={() => onEdit(task)}
-              style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '8px 0', cursor: 'pointer' }}>
+              style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '8px 0', cursor: 'pointer' }}>
               Edit Task
             </button>
             {task._source === 'list' && task._listId && onGoToList && (
               <button onClick={() => onGoToList(task._listId!)}
-                style={{ flex: 1, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#484552', background: '#f1ecf6', border: 'none', borderRadius: 8, padding: '8px 0', cursor: 'pointer' }}>
+                style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '8px 0', cursor: 'pointer' }}>
                 Go to list
               </button>
             )}
