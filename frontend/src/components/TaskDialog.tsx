@@ -644,6 +644,17 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
                 value={notes}
                 onChange={setNotes}
                 minHeight={160}
+                aiContext={{
+                  kind: 'task',
+                  title,
+                  fields: {
+                    Status: checked ? 'Completed' : 'Open',
+                    Deadline: deadline || undefined,
+                    Priority: priority || undefined,
+                    Tag: tag || undefined,
+                    List: task._listName,
+                  },
+                }}
               />
             </div>
 

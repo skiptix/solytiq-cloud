@@ -12,6 +12,7 @@ import { renderInline } from '../components/MarkdownView';
 import { toggleWrap, formatMarkerForKeyDown } from '../utils/textFormatting';
 import { apiUploadMarkdownImage, markdownImageUrl, type ShareInfo } from '../api/client';
 import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSettingsModal';
+import MarkdownListAIAssist from '../components/AIAssistant/MarkdownListAIAssist';
 
 // Matches TaskItem.tsx's hand-drawn checkmark so a `/todo` block's checkbox
 // looks identical to a task row in the To-Do screen.
@@ -625,6 +626,15 @@ export default function MarkdownListScreen() {
             )}
             {subtitle && <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', marginTop: 4 }}>{subtitle}</div>}
           </div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexShrink: 0 }}>
+          <MarkdownListAIAssist
+            markdownListId={mdId}
+            markdownListName={name}
+            onUpdated={(updatedBlocks, updatedTodoListId) => {
+              setBlocks(updatedBlocks.length > 0 ? updatedBlocks : [makeEmptyBlock('paragraph')]);
+              setTodoListId(updatedTodoListId);
+            }}
+          />
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <button onClick={() => setMenuOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer' }}>
               <Icon name="more_vert" size={16} color="var(--color-text-tertiary)" />
@@ -650,6 +660,7 @@ export default function MarkdownListScreen() {
                 </div>
               </>
             )}
+          </div>
           </div>
         </div>
         <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: saveState === 'error' ? 'var(--color-error)' : 'var(--color-text-quaternary)', marginBottom: 24, height: 14 }}>{saveLabel}</div>
