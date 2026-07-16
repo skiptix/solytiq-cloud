@@ -746,10 +746,15 @@ const useAppStore = create<AppState>()(
             })),
           }));
           if (trashRes && owns.trash) update.trashTasks = trashRes.trash.map(tr => ({
-            ...tr,
             id: Number(tr.id),
             taskId: Number(tr.taskId),
-            task: { ...tr.task, id: Number(tr.task.id) },
+            // The backend serializes the task snapshot as `taskData`; the store's
+            // TrashedTask model calls it `task`. Read the real field — dereferencing
+            // the non-existent `tr.task` here threw a TypeError for every trashed
+            // item, which the outer catch turned into a spurious loadError banner.
+            task: { ...tr.taskData, id: Number(tr.taskData.id) },
+            meta: tr.meta ?? { src: 'dash' },
+            deletedAt: tr.deletedAt,
           }));
           if (trashListsRes && owns.trash) update.trashLists = trashListsRes.trash.map(tr => ({
             id: Number(tr.id),
