@@ -211,7 +211,7 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
   const BAR_HEIGHT = isMobile ? 12 : 15;
 
   return (
-    <div key="view-timeline" style={{ display: 'flex', flexDirection: 'column', gap: 12, animation: 'sectionFadeUp 260ms ease both' }}>
+    <div key="view-timeline" style={{ display: 'flex', flexDirection: 'column', gap: 12, animation: 'viewSwitchIn 220ms cubic-bezier(0.16,1,0.3,1) both' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
         <button onClick={jumpToToday}
           style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'Hanken Grotesk, sans-serif', fontSize: 12, fontWeight: 600, color: '#5e4dbb', background: '#F5F3FF', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>

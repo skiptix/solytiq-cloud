@@ -1,5 +1,5 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useMobile } from '../hooks/useBreakpoint';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Task } from '../types';
@@ -55,7 +55,24 @@ export default function ListScreen() {
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
   const viewMode: 'list' | 'kanban' | 'timeline' =
     list?.viewMode === 'kanban' || list?.viewMode === 'timeline' ? list.viewMode : 'list';
-  const setViewMode = (v: 'list' | 'kanban' | 'timeline') => { if (list && v !== viewMode) updateList(list.id, { viewMode: v }); };
+  const setViewMode = useCallback((v: 'list' | 'kanban' | 'timeline') => {
+    if (list && v !== viewMode) updateList(list.id, { viewMode: v });
+  }, [list, viewMode, updateList]);
+
+  // "1" / "2" / "3" shortcuts — switch between List / Kanban / Timeline view.
+  useEffect(() => {
+    const onList = () => setViewMode('list');
+    const onKanban = () => setViewMode('kanban');
+    const onTimeline = () => setViewMode('timeline');
+    window.addEventListener('shortcut:view-list', onList);
+    window.addEventListener('shortcut:view-kanban', onKanban);
+    window.addEventListener('shortcut:view-timeline', onTimeline);
+    return () => {
+      window.removeEventListener('shortcut:view-list', onList);
+      window.removeEventListener('shortcut:view-kanban', onKanban);
+      window.removeEventListener('shortcut:view-timeline', onTimeline);
+    };
+  }, [setViewMode]);
 
   let pageTitle = 'Loading to-do...';
   if (!list && !listsLoading) {
@@ -397,7 +414,7 @@ export default function ListScreen() {
         </div>
 
         {/* Sections — List view (stacked) */}
-        {viewMode === 'list' && <div key="view-list" style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'sectionFadeUp 260ms ease both' }}>
+        {viewMode === 'list' && <div key="view-list" style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'viewSwitchIn 220ms cubic-bezier(0.16,1,0.3,1) both' }}>
         {list.sections.map(section => {
           const isSectionDropTarget = dragOverSectionId === section.id && draggedSectionId !== null && draggedSectionId !== section.id;
           const isSectionReorderTarget = sectionDragOverId === section.id && sectionDragId !== null && sectionDragId !== section.id;
@@ -587,7 +604,7 @@ export default function ListScreen() {
 
         {/* Sections — Kanban view (columns) */}
         {viewMode === 'kanban' && (
-          <div key="view-kanban" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 12, alignItems: 'flex-start', animation: 'sectionFadeUp 260ms ease both' }}>
+          <div key="view-kanban" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 12, alignItems: 'flex-start', animation: 'viewSwitchIn 220ms cubic-bezier(0.16,1,0.3,1) both' }}>
             {list.sections.map((section, idx) => {
               const isSectionDropTarget = dragOverSectionId === section.id && draggedSectionId !== null && draggedSectionId !== section.id;
               const isSectionReorderTarget = sectionDragOverId === section.id && sectionDragId !== null && sectionDragId !== section.id;

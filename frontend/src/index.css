@@ -65,6 +65,7 @@ body { font-family: 'Inter', sans-serif; background: #fdf8ff; color: #1c1b22; -w
 @keyframes wizardStepIn     { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: translateY(0) } }
 @keyframes previewReveal    { from { opacity: 0; transform: scale(0.7) } to { opacity: 1; transform: scale(1) } }
 @keyframes sectionFadeUp    { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes viewSwitchIn     { from { opacity: 0; transform: translateY(8px) scale(0.985) } to { opacity: 1; transform: translateY(0) scale(1) } }
 @keyframes savedPop         { 0% { opacity: 0; transform: scale(0.7) } 60% { transform: scale(1.15) } 100% { opacity: 1; transform: scale(1) } }
 @keyframes avatarSwap       { from { opacity: 0 } to { opacity: 1 } }
 @keyframes aiItemIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
