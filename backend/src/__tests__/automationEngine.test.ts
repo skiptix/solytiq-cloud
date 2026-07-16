@@ -44,6 +44,7 @@ vi.mock('../automationTypes', () => ({
   getActionDef: (id: string) => registry.actions[id],
   serializeTriggerOutput: (triggerType: string, ctx: unknown) => ({ triggerType, ctx }),
   ActionRollbackSignal: registry.ActionRollbackSignal,
+  resolveRequirement: (flag: unknown, params: Record<string, unknown>) => (typeof flag === 'function' ? flag(params) : !!flag),
 }));
 
 // vi.mock calls are hoisted above imports, so these static imports already see

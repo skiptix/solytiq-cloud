@@ -33,7 +33,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { QueryExec, userCanAccessWorkspace } from './workspaceUtil';
 import type { MutationActor } from './automationEngine';
-import { createListTask, deleteTaskRow, setListArchived } from './routes/lists';
+import { createListTask, deleteTaskRow, setListArchived, updateListTaskFields } from './routes/lists';
 import { softDeleteListTreeExec, softDeleteFolderExec, collectDescendantListIds } from './trashUtil';
 import type { ExpressionScope } from './automationExpressions';
 import { performHttpRequest, clampTimeoutMs } from './httpNode';
@@ -48,6 +48,9 @@ export interface AutomationParamProperty {
   isListId?: boolean;
   isFolderId?: boolean;
   isWorkspaceId?: boolean;
+  /** Dropdown of sections belonging to whatever list `sectionListParam` (default 'targetListId') currently names — populated client-side from the already-loaded list's own `sections`, no extra fetch. */
+  isSectionId?: boolean;
+  sectionListParam?: string;
   enum?: string[];
   /** Repeatable {key, value} row editor (HTTP node headers/query params). Stored as Array<{key,value}>. */
   isKeyValue?: boolean;
@@ -55,6 +58,11 @@ export interface AutomationParamProperty {
   isLongText?: boolean;
   /** Multi-line textarea holding raw source, NOT expression-substituted (the Code action's script). */
   isCode?: boolean;
+  /** Labels for a `type: 'boolean'` field's two-button toggle (defaults to Yes/No). */
+  trueLabel?: string;
+  falseLabel?: string;
+  /** This field only renders when a sibling param equals one of the given values — used by the consolidated Task/List/Folder nodes' operation dropdown to show only the fields relevant to the chosen operation. */
+  showIf?: { param: string; equals: string | string[] };
 }
 
 export interface AutomationParamSchema {
@@ -128,10 +136,17 @@ export interface ActionDef {
   description: string;
   icon: string;
   paramsSchema: AutomationParamSchema;
-  requiresTriggerTask?: boolean;
-  requiresTriggerList?: boolean;
+  /** Either a fixed requirement, or (for the consolidated Task/List/Folder nodes) a function of the node's OWN params — e.g. "needs a task unless operation is 'create'". */
+  requiresTriggerTask?: boolean | ((params: Record<string, unknown>) => boolean);
+  requiresTriggerList?: boolean | ((params: Record<string, unknown>) => boolean);
+  /** Superseded by a consolidated node (Task/List/Folder) but kept fully functional for automations saved before the consolidation — hidden from the "add action" picker only. */
+  hidden?: boolean;
   validate: (params: Record<string, unknown>) => string | null;
   execute: (ctx: ActionContext, params: Record<string, unknown>) => Promise<ActionResult>;
+}
+
+export function resolveRequirement(flag: boolean | ((params: Record<string, unknown>) => boolean) | undefined, params: Record<string, unknown>): boolean {
+  return typeof flag === 'function' ? flag(params) : !!flag;
 }
 
 /**
@@ -150,6 +165,7 @@ export class ActionRollbackSignal extends Error {
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim().length > 0 ? v.trim() : undefined);
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function ok(summary: string, output?: unknown): ActionResult {
   return output !== undefined ? { ok: true, summary, output } : { ok: true, summary };
@@ -305,6 +321,7 @@ export const TRIGGER_REGISTRY: TriggerDef[] = [
 export const ACTION_REGISTRY: ActionDef[] = [
   {
     id: 'delete_task',
+    hidden: true,
     label: 'Delete task',
     description: 'Deletes the task that triggered this automation.',
     icon: 'delete',
@@ -322,6 +339,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
   },
   {
     id: 'archive_list',
+    hidden: true,
     label: 'Archive list',
     description: 'Archives the list that triggered this automation (hides it from the normal workspace view; recoverable anytime from Archived).',
     icon: 'archive',
@@ -337,6 +355,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
   },
   {
     id: 'move_task',
+    hidden: true,
     label: 'Move task',
     description: 'Moves the task that triggered this automation to a different list (and optionally section).',
     icon: 'drive_file_move',
@@ -374,6 +393,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
   },
   {
     id: 'create_task',
+    hidden: true,
     label: 'Create task',
     description: 'Creates a new task in a target list.',
     icon: 'playlist_add',
@@ -409,6 +429,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
   },
   {
     id: 'create_list',
+    hidden: true,
     label: 'Create list',
     description: 'Creates a new (empty) list in this workspace.',
     icon: 'playlist_add_circle',
@@ -444,6 +465,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
   },
   {
     id: 'create_folder',
+    hidden: true,
     label: 'Create folder',
     description: 'Creates a new (empty) folder in this workspace.',
     icon: 'create_new_folder',
@@ -473,6 +495,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
   },
   {
     id: 'move_list',
+    hidden: true,
     label: 'Move list to folder',
     description: 'Moves the list that triggered this automation into a different folder (within this workspace).',
     icon: 'drive_file_move',
@@ -502,6 +525,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
   },
   {
     id: 'move_list_to_workspace',
+    hidden: true,
     label: 'Move list to workspace',
     description: "Moves the list that triggered this automation (with its sublists) into a different workspace this automation's creator has access to.",
     icon: 'move_up',
@@ -541,6 +565,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
   },
   {
     id: 'delete_list',
+    hidden: true,
     label: 'Delete list',
     description: 'Deletes the list that triggered this automation (soft-deleted to Trash, recoverable for 30 days).',
     icon: 'delete_sweep',
@@ -561,6 +586,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
   },
   {
     id: 'delete_folder',
+    hidden: true,
     label: 'Delete folder',
     description: 'Deletes a folder (soft-deleted to Trash). Lists inside it are kept, just un-foldered.',
     icon: 'folder_delete',
@@ -585,6 +611,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
   },
   {
     id: 'rename_task',
+    hidden: true,
     label: 'Rename task',
     description: 'Renames the task that triggered this automation.',
     icon: 'edit',
@@ -607,6 +634,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
   },
   {
     id: 'rename_list',
+    hidden: true,
     label: 'Rename list',
     description: 'Renames the list that triggered this automation.',
     icon: 'edit',
@@ -629,6 +657,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
   },
   {
     id: 'rename_folder',
+    hidden: true,
     label: 'Rename folder',
     description: 'Renames a folder.',
     icon: 'edit',
@@ -656,6 +685,214 @@ export const ACTION_REGISTRY: ActionDef[] = [
         if ((result.rowCount ?? 0) === 0) return fail('Folder not found');
         return ok(`Renamed folder to "${newName}"`, { folderId: targetFolderId, name: newName });
       });
+    },
+  },
+  // ── Consolidated Task/List/Folder nodes ───────────────────────────────────
+  // One node per entity, an `operation` dropdown picking what to do with it.
+  // Each operation's execute()/validate() simply DELEGATES to the equivalent
+  // (now-hidden) granular action above wherever one already exists, so this
+  // is a router over already-tested logic, not a reimplementation — the only
+  // genuinely new bodies are Task/edit, List/edit (archive+unarchive, unlike
+  // the one-way hidden `archive_list`), Folder/edit, and Folder/move (folders
+  // have no existing move action at all, since they can't nest and never had
+  // a cross-workspace move). Param keys are deliberately reused verbatim from
+  // the granular actions (targetListId/targetSectionId/targetFolderId/
+  // targetWorkspaceId) so the existing IDOR guards
+  // (assertGraphRefsInWorkspace/assertGraphWorkspaceRefsAccessible in
+  // automationGraph.ts) keep covering these nodes with no changes.
+  {
+    id: 'task',
+    label: 'Task',
+    description: 'Create, delete, move, edit, or rename a task — pick the operation below.',
+    icon: 'task_alt',
+    paramsSchema: {
+      type: 'object',
+      properties: {
+        operation: { type: 'string', label: 'Operation', description: 'What to do with the task.', enum: ['create', 'delete', 'move', 'edit', 'rename'] },
+        targetListId: { type: 'string', label: 'Target list', description: 'List to create/move the task in.', isListId: true, showIf: { param: 'operation', equals: ['create', 'move'] } },
+        targetSectionId: { type: 'string', label: 'Target section', description: 'Section within the target list. Defaults to its first section.', optional: true, isSectionId: true, sectionListParam: 'targetListId', showIf: { param: 'operation', equals: ['create', 'move'] } },
+        title: { type: 'string', label: 'Title', description: 'Title for the new task.', showIf: { param: 'operation', equals: 'create' } },
+        newTitle: { type: 'string', label: 'New title', description: 'New title for the task.', showIf: { param: 'operation', equals: 'rename' } },
+        note: { type: 'string', label: 'Note', description: "Replaces the task's note. Leave empty to leave it unchanged.", optional: true, isLongText: true, showIf: { param: 'operation', equals: 'edit' } },
+        deadline: { type: 'string', label: 'Deadline', description: 'YYYY-MM-DD. Leave empty to leave it unchanged.', optional: true, showIf: { param: 'operation', equals: 'edit' } },
+        time: { type: 'string', label: 'Time', description: '24h HH:MM. Leave empty to leave it unchanged.', optional: true, showIf: { param: 'operation', equals: 'edit' } },
+        priority: { type: 'string', label: 'Priority', description: "Leave unset to leave the task's priority unchanged.", optional: true, enum: ['High', 'Medium', 'Low'], showIf: { param: 'operation', equals: 'edit' } },
+        badge: { type: 'string', label: 'Badge', description: 'Short tag label. Leave empty to leave it unchanged.', optional: true, showIf: { param: 'operation', equals: 'edit' } },
+      },
+    },
+    requiresTriggerTask: (params) => params.operation !== 'create',
+    validate: (params) => {
+      const op = params.operation;
+      if (op === 'create') return getActionDef('create_task')!.validate(params);
+      if (op === 'move') return getActionDef('move_task')!.validate(params);
+      if (op === 'rename') return getActionDef('rename_task')!.validate(params);
+      if (op === 'edit') {
+        if (params.deadline !== undefined && str(params.deadline) && !DATE_RE.test(str(params.deadline)!)) return 'deadline must be YYYY-MM-DD';
+        if (params.time !== undefined && str(params.time) && !TIME_RE.test(str(params.time)!)) return 'time must be HH:MM (24h)';
+        if (params.priority !== undefined && str(params.priority) && !['High', 'Medium', 'Low'].includes(str(params.priority)!)) return 'priority must be High, Medium, or Low';
+        return null;
+      }
+      if (op === 'delete') return null;
+      return 'operation must be one of create, delete, move, edit, rename';
+    },
+    execute: async (ctx, params) => {
+      const op = params.operation;
+      if (op === 'create') return getActionDef('create_task')!.execute(ctx, params);
+      if (op === 'delete') return getActionDef('delete_task')!.execute(ctx, params);
+      if (op === 'move') return getActionDef('move_task')!.execute(ctx, params);
+      if (op === 'rename') return getActionDef('rename_task')!.execute(ctx, params);
+      if (op === 'edit') {
+        if (!ctx.trigger.task) return fail('No task in trigger context');
+        const task = ctx.trigger.task;
+        const updated = await updateListTaskFields(ctx.exec, task.listId, task.id, {
+          note: str(params.note) ?? null,
+          deadline: str(params.deadline) ?? null,
+          time_val: str(params.time) ?? null,
+          priority: str(params.priority) ?? null,
+          badge: str(params.badge) ?? null,
+          updateLinkedList: false,
+        }, ctx.actor);
+        return updated ? ok(`Updated task "${task.title}"`, { taskId: task.id }) : fail('Task no longer exists');
+      }
+      return fail(`Unknown operation "${String(op)}"`);
+    },
+  },
+  {
+    id: 'list',
+    label: 'List',
+    description: 'Create, delete, move, edit, or rename a list — pick the operation below.',
+    icon: 'list_alt',
+    paramsSchema: {
+      type: 'object',
+      properties: {
+        operation: { type: 'string', label: 'Operation', description: 'What to do with the list.', enum: ['create', 'delete', 'move', 'edit', 'rename'] },
+        name: { type: 'string', label: 'Name', description: 'Name for the new list.', showIf: { param: 'operation', equals: 'create' } },
+        targetFolderId: { type: 'string', label: 'Folder', description: 'Create: folder to put the new list in (empty = no folder). Move: folder to move the list into within this workspace (empty = remove it from any folder; ignored if a target workspace is chosen below).', optional: true, isFolderId: true, showIf: { param: 'operation', equals: ['create', 'move'] } },
+        targetWorkspaceId: { type: 'string', label: 'Workspace', description: 'Move to a different workspace entirely (takes priority over the folder field above).', optional: true, isWorkspaceId: true, showIf: { param: 'operation', equals: 'move' } },
+        archived: { type: 'boolean', label: 'Archived', description: 'Archive or unarchive the list.', trueLabel: 'Archived', falseLabel: 'Active', showIf: { param: 'operation', equals: 'edit' } },
+        newName: { type: 'string', label: 'New name', description: 'New name for the list.', showIf: { param: 'operation', equals: 'rename' } },
+      },
+    },
+    requiresTriggerList: (params) => params.operation !== 'create',
+    validate: (params) => {
+      const op = params.operation;
+      if (op === 'create') return getActionDef('create_list')!.validate(params);
+      if (op === 'rename') return getActionDef('rename_list')!.validate(params);
+      if (op === 'move') {
+        const targetWorkspaceId = str(params.targetWorkspaceId);
+        if (targetWorkspaceId) return getActionDef('move_list_to_workspace')!.validate({ targetWorkspaceId });
+        return getActionDef('move_list')!.validate({ targetFolderId: params.targetFolderId });
+      }
+      if (op === 'delete' || op === 'edit') return null;
+      return 'operation must be one of create, delete, move, edit, rename';
+    },
+    execute: async (ctx, params) => {
+      const op = params.operation;
+      if (op === 'create') return getActionDef('create_list')!.execute(ctx, params);
+      if (op === 'delete') return getActionDef('delete_list')!.execute(ctx, params);
+      if (op === 'rename') return getActionDef('rename_list')!.execute(ctx, params);
+      if (op === 'move') {
+        const targetWorkspaceId = str(params.targetWorkspaceId);
+        if (targetWorkspaceId) return getActionDef('move_list_to_workspace')!.execute(ctx, { targetWorkspaceId });
+        return getActionDef('move_list')!.execute(ctx, { targetFolderId: params.targetFolderId });
+      }
+      if (op === 'edit') {
+        if (!ctx.trigger.list) return fail('No list in trigger context');
+        const list = ctx.trigger.list;
+        const archived = params.archived === true;
+        const updated = await setListArchived(ctx.exec, list.id, archived);
+        return updated ? ok(`${archived ? 'Archived' : 'Unarchived'} list "${list.name}"`, { listId: list.id, archived }) : fail('List not found');
+      }
+      return fail(`Unknown operation "${String(op)}"`);
+    },
+  },
+  {
+    id: 'folder',
+    label: 'Folder',
+    description: 'Create, delete, move, edit, or rename a folder — pick the operation below.',
+    icon: 'folder',
+    paramsSchema: {
+      type: 'object',
+      properties: {
+        operation: { type: 'string', label: 'Operation', description: 'What to do with the folder.', enum: ['create', 'delete', 'move', 'edit', 'rename'] },
+        name: { type: 'string', label: 'Name', description: 'Name for the new folder.', showIf: { param: 'operation', equals: 'create' } },
+        // No trigger provides a folder (unlike task/list), so every non-create
+        // operation needs an explicit target — the same field, shown for all of them.
+        targetFolderId: { type: 'string', label: 'Folder', description: 'Folder to act on.', isFolderId: true, showIf: { param: 'operation', equals: ['delete', 'move', 'edit', 'rename'] } },
+        targetWorkspaceId: { type: 'string', label: 'Workspace', description: 'Workspace to move the folder (and everything inside it) into.', isWorkspaceId: true, showIf: { param: 'operation', equals: 'move' } },
+        isPublic: { type: 'boolean', label: 'Visibility', description: 'Make the folder public or private within its workspace.', trueLabel: 'Public', falseLabel: 'Private', showIf: { param: 'operation', equals: 'edit' } },
+        newName: { type: 'string', label: 'New name', description: 'New name for the folder.', showIf: { param: 'operation', equals: 'rename' } },
+      },
+    },
+    validate: (params) => {
+      const op = params.operation;
+      if (op === 'create') return getActionDef('create_folder')!.validate(params);
+      if (op === 'delete') return getActionDef('delete_folder')!.validate(params);
+      if (op === 'rename') return getActionDef('rename_folder')!.validate(params);
+      if (op === 'edit') return str(params.targetFolderId) ? null : 'targetFolderId is required';
+      if (op === 'move') {
+        if (!str(params.targetFolderId)) return 'targetFolderId is required';
+        if (!str(params.targetWorkspaceId)) return 'targetWorkspaceId is required';
+        return null;
+      }
+      return 'operation must be one of create, delete, move, edit, rename';
+    },
+    execute: async (ctx, params) => {
+      const op = params.operation;
+      if (op === 'create') return getActionDef('create_folder')!.execute(ctx, params);
+      if (op === 'delete') return getActionDef('delete_folder')!.execute(ctx, params);
+      if (op === 'rename') return getActionDef('rename_folder')!.execute(ctx, params);
+      if (op === 'edit') {
+        const targetFolderId = str(params.targetFolderId);
+        if (!targetFolderId) return fail('targetFolderId is required');
+        const isPublic = params.isPublic === true;
+        return ctx.withTransaction(async (exec) => {
+          const err = await assertFolderInWorkspace(exec, targetFolderId, ctx.workspaceId);
+          if (err) return fail(err);
+          const result = await exec('UPDATE folders SET is_public = $1 WHERE id = $2', [isPublic, targetFolderId]);
+          if ((result.rowCount ?? 0) === 0) return fail('Folder not found');
+          return ok(`Made folder ${isPublic ? 'public' : 'private'}`, { folderId: targetFolderId, isPublic });
+        });
+      }
+      if (op === 'move') {
+        // No existing move_folder action to delegate to — folders can't nest and
+        // never had a cross-workspace move before. Mirrors move_list_to_workspace's
+        // deliberately simplified V1 semantics: no public/private conflict dialog
+        // (that's an interactive, user-facing safety flow; automations run headless).
+        const targetFolderId = str(params.targetFolderId);
+        const targetWorkspaceId = str(params.targetWorkspaceId);
+        if (!targetFolderId) return fail('targetFolderId is required');
+        if (!targetWorkspaceId) return fail('targetWorkspaceId is required');
+        if (targetWorkspaceId === ctx.workspaceId) return fail('Target workspace is the same as the current workspace');
+        const canAccess = await userCanAccessWorkspace(ctx.automationOwnerId, targetWorkspaceId);
+        if (!canAccess) return fail("This automation's creator no longer has access to the target workspace");
+
+        return ctx.withTransaction(async (exec) => {
+          const err = await assertFolderInWorkspace(exec, targetFolderId, ctx.workspaceId);
+          if (err) return fail(err);
+
+          const listRows = await exec('SELECT id FROM lists WHERE folder_id = $1', [targetFolderId]);
+          let allListIds: string[] = [];
+          for (const row of listRows.rows as { id: string }[]) {
+            const descendants = await collectDescendantListIds(exec, row.id);
+            allListIds.push(row.id, ...descendants);
+          }
+          allListIds = Array.from(new Set(allListIds));
+          const timelineRows = await exec('SELECT id FROM timelines WHERE folder_id = $1', [targetFolderId]);
+          const timelineIds = (timelineRows.rows as { id: string }[]).map((r) => r.id);
+
+          await exec('UPDATE folders SET workspace_id = $1 WHERE id = $2', [targetWorkspaceId, targetFolderId]);
+          if (allListIds.length > 0) {
+            await exec('UPDATE lists SET workspace_id = $1 WHERE id = ANY($2::varchar[])', [targetWorkspaceId, allListIds]);
+            await exec('UPDATE tasks SET workspace_id = $1 WHERE list_id = ANY($2::varchar[])', [targetWorkspaceId, allListIds]);
+          }
+          if (timelineIds.length > 0) {
+            await exec('UPDATE timelines SET workspace_id = $1 WHERE id = ANY($2::varchar[])', [targetWorkspaceId, timelineIds]);
+          }
+          return ok('Moved folder to another workspace', { folderId: targetFolderId, workspaceId: targetWorkspaceId, movedListIds: allListIds, movedTimelineIds: timelineIds });
+        });
+      }
+      return fail(`Unknown operation "${String(op)}"`);
     },
   },
   {
@@ -744,8 +981,20 @@ export function getAutomationNodeTypeDefs() {
     triggers: TRIGGER_REGISTRY.map(({ id, label, description, icon, paramsSchema, providesTask, providesList }) => ({
       id, label, description, icon, paramsSchema, providesTask, providesList,
     })),
-    actions: ACTION_REGISTRY.map(({ id, label, description, icon, paramsSchema, requiresTriggerTask, requiresTriggerList }) => ({
-      id, label, description, icon, paramsSchema, requiresTriggerTask: !!requiresTriggerTask, requiresTriggerList: !!requiresTriggerList,
+    // Hidden (superseded) action types are still included here — an automation
+    // saved before the Task/List/Folder consolidation still has nodes of these
+    // types, and the editor needs their def (label/icon/schema) to render them.
+    // `hidden: true` only tells the "add new action" picker to not offer them
+    // for NEW nodes.
+    actions: ACTION_REGISTRY.map(({ id, label, description, icon, paramsSchema, requiresTriggerTask, requiresTriggerList, hidden }) => ({
+      // Function-typed requirements are operation-dependent (see the consolidated
+      // Task/List/Folder nodes below) and can't cross the wire as a single bool —
+      // send `false` so the "add action" picker never blocks adding the node
+      // itself; the real per-operation check happens in validateClientSide
+      // (client) and normalizeAutomationGraph (server) once params are set.
+      id, label, description, icon, paramsSchema, hidden: !!hidden,
+      requiresTriggerTask: typeof requiresTriggerTask === 'function' ? false : !!requiresTriggerTask,
+      requiresTriggerList: typeof requiresTriggerList === 'function' ? false : !!requiresTriggerList,
     })),
   };
 }
