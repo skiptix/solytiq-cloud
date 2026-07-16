@@ -1,5 +1,6 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useMobile } from '../hooks/useBreakpoint';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
@@ -1363,7 +1364,7 @@ export default function SettingsScreen() {
       </div>
 
       {/* ── All Users Dialog ── */}
-      {allUsersOpen && (
+      {allUsersOpen && createPortal(
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) setAllUsersOpen(false); }}
@@ -1481,11 +1482,12 @@ export default function SettingsScreen() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Add User Modal ── */}
-      {addUserOpen && (
+      {addUserOpen && createPortal(
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) closeAddUser(); }}
@@ -1558,11 +1560,12 @@ export default function SettingsScreen() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Edit User Modal ── */}
-      {editUserOpen && editTarget && (
+      {editUserOpen && editTarget && createPortal(
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) closeEditUser(); }}
@@ -1625,11 +1628,12 @@ export default function SettingsScreen() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Delete User Confirmation Modal ── */}
-      {deleteTarget && (
+      {deleteTarget && createPortal(
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) setDeleteTarget(null); }}
@@ -1652,11 +1656,12 @@ export default function SettingsScreen() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Nuke Confirm Modal ── */}
-      {nukeStep > 0 && (
+      {nukeStep > 0 && createPortal(
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) setNukeStep(0); }}>
           <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 420, padding: '28px 32px', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
@@ -1697,7 +1702,8 @@ export default function SettingsScreen() {
               </>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Admin API key wizard ── */}
