@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from '../components/Icon';
 import { apiCreateAdminReadApiKey, type AdminApiScope, type AdminReadApiKey } from '../api/client';
 import { ADMIN_API_FEATURES } from './adminApiFeatures';
@@ -54,7 +55,7 @@ export default function AdminApiKeyWizard({ onClose, onCreated }: Props) {
   const panelAnim = closing ? 'settingsModalOut 190ms ease-in both' : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both';
   const backdropAnim = closing ? 'backdropOut 190ms ease both' : 'backdropIn 220ms ease both';
 
-  return (
+  return createPortal(
     <div
       onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
       style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: backdropAnim }}>
@@ -146,6 +147,7 @@ export default function AdminApiKeyWizard({ onClose, onCreated }: Props) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
