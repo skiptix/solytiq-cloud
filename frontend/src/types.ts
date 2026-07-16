@@ -369,6 +369,9 @@ export interface AutomationParamProperty {
   isListId?: boolean;
   isFolderId?: boolean;
   isWorkspaceId?: boolean;
+  /** Dropdown of sections belonging to whatever list `sectionListParam` (default 'targetListId') currently names — populated from the already-loaded list's own `sections`, no extra fetch. */
+  isSectionId?: boolean;
+  sectionListParam?: string;
   enum?: string[];
   /** Repeatable {key, value} row editor (HTTP node headers/query params). Stored as Array<{key,value}>. */
   isKeyValue?: boolean;
@@ -376,6 +379,11 @@ export interface AutomationParamProperty {
   isLongText?: boolean;
   /** Multi-line textarea holding raw source, NOT expression-substituted (the Code action's script). */
   isCode?: boolean;
+  /** Labels for a `type: 'boolean'` field's two-button toggle (defaults to Yes/No). */
+  trueLabel?: string;
+  falseLabel?: string;
+  /** This field only renders when a sibling param equals one of the given values. */
+  showIf?: { param: string; equals: string | string[] };
 }
 
 export interface AutomationParamSchema {
@@ -401,6 +409,8 @@ export interface ActionTypeDef {
   paramsSchema: AutomationParamSchema;
   requiresTriggerTask: boolean;
   requiresTriggerList: boolean;
+  /** Superseded by a consolidated Task/List/Folder node — kept resolvable (existing saved automations still use it) but hidden from the "add action" picker. */
+  hidden?: boolean;
 }
 
 export interface AutomationNode {

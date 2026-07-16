@@ -11,6 +11,7 @@ import useWorkspaceStore from '../store/useWorkspaceStore';
 import { ApiError } from '../api/client';
 import Icon from '../components/Icon';
 import TimePicker from '../components/TimePicker';
+import CalendarPicker from '../components/CalendarPicker';
 import JsonTree from '../components/JsonTree';
 
 // ---------------------------------------------------------------------------
@@ -90,6 +91,15 @@ function setNodePosition(graph: AutomationGraph, nodeId: string, position: { x: 
   return { ...graph, nodes: graph.nodes.map((n) => (n.id === nodeId ? { ...n, position } : n)) };
 }
 
+/** The consolidated Task/List/Folder nodes cover 5 different operations under one label — show which one is configured so multiple instances in the same chain are distinguishable at a glance. */
+function nodeDisplayLabel(label: string, node: AutomationNode): string {
+  if ((node.type === 'task' || node.type === 'list' || node.type === 'folder') && typeof node.params.operation === 'string' && node.params.operation) {
+    const op = node.params.operation as string;
+    return `${label}: ${op.charAt(0).toUpperCase()}${op.slice(1)}`;
+  }
+  return label;
+}
+
 /** Client-side pre-check mirroring the load-bearing parts of the backend's
  *  normalizeAutomationGraph, so mistakes surface immediately instead of only
  *  after a round trip. The backend re-validates unconditionally regardless. */
@@ -118,9 +128,22 @@ function validateClientSide(
   for (const node of actions) {
     const def = nodeTypes.actions.find((a) => a.id === node.type);
     if (!def) return `Unknown action type "${node.type}".`;
-    if (def.requiresTriggerTask && !triggerDef.providesTask) return `"${def.label}" needs a task, but "${triggerDef.label}" doesn't provide one.`;
-    if (def.requiresTriggerList && !triggerDef.providesList) return `"${def.label}" needs a list, but "${triggerDef.label}" doesn't provide one.`;
+    // The consolidated Task/List nodes need a trigger task/list depending on
+    // which `operation` was chosen (never for "create"), which can't be
+    // expressed as the def's own static requiresTriggerTask/List flag — mirrors
+    // the equivalent per-node-params check in the backend's normalizeAutomationGraph.
+    const op = node.params.operation;
+    const needsTask = (node.type === 'task' && op !== 'create') || def.requiresTriggerTask;
+    const needsList = (node.type === 'list' && op !== 'create') || def.requiresTriggerList;
+    if (needsTask && !triggerDef.providesTask) return `"${def.label}" needs a task, but "${triggerDef.label}" doesn't provide one.`;
+    if (needsList && !triggerDef.providesList) return `"${def.label}" needs a list, but "${triggerDef.label}" doesn't provide one.`;
     for (const [key, prop] of Object.entries(def.paramsSchema.properties)) {
+      if (prop.showIf) {
+        const siblingValue = node.params[prop.showIf.param];
+        const equals = prop.showIf.equals;
+        const visible = Array.isArray(equals) ? equals.includes(siblingValue as string) : siblingValue === equals;
+        if (!visible) continue;
+      }
       if (!prop.optional && !node.params[key]) return `${prop.label} is required for "${def.label}".`;
     }
   }
@@ -306,10 +329,12 @@ function NodeDataPanel({ scope, output, hasOutput, nodeId }: { scope: NodeScope 
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspaces, readOnly }: {
+function ParamField({ fieldKey, prop, value, params, onChange, lists, folders, workspaces, readOnly }: {
   fieldKey: string;
   prop: AutomationParamProperty;
   value: unknown;
+  /** The node's full params object — needed by isSectionId (look up the sibling list-id field) and showIf (evaluated one level up, in ParamsForm, but some fields still want sibling values). */
+  params: Record<string, unknown>;
   onChange: (value: unknown) => void;
   lists: List[];
   folders: Folder[];
@@ -317,9 +342,31 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
   readOnly: boolean;
 }) {
   const [showTime, setShowTime] = useState(false);
+  const [showCal, setShowCal] = useState(false);
   const label = `${prop.label}${prop.optional ? ' (optional)' : ''}`;
   const stringValue = typeof value === 'string' ? value : '';
   const [insertRef, insert] = useDragInsert((nv) => onChange(nv || undefined), stringValue, readOnly, prop.isCode ? 'code' : 'token');
+
+  if (fieldKey === 'deadline') {
+    const v = typeof value === 'string' ? value : '';
+    return (
+      <div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 5 }}>{label}</div>
+        <div style={{ position: 'relative' }}>
+          <button type="button" disabled={readOnly} onClick={() => setShowCal((s) => !s)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 10px', borderRadius: 8, border: `1px solid ${v ? 'var(--color-accent-purple-soft-alt)' : 'var(--color-border)'}`, background: v ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: readOnly ? 'default' : 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: v ? 'var(--color-primary)' : 'var(--color-text-quaternary)' }}>
+            <Icon name="calendar_today" size={13} color={v ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
+            {v ? new Date(v + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Pick a date…'}
+          </button>
+          {showCal && !readOnly && (
+            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50 }}>
+              <CalendarPicker value={v || undefined} onChange={(d) => { onChange(d); setShowCal(false); }} onClear={() => { onChange(undefined); setShowCal(false); }} />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (fieldKey === 'time') {
     const v = typeof value === 'string' ? value : '';
@@ -387,6 +434,23 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
     );
   }
 
+  if (prop.isSectionId) {
+    const v = typeof value === 'string' ? value : '';
+    const listIdField = prop.sectionListParam ?? 'targetListId';
+    const listId = typeof params[listIdField] === 'string' ? (params[listIdField] as string) : '';
+    const sections = lists.find((l) => l.id === listId)?.sections ?? [];
+    return (
+      <div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 5 }}>{label}</div>
+        <select disabled={readOnly || !listId} value={v} onChange={(e) => onChange(e.target.value || undefined)}
+          style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '7px 10px', outline: 'none', background: 'var(--color-white)', color: 'var(--color-text-primary)' }}>
+          <option value="">{!listId ? 'Choose a list first…' : sections.length === 0 ? 'No sections in this list' : 'First section (default)'}</option>
+          {sections.map((s) => <option key={s.id} value={s.id}>{s.emoji ? `${s.emoji} ` : ''}{s.label}</option>)}
+        </select>
+      </div>
+    );
+  }
+
   if (prop.isWorkspaceId) {
     const v = typeof value === 'string' ? value : '';
     return (
@@ -411,6 +475,25 @@ function ParamField({ fieldKey, prop, value, onChange, lists, folders, workspace
             <button key={opt} type="button" disabled={readOnly} onClick={() => onChange(opt)}
               style={{ padding: '6px 14px', borderRadius: 8, border: `1.5px solid ${v === opt ? 'var(--color-primary)' : 'var(--color-border)'}`, background: v === opt ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: readOnly ? 'default' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: v === opt ? 'var(--color-primary)' : 'var(--color-text-tertiary)', textTransform: 'capitalize' }}>
               {opt}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (prop.type === 'boolean') {
+    const v = value === true;
+    const trueLabel = prop.trueLabel ?? 'Yes';
+    const falseLabel = prop.falseLabel ?? 'No';
+    return (
+      <div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 5 }}>{label}</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[{ opt: false, text: falseLabel }, { opt: true, text: trueLabel }].map(({ opt, text }) => (
+            <button key={String(opt)} type="button" disabled={readOnly} onClick={() => onChange(opt)}
+              style={{ flex: 1, padding: '6px 14px', borderRadius: 8, border: `1.5px solid ${v === opt ? 'var(--color-primary)' : 'var(--color-border)'}`, background: v === opt ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: readOnly ? 'default' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: v === opt ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>
+              {text}
             </button>
           ))}
         </div>
@@ -491,14 +574,19 @@ function ParamsForm({ def, params, onChange, lists, folders, workspaces, readOnl
   workspaces: Workspace[];
   readOnly: boolean;
 }) {
-  const entries = Object.entries(def.paramsSchema.properties);
+  const entries = Object.entries(def.paramsSchema.properties).filter(([, prop]) => {
+    if (!prop.showIf) return true;
+    const siblingValue = params[prop.showIf.param];
+    const equals = prop.showIf.equals;
+    return Array.isArray(equals) ? equals.includes(siblingValue as string) : siblingValue === equals;
+  });
   if (entries.length === 0) {
     return <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)', fontStyle: 'italic' }}>No configuration needed.</div>;
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {entries.map(([key, prop]) => (
-        <ParamField key={key} fieldKey={key} prop={prop} value={params[key]} onChange={(v) => onChange({ [key]: v })} lists={lists} folders={folders} workspaces={workspaces} readOnly={readOnly} />
+        <ParamField key={key} fieldKey={key} prop={prop} value={params[key]} params={params} onChange={(v) => onChange({ [key]: v })} lists={lists} folders={folders} workspaces={workspaces} readOnly={readOnly} />
       ))}
     </div>
   );
@@ -665,7 +753,7 @@ export default function AutomationEditorScreen() {
       position: n.position,
       draggable: !readOnly,
       data: {
-        label: def?.label ?? n.type,
+        label: nodeDisplayLabel(def?.label ?? n.type, n),
         icon: def?.icon ?? (n.kind === 'trigger' ? 'bolt' : 'flash_on'),
         kind: n.kind,
         selected: n.id === selectedNodeId,
@@ -729,6 +817,7 @@ export default function AutomationEditorScreen() {
   }
 
   const availableActions = nodeTypes?.actions.filter((a) => {
+    if (a.hidden) return false;
     if (!triggerNode) return false;
     const triggerDef = nodeTypes.triggers.find((t) => t.id === triggerNode.type);
     if (!triggerDef) return true;
@@ -829,7 +918,7 @@ export default function AutomationEditorScreen() {
               </div>
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>Actions</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {(nodeTypes?.actions ?? []).map((a) => {
+                {(nodeTypes?.actions ?? []).filter((a) => !a.hidden).map((a) => {
                   const disabled = !triggerNode || !availableActions.some((x) => x.id === a.id);
                   return (
                     <button key={a.id} disabled={disabled} onClick={() => handleAddAction(a.id)} title={disabled ? 'Not compatible with the current trigger' : undefined}
@@ -880,7 +969,7 @@ export default function AutomationEditorScreen() {
                   <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                       <Icon name={def.icon} size={16} color={selectedNode.kind === 'trigger' ? 'var(--color-primary)' : 'var(--color-warning-alt)'} />
-                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14.5, fontWeight: 700, color: 'var(--color-text-primary)' }}>{def.label}</div>
+                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14.5, fontWeight: 700, color: 'var(--color-text-primary)' }}>{selectedNode.kind === 'action' ? nodeDisplayLabel(def.label, selectedNode) : def.label}</div>
                     </div>
                     <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 16 }}>{def.description}</div>
                     <ParamsForm def={def} params={selectedNode.params} onChange={(p) => handleSetParams(selectedNode.id, p)} lists={workspaceLists} folders={workspaceFolders} workspaces={otherWorkspaces} readOnly={readOnly} />
@@ -989,7 +1078,7 @@ function MobileStepList({ triggerNode, orderedActions, nodeTypes, lists, folders
             </div>
             <div style={{ flex: 1 }}>
               <StepCard
-                icon={def?.icon ?? 'flash_on'} label={def?.label ?? node.type} accent="var(--color-warning-alt)" bg="var(--color-orange-pale-5)"
+                icon={def?.icon ?? 'flash_on'} label={nodeDisplayLabel(def?.label ?? node.type, node)} accent="var(--color-warning-alt)" bg="var(--color-orange-pale-5)"
                 expanded={selectedNodeId === node.id}
                 onToggle={() => setSelectedNodeId(selectedNodeId === node.id ? null : node.id)}
                 rightAction={!readOnly ? { icon: 'close', label: '', onClick: () => onRemoveAction(node.id) } : undefined}

@@ -121,6 +121,25 @@ describe('normalizeAutomationGraph', () => {
     if (!result.ok) expect(result.error).toMatch(/needs a task/);
   });
 
+  it('rejects the consolidated "task" node under a trigger with no task, but only when operation isn\'t "create" (function-typed requiresTriggerTask)', () => {
+    const withDelete: AutomationGraph = {
+      version: 1,
+      nodes: [trigger('schedule', { freq: 'daily', time: '09:00' }), action('a1', 'task', { operation: 'delete' })],
+      edges: [edge('e1', 't1', 'a1')],
+    };
+    const deleteResult = normalizeAutomationGraph(withDelete);
+    expect(deleteResult.ok).toBe(false);
+    if (!deleteResult.ok) expect(deleteResult.error).toMatch(/needs a task/);
+
+    const withCreate: AutomationGraph = {
+      version: 1,
+      nodes: [trigger('schedule', { freq: 'daily', time: '09:00' }), action('a1', 'task', { operation: 'create', targetListId: 'list_1', title: 'x' })],
+      edges: [edge('e1', 't1', 'a1')],
+    };
+    const createResult = normalizeAutomationGraph(withCreate);
+    expect(createResult.ok).toBe(true);
+  });
+
   it('rejects list_all_completed with no listId', () => {
     const graph: AutomationGraph = {
       version: 1,

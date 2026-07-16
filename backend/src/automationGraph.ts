@@ -9,7 +9,7 @@
 // linear-only" a real invariant rather than a UI convention.
 // ---------------------------------------------------------------------------
 
-import { getTriggerDef, getActionDef } from './automationTypes';
+import { getTriggerDef, getActionDef, resolveRequirement } from './automationTypes';
 import { QueryExec } from './workspaceUtil';
 
 export interface AutomationNode {
@@ -81,10 +81,13 @@ export function normalizeAutomationGraph(raw: unknown): NormalizeResult {
     if (!actionDef) return { ok: false, error: `unknown action type "${an.type}"` };
     const paramError = actionDef.validate(an.params);
     if (paramError) return { ok: false, error: `action "${actionDef.label}": ${paramError}` };
-    if (actionDef.requiresTriggerTask && !triggerDef.providesTask) {
+    // requiresTriggerTask/List may be a function of THIS node's own params (the
+    // consolidated Task/List/Folder nodes only need one depending on which
+    // `operation` was chosen — e.g. "create" needs neither).
+    if (resolveRequirement(actionDef.requiresTriggerTask, an.params) && !triggerDef.providesTask) {
       return { ok: false, error: `action "${actionDef.label}" needs a task, but trigger "${triggerDef.label}" doesn't provide one` };
     }
-    if (actionDef.requiresTriggerList && !triggerDef.providesList) {
+    if (resolveRequirement(actionDef.requiresTriggerList, an.params) && !triggerDef.providesList) {
       return { ok: false, error: `action "${actionDef.label}" needs a list, but trigger "${triggerDef.label}" doesn't provide one` };
     }
   }
