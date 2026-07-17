@@ -22,10 +22,15 @@ import TaskDialog from '../components/TaskDialog';
 import CreatorBubble from '../components/CreatorBubble';
 
 // ── Shared style tokens ────────────────────────────────────────────
+// Matches the surface used by the Folder Dashboard and To-Do screens.
 const CARD: React.CSSProperties = {
-  background: 'var(--color-white)', border: '1px solid var(--color-border-alt)',
-  borderRadius: 16, boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.03)',
+  background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)',
+  borderRadius: 16,
 };
+// Smooth, staggered entrance for each box when the dashboard opens.
+const enterAnim = (delayMs: number): React.CSSProperties => ({
+  animation: `cardIn 480ms cubic-bezier(0.22,1,0.36,1) ${delayMs}ms both`,
+});
 // How many rows the (deliberately non-scrolling) My Tasks box shows before the
 // rest is deferred to the "All tasks" dialog.
 const MY_TASKS_CAP = 8;
@@ -93,8 +98,17 @@ function TaskRow({ task, source, workspace, todayIso, onToggle, onOpen }: {
       </div>
       {task.deadline && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, flexShrink: 0 }}>
-          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: dateColor }}>{friendlyDate(task.deadline, todayIso)}</span>
-          {task.time && <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--color-text-quaternary)' }}>{task.time}</span>}
+          {overdue ? (
+            <>
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-error)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Overdue</span>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--color-text-quaternary)' }}>{friendlyDate(task.deadline, todayIso)}</span>
+            </>
+          ) : (
+            <>
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: dateColor }}>{friendlyDate(task.deadline, todayIso)}</span>
+              {task.time && <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--color-text-quaternary)' }}>{task.time}</span>}
+            </>
+          )}
         </div>
       )}
     </div>
@@ -122,7 +136,7 @@ function MyTasksBox({ todayTasks, weekTasks, resolve, wsById, todayIso, onToggle
   );
 
   return (
-    <section style={{ ...CARD, padding: '18px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <section style={{ ...CARD, ...enterAnim(40), padding: '18px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="task_alt" size={17} color="var(--color-primary)" />
@@ -261,7 +275,7 @@ function DynamicBox({ mode, setMode, milestoneItems, taskItems }: {
   mode: DynamicMode; setMode: (m: DynamicMode) => void; milestoneItems: TimelineItem[]; taskItems: TimelineItem[];
 }) {
   return (
-    <section style={{ ...CARD, padding: '16px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <section style={{ ...CARD, ...enterAnim(200), flex: 1, minHeight: 0, padding: '16px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--color-blue-pale-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="timeline" size={17} color="var(--color-blue-mid-7)" />
@@ -322,35 +336,8 @@ function RightColumn({ meetings, currentUserId, onSeeCalendar }: { meetings: Mee
     return ka - kb;
   });
   return (
-    <section style={{ ...CARD, display: 'flex', flexDirection: 'column' }}>
-      {/* My Meetings */}
-      <div style={{ padding: '18px 16px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="event" size={17} color="var(--color-primary)" />
-          </div>
-          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>My Meetings</div>
-          <div style={{ flex: 1 }} />
-          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', borderRadius: 9999, padding: '2px 9px' }}>{sorted.length}</span>
-        </div>
-        <SectionLabel>Today</SectionLabel>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {sorted.length === 0 ? (
-            <div style={{ padding: '20px 12px', textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>No meetings today.</div>
-          ) : sorted.map(m => <MeetingRow key={m.id} meeting={m} currentUserId={currentUserId} onOpen={onSeeCalendar} />)}
-        </div>
-        <button onClick={onSeeCalendar}
-          onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-purple-tint-2)'; }}
-          style={{ width: '100%', background: 'transparent', border: '1px dashed var(--color-purple-tint-2)', borderRadius: 9, padding: '10px', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 160ms' }}>
-          <Icon name="calendar_month" size={15} color="var(--color-primary)" />
-          See all meetings
-        </button>
-      </div>
-
-      <div style={{ height: 1, background: 'var(--color-divider)', margin: '0 16px' }} />
-
-      {/* Notifications — WiP placeholder, intentionally not wired up. */}
+    <section style={{ ...CARD, ...enterAnim(120), display: 'flex', flexDirection: 'column' }}>
+      {/* Notifications — WiP placeholder, intentionally not wired up. (Top) */}
       <div style={{ padding: '18px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -368,6 +355,33 @@ function RightColumn({ meetings, currentUserId, onSeeCalendar }: { meetings: Mee
             Notifications are on the way — you'll see mentions, invites and reminders here.
           </div>
         </div>
+      </div>
+
+      <div style={{ height: 1, background: 'var(--color-divider)', margin: '0 16px' }} />
+
+      {/* My Meetings — fills the rest, "See all" pinned to the bottom. */}
+      <div style={{ flex: 1, minHeight: 0, padding: '18px 16px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="event" size={17} color="var(--color-primary)" />
+          </div>
+          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>My Meetings</div>
+          <div style={{ flex: 1 }} />
+          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', borderRadius: 9999, padding: '2px 9px' }}>{sorted.length}</span>
+        </div>
+        <SectionLabel>Today</SectionLabel>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {sorted.length === 0 ? (
+            <div style={{ padding: '20px 12px', textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>No meetings today.</div>
+          ) : sorted.map(m => <MeetingRow key={m.id} meeting={m} currentUserId={currentUserId} onOpen={onSeeCalendar} />)}
+        </div>
+        <button onClick={onSeeCalendar}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-purple-tint-2)'; }}
+          style={{ marginTop: 'auto', width: '100%', background: 'transparent', border: '1px dashed var(--color-purple-tint-2)', borderRadius: 9, padding: '10px', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 160ms' }}>
+          <Icon name="calendar_month" size={15} color="var(--color-primary)" />
+          See all meetings
+        </button>
       </div>
     </section>
   );
@@ -449,8 +463,11 @@ export default function DashboardScreen() {
   const resolve = useCallback((t: Task) => resolveTaskSource(t, listById, mdByTodoListId), [listById, mdByTodoListId]);
 
   // ── Derived task sets ──
-  const todayTasks = useMemo(() => sortByDeadline(tasks.filter(t => !t.checked && isDueToday(t.deadline, todayIso))), [tasks, todayIso]);
-  const weekTasks = useMemo(() => sortByDeadline(tasks.filter(t => !t.checked && isDueWithinNextDays(t.deadline, todayIso, 7))), [tasks, todayIso]);
+  // Both "Today" and "Next 7 days" also surface overdue open tasks — they sort to
+  // the top (earlier dates first) and carry an "Overdue" label, so nothing due in
+  // the past slips out of view.
+  const todayTasks = useMemo(() => sortByDeadline(tasks.filter(t => !t.checked && (isOverdue(t, todayIso) || isDueToday(t.deadline, todayIso)))), [tasks, todayIso]);
+  const weekTasks = useMemo(() => sortByDeadline(tasks.filter(t => !t.checked && (isOverdue(t, todayIso) || isDueWithinNextDays(t.deadline, todayIso, 7)))), [tasks, todayIso]);
   const allCounts = useMemo(() => countTasks(tasks), [tasks]);
   const weekCounts = useMemo(() => countTasks(tasks.filter(t => isDueWithinNextDays(t.deadline, todayIso, 7))), [tasks, todayIso]);
   const overdueCount = useMemo(() => tasks.filter(t => isOverdue(t, todayIso)).length, [tasks, todayIso]);
@@ -514,15 +531,17 @@ export default function DashboardScreen() {
     else apiDeleteTask(id).catch(() => void refresh());
   }, [tasks, resolve, refresh]);
 
+  // Desktop: three equal-height columns that fill the viewport, so every box
+  // reads as full-height even with little content. Mobile: a simple stack.
   const gridStyle: React.CSSProperties = isMobile
     ? { display: 'flex', flexDirection: 'column', gap: 16 }
-    : { display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1.3fr) minmax(0, 0.95fr)', gap: 16, alignItems: 'start' };
+    : { display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1.3fr) minmax(0, 0.95fr)', gap: 16, alignItems: 'stretch', flex: 1, minHeight: 0 };
 
   const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
-      <div style={{ maxWidth: 1440, margin: '0 auto', padding: isMobile ? '20px 16px 90px' : '28px 28px 48px', display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
+      <div style={{ maxWidth: 1440, margin: '0 auto', padding: isMobile ? '20px 16px 90px' : '28px 28px 48px', display: 'flex', flexDirection: 'column', gap: 20, width: '100%', minHeight: '100%', boxSizing: 'border-box' }}>
 
         <header style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div>
@@ -530,7 +549,7 @@ export default function DashboardScreen() {
             <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 27, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.02em', lineHeight: 1.15 }}>Dashboard</h1>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
               {loading ? 'Gathering everything across your workspaces…'
-                : todayTasks.length > 0 ? <>You have <strong style={{ color: 'var(--color-primary)' }}>{todayTasks.length} task{todayTasks.length === 1 ? '' : 's'}</strong> due today across {workspaces.length} workspace{workspaces.length === 1 ? '' : 's'}.</>
+                : todayTasks.length > 0 ? <>You have <strong style={{ color: 'var(--color-primary)' }}>{todayTasks.length} task{todayTasks.length === 1 ? '' : 's'}</strong> on your plate today across {workspaces.length} workspace{workspaces.length === 1 ? '' : 's'}.</>
                 : <>Nothing due today. <strong style={{ color: 'var(--color-text-primary)' }}>{weekTasks.length}</strong> ahead in the next 7 days.</>}
             </div>
           </div>
@@ -550,18 +569,18 @@ export default function DashboardScreen() {
           {/* Middle — charts + dynamic timeline */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-              <div style={{ ...CARD, flex: '1 1 220px', minWidth: 0, padding: '16px 16px' }}>
+              <div style={{ ...CARD, ...enterAnim(100), flex: '1 1 220px', minWidth: 0, padding: '16px 16px' }}>
                 <DonutChart title="All tasks" subtitle={`${allCounts.total} total`} completed={allCounts.completed} open={allCounts.open} />
               </div>
-              <div style={{ ...CARD, flex: '1 1 220px', minWidth: 0, padding: '16px 16px' }}>
+              <div style={{ ...CARD, ...enterAnim(140), flex: '1 1 220px', minWidth: 0, padding: '16px 16px' }}>
                 <DonutChart title="Next 7 days" subtitle={`${weekCounts.total} due`} completed={weekCounts.completed} open={weekCounts.open} />
               </div>
             </div>
             <DynamicBox mode={dynamicMode} setMode={setDynamicMode} milestoneItems={milestoneItems} taskItems={taskItems} />
           </div>
 
-          {/* Right — meetings + notifications */}
-          <RightColumn meetings={meetings} currentUserId={currentUserId} onSeeCalendar={() => navigate('/calendar')} />
+          {/* Right — notifications + meetings; "See all" deep-links to a meetings-only Calendar */}
+          <RightColumn meetings={meetings} currentUserId={currentUserId} onSeeCalendar={() => navigate('/calendar?show=meetings')} />
         </div>
       </div>
 

@@ -39,6 +39,12 @@ const PRIORITY_COLORS: Record<string, string> = { High: 'var(--color-orange)', M
 const MEETING_COLORS = ['var(--color-primary)', 'var(--color-blue-mid-4)', 'var(--color-blue-mid-6)', 'var(--color-success)', 'var(--color-warning-alt)', 'var(--color-red-mid-2)', 'var(--color-pink-mid-2)', 'var(--color-purple-mid-3)'];
 const DEFAULT_MEETING_COLOR = 'var(--color-blue-mid-4)';
 const DEFAULT_MILESTONE_COLOR = 'var(--color-blue-mid-6)';
+// Event families the Calendar filter can toggle.
+const KIND_META: Array<{ id: 'meeting' | 'task' | 'milestone'; label: string; icon: string }> = [
+  { id: 'meeting', label: 'Meetings', icon: 'event' },
+  { id: 'task', label: 'Task deadlines', icon: 'task_alt' },
+  { id: 'milestone', label: 'Milestones', icon: 'flag' },
+];
 
 const HOUR_H = 48;                 // px per hour in the Week time-grid
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -1051,6 +1057,17 @@ export default function CalendarScreen() {
     const result = typeof next === 'function' ? next(cur) : next;
     useUserPrefsStore.getState().setCalendarHiddenWorkspaces([...result]);
   }, []);
+  // Event-family filter (task deadlines / milestones / meetings). Persisted like
+  // the workspace filter; the dashboard's "See all meetings" deep-links into a
+  // meetings-only view via ?show=meetings (handled below).
+  const hiddenKindsArr = useUserPrefsStore(s => s.calendarHiddenKinds);
+  const hiddenKinds = useMemo(() => new Set(hiddenKindsArr), [hiddenKindsArr]);
+  const kindVisible = useCallback((k: string) => !hiddenKinds.has(k), [hiddenKinds]);
+  const toggleKind = (k: string) => {
+    const cur = new Set(useUserPrefsStore.getState().calendarHiddenKinds);
+    if (cur.has(k)) cur.delete(k); else cur.add(k);
+    useUserPrefsStore.getState().setCalendarHiddenKinds([...cur]);
+  };
   const [anchor, setAnchor] = useState<Date>(today);
   const [showFilter, setShowFilter] = useState(false);
 
@@ -1132,6 +1149,19 @@ export default function CalendarScreen() {
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, [showFilter]);
+
+  // Deep-link from the dashboard's "See all meetings": ?show=meetings switches
+  // the event-family filter to meetings-only, then the param is stripped so a
+  // later refresh doesn't re-apply it (the filter itself persists). Read straight
+  // off window.location to avoid a router hook the React Compiler can't model.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('show') !== 'meetings') return;
+    useUserPrefsStore.getState().setCalendarHiddenKinds(['task', 'milestone']);
+    params.delete('show');
+    const qs = params.toString();
+    window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+  }, []);
 
   // Close unscheduled popover on outside click.
   useEffect(() => {
@@ -1222,6 +1252,23 @@ export default function CalendarScreen() {
     }
     return map;
   }, [allTasks, timelines, meetings, wsVisible, navigate]);
+
+  // Event-family filter, applied as a cheap post-process so the (heavier)
+  // chip-building memo above stays untouched. A plain derived value — the React
+  // Compiler memoizes it — so no manual dependency list to keep in sync.
+  // Event-family filter, applied as a cheap post-process so the (heavier)
+  // chip-building memo above stays untouched. A plain derived value — the React
+  // Compiler memoizes it — so there's no manual dependency list to keep in sync.
+  const visibleChipsByDate: Record<string, Chip[]> = (() => {
+    if (hiddenKindsArr.length === 0) return chipsByDate;
+    const hidden = new Set(hiddenKindsArr);
+    const out: Record<string, Chip[]> = {};
+    for (const d of Object.keys(chipsByDate)) {
+      const arr = chipsByDate[d].filter(c => !hidden.has(c.kind));
+      if (arr.length) out[d] = arr;
+    }
+    return out;
+  })();
 
   // ── Unscheduled tasks (panel) ──────────────────────────────────
   const unscheduled = allTasks.filter(t => !t.deadline && !t.checked && wsVisible(t.workspaceId));
@@ -1404,7 +1451,9 @@ export default function CalendarScreen() {
       : `${MONTHS_SHORT[ws.getMonth()]} ${ws.getDate()} – ${MONTHS_SHORT[we.getMonth()]} ${we.getDate()}, ${we.getFullYear()}`;
   })();
 
-  const showPanel = view !== 'year';
+  // The unscheduled-tasks panel is task-centric, so hide it when task deadlines
+  // are filtered out (e.g. the meetings-only view).
+  const showPanel = view !== 'year' && kindVisible('task');
 
   // ════════════════════════════════════════════════════════════════
   // Views
@@ -1428,7 +1477,7 @@ export default function CalendarScreen() {
           {cells.map((cell, i) => {
             const iso = toIso(cell.date);
             const isToday = iso === todayIso;
-            const chips = cell.current ? (chipsByDate[iso] ?? []) : [];
+            const chips = cell.current ? (visibleChipsByDate[iso] ?? []) : [];
             const visible = chips.slice(0, 3);
             const overflow = chips.length - visible.length;
             return (
@@ -1475,7 +1524,7 @@ export default function CalendarScreen() {
 
     const dayData = days.map(d => {
       const iso = toIso(d);
-      const chips = chipsByDate[iso] ?? [];
+      const chips = visibleChipsByDate[iso] ?? [];
       const timed = chips.filter(c => c.startMin != null);
       const untimed = chips.filter(c => c.startMin == null);
       return { d, iso, isToday: iso === todayIso, timed, untimed, layout: layoutDay(timed) };
@@ -1596,7 +1645,7 @@ export default function CalendarScreen() {
                     if (!d) return <div key={i} />;
                     const iso = toIso(d);
                     const isToday = iso === todayIso;
-                    const chips = chipsByDate[iso] ?? [];
+                    const chips = visibleChipsByDate[iso] ?? [];
                     const dots = chips.slice(0, 3);
                     return (
                       <button key={i} onClick={() => { setAnchor(d); setView('month'); }}
@@ -1659,13 +1708,36 @@ export default function CalendarScreen() {
             {/* Workspace filter */}
             <div ref={filterRef} style={{ position: 'relative' }}>
               <button onClick={() => setShowFilter(v => !v)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: hiddenWs.size > 0 ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: hiddenWs.size > 0 ? 'var(--color-surface-tint)' : 'transparent', border: `1px solid ${hiddenWs.size > 0 ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
-                <Icon name="filter_list" size={16} color={hiddenWs.size > 0 ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
-                {!isMobile && 'Workspaces'}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: (hiddenWs.size > 0 || hiddenKinds.size > 0) ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: (hiddenWs.size > 0 || hiddenKinds.size > 0) ? 'var(--color-surface-tint)' : 'transparent', border: `1px solid ${(hiddenWs.size > 0 || hiddenKinds.size > 0) ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
+                <Icon name="filter_list" size={16} color={(hiddenWs.size > 0 || hiddenKinds.size > 0) ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
+                {!isMobile && 'Filter'}
                 {hiddenWs.size > 0 && <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, color: 'var(--color-white)', background: 'var(--color-primary)', borderRadius: 9999, padding: '1px 6px' }}>{Math.max(workspaces.length - hiddenWs.size, 0)}/{workspaces.length}</span>}
               </button>
               {showFilter && (
                 <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 250, maxHeight: 360, overflowY: 'auto', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border-alt)', boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.14)', zIndex: 400, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                  {/* Event families — hide meetings / task deadlines / milestones */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px 8px' }}>
+                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-quaternary)' }}>Show</span>
+                    {hiddenKinds.size > 0 && <button onClick={() => useUserPrefsStore.getState().setCalendarHiddenKinds([])} style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>Reset</button>}
+                  </div>
+                  <div style={{ padding: '0 8px 6px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {KIND_META.map(k => {
+                      const on = kindVisible(k.id);
+                      return (
+                        <button key={k.id} onClick={() => toggleKind(k.id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 120ms' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                          <div style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? 'var(--color-primary)' : 'var(--color-purple-tint-7)'}`, background: on ? 'var(--color-primary)' : 'var(--color-white)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 120ms' }}>
+                            {on && <Icon name="check" size={13} color="var(--color-white)" />}
+                          </div>
+                          <Icon name={k.icon} size={15} color="var(--color-text-tertiary)" />
+                          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-primary)' }}>{k.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ height: 1, background: 'var(--color-divider)', margin: '2px 12px 0' }} />
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px 8px' }}>
                     <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-quaternary)' }}>Workspaces</span>
                     <div style={{ display: 'flex', gap: 8 }}>
@@ -1833,7 +1905,7 @@ export default function CalendarScreen() {
         <AddToDateModal date={addingTaskDate} lists={lists} onAdd={handleAddToDate} onClose={() => setAddingTaskDate(null)} />
       )}
       {dayItemsIso && (
-        <DayItemsModal date={dayItemsIso} chips={chipsByDate[dayItemsIso] ?? []} onOpenMenu={openChipMenu} onClose={() => setDayItemsIso(null)} />
+        <DayItemsModal date={dayItemsIso} chips={visibleChipsByDate[dayItemsIso] ?? []} onOpenMenu={openChipMenu} onClose={() => setDayItemsIso(null)} />
       )}
       {editingMeeting && editingMeeting.isOwner === false ? (
         <MeetingViewModal
