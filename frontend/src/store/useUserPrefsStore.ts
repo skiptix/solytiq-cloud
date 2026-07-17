@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 
 export type CalendarView = 'week' | 'month' | 'year';
 export type ListViewMode = 'list' | 'kanban';
+/** The three event families the Calendar can show; any can be hidden. */
+export type CalendarKind = 'task' | 'milestone' | 'meeting';
 
 interface UserPrefsState {
   timezone: string;
@@ -16,14 +18,18 @@ interface UserPrefsState {
   // ── Calendar UI preferences (persisted until logout / cache clear) ──
   calendarView: CalendarView;
   calendarHiddenWorkspaces: string[];
+  /** Event families hidden from the Calendar (e.g. ['task','milestone'] = meetings only). */
+  calendarHiddenKinds: string[];
   setCalendarView: (v: CalendarView) => void;
   setCalendarHiddenWorkspaces: (ids: string[]) => void;
+  setCalendarHiddenKinds: (kinds: string[]) => void;
   resetCalendarPrefs: () => void;
 }
 
 const CALENDAR_DEFAULTS = {
   calendarView: 'month' as CalendarView,
   calendarHiddenWorkspaces: [] as string[],
+  calendarHiddenKinds: [] as string[],
 };
 
 const useUserPrefsStore = create<UserPrefsState>()(
@@ -40,6 +46,7 @@ const useUserPrefsStore = create<UserPrefsState>()(
       ...CALENDAR_DEFAULTS,
       setCalendarView: (v) => set({ calendarView: v }),
       setCalendarHiddenWorkspaces: (ids) => set({ calendarHiddenWorkspaces: ids }),
+      setCalendarHiddenKinds: (kinds) => set({ calendarHiddenKinds: kinds }),
       resetCalendarPrefs: () => set({ ...CALENDAR_DEFAULTS }),
     }),
     {

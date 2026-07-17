@@ -2,12 +2,12 @@
  * A small two-segment progress donut: Completed vs Open.
  *
  * Colours are the app's status/brand tokens (Completed = success green, Open =
- * primary purple) — validated for CVD separation. Identity is never colour-alone:
- * a legend with counts is always rendered and the centre carries the headline
- * figure, satisfying the "visible labels" relief the palette check flags for the
- * green-on-surface contrast. A 2px surface gap separates the two arcs.
+ * primary purple) — validated for CVD separation. A 2px surface gap separates
+ * the two arcs. There is no persistent legend; identity is carried by the SVG
+ * `<title>` (screen readers), the always-visible centre percentage, and a hover
+ * tooltip that breaks the ring down into its Completed / Open counts.
  */
-import { useId } from 'react';
+import { useId, useState } from 'react';
 
 interface DonutChartProps {
   title: string;
@@ -36,6 +36,7 @@ function arcPath(cx: number, cy: number, r: number, startAngle: number, endAngle
 }
 
 export default function DonutChart({ title, subtitle, completed, open, size = 128 }: DonutChartProps) {
+  const [hov, setHov] = useState(false);
   const total = completed + open;
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
@@ -51,11 +52,21 @@ export default function DonutChart({ title, subtitle, completed, open, size = 12
   const completedEnd = total > 0 ? (completed / total) * 360 : 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>{title}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-labelledby={titleId} style={{ flexShrink: 0 }}>
-          <title id={titleId}>{`${title}: ${completed} of ${total} completed (${pct}%)`}</title>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', minWidth: 0 }}>
+      <div style={{ alignSelf: 'stretch', display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>{title}</span>
+        <div style={{ flex: 1 }} />
+        {subtitle && <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', whiteSpace: 'nowrap' }}>{subtitle}</span>}
+      </div>
+
+      <div
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
+        style={{ position: 'relative', width: size, height: size, cursor: 'default' }}
+      >
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-labelledby={titleId}
+          style={{ display: 'block', transformOrigin: 'center', transform: hov ? 'scale(1.05)' : 'scale(1)', transition: 'transform 260ms cubic-bezier(0.34,1.56,0.64,1), filter 200ms', filter: hov ? 'drop-shadow(0 8px 18px rgba(var(--color-primary-rgb), 0.20))' : 'none' }}>
+          <title id={titleId}>{`${title}: ${completed} of ${total} completed (${pct}%), ${open} open`}</title>
           {/* Track */}
           <circle cx={cx} cy={cy} r={r} fill="none" stroke={TRACK_COLOR} strokeWidth={stroke} />
           {total === 0 ? null : completed === total ? (
@@ -79,25 +90,24 @@ export default function DonutChart({ title, subtitle, completed, open, size = 12
           </text>
         </svg>
 
-        {/* Legend + counts — identity is never colour-alone. */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
-          <LegendRow color={COMPLETED_COLOR} label="Completed" value={completed} />
-          <LegendRow color={OPEN_COLOR} label="Open" value={open} />
-          {subtitle && (
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', marginTop: 2 }}>{subtitle}</div>
-          )}
-        </div>
+        {/* Hover tooltip — the breakdown, so counts + identity are one interaction away. */}
+        {total > 0 && (
+          <div style={{ position: 'absolute', left: '50%', top: -10, transform: 'translate(-50%, -100%)', opacity: hov ? 1 : 0, transition: 'opacity 160ms', pointerEvents: 'none', background: 'var(--color-text-primary)', borderRadius: 9, padding: '8px 11px', boxShadow: '0 6px 22px rgba(var(--color-black-rgb), 0.24)', display: 'flex', flexDirection: 'column', gap: 5, whiteSpace: 'nowrap', zIndex: 5 }}>
+            <TooltipRow color={COMPLETED_COLOR} value={completed} label="Completed" />
+            <TooltipRow color={OPEN_COLOR} value={open} label="Open" />
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function LegendRow({ color, label, value }: { color: string; label: string; value: number }) {
+function TooltipRow({ color, value, label }: { color: string; value: number; label: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-      <span style={{ width: 10, height: 10, borderRadius: 3, background: color, flexShrink: 0 }} />
-      <span style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700, color: 'var(--color-text-primary)', lineHeight: 1 }}>{value}</span>
-      <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+      <span style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
+      <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 700, color: 'var(--color-white)', lineHeight: 1 }}>{value}</span>
+      <span style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'rgba(var(--color-white-rgb), 0.75)' }}>{label}</span>
     </div>
   );
 }
