@@ -82,6 +82,10 @@ function AppLayout() {
   const [addWizardMode, setAddWizardMode] = useState<'list' | 'timeline' | undefined>(undefined);
   const isMobile = useMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Suppresses the sidebar/content width transition while the resize handle is
+  // being dragged (so it tracks the cursor 1:1), while still animating smoothly
+  // on a collapse/expand toggle (click or keyboard shortcut).
+  const [sidebarResizing, setSidebarResizing] = useState(false);
   const { installedApps, loaded: appsLoaded } = useInstalledAppsStore();
   const gpsInstalled = installedApps.includes('gps');
   const filesInstalled = installedApps.includes('files');
@@ -268,12 +272,13 @@ function AppLayout() {
   // Sidebar resize
   const handleResizeStart = useCallback((initialX: number) => {
     const startW = sidebarWidth;
+    setSidebarResizing(true);
     const onMove = (e: MouseEvent) => {
       const delta = e.clientX - initialX;
       const newW = Math.max(60, Math.min(380, startW + delta));
       setSidebarWidth(newW < 140 ? 60 : newW);
     };
-    const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    const onUp = () => { setSidebarResizing(false); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   }, [sidebarWidth, setSidebarWidth]);
@@ -341,8 +346,13 @@ function AppLayout() {
         onTaskDropToList={moveTaskToList}
         isMobile={isMobile}
         drawerOpen={drawerOpen}
+        resizing={sidebarResizing}
       />
-      <div style={{ marginLeft: isMobile ? 0 : sidebarWidth, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+      <div style={{
+        marginLeft: isMobile ? 0 : sidebarWidth,
+        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0,
+        transition: isMobile || sidebarResizing ? undefined : 'margin-left 240ms cubic-bezier(0.22,1,0.36,1)',
+      }}>
         <TopBar
           onNavigate={navigate}
           isMobile={isMobile}

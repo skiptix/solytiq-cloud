@@ -506,6 +506,35 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
   const { updateFolder, deleteFolder, setFolders, setLists, setTimelines } = useAppStore();
   const currentWorkspaceId = useWorkspaceStore(s => s.currentWorkspaceId);
 
+  // Collapsed-sidebar fold-out: a folder's contents are otherwise unreachable
+  // from the sidebar itself once icon-only (its own expand/collapse chevron is
+  // hidden, and there's no room for nested rows) — hovering the icon instead
+  // pops a flyout with the same lists/timelines the expanded view would show.
+  const [flyoutOpen, setFlyoutOpen] = useState(false);
+  const [flyoutPos, setFlyoutPos] = useState<{ top: number; left: number } | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const flyoutCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const openFlyout = () => {
+    if (flyoutCloseTimer.current) { clearTimeout(flyoutCloseTimer.current); flyoutCloseTimer.current = null; }
+    const rect = rowRef.current?.getBoundingClientRect();
+    if (rect) {
+      // Rough content-height estimate (header row + divider + one row per item)
+      // so a folder near the bottom of the viewport opens upward instead of
+      // running off-screen — cheaper than a post-render measure-and-reflow pass.
+      const estimatedHeight = 46 + Math.max(1, lists.length + timelines.length) * 33;
+      const top = Math.min(rect.top, Math.max(16, window.innerHeight - estimatedHeight - 16));
+      setFlyoutPos({ top, left: rect.right + 8 });
+    }
+    setFlyoutOpen(true);
+  };
+  const scheduleFlyoutClose = () => {
+    if (flyoutCloseTimer.current) clearTimeout(flyoutCloseTimer.current);
+    flyoutCloseTimer.current = setTimeout(() => setFlyoutOpen(false), 150);
+  };
+  useEffect(() => () => { if (flyoutCloseTimer.current) clearTimeout(flyoutCloseTimer.current); }, []);
+  const navigateFromFlyout = (path: string) => { setFlyoutOpen(false); onNavigate(path); };
+
   const openMenu = (e: React.MouseEvent) => {
     e.stopPropagation();
     const rect = menuBtnRef.current?.getBoundingClientRect();
@@ -551,6 +580,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
     <>
       {/* Folder header */}
       <div
+        ref={rowRef}
         draggable={!collapsed && !editingName}
         onDragStart={e => onFolderDragStart(folder.id, e)}
         onDragOver={e => {
@@ -566,8 +596,8 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
           onFolderReorderDrop(folder.id, e);
         }}
         onContextMenu={openContextMenu}
-        onMouseEnter={() => setHov(true)}
-        onMouseLeave={() => setHov(false)}
+        onMouseEnter={() => { setHov(true); if (collapsed) openFlyout(); }}
+        onMouseLeave={() => { setHov(false); if (collapsed) scheduleFlyoutClose(); }}
         style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', borderTop: dragOverFolderReorderId === folder.id ? '2px solid var(--color-accent-purple-light)' : isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', transition: 'all 120ms', background: isDragTarget ? `${accentColor}15` : 'transparent' }}>
 
         {editingName && !collapsed ? (
@@ -683,6 +713,81 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
             </div>
           )}
         </div>
+      )}
+
+      {/* Collapsed-sidebar fold-out — mirrors the expanded folder contents above,
+          anchored to the right of the icon and shown on hover. */}
+      {collapsed && flyoutOpen && flyoutPos && createPortal(
+        <div
+          onMouseEnter={openFlyout}
+          onMouseLeave={scheduleFlyoutClose}
+          style={{
+            position: 'fixed', top: flyoutPos.top, left: flyoutPos.left, zIndex: 200,
+            minWidth: 220, maxWidth: 280, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto',
+            background: 'var(--color-white)', borderRadius: 12, border: '1px solid var(--color-border)',
+            boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 6,
+            animation: 'menuIn 160ms ease both', transformOrigin: 'top left',
+          }}
+        >
+          <button
+            onClick={() => navigateFromFlyout(`/folder/${folder.id}`)}
+            title={`Open ${folder.name} overview`}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 8px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 8, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 700, color: accentColor, textAlign: 'left' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            {folder.emoji
+              ? <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{folder.emoji}</span>
+              : <Icon name="folder" size={16} color={accentColor} />}
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{folder.name}</span>
+          </button>
+          <div style={{ height: 1, background: 'var(--color-divider)', margin: '4px 4px 6px' }} />
+          {lists.length === 0 && timelines.length === 0 ? (
+            <div style={{ padding: '6px 8px', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', fontStyle: 'italic' }}>
+              Empty folder
+            </div>
+          ) : (
+            <>
+              {lists.map(list => {
+                const isActive = active === 'list' && activeListId === list.id;
+                return (
+                  <button
+                    key={list.id}
+                    onClick={() => navigateFromFlyout(`/list/${list.id}`)}
+                    title={list.name}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 8px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 8, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: isActive ? 600 : 450, color: isActive ? (list.color ?? 'var(--color-primary)') : 'var(--color-text-secondary)', textAlign: 'left' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = list.colorBg ?? 'var(--color-surface-tint-2)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    {list.emoji
+                      ? <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{list.emoji}</span>
+                      : <Icon name="format_list_bulleted" size={16} color={isActive ? (list.color ?? 'var(--color-primary)') : 'var(--color-text-tertiary)'} />}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{list.name}</span>
+                  </button>
+                );
+              })}
+              {timelines.map(timeline => {
+                const isActive = active === 'timeline' && activeTimelineId === timeline.id;
+                return (
+                  <button
+                    key={timeline.id}
+                    onClick={() => navigateFromFlyout(`/timeline/${timeline.id}`)}
+                    title={timeline.name}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 8px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 8, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: isActive ? 600 : 450, color: isActive ? (timeline.color ?? 'var(--color-blue-mid-7)') : 'var(--color-text-secondary)', textAlign: 'left' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = timeline.colorBg ?? 'var(--color-surface-tint-2)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    {timeline.emoji
+                      ? <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{timeline.emoji}</span>
+                      : <Icon name="timeline" size={16} color={isActive ? (timeline.color ?? 'var(--color-blue-mid-7)') : 'var(--color-text-tertiary)'} />}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{timeline.name}</span>
+                  </button>
+                );
+              })}
+            </>
+          )}
+        </div>,
+        document.body
       )}
 
       {/* Right-click / "..." menu — shared component, two triggers */}
@@ -1155,6 +1260,11 @@ interface SidebarProps {
   onTaskDropToList: (taskId: number, listId: string) => void;
   isMobile?: boolean;
   drawerOpen?: boolean;
+  /** True while the user is actively dragging the resize handle — width
+   *  transitions are suppressed during a live drag so the sidebar tracks the
+   *  cursor 1:1, and re-enabled the moment the drag ends (or on a collapse/
+   *  expand toggle) so those changes animate smoothly instead of snapping. */
+  resizing?: boolean;
 }
 
 function fmtDistShort(m?: number | null) {
@@ -1162,7 +1272,7 @@ function fmtDistShort(m?: number | null) {
   return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`;
 }
 
-export default function Sidebar({ active, activeListId, activeTimelineId, activeFolderId, activeGpsFileId, activeMarkdownListId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList, isMobile, drawerOpen }: SidebarProps) {
+export default function Sidebar({ active, activeListId, activeTimelineId, activeFolderId, activeGpsFileId, activeMarkdownListId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList, isMobile, drawerOpen, resizing }: SidebarProps) {
   const markdownLists = useMarkdownListsStore(s => s.markdownLists);
   const mdTodoListIds = new Set(markdownLists.map(m => m.todoListId).filter((x): x is string => !!x));
   const collapsed = isMobile ? false : width <= 72;
@@ -1366,7 +1476,9 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         overflowY: 'auto',
         overflowX: 'hidden',
         boxSizing: 'border-box',
-        transition: isMobile ? 'left 260ms cubic-bezier(0.22,1,0.36,1)' : undefined,
+        transition: isMobile
+          ? 'left 260ms cubic-bezier(0.22,1,0.36,1)'
+          : resizing ? undefined : 'width 240ms cubic-bezier(0.22,1,0.36,1), min-width 240ms cubic-bezier(0.22,1,0.36,1)',
       }}>
         {/* Resize handle — desktop only */}
         {!isMobile && (
@@ -1379,7 +1491,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
                 onMouseDown={e => e.stopPropagation()}
                 onClick={e => { e.stopPropagation(); toggleCollapsed(); }}
                 title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                style={{ position: 'fixed', top: '50%', left: width - 12, transform: 'translateY(-50%)', width: 24, height: 24, borderRadius: 7, border: '1px solid var(--color-border)', background: 'var(--color-white)', boxShadow: '0 2px 8px rgba(var(--color-primary-rgb), 0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 60 }}>
+                style={{ position: 'fixed', top: '50%', left: width - 12, transform: 'translateY(-50%)', width: 24, height: 24, borderRadius: 7, border: '1px solid var(--color-border)', background: 'var(--color-white)', boxShadow: '0 2px 8px rgba(var(--color-primary-rgb), 0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 60, transition: resizing ? undefined : 'left 240ms cubic-bezier(0.22,1,0.36,1)' }}>
                 <Icon name={collapsed ? 'chevron_right' : 'chevron_left'} size={14} color="var(--color-primary)" />
               </button>
             )}
@@ -1489,7 +1601,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.51.0
+              v1.52.0
             </div>
           )}
         </div>
@@ -1517,7 +1629,9 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
       overflowY: 'auto',
       overflowX: 'hidden',
       boxSizing: 'border-box',
-      transition: isMobile ? 'left 260ms cubic-bezier(0.22,1,0.36,1)' : undefined,
+      transition: isMobile
+        ? 'left 260ms cubic-bezier(0.22,1,0.36,1)'
+        : resizing ? undefined : 'width 240ms cubic-bezier(0.22,1,0.36,1), min-width 240ms cubic-bezier(0.22,1,0.36,1)',
     }}>
 
       {/* Resize handle — desktop only */}
@@ -1806,7 +1920,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="archive" label="Archived" active={false} onClick={() => onOpenModal('archived')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.51.0
+            v1.52.0
           </div>
         )}
       </div>
