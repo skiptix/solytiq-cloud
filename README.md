@@ -27,9 +27,11 @@
 - 📂 **Folders & Lists** — Deeply nestable folders and smart lists with custom emojis, colors, and progress tracking.
 - 🗺️ **GPS Tracks & Routing** — Upload, analyze, and map GPX/FIT files directly within your workspace.
 - 📈 **Visual Timelines** — Track project milestones and plan your schedule chronologically.
-- ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via Server-Sent Events.
+- ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via Server-Sent Events using a cursor-based delta-sync engine.
 - 🔒 **Enhanced Security** — Built-in TOTP 2FA support, JWT-based authentication, and hardened security headers.
 - 🤖 **AI Assistant & MCP Server** — A floating AI chat powered by OpenRouter, plus an integrated Model Context Protocol (MCP) server for external AI agents (like Claude) to securely interact with your workspace via OAuth 2.1.
+- ⚙️ **Automation Hub** — Per-workspace flow-chart automations executing user-supplied JavaScript inside a secure V8 sandbox (`isolated-vm`).
+- 📝 **Inline AI Assist** — An "Ask AI" button with quick-action chips for summarizing or improving text directly within note editors.
 - 📎 **Cloud File Sharing** — Securely share files (max upload size: 200 MB, Nginx proxy limit: 210 MB) with password protection, expiry dates, and public links.
 - 👥 **Multi-User & Admin** — Full member management with 15 GB per-user storage quotas and admin-controlled permissions.
 - 📅 **CalDAV Server** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing meetings.
@@ -157,8 +159,10 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **Two distinct notions of "public":**
   1. `is_public` on lists/folders/timelines = **in-app visibility to workspace members**.
   2. `share_enabled` + `share_token` = **anonymous read-only link** for anyone on the internet (no login), optionally password-protected and/or time-limited.
-- **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
+- **Real-time via a cursor-based delta-sync engine over SSE** — A transactional outbox (`sync_log`) and authoritative delta endpoints apply changes without full reloads. There is no WebSocket server.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
+- **Automation Hub** — Per-workspace flow-chart automations executing user-supplied JavaScript inside a secure V8 sandbox (`isolated-vm`).
+- **Inline AI Assist** — An "Ask AI" button with quick-action chips for summarizing or improving text directly within note editors.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
 - **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
 - **MCP Server** — Model Context Protocol server over Streamable HTTP. It exposes the shared tool registry to external agents (e.g. the Claude MCP connector) with bearer tokens minted via an OAuth 2.1 connector flow.
