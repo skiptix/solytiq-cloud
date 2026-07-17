@@ -381,7 +381,7 @@ All shared interfaces are in `src/types.ts`. Key types:
 Routes are defined in `App.tsx` using React Router v7. Authenticated app routes render inside the layout shell; public/auth routes render standalone. Protected access is enforced by the `loggedIn` flag in `useAuthStore`.
 
 Authenticated routes:
-- `/dashboard` → `DashboardScreen` (due today + priority tasks + upcoming-milestone widget)
+- `/dashboard` → `DashboardScreen` — the **Overall Dashboard**: an all-workspace overview (opened from the top-left logo, independent of the active-workspace switcher). Fetches cross-workspace data directly via the unscoped list/task/timeline/meeting endpoints (not the workspace-scoped `useAppStore`), scoping list tasks to the membership-checked accessible-list set from `apiGetLists()`. Three columns — **My Tasks** (left: every open to-do across workspaces you own/are a member of, incl. markdown-page todos; Today / Next-7-days filters; a deliberately non-scrolling capped list + an "All tasks" dialog; each row badged with its workspace icon + source list/page name), a **middle** pair of completed-vs-open donuts (`DonutChart.tsx`: all tasks + next 7 days) over a dropdown-switched horizontal timeline (recent milestones **or** newest-created tasks), and a **right** column with today's **My Meetings** (→ Calendar) + a **Notifications** WiP placeholder. Pure date/counting/source helpers live in `utils/dashboard.ts` (unit-tested)
 - `/folder/:folderId` → `FolderDashboardScreen`
 - `/list/:listId` → `ListScreen` (labeled "To-Do" in the UI — see below; the `list` entity name, route, and store fields are unchanged)
 - `/timeline/:timelineId` → `TimelineScreen`

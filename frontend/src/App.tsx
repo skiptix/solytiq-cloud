@@ -76,7 +76,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { lists, timelines, listsLoading, loadError, sidebarWidth, setSidebarWidth, loadFromApi, setLists, updateList, moveTaskToList } = useAppStore();
+  const { lists, loadError, sidebarWidth, setSidebarWidth, loadFromApi, setLists, updateList, moveTaskToList } = useAppStore();
   const prevWorkspaceRef = useRef<string | null | undefined>(undefined);
   const [modal, setModal] = useState<'add' | 'completed' | 'trash' | 'archived' | null>(null);
   const [addWizardMode, setAddWizardMode] = useState<'list' | 'timeline' | undefined>(undefined);
@@ -368,27 +368,6 @@ function AppLayout() {
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </div>
-
-          {currentWorkspaceId && lists.length === 0 && timelines.length === 0 && !listsLoading && getActive() === 'dashboard' && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, zIndex: 10, background: 'rgba(var(--color-purple-pale-13-rgb), 0.90)', backdropFilter: 'blur(10px)', animation: 'backdropIn 220ms ease both' }}>
-              <div style={{ width: 72, height: 72, borderRadius: 20, background: 'var(--color-purple-pale-21)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
-                <span style={{ fontSize: 36 }}>📋</span>
-              </div>
-              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)' }}>No to-dos yet</div>
-              <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)', textAlign: 'center', maxWidth: 280, lineHeight: 1.6 }}>
-                This workspace is empty. Create your first to-do to get started.
-              </div>
-              <button
-                onClick={() => setModal('add')}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 24px', borderRadius: 12, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 16px rgba(var(--color-primary-rgb), 0.35)', transition: 'all 150ms' }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-mid-11)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-primary)')}
-              >
-                <span style={{ fontSize: 18, lineHeight: 1 }}>+</span>
-                Create To-Do
-              </button>
-            </div>
-          )}
         </div>
       </div>
 
