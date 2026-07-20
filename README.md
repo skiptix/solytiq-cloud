@@ -35,6 +35,7 @@
 - 📅 **CalDAV Server** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing meetings.
 - 🗑️ **Trash & Restore** — Comprehensive protection against accidental deletions with a 30-day recovery window.
 - 📋 **Templates** — Capture any list or timeline as a reusable template, keeping relative dates and recursive sublist structures intact.
+- 🧩 **App Directory & Automation Hub** — Expand functionality with admin-installable apps (GPS, Files, MCP, Automations). The Automation Hub enables visual, flow-chart automations with secure, sandboxed JavaScript execution via `isolated-vm`.
 
 ---
 
@@ -157,8 +158,9 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **Two distinct notions of "public":**
   1. `is_public` on lists/folders/timelines = **in-app visibility to workspace members**.
   2. `share_enabled` + `share_token` = **anonymous read-only link** for anyone on the internet (no login), optionally password-protected and/or time-limited.
-- **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
+- **Real-time via SSE** — Mutations append to a `sync_log` transactional outbox and broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
+- **Automation Hub** — Workspace-scoped flow-chart automations (V1 graphs are strictly linear) that execute per-step. Parameters support an eval-free `{{...}}` token syntax. User-supplied JavaScript in the Code action runs inside a real `isolated-vm` V8 isolate, avoiding Node's insecure built-in `vm` module.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
 - **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
 - **MCP Server** — Model Context Protocol server over Streamable HTTP. It exposes the shared tool registry to external agents (e.g. the Claude MCP connector) with bearer tokens minted via an OAuth 2.1 connector flow.
