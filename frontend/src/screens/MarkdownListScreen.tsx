@@ -4,6 +4,7 @@ import { createPortal, flushSync } from 'react-dom';
 import type {
   MarkdownBlock, MarkdownBlockType, MarkdownTodoBlock, MarkdownImageBlock, MarkdownLinkBlock,
   MarkdownHeadingBlock, MarkdownParagraphBlock, MarkdownBulletListItemBlock, MarkdownNumberedListItemBlock, MarkdownQuoteBlock,
+  MarkdownDividerBlock,
 } from '../types';
 import useMarkdownListsStore from '../store/useMarkdownListsStore';
 import { useMobile } from '../hooks/useBreakpoint';
@@ -31,6 +32,8 @@ interface SlashCommand {
   icon: string;
   type: MarkdownBlockType;
   level?: 1 | 2 | 3;
+  /** For `type: 'divider'` only — inserts it already set to the 2-column side-by-side layout. */
+  columns?: boolean;
 }
 const SLASH_COMMANDS: SlashCommand[] = [
   { cmd: 'h1', label: 'Heading 1', icon: 'format_h1', type: 'heading', level: 1 },
@@ -41,6 +44,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { cmd: 'todo', label: 'To-do', icon: 'check_box', type: 'todo' },
   { cmd: 'quote', label: 'Quote', icon: 'format_quote', type: 'quote' },
   { cmd: 'divider', label: 'Divider', icon: 'horizontal_rule', type: 'divider' },
+  { cmd: 'columns', label: '2 columns', icon: 'view_column', type: 'divider', columns: true },
   { cmd: 'image', label: 'Image', icon: 'image', type: 'image' },
   { cmd: 'link', label: 'Link', icon: 'link', type: 'link' },
 ];
@@ -172,6 +176,12 @@ export default function MarkdownListScreen() {
   const [linkDraft, setLinkDraft] = useState({ url: '', title: '', description: '' });
   const [dragBlockId, setDragBlockId] = useState<string | null>(null);
   const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
+  // Columns layout (up to 2 sections side by side, see `divider.layout`):
+  // which handle is currently being dragged (its divider + which side it's
+  // on), and which columns row is hovered (reveals both outside handles plus
+  // the row's Stack/delete control bar together, since the pair is one unit).
+  const [dragColumnHandle, setDragColumnHandle] = useState<{ dividerId: string; col: 0 | 1 } | null>(null);
+  const [hoveredColumnsRowId, setHoveredColumnsRowId] = useState<string | null>(null);
   // Which block currently shows a raw, editable textarea. Every other
   // text-bearing block shows its formatted (bold/italic/strikethrough)
   // rendering instead — click it to switch into edit mode.
@@ -323,6 +333,29 @@ export default function MarkdownListScreen() {
     });
   };
 
+  const toggleColumnsLayout = (dividerId: string, layout: 'stack' | 'columns') => {
+    updateBlocks(prev => prev.map(b => (b.id === dividerId && b.type === 'divider') ? { ...b, layout } : b));
+  };
+
+  // Swaps the two sections flanking a `layout: 'columns'` divider — the only
+  // possible reorder with exactly 2 boxes. A section is the contiguous run of
+  // blocks between this divider and its nearest neighboring divider (or the
+  // start/end of the document), so swapping is just reslicing the flat array.
+  const swapColumns = (dividerId: string) => {
+    updateBlocks(prev => {
+      const dIdx = prev.findIndex(b => b.id === dividerId);
+      if (dIdx === -1) return prev;
+      let leftStart = 0;
+      for (let k = dIdx - 1; k >= 0; k--) { if (prev[k].type === 'divider') { leftStart = k + 1; break; } }
+      let rightEnd = prev.length;
+      for (let k = dIdx + 1; k < prev.length; k++) { if (prev[k].type === 'divider') { rightEnd = k; break; } }
+      const leftBlocks = prev.slice(leftStart, dIdx);
+      const rightBlocks = prev.slice(dIdx + 1, rightEnd);
+      if (leftBlocks.length === 0 || rightBlocks.length === 0) return prev;
+      return [...prev.slice(0, leftStart), ...rightBlocks, prev[dIdx], ...leftBlocks, ...prev.slice(rightEnd)];
+    });
+  };
+
   const filteredCommands = (query: string) => {
     const q = query.toLowerCase();
     return SLASH_COMMANDS.filter(c => c.cmd.startsWith(q));
@@ -347,7 +380,7 @@ export default function MarkdownListScreen() {
         updateBlocks(prev => {
           const idx = prev.findIndex(b => b.id === blockId);
           const next = [...prev];
-          next[idx] = { id: blockId, type: 'divider' };
+          next[idx] = command.columns ? { id: blockId, type: 'divider', layout: 'columns' } : { id: blockId, type: 'divider' };
           next.splice(idx + 1, 0, nextParagraph);
           return next;
         });
@@ -487,6 +520,13 @@ export default function MarkdownListScreen() {
     else sections[sections.length - 1].push(b);
   }
 
+  // A divider can only offer the "side by side" toggle when it actually has
+  // a non-empty section on both sides to pair up.
+  const dividerCanColumnsById: Record<string, boolean> = {};
+  sectionDividers.forEach((d, i) => {
+    dividerCanColumnsById[d.id] = (sections[i]?.length ?? 0) > 0 && (sections[i + 1]?.length ?? 0) > 0;
+  });
+
   const renderBlock = (block: MarkdownBlock, index: number) => {
     const hovered = hoveredBlockId === block.id;
     return (
@@ -514,7 +554,18 @@ export default function MarkdownListScreen() {
           overflow: block.type === 'image' ? 'hidden' : 'visible',
         }}>
           {block.type === 'divider' ? (
-            <hr style={{ border: 'none', borderTop: '1.5px solid var(--color-border)', margin: '10px 0' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <hr style={{ flex: 1, border: 'none', borderTop: '1.5px solid var(--color-border)', margin: '10px 0' }} />
+              {dividerCanColumnsById[block.id] && (
+                <button
+                  onClick={() => toggleColumnsLayout(block.id, 'columns')}
+                  title="Arrange the sections above and below side by side"
+                  style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer', opacity: hovered ? 1 : 0, transition: 'opacity 120ms' }}>
+                  <Icon name="view_column" size={13} color="var(--color-text-tertiary)" />
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>Side by side</span>
+                </button>
+              )}
+            </div>
           ) : block.type === 'image' ? (
             <div>
               <img src={markdownImageUrl(mdId, block.imageId)} alt={block.caption ?? ''} style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }} />
@@ -607,6 +658,67 @@ export default function MarkdownListScreen() {
     );
   };
 
+  // Renders a `layout: 'columns'` divider's two flanking sections as a
+  // side-by-side grid (capped at 2 boxes). Each box gets a drag handle
+  // positioned OUTSIDE its border — distinct from each block's own internal
+  // reorder handle — dragging one onto the other box swaps left/right, the
+  // only possible reorder with exactly 2 boxes.
+  const renderColumnsRow = (leftBlocks: MarkdownBlock[], rightBlocks: MarkdownBlock[], divider: MarkdownDividerBlock) => {
+    const rowHovered = hoveredColumnsRowId === divider.id;
+    return (
+      <div key={divider.id}
+        onMouseEnter={() => setHoveredColumnsRowId(divider.id)}
+        onMouseLeave={() => setHoveredColumnsRowId(prev => prev === divider.id ? null : prev)}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: rowHovered ? 6 : 0, height: rowHovered ? 24 : 0, overflow: 'hidden', transition: 'opacity 120ms', opacity: rowHovered ? 1 : 0 }}>
+          <button onClick={() => toggleColumnsLayout(divider.id, 'stack')} title="Stack sections vertically"
+            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer' }}>
+            <Icon name="view_agenda" size={13} color="var(--color-text-tertiary)" />
+            <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>Stack</span>
+          </button>
+          <button onClick={() => deleteBlock(divider.id)} title="Remove divider"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer' }}>
+            <Icon name="close" size={12} color="var(--color-text-quaternary)" />
+          </button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+          {[leftBlocks, rightBlocks].map((sideBlocks, colIdx) => {
+            const col = colIdx as 0 | 1;
+            const handleStyle: React.CSSProperties = {
+              position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+              cursor: 'grab', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 20, height: 28, borderRadius: 6, background: 'var(--color-white)',
+              border: '1px solid var(--color-border)', boxShadow: '0 2px 6px rgba(var(--color-black-rgb), 0.08)',
+              opacity: rowHovered ? 1 : 0, transition: 'opacity 120ms', zIndex: 2,
+              ...(col === 0 ? { left: -14 } : { right: -14 }),
+            };
+            return (
+              <div key={colIdx}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  if (dragColumnHandle && dragColumnHandle.dividerId === divider.id && dragColumnHandle.col !== col) swapColumns(divider.id);
+                  setDragColumnHandle(null);
+                }}
+                style={{ position: 'relative', minWidth: 0, border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {!isMobile && (
+                  <span
+                    draggable
+                    onDragStart={() => setDragColumnHandle({ dividerId: divider.id, col })}
+                    onDragEnd={() => setDragColumnHandle(null)}
+                    title="Drag onto the other box to swap"
+                    style={handleStyle}>
+                    <Icon name="drag_indicator" size={14} color="var(--color-border-strong)" />
+                  </span>
+                )}
+                {sideBlocks.map(b => renderBlock(b, blockIndexById[b.id]))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center', padding: isMobile ? '20px 16px 80px' : '40px 24px 120px' }}>
       <div style={{ width: '100%', maxWidth: 760 }}>
@@ -667,16 +779,34 @@ export default function MarkdownListScreen() {
 
         {/* Blocks */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {sections.map((sectionBlocks, i) => (
-            <Fragment key={`section-${i}`}>
-              {sectionBlocks.length > 0 && (
-                <div style={{ border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {sectionBlocks.map(block => renderBlock(block, blockIndexById[block.id]))}
-                </div>
-              )}
-              {sectionDividers[i] && renderBlock(sectionDividers[i], blockIndexById[sectionDividers[i].id])}
-            </Fragment>
-          ))}
+          {(() => {
+            // A `layout: 'columns'` divider consumes the section right after
+            // it too, rendering both as one side-by-side row instead of the
+            // usual stacked section-then-divider sequence — everything else
+            // renders exactly as before.
+            const rows: React.ReactNode[] = [];
+            let i = 0;
+            while (i < sections.length) {
+              const sectionBlocks = sections[i];
+              const divider = sectionDividers[i] as MarkdownDividerBlock | undefined;
+              const nextSection = sections[i + 1];
+              if (divider?.layout === 'columns' && sectionBlocks.length > 0 && nextSection && nextSection.length > 0) {
+                rows.push(renderColumnsRow(sectionBlocks, nextSection, divider));
+                i += 2;
+                continue;
+              }
+              if (sectionBlocks.length > 0) {
+                rows.push(
+                  <div key={`section-${i}`} style={{ border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {sectionBlocks.map(block => renderBlock(block, blockIndexById[block.id]))}
+                  </div>
+                );
+              }
+              if (divider) rows.push(<Fragment key={`divider-${divider.id}`}>{renderBlock(divider, blockIndexById[divider.id])}</Fragment>);
+              i += 1;
+            }
+            return rows;
+          })()}
         </div>
 
         <button onClick={() => { const b = makeEmptyBlock('paragraph'); addBlockAfter(blocks[blocks.length - 1]?.id ?? '', b); }}

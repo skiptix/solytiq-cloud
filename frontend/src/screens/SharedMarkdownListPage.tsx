@@ -1,8 +1,9 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useCallback, Fragment } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import Icon from '../components/Icon';
 import { renderInline } from '../components/MarkdownView';
+import { useMobile } from '../hooks/useBreakpoint';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -31,6 +32,7 @@ interface SharedBlock {
   url?: string;
   title?: string;
   description?: string;
+  layout?: 'stack' | 'columns';
 }
 
 interface MarkdownListContentResponse {
@@ -50,6 +52,7 @@ function sharedByInitials(name: string): string {
 
 export default function SharedMarkdownListPage() {
   const { token } = useParams<{ token: string }>();
+  const isMobile = useMobile();
   const [state, setState] = useState<PageState>('loading');
   const [meta, setMeta] = useState<MarkdownListMeta | null>(null);
   const [content, setContent] = useState<MarkdownListContentResponse | null>(null);
@@ -121,13 +124,52 @@ export default function SharedMarkdownListPage() {
   }
 
   // Blocks are grouped into outlined sections, same rule as the editor: a
-  // `/divider` block closes the current section and opens a new one.
+  // `/divider` block closes the current section and opens a new one. A
+  // `layout: 'columns'` divider additionally consumes the section right
+  // after it, rendering both side by side in a 2-column grid instead of the
+  // usual stacked section-then-divider sequence.
   const sections: SharedBlock[][] = [[]];
   const sectionDividers: SharedBlock[] = [];
   if (content) {
     for (const b of content.content.blocks) {
       if (b.type === 'divider') { sectionDividers.push(b); sections.push([]); }
       else sections[sections.length - 1].push(b);
+    }
+  }
+
+  const rows: React.ReactNode[] = [];
+  {
+    let i = 0;
+    while (i < sections.length) {
+      const sectionBlocks = sections[i];
+      const divider = sectionDividers[i];
+      const nextSection = sections[i + 1];
+      if (divider?.layout === 'columns' && sectionBlocks.length > 0 && nextSection && nextSection.length > 0) {
+        rows.push(
+          <div key={`row-${divider.id}`} style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+            {[sectionBlocks, nextSection].map((sideBlocks, colIdx) => (
+              <div key={colIdx} style={{ minWidth: 0, border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {sideBlocks.map(block => (
+                  <SharedBlockView key={block.id} block={block} accent={accent} number={numberByBlockId[block.id]} token={token} password={password} />
+                ))}
+              </div>
+            ))}
+          </div>
+        );
+        i += 2;
+        continue;
+      }
+      if (sectionBlocks.length > 0) {
+        rows.push(
+          <div key={`section-${i}`} style={{ border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {sectionBlocks.map(block => (
+              <SharedBlockView key={block.id} block={block} accent={accent} number={numberByBlockId[block.id]} token={token} password={password} />
+            ))}
+          </div>
+        );
+      }
+      if (divider) rows.push(<SharedBlockView key={divider.id} block={divider} accent={accent} token={token} password={password} />);
+      i += 1;
     }
   }
 
@@ -230,20 +272,7 @@ export default function SharedMarkdownListPage() {
               {content.content.blocks.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-quaternary)' }}>This markdown list is empty.</div>
               )}
-              {sections.map((sectionBlocks, i) => (
-                <Fragment key={`section-${i}`}>
-                  {sectionBlocks.length > 0 && (
-                    <div style={{ border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      {sectionBlocks.map(block => (
-                        <SharedBlockView key={block.id} block={block} accent={accent} number={numberByBlockId[block.id]} token={token} password={password} />
-                      ))}
-                    </div>
-                  )}
-                  {sectionDividers[i] && (
-                    <SharedBlockView key={sectionDividers[i].id} block={sectionDividers[i]} accent={accent} token={token} password={password} />
-                  )}
-                </Fragment>
-              ))}
+              {rows}
             </div>
           </>
         )}
