@@ -327,6 +327,15 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
     return () => window.removeEventListener('shortcut:delete-current', onDeleteShortcut);
   }, []);
 
+  // "Toggle change history" shortcut — same as the manage_history icon button.
+  // No-op for dash tasks, which have no tracked change history.
+  useEffect(() => {
+    if (!isListTask) return;
+    const onToggleChangelog = () => setShowChangelog(v => !v);
+    window.addEventListener('shortcut:toggle-changelog', onToggleChangelog);
+    return () => window.removeEventListener('shortcut:toggle-changelog', onToggleChangelog);
+  }, [isListTask]);
+
   // Buffered editing: field edits live in local state and are only persisted
   // when Save is clicked. Cancel/close discards them. (Attachments & sub-items
   // remain immediate — they're separate actions that can't be cleanly rolled back.)
