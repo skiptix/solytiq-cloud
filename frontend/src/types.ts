@@ -505,7 +505,8 @@ export interface AutomationRunResult {
 // `/todo` block optionally mirrors a real task in an auto-managed Todo list
 // (`todoListId`) — see backend/src/routes/markdownLists.ts — so its `checked`
 // state stays in sync with that list and the block can be checked off from
-// either surface.
+// either surface. A `divider` block's `layout` can additionally turn the two
+// sections it separates into a 2-column side-by-side grid.
 export type MarkdownBlockType =
   | 'heading'
   | 'paragraph'
@@ -558,6 +559,13 @@ export interface MarkdownQuoteBlock extends MarkdownBlockBase {
 
 export interface MarkdownDividerBlock extends MarkdownBlockBase {
   type: 'divider';
+  /**
+   * When 'columns', this divider pairs the section immediately before it with
+   * the section immediately after it into a 2-column side-by-side grid
+   * instead of stacking them vertically — see MarkdownListScreen.tsx's row
+   * grouping. Absent/'stack' preserves the original full-width layout.
+   */
+  layout?: 'stack' | 'columns';
 }
 
 export interface MarkdownImageBlock extends MarkdownBlockBase {
