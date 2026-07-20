@@ -359,6 +359,9 @@ export const apiGetListProgress = (listId: string) =>
 export const apiGetListChangelog = (listId: string) =>
   apiFetch<{ entries: TaskChangeLogEntry[] }>(`/lists/${listId}/changelog`);
 
+export const apiGetTaskChangelog = (listId: string, taskId: number) =>
+  apiFetch<{ entries: TaskChangeLogEntry[] }>(`/lists/${listId}/tasks/${taskId}/changelog`);
+
 export const apiUpdateListTask = (listId: string, taskId: number, data: Partial<Task>) =>
   apiFetch<{ task: Task }>(`/lists/${listId}/tasks/${taskId}`, { method: 'PUT', body: JSON.stringify(data) });
 

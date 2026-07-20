@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { List, Task, TaskChangeLogEntry } from '../types';
 import { apiGetListChangelog } from '../api/client';
 import Icon from './Icon';
-import TaskChangeLogModal from './TaskChangeLogModal';
 
 interface TaskTimelineViewProps {
   list: List;
@@ -146,7 +145,6 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
   const barColor = list.color ?? 'var(--color-primary)';
 
   const [changelog, setChangelog] = useState<TaskChangeLogEntry[]>([]);
-  const [changelogTask, setChangelogTask] = useState<Task | null>(null);
 
   // Feeds both the bars' date-positioned change markers and the per-row
   // changelog button's modal. Fetched in bulk for the whole list rather
@@ -309,17 +307,6 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
                 }}>
                   {row.task.title}
                 </span>
-                <button
-                  onClick={e => { e.stopPropagation(); setChangelogTask(row.task); }}
-                  title="View change history"
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, minWidth: 18,
-                    borderRadius: 5, border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0, opacity: 0.5,
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                  onMouseLeave={e => (e.currentTarget.style.opacity = '0.5')}>
-                  <Icon name="history" size={13} color="var(--color-text-tertiary)" />
-                </button>
               </div>
             ))}
           </div>
@@ -447,14 +434,6 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
             </div>
           </div>
         </div>
-      )}
-
-      {changelogTask && (
-        <TaskChangeLogModal
-          task={changelogTask}
-          entries={changesByTask.get(changelogTask.id) ?? []}
-          onClose={() => setChangelogTask(null)}
-        />
       )}
     </div>
   );

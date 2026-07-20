@@ -1436,9 +1436,26 @@ router.get('/:listId/progress', async (req: Request, res: Response) => {
   }
 });
 
+function mapChangeLogRow(r: {
+  id: string; task_id: string; field: string; old_value: string | null; new_value: string | null;
+  actor_type: string; actor_id: string | null; actor_name: string | null; changed_at: string;
+}) {
+  return {
+    id: r.id,
+    taskId: Number(r.task_id),
+    field: r.field,
+    oldValue: r.old_value,
+    newValue: r.new_value,
+    actorType: r.actor_type,
+    actorId: r.actor_id,
+    actorName: r.actor_name,
+    changedAt: r.changed_at,
+  };
+}
+
 // GET /api/lists/:listId/changelog — every tracked field change (title/note/
 // deadline/priority/badge/section) across this list's tasks, newest first.
-// Feeds the Timeline view's per-task change markers and changelog modal.
+// Feeds the Timeline view's per-task change markers.
 router.get('/:listId/changelog', async (req: Request, res: Response) => {
   try {
     const { listId } = req.params;
@@ -1469,27 +1486,62 @@ router.get('/:listId/changelog', async (req: Request, res: Response) => {
 
     const rows = await query<{
       id: string; task_id: string; field: string; old_value: string | null; new_value: string | null;
-      actor_type: string; actor_name: string | null; changed_at: string;
+      actor_type: string; actor_id: string | null; actor_name: string | null; changed_at: string;
     }>(
-      `SELECT id, task_id, field, old_value, new_value, actor_type, actor_name, changed_at
+      `SELECT id, task_id, field, old_value, new_value, actor_type, actor_id, actor_name, changed_at
        FROM task_change_log WHERE list_id = $1 ORDER BY changed_at DESC LIMIT 1000`,
       [listId]
     );
 
-    res.json({
-      entries: rows.rows.map((r) => ({
-        id: r.id,
-        taskId: Number(r.task_id),
-        field: r.field,
-        oldValue: r.old_value,
-        newValue: r.new_value,
-        actorType: r.actor_type,
-        actorName: r.actor_name,
-        changedAt: r.changed_at,
-      })),
-    });
+    res.json({ entries: rows.rows.map(mapChangeLogRow) });
   } catch (err) {
     werr('list changelog error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/lists/:listId/tasks/:taskId/changelog — one task's full tracked-field
+// change history, newest first. Feeds the "Change history" panel in TaskDialog.
+router.get('/:listId/tasks/:taskId/changelog', async (req: Request, res: Response) => {
+  try {
+    const { listId, taskId } = req.params;
+
+    const listCheck = await query<{ user_id: string; workspace_id: string | null; is_public: boolean }>(
+      'SELECT user_id, workspace_id, is_public FROM lists WHERE id = $1',
+      [listId]
+    );
+    if (listCheck.rows.length === 0) {
+      res.status(404).json({ error: 'List not found' });
+      return;
+    }
+    const listObj = listCheck.rows[0];
+    const isOwner = listObj.user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+
+    let hasWorkspaceAccess = false;
+    if (listObj.workspace_id) {
+      const wsMemberCheck = await query('SELECT 1 FROM workspace_members WHERE workspace_id = $1 AND user_id = $2', [listObj.workspace_id, req.userId]);
+      hasWorkspaceAccess = wsMemberCheck.rows.length > 0;
+    }
+
+    const canAccess = isOwner || isAdmin || listObj.is_public || hasWorkspaceAccess;
+    if (!canAccess) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    const rows = await query<{
+      id: string; task_id: string; field: string; old_value: string | null; new_value: string | null;
+      actor_type: string; actor_id: string | null; actor_name: string | null; changed_at: string;
+    }>(
+      `SELECT id, task_id, field, old_value, new_value, actor_type, actor_id, actor_name, changed_at
+       FROM task_change_log WHERE list_id = $1 AND task_id = $2 ORDER BY changed_at DESC LIMIT 500`,
+      [listId, taskId]
+    );
+
+    res.json({ entries: rows.rows.map(mapChangeLogRow) });
+  } catch (err) {
+    werr('task changelog error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
