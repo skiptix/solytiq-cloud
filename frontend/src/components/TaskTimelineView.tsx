@@ -51,10 +51,11 @@ function formatDateTime(iso?: string | null): string {
 }
 
 const CHANGE_FIELD_LABELS: Record<TaskChangeLogEntry['field'], string> = {
-  title: 'Title', note: 'Note', deadline: 'Deadline', priority: 'Priority', badge: 'Badge', section: 'Section',
+  title: 'Title', note: 'Note', deadline: 'Deadline', priority: 'Priority', badge: 'Badge', section: 'Section', checked: 'Status',
 };
 
 function formatChangeValue(field: TaskChangeLogEntry['field'], value: string | null): string {
+  if (field === 'checked') return value === 'true' ? 'Done' : 'Not done';
   if (!value) return field === 'deadline' ? 'no deadline' : 'none';
   if (field === 'deadline') return dayFromDateOnly(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   return value;

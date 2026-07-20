@@ -28,6 +28,17 @@ describe('recordTaskChanges', () => {
     expect(calls.length).toBe(0);
   });
 
+  it('logs a checked (done/not done) transition as boolean strings', async () => {
+    const { exec, calls } = makeExec([
+      [{ username: 'niels' }],
+      [],
+    ]);
+    await recordTaskChanges(exec, 'list_1', 't1', { checked: false }, { checked: true }, userActor);
+
+    expect(calls[1].text).toMatch(/INSERT INTO task_change_log/);
+    expect(calls[1].params).toEqual(['t1', 'list_1', 'checked', 'false', 'true', 'user', 'user_1', 'niels']);
+  });
+
   it('logs a single field change with a user actor name resolved from users.username', async () => {
     const { exec, calls } = makeExec([
       [{ username: 'niels' }], // actor name lookup
