@@ -39,6 +39,7 @@ export const SHORTCUT_DEFS: ShortcutDef[] = [
   { id: 'create-milestone', label: 'New milestone', description: 'Open the editor to add a new milestone.', defaultKey: 'm', scope: 'timeline', scopeLabel: 'Inside a timeline' },
   { id: 'create-meeting', label: 'New meeting', description: 'Open the editor to add a new meeting.', defaultKey: 'c', scope: 'calendar', scopeLabel: 'Calendar page' },
   { id: 'delete-current', label: 'Delete open item / milestone', description: 'Ask to delete the item or milestone currently open in its editor.', defaultKey: 'backspace', scope: 'dialog', scopeLabel: 'Item / milestone editor' },
+  { id: 'toggle-changelog', label: 'Toggle change history', description: 'Show or hide the change history panel for the item currently open in its editor.', defaultKey: 'h', scope: 'dialog', scopeLabel: 'Item / milestone editor' },
 ];
 
 export function bindingFor(overrides: Record<string, ShortcutOverride>, def: ShortcutDef): ShortcutBinding {
