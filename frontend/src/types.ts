@@ -22,6 +22,21 @@ export interface Task {
   completedAt?: string | null;
 }
 
+/** One row from a task's audit trail — backs the Timeline view's per-task
+ *  change markers and changelog modal. Written by the backend whenever
+ *  title/note/deadline/priority/badge/section actually changes (user edit
+ *  or an Automation Hub action). */
+export interface TaskChangeLogEntry {
+  id: number;
+  taskId: number;
+  field: 'title' | 'note' | 'deadline' | 'priority' | 'badge' | 'section';
+  oldValue: string | null;
+  newValue: string | null;
+  actorType: 'user' | 'automation';
+  actorName: string | null;
+  changedAt: string;
+}
+
 export type MeetingRecurrenceFreq = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
 /** Repeat preset for a new meeting series — expanded server-side into one row

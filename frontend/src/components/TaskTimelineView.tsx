@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { List, Task } from '../types';
+import type { List, Task, TaskChangeLogEntry } from '../types';
+import { apiGetListChangelog } from '../api/client';
 import Icon from './Icon';
+import TaskChangeLogModal from './TaskChangeLogModal';
 
 interface TaskTimelineViewProps {
   list: List;
@@ -47,6 +49,16 @@ function formatDateTime(iso?: string | null): string {
   const dd = String(d.getDate()).padStart(2, '0');
   const mo = String(d.getMonth() + 1).padStart(2, '0');
   return `${hh}:${mi} - ${dd}.${mo}.${d.getFullYear()}`;
+}
+
+const CHANGE_FIELD_LABELS: Record<TaskChangeLogEntry['field'], string> = {
+  title: 'Title', note: 'Note', deadline: 'Deadline', priority: 'Priority', badge: 'Badge', section: 'Section',
+};
+
+function formatChangeValue(field: TaskChangeLogEntry['field'], value: string | null): string {
+  if (!value) return field === 'deadline' ? 'no deadline' : 'none';
+  if (field === 'deadline') return dayFromDateOnly(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return value;
 }
 
 const ZOOM_PX_PER_DAY: Record<Zoom, { desktop: number; mobile: number }> = {
@@ -132,6 +144,29 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
   const [containerWidth, setContainerWidth] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const barColor = list.color ?? 'var(--color-primary)';
+
+  const [changelog, setChangelog] = useState<TaskChangeLogEntry[]>([]);
+  const [changelogTask, setChangelogTask] = useState<Task | null>(null);
+
+  // Feeds both the bars' date-positioned change markers and the per-row
+  // changelog button's modal. Fetched in bulk for the whole list rather
+  // than per-task, so switching to Timeline never fires N requests.
+  useEffect(() => {
+    let cancelled = false;
+    apiGetListChangelog(list.id)
+      .then((res) => { if (!cancelled) setChangelog(res.entries); })
+      .catch(() => { if (!cancelled) setChangelog([]); });
+    return () => { cancelled = true; };
+  }, [list.id]);
+
+  const changesByTask = useMemo(() => {
+    const map = new Map<number, TaskChangeLogEntry[]>();
+    for (const entry of changelog) {
+      const arr = map.get(entry.taskId);
+      if (arr) arr.push(entry); else map.set(entry.taskId, [entry]);
+    }
+    return map;
+  }, [changelog]);
 
   // Measure the visible chart width so a short date range can stretch its
   // columns to fill it exactly, rather than leaving dead space on the right.
@@ -268,12 +303,23 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
                   {row.task.checked && <Icon name="check" size={11} color="var(--color-white)" />}
                 </div>
                 <span style={{
-                  fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)',
+                  flex: 1, fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)',
                   opacity: row.task.checked ? 0.45 : 1, textDecoration: row.task.checked ? 'line-through' : 'none',
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>
                   {row.task.title}
                 </span>
+                <button
+                  onClick={e => { e.stopPropagation(); setChangelogTask(row.task); }}
+                  title="View change history"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', width: 18, height: 18, minWidth: 18,
+                    borderRadius: 5, border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0, opacity: 0.5,
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                  onMouseLeave={e => (e.currentTarget.style.opacity = '0.5')}>
+                  <Icon name="history" size={13} color="var(--color-text-tertiary)" />
+                </button>
               </div>
             ))}
           </div>
@@ -339,6 +385,21 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
                     t.checked ? `Completed: ${formatDateTime(t.completedAt)}` : null,
                   ].filter(Boolean).join('\n');
 
+                  // Group this task's tracked-field changes by calendar day so
+                  // several edits made at once collapse into a single marker.
+                  const changesByDay = new Map<number, TaskChangeLogEntry[]>();
+                  for (const change of changesByTask.get(t.id) ?? []) {
+                    const dayKey = dayFromTimestamp(change.changedAt).getTime();
+                    const arr = changesByDay.get(dayKey);
+                    if (arr) arr.push(change); else changesByDay.set(dayKey, [change]);
+                  }
+                  const changeMarkers = Array.from(changesByDay.entries()).map(([dayKey, dayChanges]) => ({
+                    left: daysBetween(range.start, new Date(dayKey)) * pxPerDay + pxPerDay / 2,
+                    date: new Date(dayKey),
+                    changes: dayChanges,
+                  }));
+                  const markerTop = BAR_HEIGHT / 2 + 7;
+
                   return (
                     <div key={row.id} style={{ height: ROW_HEIGHT, position: 'relative', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
                       <div
@@ -363,6 +424,22 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
                           <Icon name="flag" size={13} color={deadlineOverdue ? 'var(--color-error)' : 'var(--color-text-secondary)'} />
                         </div>
                       )}
+                      {changeMarkers.map((cm) => {
+                        const markerTooltip = [
+                          cm.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                          ...cm.changes.map(c => `${CHANGE_FIELD_LABELS[c.field]}: ${formatChangeValue(c.field, c.oldValue)} → ${formatChangeValue(c.field, c.newValue)}`),
+                        ].join('\n');
+                        return (
+                          <div key={cm.date.getTime()}
+                            title={markerTooltip}
+                            style={{
+                              position: 'absolute', left: cm.left - 4, top: `calc(50% + ${markerTop}px)`, transform: 'translateY(-50%)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', width: 8, height: 8, zIndex: 1,
+                            }}>
+                            <Icon name="history" size={8} color="var(--color-accent-purple-light)" />
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })()
@@ -370,6 +447,14 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
             </div>
           </div>
         </div>
+      )}
+
+      {changelogTask && (
+        <TaskChangeLogModal
+          task={changelogTask}
+          entries={changesByTask.get(changelogTask.id) ?? []}
+          onClose={() => setChangelogTask(null)}
+        />
       )}
     </div>
   );

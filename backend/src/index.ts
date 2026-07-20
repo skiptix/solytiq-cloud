@@ -1056,6 +1056,26 @@ async function runMigrations() {
     )
   `);
 
+  // Audit trail for the Timeline view's per-task change markers/changelog
+  // button — one row per tracked-field change (title/note/deadline/priority/
+  // badge/section). Must come after `tasks` — it has a FK to tasks(id).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS task_change_log (
+      id          BIGSERIAL PRIMARY KEY,
+      task_id     BIGINT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      list_id     VARCHAR(100) NOT NULL,
+      field       VARCHAR(20) NOT NULL,
+      old_value   TEXT,
+      new_value   TEXT,
+      actor_type  VARCHAR(20) NOT NULL CHECK (actor_type IN ('user', 'automation')),
+      actor_id    VARCHAR(100),
+      actor_name  VARCHAR(255),
+      changed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS task_change_log_task_idx ON task_change_log (task_id, changed_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS task_change_log_list_idx ON task_change_log (list_id, changed_at DESC)`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS trash (
       id         SERIAL PRIMARY KEY,
