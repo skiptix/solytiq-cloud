@@ -1,5 +1,5 @@
 import { usePageTitle } from '../hooks/usePageTitle';
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useMobile } from '../hooks/useBreakpoint';
@@ -236,41 +236,100 @@ function AllTasksDialog({ tasks, resolve, wsById, todayIso, onClose, onToggle, o
   );
 }
 
-// ── Horizontal timeline (dynamic box) ──────────────────────────────
+// ── Vertical timeline (dynamic box) ─────────────────────────────────
 interface TimelineItem { id: string; title: string; sub: string; dateLabel: string; emoji?: string | null; color: string; onClick: () => void; }
 
-function HorizontalTimeline({ items, emptyText }: { items: TimelineItem[]; emptyText: string }) {
+function VerticalTimeline({ items, emptyText }: { items: TimelineItem[]; emptyText: string }) {
   if (items.length === 0) {
     return <div style={{ padding: '28px 12px', textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>{emptyText}</div>;
   }
   return (
-    <div style={{ display: 'flex', overflowX: 'auto', paddingBottom: 4 }}>
-      {items.map(it => (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {items.map((it, i) => (
         <button key={it.id} onClick={it.onClick}
-          style={{ flex: '1 0 132px', minWidth: 132, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 8, padding: '4px 6px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'center' }}>
-          {/* Title + source */}
-          <div style={{ minHeight: 40, display: 'flex', flexDirection: 'column', gap: 2, justifyContent: 'flex-end' }}>
-            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: 1.25 }}>
-              {it.emoji ? `${it.emoji} ` : ''}{it.title}
+          style={{ display: 'flex', alignItems: 'stretch', gap: 12, padding: '2px 6px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', width: '100%' }}>
+          {/* Axis + dot, connected down to the next row */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+            <div style={{ width: 12, height: 12, marginTop: 5, borderRadius: '50%', background: it.color, border: '2.5px solid var(--color-white)', boxShadow: `0 0 0 1.5px ${it.color}`, flexShrink: 0 }} />
+            {i < items.length - 1 && <div style={{ flex: 1, width: 2, minHeight: 14, background: 'var(--color-border)' }} />}
+          </div>
+          {/* Title + source + date */}
+          <div style={{ flex: 1, minWidth: 0, paddingBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                {it.emoji ? `${it.emoji} ` : ''}{it.title}
+              </div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 700, color: 'var(--color-text-secondary)', flexShrink: 0 }}>{it.dateLabel}</div>
             </div>
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-quaternary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.sub}</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-quaternary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.sub}</div>
           </div>
-          {/* Axis + dot */}
-          <div style={{ position: 'relative', height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: 2, background: 'var(--color-border)' }} />
-            <div style={{ position: 'relative', width: 14, height: 14, borderRadius: '50%', background: it.color, border: '3px solid var(--color-white)', boxShadow: `0 0 0 1.5px ${it.color}` }} />
-          </div>
-          {/* Date */}
-          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 700, color: 'var(--color-text-secondary)' }}>{it.dateLabel}</div>
         </button>
       ))}
     </div>
   );
 }
 
-// ── Dynamic box (milestones | newest tasks) ────────────────────────
+// ── Custom dropdown (replaces the native <select>) ──────────────────
 type DynamicMode = 'milestones' | 'newest';
 
+const MODE_OPTIONS: { key: DynamicMode; label: string; icon: string }[] = [
+  { key: 'newest', label: 'Newest tasks', icon: 'fiber_new' },
+  { key: 'milestones', label: 'Milestones', icon: 'flag' },
+];
+
+function ModeDropdown({ mode, setMode }: { mode: DynamicMode; setMode: (m: DynamicMode) => void }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const current = MODE_OPTIONS.find(o => o.key === mode) ?? MODE_OPTIONS[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (menuRef.current?.contains(e.target as Node) || btnRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  const toggle = () => {
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (rect) setPos({ top: rect.bottom + 4, left: Math.max(8, rect.right - 172) });
+    setOpen(o => !o);
+  };
+
+  return (
+    <>
+      <button ref={btnRef} onClick={toggle}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, border: '1.5px solid var(--color-border)', borderRadius: 9, padding: '5px 8px 5px 10px', background: open ? 'var(--color-surface-tint)' : 'var(--color-white)', color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
+        {current.label}
+        <Icon name="unfold_more" size={14} color="var(--color-accent-purple-light)" />
+      </button>
+      {open && pos && createPortal(
+        <div ref={menuRef}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 500, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', minWidth: 172, padding: '4px 0', animation: 'menuIn 140ms ease both' }}>
+          {MODE_OPTIONS.map(opt => (
+            <button key={opt.key} onClick={() => { setMode(opt.key); setOpen(false); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: opt.key === mode ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: opt.key === mode ? 600 : 500, color: opt.key === mode ? 'var(--color-primary)' : 'var(--color-text-primary)', textAlign: 'left' }}
+              onMouseEnter={e => { if (opt.key !== mode) e.currentTarget.style.background = 'var(--color-purple-pale-11)'; }}
+              onMouseLeave={e => { if (opt.key !== mode) e.currentTarget.style.background = 'transparent'; }}>
+              <Icon name={opt.icon} size={15} color={opt.key === mode ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
+              <span style={{ flex: 1 }}>{opt.label}</span>
+              {opt.key === mode && <Icon name="check" size={14} color="var(--color-primary)" />}
+            </button>
+          ))}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// ── Dynamic box (milestones | newest tasks) ────────────────────────
 function DynamicBox({ mode, setMode, milestoneItems, taskItems }: {
   mode: DynamicMode; setMode: (m: DynamicMode) => void; milestoneItems: TimelineItem[]; taskItems: TimelineItem[];
 }) {
@@ -284,16 +343,14 @@ function DynamicBox({ mode, setMode, milestoneItems, taskItems }: {
           {mode === 'milestones' ? 'Upcoming milestones' : 'Newest tasks'}
         </div>
         <div style={{ flex: 1 }} />
-        <select value={mode} onChange={e => setMode(e.target.value as DynamicMode)}
-          style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, border: '1.5px solid var(--color-border)', borderRadius: 9, padding: '5px 10px', background: 'var(--color-white)', color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
-          <option value="milestones">Milestones</option>
-          <option value="newest">Newest tasks</option>
-        </select>
+        <ModeDropdown mode={mode} setMode={setMode} />
       </div>
-      <HorizontalTimeline
-        items={mode === 'milestones' ? milestoneItems : taskItems}
-        emptyText={mode === 'milestones' ? 'No milestones scheduled yet.' : 'No tasks created yet.'}
-      />
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        <VerticalTimeline
+          items={mode === 'milestones' ? milestoneItems : taskItems}
+          emptyText={mode === 'milestones' ? 'No milestones scheduled yet.' : 'No tasks created yet.'}
+        />
+      </div>
     </section>
   );
 }
@@ -405,7 +462,7 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [dynamicMode, setDynamicMode] = useState<DynamicMode>('milestones');
+  const [dynamicMode, setDynamicMode] = useState<DynamicMode>('newest');
 
   const refresh = useCallback(async () => {
     try {
