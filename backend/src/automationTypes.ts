@@ -35,6 +35,7 @@ import { QueryExec, userCanAccessWorkspace } from './workspaceUtil';
 import type { MutationActor } from './automationEngine';
 import { createListTask, deleteTaskRow, setListArchived, updateListTaskFields } from './routes/lists';
 import { softDeleteListTreeExec, softDeleteFolderExec, collectDescendantListIds } from './trashUtil';
+import { recordTaskChanges } from './taskChangeLog';
 import type { ExpressionScope } from './automationExpressions';
 import { performHttpRequest, clampTimeoutMs } from './httpNode';
 import { runSandboxedCode } from './codeNode';
@@ -387,6 +388,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
           `UPDATE tasks SET list_id = $1, section_id = $2, workspace_id = $3, position = $4 WHERE id = $5`,
           [targetListId, section, ctx.workspaceId, nextPos, task.id]
         );
+        await recordTaskChanges(exec, targetListId, task.id, { section_id: task.sectionId }, { section_id: section }, ctx.actor);
         return ok(`Moved task "${task.title}" to list ${targetListId}`, { taskId: task.id, targetListId, targetSectionId: section });
       });
     },
@@ -627,8 +629,10 @@ export const ACTION_REGISTRY: ActionDef[] = [
       if (!ctx.trigger.task) return fail('No task in trigger context');
       const newTitle = str(params.newTitle);
       if (!newTitle) return fail('newTitle is required');
+      const oldTitle = ctx.trigger.task.title;
       const result = await ctx.exec('UPDATE tasks SET title = $1 WHERE id = $2', [newTitle, ctx.trigger.task.id]);
       if ((result.rowCount ?? 0) === 0) return fail('Task no longer exists');
+      await recordTaskChanges(ctx.exec, ctx.trigger.task.listId, ctx.trigger.task.id, { title: oldTitle }, { title: newTitle }, ctx.actor);
       return ok(`Renamed task to "${newTitle}"`, { taskId: ctx.trigger.task.id, title: newTitle });
     },
   },

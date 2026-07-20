@@ -10,6 +10,7 @@ import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, wwarn, werr, Que
 import { softDeleteListTree, collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestrictConflict } from '../visibility';
 import type { MutationActor } from '../automationEngine';
+import { recordTaskChanges } from '../taskChangeLog';
 
 const router = Router();
 router.use(authenticate);
@@ -1088,9 +1089,13 @@ export async function updateListTaskFields(
   },
   actor: MutationActor
 ): Promise<TaskRow | null> {
-  const before = await exec(`SELECT checked FROM tasks WHERE id = $1 AND list_id = $2`, [taskId, listId]);
+  const before = await exec(
+    `SELECT title, note, checked, deadline, priority, badge, section_id FROM tasks WHERE id = $1 AND list_id = $2`,
+    [taskId, listId]
+  );
   if (before.rows.length === 0) return null;
-  const wasChecked = (before.rows[0] as { checked: boolean }).checked;
+  const beforeRow = before.rows[0] as { title: string; note: string | null; checked: boolean; deadline: string | null; priority: string | null; badge: string | null; section_id: string | null };
+  const wasChecked = beforeRow.checked;
 
   const result = await exec(
     `UPDATE tasks
@@ -1129,6 +1134,16 @@ export async function updateListTaskFields(
 
   if (result.rows.length === 0) return null;
   const saved = result.rows[0] as unknown as TaskRow;
+
+  // Audit trail for the Timeline view's change markers/changelog button —
+  // logs whichever of title/note/deadline/priority/badge/section actually
+  // moved. No-ops (cheaply) when this call touched none of them.
+  await recordTaskChanges(
+    exec, listId, taskId,
+    { title: beforeRow.title, note: beforeRow.note, deadline: beforeRow.deadline, priority: beforeRow.priority, badge: beforeRow.badge, section_id: beforeRow.section_id },
+    { title: saved.title, note: saved.note, deadline: saved.deadline, priority: saved.priority, badge: saved.badge, section_id: saved.section_id },
+    actor
+  );
 
   // Fire triggers only on a false → true checked transition, and only for
   // genuine user actions (see file header). A list-all-completed check piggy
@@ -1417,6 +1432,64 @@ router.get('/:listId/progress', async (req: Request, res: Response) => {
     res.json({ total, completed, percent });
   } catch (err) {
     werr('list progress error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/lists/:listId/changelog — every tracked field change (title/note/
+// deadline/priority/badge/section) across this list's tasks, newest first.
+// Feeds the Timeline view's per-task change markers and changelog modal.
+router.get('/:listId/changelog', async (req: Request, res: Response) => {
+  try {
+    const { listId } = req.params;
+
+    const listCheck = await query<{ user_id: string; workspace_id: string | null; is_public: boolean }>(
+      'SELECT user_id, workspace_id, is_public FROM lists WHERE id = $1',
+      [listId]
+    );
+    if (listCheck.rows.length === 0) {
+      res.status(404).json({ error: 'List not found' });
+      return;
+    }
+    const listObj = listCheck.rows[0];
+    const isOwner = listObj.user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+
+    let hasWorkspaceAccess = false;
+    if (listObj.workspace_id) {
+      const wsMemberCheck = await query('SELECT 1 FROM workspace_members WHERE workspace_id = $1 AND user_id = $2', [listObj.workspace_id, req.userId]);
+      hasWorkspaceAccess = wsMemberCheck.rows.length > 0;
+    }
+
+    const canAccess = isOwner || isAdmin || listObj.is_public || hasWorkspaceAccess;
+    if (!canAccess) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    const rows = await query<{
+      id: string; task_id: string; field: string; old_value: string | null; new_value: string | null;
+      actor_type: string; actor_name: string | null; changed_at: string;
+    }>(
+      `SELECT id, task_id, field, old_value, new_value, actor_type, actor_name, changed_at
+       FROM task_change_log WHERE list_id = $1 ORDER BY changed_at DESC LIMIT 1000`,
+      [listId]
+    );
+
+    res.json({
+      entries: rows.rows.map((r) => ({
+        id: r.id,
+        taskId: Number(r.task_id),
+        field: r.field,
+        oldValue: r.old_value,
+        newValue: r.new_value,
+        actorType: r.actor_type,
+        actorName: r.actor_name,
+        changedAt: r.changed_at,
+      })),
+    });
+  } catch (err) {
+    werr('list changelog error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
