@@ -5,6 +5,7 @@ import Icon from './Icon';
 import { useMobile } from '../hooks/useBreakpoint';
 import CalendarPicker from './CalendarPicker';
 import CreatorBubble from './CreatorBubble';
+import TaskChangeHistory from './TaskChangeHistory';
 import NotesEditor from './NotesEditor';
 import AttachmentPreviewModal from './AttachmentPreview';
 import { isPreviewable } from '../utils/attachmentPreview';
@@ -259,6 +260,8 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
   const isMobile = useMobile();
   const owner = useMembersStore(s => (task.creatorId ? s.members[task.creatorId] : undefined));
   const showOwner = Boolean(isPublic && task.creatorId);
+  const isListTask = task._source === 'list' && Boolean(task._listId);
+  const [showChangelog, setShowChangelog] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.note ?? '');
   const [deadline, setDeadline] = useState(task.deadline ?? '');
@@ -474,17 +477,25 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
             background: 'var(--color-white)',
             borderRadius: isMobile ? '16px 16px 0 0' : 18,
             width: '100%',
-            maxWidth: isMobile ? undefined : 800,
+            // Widens to make room for the change-history panel — the backdrop's
+            // own flex centering re-centers the whole card smoothly as this
+            // transitions, no extra positioning logic needed.
+            maxWidth: isMobile ? undefined : (showChangelog ? 800 + 320 : 800),
             maxHeight: isMobile ? '94vh' : '92vh',
             overflow: 'hidden',
             display: 'flex',
-            flexDirection: 'column',
+            flexDirection: isMobile ? 'column' : 'row',
             position: 'relative',
             boxShadow: '0 32px 80px rgba(var(--color-black-rgb), 0.22), 0 2px 8px rgba(var(--color-black-rgb), 0.08)',
             animation: isMobile ? 'slideUp 280ms cubic-bezier(0.22,1,0.36,1) both' : 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both',
+            transition: isMobile ? undefined : 'max-width 320ms cubic-bezier(0.4,0,0.2,1)',
           }}>
 
           <AttachDropOverlay visible={dragging} subtitle="Files will be uploaded and attached to this item" />
+
+          {/* Main column — everything the dialog already had, now wrapped so a
+              change-history panel can sit beside it on desktop. */}
+          <div style={{ flex: '1 1 auto', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Priority accent stripe */}
           <div style={{ height: 3, background: priority ? PRIORITY_COLORS[priority] : 'var(--color-purple-pale-23)', flexShrink: 0, transition: 'background 200ms' }} />
@@ -521,6 +532,16 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
               />
 
               <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginTop: 2 }}>
+                {isListTask && (
+                  <button
+                    onClick={() => setShowChangelog(v => !v)}
+                    title={showChangelog ? 'Hide change history' : 'View change history'}
+                    style={{ width: 34, height: 34, borderRadius: 9, background: showChangelog ? 'var(--color-surface-tint)' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 120ms' }}
+                    onMouseEnter={e => { if (!showChangelog) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                    onMouseLeave={e => { if (!showChangelog) e.currentTarget.style.background = 'transparent'; }}>
+                    <Icon name="manage_history" size={17} color={showChangelog ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
+                  </button>
+                )}
                 <button
                   onClick={() => setShowDelete(true)}
                   title="Delete task"
@@ -637,6 +658,11 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
                 </PropRow>
               )}
             </div>
+
+            {/* Change history — mobile only; desktop gets the side panel instead. */}
+            {isMobile && isListTask && (
+              <TaskChangeHistory task={task} listId={task._listId!} open={showChangelog} variant="inline" />
+            )}
 
             {/* Notes */}
             <div style={{ marginBottom: 28 }}>
@@ -854,6 +880,21 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
               Save
             </button>
           </div>
+          </div>
+          {/* Change-history panel — desktop only (mobile shows it inline in the
+              scrollable body instead). Always mounted so TaskChangeHistory's
+              lazy fetch only ever fires once; width animates 0 <-> 320. */}
+          {!isMobile && isListTask && (
+            <div style={{
+              width: showChangelog ? 320 : 0, flexShrink: 0, overflow: 'hidden',
+              borderLeft: '1px solid', borderLeftColor: showChangelog ? 'var(--color-surface-tint-2)' : 'transparent',
+              transition: 'width 320ms cubic-bezier(0.4,0,0.2,1), border-color 320ms',
+            }}>
+              <div style={{ width: 320, height: '100%', flexShrink: 0 }}>
+                <TaskChangeHistory task={task} listId={task._listId!} open={showChangelog} variant="panel" />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

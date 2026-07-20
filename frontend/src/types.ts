@@ -23,9 +23,9 @@ export interface Task {
 }
 
 /** One row from a task's audit trail — backs the Timeline view's per-task
- *  change markers and changelog modal. Written by the backend whenever
- *  title/note/deadline/priority/badge/section actually changes (user edit
- *  or an Automation Hub action). */
+ *  change markers and TaskDialog's "Change history" panel. Written by the
+ *  backend whenever title/note/deadline/priority/badge/section actually
+ *  changes (user edit or an Automation Hub action). */
 export interface TaskChangeLogEntry {
   id: number;
   taskId: number;
@@ -33,6 +33,8 @@ export interface TaskChangeLogEntry {
   oldValue: string | null;
   newValue: string | null;
   actorType: 'user' | 'automation';
+  /** User id (actorType 'user') or automation id (actorType 'automation'). */
+  actorId: string | null;
   actorName: string | null;
   changedAt: string;
 }
