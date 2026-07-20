@@ -23,9 +23,11 @@ const FIELD_META: Record<TaskChangeLogEntry['field'], { label: string; icon: str
   priority: { label: 'Priority', icon: 'priority_high' },
   badge:    { label: 'Badge',    icon: 'label' },
   section:  { label: 'Section',  icon: 'view_column' },
+  checked:  { label: 'Status',   icon: 'check_circle' },
 };
 
 function formatFieldValue(field: TaskChangeLogEntry['field'], value: string | null): string {
+  if (field === 'checked') return value === 'true' ? 'Done' : 'Not done';
   if (!value) return field === 'deadline' ? 'no deadline' : 'none';
   if (field === 'deadline') {
     const [y, m, d] = value.slice(0, 10).split('-').map(Number);

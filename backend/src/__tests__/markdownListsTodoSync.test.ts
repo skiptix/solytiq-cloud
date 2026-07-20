@@ -71,11 +71,12 @@ describe('reconcileTodoBlocks', () => {
         list_id: 'list_existing', section_id: 'section_todos', position: 0,
         created_at: 'x', updated_at: 'y', linked_list_id: null, linked_list_type: null,
       }], // updateListTaskFields: UPDATE ... RETURNING *
-      // The title actually changed ("Buy milk" -> "Buy milk (2%)"), so
-      // updateListTaskFields' task_change_log write kicks in: actor-name
-      // lookup, then the INSERT.
+      // Both the title ("Buy milk" -> "Buy milk (2%)") and checked status
+      // (false -> true) actually changed, so updateListTaskFields' task_change_log
+      // write kicks in: one actor-name lookup, then one INSERT per changed field.
       [{ username: 'someone' }],
-      [],
+      [], // INSERT — title
+      [], // INSERT — checked
       // list_all_completed check path is only entered on a false->true transition;
       // updateListTaskFields queries the list + remaining-unchecked count.
       [{ workspace_id: 'ws_1', name: 'My Notes — Todos' }],

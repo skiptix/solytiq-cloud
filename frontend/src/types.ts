@@ -29,7 +29,7 @@ export interface Task {
 export interface TaskChangeLogEntry {
   id: number;
   taskId: number;
-  field: 'title' | 'note' | 'deadline' | 'priority' | 'badge' | 'section';
+  field: 'title' | 'note' | 'deadline' | 'priority' | 'badge' | 'section' | 'checked';
   oldValue: string | null;
   newValue: string | null;
   actorType: 'user' | 'automation';

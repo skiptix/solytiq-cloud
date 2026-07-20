@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Task change log — audit trail behind the Timeline view's per-task change
-// markers and "changelog" button (see TaskTimelineView.tsx /
-// TaskChangeLogModal.tsx on the frontend).
+// markers and TaskDialog's "Change history" panel (see TaskTimelineView.tsx
+// / TaskChangeHistory.tsx on the frontend).
 //
 // recordTaskChanges() is the single place that diffs a task's tracked
 // fields and writes task_change_log rows. It's deliberately snapshot-based
@@ -17,7 +17,7 @@
 import { QueryExec } from './workspaceUtil';
 import type { MutationActor } from './automationEngine';
 
-export type TaskChangeField = 'title' | 'note' | 'deadline' | 'priority' | 'badge' | 'section';
+export type TaskChangeField = 'title' | 'note' | 'deadline' | 'priority' | 'badge' | 'section' | 'checked';
 
 export interface TaskChangeSnapshot {
   title?: string;
@@ -26,6 +26,7 @@ export interface TaskChangeSnapshot {
   priority?: string | null;
   badge?: string | null;
   section_id?: string | null;
+  checked?: boolean;
 }
 
 const NOTE_PREVIEW_LEN = 300;
@@ -70,6 +71,9 @@ export async function recordTaskChanges(
   }
   if (before.badge !== undefined && after.badge !== undefined && before.badge !== after.badge) {
     diffs.push({ field: 'badge', oldValue: before.badge, newValue: after.badge });
+  }
+  if (before.checked !== undefined && after.checked !== undefined && before.checked !== after.checked) {
+    diffs.push({ field: 'checked', oldValue: String(before.checked), newValue: String(after.checked) });
   }
   if (before.section_id !== undefined && after.section_id !== undefined && before.section_id !== after.section_id) {
     const ids = [before.section_id, after.section_id].filter((v): v is string => !!v);

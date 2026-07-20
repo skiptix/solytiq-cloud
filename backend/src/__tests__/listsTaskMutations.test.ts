@@ -74,6 +74,10 @@ describe('updateListTaskFields — task_completed trigger payload', () => {
         list_id: 'list_1', section_id: 'sec_1', position: 3, created_at: '2026-07-14T00:00:00Z', updated_at: '2026-07-14T01:00:00Z',
         linked_list_id: null, linked_list_type: null,
       }], // UPDATE ... RETURNING *
+      // checked flipped false -> true, so the task_change_log write kicks in:
+      // actor-name lookup, then the INSERT.
+      [{ username: 'someone' }],
+      [],
       [{ workspace_id: 'ws_1', name: 'Groceries' }], // list lookup for the trigger's workspace/name
       [{ n: 2 }], // remaining unchecked tasks (nonzero -> list_all_completed does NOT fire)
     ]);

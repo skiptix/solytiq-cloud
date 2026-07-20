@@ -1135,13 +1135,13 @@ export async function updateListTaskFields(
   if (result.rows.length === 0) return null;
   const saved = result.rows[0] as unknown as TaskRow;
 
-  // Audit trail for the Timeline view's change markers/changelog button —
-  // logs whichever of title/note/deadline/priority/badge/section actually
-  // moved. No-ops (cheaply) when this call touched none of them.
+  // Audit trail for the Timeline view's change markers/changelog panel —
+  // logs whichever of title/note/deadline/priority/badge/section/checked
+  // actually moved. No-ops (cheaply) when this call touched none of them.
   await recordTaskChanges(
     exec, listId, taskId,
-    { title: beforeRow.title, note: beforeRow.note, deadline: beforeRow.deadline, priority: beforeRow.priority, badge: beforeRow.badge, section_id: beforeRow.section_id },
-    { title: saved.title, note: saved.note, deadline: saved.deadline, priority: saved.priority, badge: saved.badge, section_id: saved.section_id },
+    { title: beforeRow.title, note: beforeRow.note, deadline: beforeRow.deadline, priority: beforeRow.priority, badge: beforeRow.badge, section_id: beforeRow.section_id, checked: beforeRow.checked },
+    { title: saved.title, note: saved.note, deadline: saved.deadline, priority: saved.priority, badge: saved.badge, section_id: saved.section_id, checked: saved.checked },
     actor
   );
 
