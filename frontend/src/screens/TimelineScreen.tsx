@@ -17,6 +17,7 @@ import {
 } from '../api/client';
 import { genId } from '../utils/id';
 import Icon from '../components/Icon';
+import SaveStatusDot from '../components/SaveStatusDot';
 import EmojiSelector from '../components/EmojiSelector';
 import CalendarPicker from '../components/CalendarPicker';
 import TimePicker from '../components/TimePicker';
@@ -645,6 +646,7 @@ export default function TimelineScreen() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <h1 style={{ margin: 0, fontFamily: 'var(--font-heading)', fontSize: 26, fontWeight: 800, color: 'var(--color-text-primary)' }}>{timeline.name}</h1>
+              <SaveStatusDot />
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: accent, background: 'var(--color-white)', padding: '3px 9px', borderRadius: 9999, border: `1px solid ${accent}33` }}>
                 <Icon name="timeline" size={13} color={accent} /> Timeline
               </span>

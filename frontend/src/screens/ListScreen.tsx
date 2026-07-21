@@ -10,6 +10,7 @@ import TaskDialog from '../components/TaskDialog';
 import TaskTimelineView from '../components/TaskTimelineView';
 import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, apiCreateSublistTask, apiLinkListAsTask, apiReorderSectionTasks, apiReorderListSections, apiUpdateListTask } from '../api/client';
 import Icon from '../components/Icon';
+import SaveStatusDot from '../components/SaveStatusDot';
 import EmojiSelector from '../components/EmojiSelector';
 
 export default function ListScreen() {
@@ -396,6 +397,7 @@ export default function ListScreen() {
                     {list.name}
                   </h1>
                 )}
+                <SaveStatusDot />
               </div>
               {list.subtitle && <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: 6 }}>{list.subtitle}</div>}
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>{completedCount} of {totalCount} done</div>
