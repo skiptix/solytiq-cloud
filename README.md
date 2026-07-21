@@ -27,14 +27,17 @@
 - 📂 **Folders & Lists** — Deeply nestable folders and smart lists with custom emojis, colors, and progress tracking.
 - 🗺️ **GPS Tracks & Routing** — Upload, analyze, and map GPX/FIT files directly within your workspace.
 - 📈 **Visual Timelines** — Track project milestones and plan your schedule chronologically.
-- ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via Server-Sent Events.
+- ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via Server-Sent Events, using a cursor-based delta-sync engine for authoritative updates without full reloads.
 - 🔒 **Enhanced Security** — Built-in TOTP 2FA support, JWT-based authentication, and hardened security headers.
 - 🤖 **AI Assistant & MCP Server** — A floating AI chat powered by OpenRouter, plus an integrated Model Context Protocol (MCP) server for external AI agents (like Claude) to securely interact with your workspace via OAuth 2.1.
+- 📝 **Inline AI Assist** — "Ask AI" button in notes and markdown pages for summarizing, generating content, and directly mutating markdown lists.
 - 📎 **Cloud File Sharing** — Securely share files (max upload size: 200 MB, Nginx proxy limit: 210 MB) with password protection, expiry dates, and public links.
-- 👥 **Multi-User & Admin** — Full member management with 15 GB per-user storage quotas and admin-controlled permissions.
+- 👥 **Multi-User & Admin** — Full member management with 15 GB per-user storage quotas and admin-controlled permissions. Includes an 'Admin Nuke' feature for total instance resets.
 - 📅 **CalDAV Server** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing meetings.
 - 🗑️ **Trash & Restore** — Comprehensive protection against accidental deletions with a 30-day recovery window.
 - 📋 **Templates** — Capture any list or timeline as a reusable template, keeping relative dates and recursive sublist structures intact.
+- ⚡ **Automation Hub** — Per-workspace, flow-chart-style automations (trigger/action) to streamline task management, executed securely via isolated-vm.
+- ⌨️ **Keyboard Shortcuts** — Comprehensive keyboard shortcuts registry for all major features, with customizable user overrides.
 
 ---
 
@@ -172,6 +175,20 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **Testing** — Vitest is the standard for both frontend and backend suites. To run tests, navigate to their respective directories and run `npm install && npm run test`.
 
 ---
+
+
+## 🏗️ Architecture & Technical Decisions
+
+- **State Management:** Zustand over Redux, with stores divided by domain (`useAppStore`, `useAuthStore`, `useWorkspaceStore`, etc.).
+- **Real-time via a cursor-based delta-sync engine over SSE:** `sync_log` outbox table triggers on mutations. The dispatcher resolves audiences and pushes a cursor-tagged frame over `/api/events` to trigger `GET /api/sync/delta?since=`. No WebSocket server is used.
+- **Database:** PostgreSQL 16 using raw SQL (no ORM) for explicit query control. Database migrations are managed in-code via `runMigrations()`.
+- **Soft Delete:** Entities are moved to trash tables (JSONB payload) with a 30-day `expires_at`, keeping live tables clean without a `deleted_at` column.
+- **ID Generation:** Task IDs are generated client-side using `Date.now()` (milliseconds) as BIGINT.
+- **Apps Registry:** An App Directory catalog allows admins to install/uninstall optional modules like `gps`, `files`, `mcp`, and `automations` without changing core code.
+- **Two Distinct "Public" Concepts:** `is_public` for in-app workspace members, and `share_enabled` + `share_token` for anonymous read-only web links.
+- **Security:** IDOR prevention via JWT `userId` checks, transaction-based quota checks (15GB/user limit), and `bcryptjs` hashing for all passwords.
+- **Admin Nuke:** A total, self-restarting instance reset that truncates tables, deletes files, and broadcasts a global SSE frame to clear client storage.
+- **Inline AI Assist:** Markdown pages support real editing tools via the AI tool registry, allowing the AI to directly insert or modify markdown blocks.
 
 ## 🔑 Admin API
 
