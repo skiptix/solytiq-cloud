@@ -607,6 +607,9 @@ export interface MarkdownList {
   colorBg?: string;
   subtitle?: string;
   isPublic?: boolean;
+  /** When true, the in-app editor stretches content to the full app width
+   *  instead of the default centered reading column. */
+  fullWidth?: boolean;
   folderId?: string;
   workspaceId?: string;
   position?: number;
