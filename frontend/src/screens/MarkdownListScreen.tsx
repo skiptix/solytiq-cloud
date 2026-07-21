@@ -187,6 +187,10 @@ export default function MarkdownListScreen() {
   // text-bearing block shows its formatted (bold/italic/strikethrough)
   // rendering instead — click it to switch into edit mode.
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
+  // Right-click context menu anchored at a viewport position, targeting one
+  // block (its Split/Stack/Swap options are resolved from that block's
+  // current section/columns membership — see contextMenuItems below).
+  const [contextMenu, setContextMenu] = useState<{ blockId: string; x: number; y: number } | null>(null);
 
   const blockRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -259,6 +263,22 @@ export default function MarkdownListScreen() {
   }, [persist]);
 
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
+
+  // Dismiss the right-click menu on Escape or when the page scrolls/resizes
+  // (its fixed position would otherwise drift away from the block it targets).
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [contextMenu]);
 
   const updateBlocks = useCallback((mutator: (prev: MarkdownBlock[]) => MarkdownBlock[]) => {
     setBlocks(prev => {
@@ -355,6 +375,21 @@ export default function MarkdownListScreen() {
       const rightBlocks = prev.slice(dIdx + 1, rightEnd);
       if (leftBlocks.length === 0 || rightBlocks.length === 0) return prev;
       return [...prev.slice(0, leftStart), ...rightBlocks, prev[dIdx], ...leftBlocks, ...prev.slice(rightEnd)];
+    });
+  };
+
+  // Splits a block's own section in two side-by-side columns by inserting a
+  // `columns` divider immediately before it: everything above the block (within
+  // the same section) becomes the left column, this block onward the right.
+  // Only meaningful when the block isn't already the first in its section
+  // (otherwise the left column would be empty) — the context menu enforces that.
+  const splitBeforeBlock = (blockId: string) => {
+    updateBlocks(prev => {
+      const idx = prev.findIndex(b => b.id === blockId);
+      if (idx <= 0 || prev[idx - 1].type === 'divider') return prev;
+      const next = [...prev];
+      next.splice(idx, 0, { id: newBlockId(), type: 'divider', layout: 'columns' });
+      return next;
     });
   };
 
@@ -530,12 +565,81 @@ export default function MarkdownListScreen() {
     dividerCanColumnsById[d.id] = (sections[i]?.length ?? 0) > 0 && (sections[i + 1]?.length ?? 0) > 0;
   });
 
+  // Which section each non-divider block lives in, and each divider's order
+  // among the dividers — used by the right-click menu to resolve a block's
+  // available Split/Stack/Swap options from its live columns membership.
+  const sectionIdxByBlockId: Record<string, number> = {};
+  sections.forEach((sec, si) => sec.forEach(b => { sectionIdxByBlockId[b.id] = si; }));
+
+  // Resolves the columns context for a block: whether it's currently inside a
+  // side-by-side pair (→ Swap/Stack, on `columnsDivider`), can flip an existing
+  // neighbouring divider to columns (→ Split, on `splitDivider`), or can split
+  // its own section at itself (→ Split, inserting a divider before `splitBefore`).
+  type ColumnsCtx = { columnsDivider?: MarkdownDividerBlock; splitDivider?: MarkdownDividerBlock; splitBefore?: string };
+  const columnsContextForBlock = (block: MarkdownBlock): ColumnsCtx => {
+    if (block.type === 'divider') {
+      const d = block as MarkdownDividerBlock;
+      if (d.layout === 'columns' && dividerCanColumnsById[d.id]) return { columnsDivider: d };
+      if (dividerCanColumnsById[d.id]) return { splitDivider: d };
+      return {};
+    }
+    const si = sectionIdxByBlockId[block.id];
+    if (si === undefined) return {};
+    const closing = sectionDividers[si] as MarkdownDividerBlock | undefined;      // divider after this section
+    const opening = sectionDividers[si - 1] as MarkdownDividerBlock | undefined;  // divider before this section
+    const isLeft = closing?.type === 'divider' && closing.layout === 'columns' && (sections[si]?.length ?? 0) > 0 && (sections[si + 1]?.length ?? 0) > 0;
+    const isRight = opening?.type === 'divider' && opening.layout === 'columns' && (sections[si - 1]?.length ?? 0) > 0 && (sections[si]?.length ?? 0) > 0;
+    if (isLeft) return { columnsDivider: closing };
+    if (isRight) return { columnsDivider: opening };
+    // Not in a columns pair — offer a split. Prefer splitting this section at
+    // the block itself; fall back to pairing with a non-empty neighbour.
+    const sec = sections[si] ?? [];
+    if (sec.findIndex(b => b.id === block.id) > 0) return { splitBefore: block.id };
+    if (opening && (sections[si - 1]?.length ?? 0) > 0) return { splitDivider: opening };
+    if (closing && (sections[si + 1]?.length ?? 0) > 0) return { splitDivider: closing };
+    return {};
+  };
+
+  interface ContextMenuItem { icon: string; label: string; onClick: () => void; danger?: boolean; }
+  const contextMenuItemsForBlock = (block: MarkdownBlock): ContextMenuItem[] => {
+    const ctx = columnsContextForBlock(block);
+    const items: ContextMenuItem[] = [];
+    if (ctx.columnsDivider) {
+      const id = ctx.columnsDivider.id;
+      items.push({ icon: 'swap_horiz', label: 'Swap columns', onClick: () => swapColumns(id) });
+      items.push({ icon: 'view_agenda', label: 'Stack vertically', onClick: () => toggleColumnsLayout(id, 'stack') });
+    } else if (ctx.splitDivider) {
+      const id = ctx.splitDivider.id;
+      items.push({ icon: 'view_column', label: 'Split side by side', onClick: () => toggleColumnsLayout(id, 'columns') });
+    } else if (ctx.splitBefore) {
+      const id = ctx.splitBefore;
+      items.push({ icon: 'view_column', label: 'Split into columns here', onClick: () => splitBeforeBlock(id) });
+    }
+    if (block.type !== 'divider' && blocks.length > 1) {
+      items.push({ icon: 'delete', label: 'Delete block', danger: true, onClick: () => deleteBlock(block.id) });
+    } else if (block.type === 'divider') {
+      items.push({ icon: 'delete', label: 'Remove divider', danger: true, onClick: () => deleteBlock(block.id) });
+    }
+    return items;
+  };
+
+  const openContextMenu = (block: MarkdownBlock, e: React.MouseEvent) => {
+    // Let the native menu through for the actively-edited textarea (copy /
+    // paste / spellcheck) — the custom menu is for the block chrome/preview.
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag === 'TEXTAREA' || tag === 'INPUT') return;
+    if (contextMenuItemsForBlock(block).length === 0) return;
+    e.preventDefault();
+    setContextMenu({ blockId: block.id, x: e.clientX, y: e.clientY });
+  };
+
   const renderBlock = (block: MarkdownBlock, index: number) => {
     const hovered = hoveredBlockId === block.id;
     return (
       <div key={block.id}
         onMouseEnter={() => setHoveredBlockId(block.id)}
         onMouseLeave={() => setHoveredBlockId(prev => prev === block.id ? null : prev)}
+        onContextMenu={e => openContextMenu(block, e)}
         onDragOver={e => e.preventDefault()}
         onDrop={e => { e.preventDefault(); if (dragBlockId && dragBlockId !== block.id) moveBlock(dragBlockId, block.id); setDragBlockId(null); }}
         style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
@@ -563,7 +667,7 @@ export default function MarkdownListScreen() {
                 <button
                   onClick={() => toggleColumnsLayout(block.id, 'columns')}
                   title="Arrange the sections above and below side by side"
-                  style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 999, border: `1px solid ${hovered ? 'var(--color-primary)' : 'var(--color-border)'}`, background: hovered ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', opacity: hovered ? 1 : 0.55, transition: 'opacity 160ms ease, background 160ms ease, border-color 160ms ease' }}>
+                  style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 999, border: `1px solid ${hovered ? 'var(--color-primary)' : 'var(--color-border)'}`, background: hovered ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', transition: 'background 160ms ease, border-color 160ms ease' }}>
                   <Icon name="view_column" size={13} color={hovered ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                   <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: hovered ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>Side by side</span>
                 </button>
@@ -662,7 +766,7 @@ export default function MarkdownListScreen() {
   };
 
   // Renders a `layout: 'columns'` divider's two flanking sections as a
-  // side-by-side grid (capped at 2 boxes). A hover-revealed toolbar sits above
+  // side-by-side grid (capped at 2 boxes). An always-visible toolbar sits above
   // the row with a one-click **Swap** (the only possible reorder with exactly
   // 2 boxes), **Stack** (un-split), and **Remove**. Each box also carries a
   // top grip handle so it can be dragged onto the other box to swap — while a
@@ -685,8 +789,8 @@ export default function MarkdownListScreen() {
         onMouseEnter={() => setHoveredColumnsRowId(divider.id)}
         onMouseLeave={() => setHoveredColumnsRowId(prev => prev === divider.id ? null : prev)}
         style={{ animation: 'viewSwitchIn 260ms cubic-bezier(0.22,1,0.36,1) both' }}>
-        {/* Hover toolbar — smoothly expands/reveals */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, height: rowHovered ? 30 : 0, marginBottom: rowHovered ? 8 : 0, overflow: 'hidden', opacity: rowHovered ? 1 : 0, pointerEvents: rowHovered ? 'auto' : 'none', transition: 'opacity 160ms ease, height 220ms cubic-bezier(0.22,1,0.36,1), margin-bottom 220ms cubic-bezier(0.22,1,0.36,1)' }}>
+        {/* Toolbar — always visible so the controls are never a mystery */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
           {!isMobile && (
             <button onClick={() => swapColumns(divider.id)} title="Swap the two columns" style={toolbarBtn} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
               <Icon name="swap_horiz" size={14} color="currentColor" />
@@ -887,6 +991,34 @@ export default function MarkdownListScreen() {
         </div>,
         document.body
       )}
+
+      {contextMenu && (() => {
+        const targetBlock = blocks.find(b => b.id === contextMenu.blockId);
+        const items = targetBlock ? contextMenuItemsForBlock(targetBlock) : [];
+        if (items.length === 0) return null;
+        const MENU_W = 224;
+        const estH = items.length * 40 + 10;
+        const left = Math.min(contextMenu.x, window.innerWidth - MENU_W - 10);
+        const top = Math.min(contextMenu.y, window.innerHeight - estH - 10);
+        return createPortal(
+          <>
+            <div onClick={() => setContextMenu(null)} onContextMenu={e => { e.preventDefault(); setContextMenu(null); }} style={{ position: 'fixed', inset: 0, zIndex: 1190 }} />
+            <div style={{ position: 'fixed', left, top, minWidth: MENU_W, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5, zIndex: 1200, animation: 'menuIn 140ms ease both' }}>
+              {items.map((item, ii) => (
+                <button key={ii}
+                  onClick={() => { item.onClick(); setContextMenu(null); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: 'none', border: 'none', borderRadius: 8, cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: item.danger ? 'var(--color-error)' : 'var(--color-text-primary)' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = item.danger ? 'var(--color-error-bg)' : 'var(--color-surface-tint)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                  <Icon name={item.icon} size={16} color={item.danger ? 'var(--color-error)' : 'var(--color-primary)'} />
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body
+        );
+      })()}
     </div>
   );
 }
