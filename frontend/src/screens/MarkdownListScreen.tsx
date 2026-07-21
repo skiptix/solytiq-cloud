@@ -195,6 +195,10 @@ export default function MarkdownListScreen() {
   // Which context-menu item's flyout submenu (the "Turn into" type switcher) is
   // currently open. Reset whenever the menu opens/closes.
   const [ctxSubmenuOpen, setCtxSubmenuOpen] = useState(false);
+  // "Reorder" mode: when on, every block's drag grip is shown so blocks can be
+  // dragged to reorder; when off (default) the grips stay hidden for a clean,
+  // no-movement reading/editing experience (toggled from the header button).
+  const [reorderMode, setReorderMode] = useState(false);
 
   const blockRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -700,11 +704,11 @@ export default function MarkdownListScreen() {
         onDrop={e => { e.preventDefault(); if (dragBlockId && dragBlockId !== block.id) moveBlock(dragBlockId, block.id); setDragBlockId(null); }}
         style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
         <span
-          draggable
-          onDragStart={() => setDragBlockId(block.id)}
+          draggable={reorderMode}
+          onDragStart={() => { if (reorderMode) setDragBlockId(block.id); }}
           title="Drag to reorder"
-          style={{ cursor: 'grab', flexShrink: 0, width: 15, overflow: 'hidden', display: 'flex', alignItems: 'center', height: 15, marginTop: Math.max(0, lineCenter - 7.5), opacity: hovered ? 1 : 0, transition: 'opacity 120ms ease, margin-top 200ms cubic-bezier(0.22,1,0.36,1)' }}>
-          <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
+          style={{ cursor: reorderMode ? 'grab' : 'default', flexShrink: 0, width: 15, overflow: 'hidden', display: 'flex', alignItems: 'center', height: 15, marginTop: Math.max(0, lineCenter - 7.5), opacity: reorderMode ? 1 : 0, pointerEvents: reorderMode ? 'auto' : 'none', transition: 'opacity 160ms ease, margin-top 200ms cubic-bezier(0.22,1,0.36,1)' }}>
+          <Icon name="drag_indicator" size={15} color="var(--color-primary)" />
         </span>
 
         <div style={{
@@ -930,6 +934,15 @@ export default function MarkdownListScreen() {
             {subtitle && <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', marginTop: 4 }}>{subtitle}</div>}
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexShrink: 0 }}>
+          <button
+            onClick={() => setReorderMode(r => !r)}
+            title={reorderMode ? 'Done reordering' : 'Reorder blocks'}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: 32, width: isMobile ? 32 : undefined, padding: isMobile ? 0 : '0 11px', borderRadius: 8, border: `1px solid ${reorderMode ? 'var(--color-primary)' : 'var(--color-border)'}`, background: reorderMode ? 'var(--color-primary)' : 'var(--color-white)', cursor: 'pointer', transition: 'all 120ms', flexShrink: 0 }}
+            onMouseEnter={e => { if (!reorderMode) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+            onMouseLeave={e => { if (!reorderMode) e.currentTarget.style.background = 'var(--color-white)'; }}>
+            <Icon name="swap_vert" size={15} color={reorderMode ? 'var(--color-white)' : 'var(--color-primary)'} />
+            {!isMobile && <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: reorderMode ? 'var(--color-white)' : 'var(--color-primary)' }}>{reorderMode ? 'Done' : 'Reorder'}</span>}
+          </button>
           {todoListId && (
             <button
               onClick={() => navigate(`/list/${todoListId}`)}
