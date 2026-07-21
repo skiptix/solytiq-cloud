@@ -1081,16 +1081,23 @@ interface MarkdownListWithTodoProps {
   onListDrop: (listId: string, e: React.DragEvent) => void;
 }
 function MarkdownListWithTodo({ markdownList, todoList, active, activeListId, activeMarkdownListId, collapsed, dragOverId, dragOverTaskListId, recentlyDroppedListId, folders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop }: MarkdownListWithTodoProps) {
-  const [subExpanded, setSubExpanded] = useState(true);
+  // Same collapsed-by-default, persisted-per-item behaviour as
+  // StandaloneListWithSublists — keyed by the Markdown List's id so the fold-out
+  // state survives refreshes instead of springing back open.
+  const subExpanded = useUserPrefsStore(s => s.sidebarExpandedSublists[markdownList.id] ?? false);
+  const toggleSublistExpanded = useUserPrefsStore(s => s.toggleSublistExpanded);
   const isActive = active === 'markdownList' && activeMarkdownListId === markdownList.id;
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center' }}>
         {!collapsed && todoList && (
-          <button onClick={() => setSubExpanded(e => !e)}
+          <button onClick={() => toggleSublistExpanded(markdownList.id)}
+            title={subExpanded ? 'Collapse Todo list' : 'Expand Todo list'}
             style={{ display: 'flex', alignItems: 'center', padding: '0 2px', border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}>
-            <Icon name={subExpanded ? 'expand_more' : 'chevron_right'} size={14} color="var(--color-text-quaternary)" />
+            <span style={{ display: 'inline-flex', transform: subExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 180ms cubic-bezier(0.22,1,0.36,1)' }}>
+              <Icon name="chevron_right" size={14} color="var(--color-text-quaternary)" />
+            </span>
           </button>
         )}
         <div style={{ flex: 1 }}>
@@ -1098,7 +1105,7 @@ function MarkdownListWithTodo({ markdownList, todoList, active, activeListId, ac
         </div>
       </div>
       {!collapsed && subExpanded && todoList && (
-        <div style={{ paddingLeft: 12, borderLeft: '2px solid var(--color-border)', marginLeft: 10 }}>
+        <div style={{ paddingLeft: 12, borderLeft: '2px solid var(--color-border)', marginLeft: 10, animation: 'menuItemIn 200ms cubic-bezier(0.22,1,0.36,1) both' }}>
           <ListItemRow
             list={todoList}
             isActive={active === 'list' && activeListId === todoList.id}
@@ -1608,7 +1615,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.58.0
+              v1.58.1
             </div>
           )}
         </div>
@@ -1927,7 +1934,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="archive" label="Archived" active={false} onClick={() => onOpenModal('archived')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.58.0
+            v1.58.1
           </div>
         )}
       </div>
