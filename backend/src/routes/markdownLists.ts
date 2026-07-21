@@ -59,6 +59,7 @@ interface MarkdownListRow {
   color_bg: string | null;
   subtitle: string | null;
   is_public: boolean;
+  full_width: boolean;
   folder_id: string | null;
   workspace_id: string | null;
   position: number;
@@ -105,6 +106,7 @@ function sanitize(row: MarkdownListRow) {
     colorBg: row.color_bg,
     subtitle: row.subtitle,
     isPublic: row.is_public,
+    fullWidth: row.full_width ?? false,
     folderId: row.folder_id ?? undefined,
     workspaceId: row.workspace_id ?? undefined,
     position: row.position,
@@ -390,9 +392,9 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
 router.put('/:id', authenticate, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, emoji, color, colorBg, subtitle, isPublic, folderId, position, content, expectedVersion } = req.body as {
+    const { name, emoji, color, colorBg, subtitle, isPublic, fullWidth, folderId, position, content, expectedVersion } = req.body as {
       name?: string; emoji?: string; color?: string; colorBg?: string; subtitle?: string;
-      isPublic?: boolean; folderId?: string | null; position?: number;
+      isPublic?: boolean; fullWidth?: boolean; folderId?: string | null; position?: number;
       content?: MarkdownListContent; expectedVersion?: number;
     };
 
@@ -442,6 +444,7 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
              color_bg   = COALESCE($4, color_bg),
              subtitle   = COALESCE($5, subtitle),
              is_public  = COALESCE($6, is_public),
+             full_width = COALESCE($13, full_width),
              folder_id  = CASE WHEN $8 THEN $9 ELSE folder_id END,
              position   = COALESCE($10, position),
              content    = COALESCE($11, content),
@@ -450,7 +453,7 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
          WHERE id = $7
          RETURNING *`,
         [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? null, id,
-          updateFolderId, folderId ?? null, position ?? null, contentJson, todoListId]
+          updateFolderId, folderId ?? null, position ?? null, contentJson, todoListId, fullWidth ?? null]
       );
       return { result: updateRes, newTodoListId: todoListId, priorTodoListId: locked.todo_list_id };
     });

@@ -159,6 +159,7 @@ export default function MarkdownListScreen() {
   const [color, setColor] = useState<string | undefined>(undefined);
   const [subtitle, setSubtitle] = useState<string | undefined>(undefined);
   const [isPublic, setIsPublic] = useState(false);
+  const [fullWidth, setFullWidth] = useState(false);
   const [shareInfo, setShareInfo] = useState<{ enabled?: boolean; token?: string | null; hasPassword?: boolean; expiresAt?: string | null }>({});
   const [showSettings, setShowSettings] = useState(false);
   const [todoListId, setTodoListId] = useState<string | null>(null);
@@ -203,6 +204,7 @@ export default function MarkdownListScreen() {
       setColor(md.color);
       setSubtitle(md.subtitle ?? undefined);
       setIsPublic(Boolean(md.isPublic));
+      setFullWidth(Boolean(md.fullWidth));
       setShareInfo({ enabled: md.shareEnabled, token: md.shareToken, hasPassword: md.shareHasPassword, expiresAt: md.shareExpiresAt });
       setTodoListId(md.todoListId ?? null);
       const initialBlocks = md.content.blocks.length > 0 ? md.content.blocks : [makeEmptyBlock('paragraph')];
@@ -477,6 +479,7 @@ export default function MarkdownListScreen() {
     if (updates.emoji !== undefined) setEmoji(updates.emoji);
     if (updates.color !== undefined) setColor(updates.color);
     if (updates.isPublic !== undefined) setIsPublic(updates.isPublic);
+    if (updates.fullWidth !== undefined) setFullWidth(updates.fullWidth);
     // Markdown lists don't expose the Folder tab (no folder-nesting UI yet),
     // so `folderId` never actually arrives here in practice — the cast just
     // satisfies ItemSettingsUpdates' shared shape (folderId: string | null)
@@ -554,15 +557,15 @@ export default function MarkdownListScreen() {
           overflow: block.type === 'image' ? 'hidden' : 'visible',
         }}>
           {block.type === 'divider' ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <hr style={{ flex: 1, border: 'none', borderTop: '1.5px solid var(--color-border)', margin: '10px 0' }} />
               {dividerCanColumnsById[block.id] && (
                 <button
                   onClick={() => toggleColumnsLayout(block.id, 'columns')}
                   title="Arrange the sections above and below side by side"
-                  style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer', opacity: hovered ? 1 : 0, transition: 'opacity 120ms' }}>
-                  <Icon name="view_column" size={13} color="var(--color-text-tertiary)" />
-                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>Side by side</span>
+                  style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 999, border: `1px solid ${hovered ? 'var(--color-primary)' : 'var(--color-border)'}`, background: hovered ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', opacity: hovered ? 1 : 0.55, transition: 'opacity 160ms ease, background 160ms ease, border-color 160ms ease' }}>
+                  <Icon name="view_column" size={13} color={hovered ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: hovered ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>Side by side</span>
                 </button>
               )}
             </div>
@@ -659,56 +662,79 @@ export default function MarkdownListScreen() {
   };
 
   // Renders a `layout: 'columns'` divider's two flanking sections as a
-  // side-by-side grid (capped at 2 boxes). Each box gets a drag handle
-  // positioned OUTSIDE its border — distinct from each block's own internal
-  // reorder handle — dragging one onto the other box swaps left/right, the
-  // only possible reorder with exactly 2 boxes.
+  // side-by-side grid (capped at 2 boxes). A hover-revealed toolbar sits above
+  // the row with a one-click **Swap** (the only possible reorder with exactly
+  // 2 boxes), **Stack** (un-split), and **Remove**. Each box also carries a
+  // top grip handle so it can be dragged onto the other box to swap — while a
+  // drag is in flight the target column lights up so the drop is obvious.
   const renderColumnsRow = (leftBlocks: MarkdownBlock[], rightBlocks: MarkdownBlock[], divider: MarkdownDividerBlock) => {
     const rowHovered = hoveredColumnsRowId === divider.id;
+    const dragging = dragColumnHandle?.dividerId === divider.id;
+
+    const toolbarBtn: React.CSSProperties = {
+      display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999,
+      border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer',
+      fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)',
+      transition: 'background 140ms ease, border-color 140ms ease, color 140ms ease',
+    };
+    const hoverIn = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; };
+    const hoverOut = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = 'var(--color-white)'; e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; };
+
     return (
       <div key={divider.id}
         onMouseEnter={() => setHoveredColumnsRowId(divider.id)}
-        onMouseLeave={() => setHoveredColumnsRowId(prev => prev === divider.id ? null : prev)}>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: rowHovered ? 6 : 0, height: rowHovered ? 24 : 0, overflow: 'hidden', transition: 'opacity 120ms', opacity: rowHovered ? 1 : 0 }}>
-          <button onClick={() => toggleColumnsLayout(divider.id, 'stack')} title="Stack sections vertically"
-            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer' }}>
-            <Icon name="view_agenda" size={13} color="var(--color-text-tertiary)" />
-            <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>Stack</span>
+        onMouseLeave={() => setHoveredColumnsRowId(prev => prev === divider.id ? null : prev)}
+        style={{ animation: 'viewSwitchIn 260ms cubic-bezier(0.22,1,0.36,1) both' }}>
+        {/* Hover toolbar — smoothly expands/reveals */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, height: rowHovered ? 30 : 0, marginBottom: rowHovered ? 8 : 0, overflow: 'hidden', opacity: rowHovered ? 1 : 0, pointerEvents: rowHovered ? 'auto' : 'none', transition: 'opacity 160ms ease, height 220ms cubic-bezier(0.22,1,0.36,1), margin-bottom 220ms cubic-bezier(0.22,1,0.36,1)' }}>
+          {!isMobile && (
+            <button onClick={() => swapColumns(divider.id)} title="Swap the two columns" style={toolbarBtn} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
+              <Icon name="swap_horiz" size={14} color="currentColor" />
+              <span>Swap</span>
+            </button>
+          )}
+          <button onClick={() => toggleColumnsLayout(divider.id, 'stack')} title="Stack sections vertically" style={toolbarBtn} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
+            <Icon name="view_agenda" size={13} color="currentColor" />
+            <span>Stack</span>
           </button>
-          <button onClick={() => deleteBlock(divider.id)} title="Remove divider"
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer' }}>
-            <Icon name="close" size={12} color="var(--color-text-quaternary)" />
+          <button onClick={() => deleteBlock(divider.id)} title="Remove divider" style={{ ...toolbarBtn, padding: '5px 8px' }} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
+            <Icon name="close" size={13} color="currentColor" />
           </button>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'start' }}>
           {[leftBlocks, rightBlocks].map((sideBlocks, colIdx) => {
             const col = colIdx as 0 | 1;
-            const handleStyle: React.CSSProperties = {
-              position: 'absolute', top: '50%', transform: 'translateY(-50%)',
-              cursor: 'grab', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 20, height: 28, borderRadius: 6, background: 'var(--color-white)',
-              border: '1px solid var(--color-border)', boxShadow: '0 2px 6px rgba(var(--color-black-rgb), 0.08)',
-              opacity: rowHovered ? 1 : 0, transition: 'opacity 120ms', zIndex: 2,
-              ...(col === 0 ? { left: -14 } : { right: -14 }),
-            };
+            const isDropTarget = dragging && dragColumnHandle!.col !== col;
+            const isSource = dragging && dragColumnHandle!.col === col;
             return (
               <div key={colIdx}
-                onDragOver={e => e.preventDefault()}
+                onDragOver={e => { if (dragging) e.preventDefault(); }}
                 onDrop={e => {
                   e.preventDefault();
                   if (dragColumnHandle && dragColumnHandle.dividerId === divider.id && dragColumnHandle.col !== col) swapColumns(divider.id);
                   setDragColumnHandle(null);
                 }}
-                style={{ position: 'relative', minWidth: 0, border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                style={{
+                  position: 'relative', minWidth: 0,
+                  border: `1.5px solid ${isDropTarget ? 'var(--color-primary)' : 'var(--color-border-alt)'}`,
+                  borderRadius: 12,
+                  background: isDropTarget ? 'var(--color-surface-tint)' : 'var(--color-surface-gray)',
+                  boxShadow: isDropTarget ? '0 0 0 3px rgba(var(--color-primary-rgb), 0.12)' : 'none',
+                  opacity: isSource ? 0.55 : 1,
+                  padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2,
+                  transition: 'border-color 140ms ease, background 140ms ease, box-shadow 140ms ease, opacity 140ms ease',
+                }}>
                 {!isMobile && (
-                  <span
-                    draggable
-                    onDragStart={() => setDragColumnHandle({ dividerId: divider.id, col })}
-                    onDragEnd={() => setDragColumnHandle(null)}
-                    title="Drag onto the other box to swap"
-                    style={handleStyle}>
-                    <Icon name="drag_indicator" size={14} color="var(--color-border-strong)" />
-                  </span>
+                  <div style={{ display: 'flex', justifyContent: 'center', height: rowHovered || dragging ? 16 : 0, marginBottom: rowHovered || dragging ? 2 : 0, overflow: 'hidden', opacity: rowHovered || dragging ? 1 : 0, transition: 'opacity 140ms ease, height 200ms cubic-bezier(0.22,1,0.36,1), margin-bottom 200ms cubic-bezier(0.22,1,0.36,1)' }}>
+                    <span
+                      draggable
+                      onDragStart={() => setDragColumnHandle({ dividerId: divider.id, col })}
+                      onDragEnd={() => setDragColumnHandle(null)}
+                      title="Drag onto the other column to swap"
+                      style={{ cursor: 'grab', display: 'flex', alignItems: 'center', gap: 2, padding: '0 12px', borderRadius: 999, lineHeight: 1 }}>
+                      <Icon name="drag_indicator" size={14} color="var(--color-border-strong)" />
+                    </span>
+                  </div>
                 )}
                 {sideBlocks.map(b => renderBlock(b, blockIndexById[b.id]))}
               </div>
@@ -721,7 +747,7 @@ export default function MarkdownListScreen() {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center', padding: isMobile ? '20px 16px 80px' : '40px 24px 120px' }}>
-      <div style={{ width: '100%', maxWidth: 760 }}>
+      <div style={{ width: '100%', maxWidth: fullWidth ? 1400 : 760, transition: 'max-width 320ms cubic-bezier(0.22,1,0.36,1)' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
           <span style={{ fontSize: 34, lineHeight: 1.2 }}>{emoji || '📝'}</span>
@@ -797,7 +823,7 @@ export default function MarkdownListScreen() {
               }
               if (sectionBlocks.length > 0) {
                 rows.push(
-                  <div key={`section-${i}`} style={{ border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <div key={`section-${i}`} style={{ border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2, animation: 'viewSwitchIn 260ms cubic-bezier(0.22,1,0.36,1) both' }}>
                     {sectionBlocks.map(block => renderBlock(block, blockIndexById[block.id]))}
                   </div>
                 );
@@ -824,6 +850,7 @@ export default function MarkdownListScreen() {
           emoji={emoji}
           color={color}
           isPublic={isPublic}
+          fullWidth={fullWidth}
           itemId={mdId}
           share={shareInfo}
           onShareUpdated={(s: ShareInfo) => setShareInfo({ enabled: s.enabled, token: s.token, hasPassword: s.hasPassword, expiresAt: s.expiresAt })}

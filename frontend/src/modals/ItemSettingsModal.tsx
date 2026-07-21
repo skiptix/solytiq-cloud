@@ -41,6 +41,7 @@ export interface ItemSettingsUpdates {
   color?: string;
   colorBg?: string;
   isPublic?: boolean;
+  fullWidth?: boolean;
   folderId?: string | null;
 }
 
@@ -50,6 +51,8 @@ interface ItemSettingsModalProps {
   emoji?: string;
   color?: string;
   isPublic?: boolean;
+  /** Markdown lists only — whether the page renders full-width in-app. */
+  fullWidth?: boolean;
   folders?: Folder[];
   folderId?: string;
   itemId?: string;
@@ -378,9 +381,10 @@ function AccessibilitySection({ kind, itemId, initialPublic, onApplied }: {
 type ItemTab = 'appearance' | 'access' | 'organization' | 'share' | 'admin';
 
 // ── Main modal ────────────────────────────────────────────────────────────────
-export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, folders, folderId, itemId, creatorId, share, onShareUpdated, onVisibilityApplied, onChange, onClose }: ItemSettingsModalProps) {
+export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, fullWidth, folders, folderId, itemId, creatorId, share, onShareUpdated, onVisibilityApplied, onChange, onClose }: ItemSettingsModalProps) {
   const isMobile = useMobile();
   const accent = color ?? 'var(--color-primary)';
+  const [fw, setFw] = useState(Boolean(fullWidth));
   const { isAdmin } = useAuthStore();
   const { lists, timelines } = useAppStore();
   const { markdownLists } = useMarkdownListsStore();
@@ -520,6 +524,33 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                   </div>
                 </div>
               </div>
+
+              {/* Page width (markdown lists only) */}
+              {kind === 'markdownList' && (
+                <div style={{ marginTop: 20 }}>
+                  {sectionLabel('Page width')}
+                  <div style={{ ...card, padding: '4px', display: 'flex', gap: 4 }}>
+                    {([
+                      { label: 'Standard', icon: 'format_align_center', val: false },
+                      { label: 'Full width', icon: 'width_full', val: true },
+                    ] as const).map(opt => {
+                      const selected = fw === opt.val;
+                      return (
+                        <button key={opt.label}
+                          onClick={() => { if (fw !== opt.val) { setFw(opt.val); onChange({ fullWidth: opt.val }); } }}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? 'var(--color-white)' : 'var(--color-primary)', transition: 'all 120ms' }}>
+                          <Icon name={opt.icon} size={15} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
+                          {opt.label}
+                          {selected && <Icon name="check" size={13} color="var(--color-white)" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', marginTop: 6, lineHeight: 1.4, paddingLeft: 2 }}>
+                    Full width stretches sections and side-by-side columns across the whole app — great for wide tables of boxes.
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

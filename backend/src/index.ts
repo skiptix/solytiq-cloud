@@ -1655,6 +1655,12 @@ async function runMigrations() {
   await pool.query(`ALTER TABLE markdown_lists ADD COLUMN IF NOT EXISTS share_expires_at TIMESTAMPTZ`);
   await pool.query(`CREATE INDEX IF NOT EXISTS markdown_lists_share_token_idx ON markdown_lists(share_token) WHERE share_token IS NOT NULL`);
 
+  // Per-page layout preference: when true, the in-app editor stretches its
+  // content (sections/columns) to fill the whole app width instead of the
+  // default centered reading column — toggled from the Appearance tab of the
+  // "More settings…" dialog. See frontend/src/screens/MarkdownListScreen.tsx.
+  await pool.query(`ALTER TABLE markdown_lists ADD COLUMN IF NOT EXISTS full_width BOOLEAN NOT NULL DEFAULT false`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS trash_markdown_lists (
       id                 SERIAL PRIMARY KEY,

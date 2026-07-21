@@ -17,7 +17,7 @@ interface MarkdownListsStore {
   load: (workspaceId?: string) => Promise<void>;
   getDetail: (id: string) => Promise<MarkdownList>;
   create: (data: { name: string; emoji?: string; color?: string; colorBg?: string; subtitle?: string; isPublic?: boolean; folderId?: string; workspaceId?: string }) => Promise<MarkdownList>;
-  update: (id: string, data: Partial<Pick<MarkdownList, 'name' | 'emoji' | 'color' | 'colorBg' | 'subtitle' | 'isPublic' | 'folderId' | 'position'>> & { content?: MarkdownListContent; expectedVersion?: number }) => Promise<MarkdownList>;
+  update: (id: string, data: Partial<Pick<MarkdownList, 'name' | 'emoji' | 'color' | 'colorBg' | 'subtitle' | 'isPublic' | 'fullWidth' | 'folderId' | 'position'>> & { content?: MarkdownListContent; expectedVersion?: number }) => Promise<MarkdownList>;
   remove: (id: string) => Promise<void>;
   /** Local-only patch, no network call — for syncing state after a caller
    *  (e.g. ItemSettingsModal's ShareSection/AccessibilitySection) already

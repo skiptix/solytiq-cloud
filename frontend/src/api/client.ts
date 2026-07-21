@@ -1305,7 +1305,7 @@ export const apiGetMarkdownList = (id: string) =>
 export const apiCreateMarkdownList = (data: { id?: string; name: string; emoji?: string; color?: string; colorBg?: string; subtitle?: string; isPublic?: boolean; folderId?: string; workspaceId?: string }) =>
   apiFetch<{ markdownList: MarkdownList }>('/markdown-lists', { method: 'POST', body: JSON.stringify(data) });
 
-export const apiUpdateMarkdownList = (id: string, data: Partial<Pick<MarkdownList, 'name' | 'emoji' | 'color' | 'colorBg' | 'subtitle' | 'isPublic' | 'folderId' | 'position'>> & { content?: MarkdownListContent; expectedVersion?: number; cascade?: boolean }) =>
+export const apiUpdateMarkdownList = (id: string, data: Partial<Pick<MarkdownList, 'name' | 'emoji' | 'color' | 'colorBg' | 'subtitle' | 'isPublic' | 'fullWidth' | 'folderId' | 'position'>> & { content?: MarkdownListContent; expectedVersion?: number; cascade?: boolean }) =>
   apiFetch<{ markdownList: MarkdownList }>(`/markdown-lists/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiDeleteMarkdownList = (id: string) =>
