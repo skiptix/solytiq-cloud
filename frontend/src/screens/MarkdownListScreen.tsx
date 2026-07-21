@@ -14,6 +14,7 @@ import { toggleWrap, formatMarkerForKeyDown } from '../utils/textFormatting';
 import { apiUploadMarkdownImage, markdownImageUrl, type ShareInfo } from '../api/client';
 import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSettingsModal';
 import MarkdownListAIAssist from '../components/AIAssistant/MarkdownListAIAssist';
+import SaveStatusDot from '../components/SaveStatusDot';
 
 // Matches TaskItem.tsx's hand-drawn checkmark so a `/todo` block's checkbox
 // looks identical to a task row in the To-Do screen.
@@ -535,8 +536,6 @@ export default function MarkdownListScreen() {
     );
   }
 
-  const saveLabel = saveState === 'saving' ? 'Saving…' : saveState === 'error' ? 'Failed to save' : saveState === 'saved' ? 'Saved' : '';
-
   // Contiguous run numbering for numbered-list-item blocks.
   const numberByBlockId: Record<string, number> = {};
   let runCount = 0;
@@ -853,19 +852,22 @@ export default function MarkdownListScreen() {
     <div style={{ flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center', padding: isMobile ? '20px 16px 80px' : '40px 24px 120px' }}>
       <div style={{ width: '100%', maxWidth: fullWidth ? 1400 : 760, transition: 'max-width 320ms cubic-bezier(0.22,1,0.36,1)' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 24 }}>
           <span style={{ fontSize: 34, lineHeight: 1.2 }}>{emoji || '📝'}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            {nameEditing ? (
-              <input autoFocus value={nameDraft} onChange={e => setNameDraft(e.target.value)}
-                onBlur={handleNameSave} onKeyDown={e => { if (e.key === 'Enter') handleNameSave(); if (e.key === 'Escape') setNameEditing(false); }}
-                style={{ fontFamily: 'var(--font-heading)', fontSize: 28, fontWeight: 700, color: 'var(--color-text-primary)', border: 'none', borderBottom: '2px solid var(--color-primary)', outline: 'none', width: '100%', background: 'transparent' }} />
-            ) : (
-              <h1 onClick={() => { setNameDraft(name); setNameEditing(true); }}
-                style={{ fontFamily: 'var(--font-heading)', fontSize: 28, fontWeight: 700, color: 'var(--color-text-primary)', margin: 0, cursor: 'text', overflowWrap: 'break-word' }}>
-                {name}
-              </h1>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {nameEditing ? (
+                <input autoFocus value={nameDraft} onChange={e => setNameDraft(e.target.value)}
+                  onBlur={handleNameSave} onKeyDown={e => { if (e.key === 'Enter') handleNameSave(); if (e.key === 'Escape') setNameEditing(false); }}
+                  style={{ fontFamily: 'var(--font-heading)', fontSize: 28, fontWeight: 700, color: 'var(--color-text-primary)', border: 'none', borderBottom: '2px solid var(--color-primary)', outline: 'none', width: '100%', background: 'transparent' }} />
+              ) : (
+                <h1 onClick={() => { setNameDraft(name); setNameEditing(true); }}
+                  style={{ fontFamily: 'var(--font-heading)', fontSize: 28, fontWeight: 700, color: 'var(--color-text-primary)', margin: 0, cursor: 'text', overflowWrap: 'break-word' }}>
+                  {name}
+                </h1>
+              )}
+              <SaveStatusDot state={saveState} />
+            </div>
             {subtitle && <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', marginTop: 4 }}>{subtitle}</div>}
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexShrink: 0 }}>
@@ -905,7 +907,6 @@ export default function MarkdownListScreen() {
           </div>
           </div>
         </div>
-        <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: saveState === 'error' ? 'var(--color-error)' : 'var(--color-text-quaternary)', marginBottom: 24, height: 14 }}>{saveLabel}</div>
 
         {/* Blocks */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

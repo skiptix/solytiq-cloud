@@ -17,6 +17,16 @@ let _onMutationSettled: (() => void) | undefined;
  *  realtime frame happens to arrive. */
 export function setMutationSettledHandler(fn: () => void): void { _onMutationSettled = fn; }
 
+// Lightweight save-activity signal (drives the header status dot). Fires the
+// request path (e.g. `/lists/abc`) so the consumer can scope which writes it
+// cares about — every non-GET request start / success / failure is reported.
+let _onSaveStart: ((path: string) => void) | undefined;
+let _onSaveSuccess: ((path: string) => void) | undefined;
+let _onSaveError: ((path: string) => void) | undefined;
+export function setSaveActivityHandlers(h: {
+  start: (path: string) => void; success: (path: string) => void; error: (path: string) => void;
+}): void { _onSaveStart = h.start; _onSaveSuccess = h.success; _onSaveError = h.error; }
+
 /** Error thrown for any non-2xx response. Carries the HTTP status and the
  *  parsed JSON body (when available) so callers can react to structured errors
  *  such as the visibility-hierarchy 409 conflict. */
@@ -97,9 +107,16 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     inflight.set(key, p);
     return p;
   }
-  const result = await rawFetch<T>(path, options);
-  _onMutationSettled?.();
-  return result;
+  _onSaveStart?.(path);
+  try {
+    const result = await rawFetch<T>(path, options);
+    _onMutationSettled?.();
+    _onSaveSuccess?.(path);
+    return result;
+  } catch (e) {
+    _onSaveError?.(path);
+    throw e;
+  }
 }
 
 // ── Visibility hierarchy conflict (Workspace → Folder → List/Timeline) ────────
