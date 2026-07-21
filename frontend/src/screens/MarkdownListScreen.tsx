@@ -192,6 +192,9 @@ export default function MarkdownListScreen() {
   // block (its Split/Stack/Swap options are resolved from that block's
   // current section/columns membership — see contextMenuItems below).
   const [contextMenu, setContextMenu] = useState<{ blockId: string; x: number; y: number } | null>(null);
+  // Which context-menu item's flyout submenu (the "Turn into" type switcher) is
+  // currently open. Reset whenever the menu opens/closes.
+  const [ctxSubmenuOpen, setCtxSubmenuOpen] = useState(false);
 
   const blockRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -392,6 +395,20 @@ export default function MarkdownListScreen() {
       next.splice(idx, 0, { id: newBlockId(), type: 'divider', layout: 'columns' });
       return next;
     });
+  };
+
+  // Converts a text-bearing block to another text-bearing type IN PLACE — keeps
+  // the same block id and its text, only changing how it renders (e.g. H1 → H2,
+  // paragraph → quote). Used by the right-click "Turn into" submenu.
+  type TextConvertType = 'heading' | 'paragraph' | 'bulleted-list-item' | 'numbered-list-item' | 'todo' | 'quote';
+  const changeBlockType = (blockId: string, type: TextConvertType, level?: 1 | 2 | 3) => {
+    updateBlocks(prev => prev.map(b => {
+      if (b.id !== blockId || !hasText(b)) return b;
+      const text = b.text;
+      if (type === 'heading') return { id: b.id, type, level: level ?? 3, text };
+      if (type === 'todo') return { id: b.id, type, text, checked: b.type === 'todo' ? b.checked : false, taskId: b.type === 'todo' ? b.taskId : null };
+      return { id: b.id, type, text };
+    }));
   };
 
   const filteredCommands = (query: string) => {
@@ -599,7 +616,17 @@ export default function MarkdownListScreen() {
     return {};
   };
 
-  interface ContextMenuItem { icon: string; label: string; onClick: () => void; danger?: boolean; }
+  interface ContextMenuItem { icon: string; label: string; onClick?: () => void; danger?: boolean; active?: boolean; submenu?: ContextMenuItem[]; }
+  const TURN_INTO_OPTIONS: { icon: string; label: string; type: TextConvertType; level?: 1 | 2 | 3 }[] = [
+    { icon: 'notes', label: 'Text', type: 'paragraph' },
+    { icon: 'format_h1', label: 'Heading 1', type: 'heading', level: 1 },
+    { icon: 'format_h2', label: 'Heading 2', type: 'heading', level: 2 },
+    { icon: 'format_h3', label: 'Heading 3', type: 'heading', level: 3 },
+    { icon: 'format_list_bulleted', label: 'Bulleted list', type: 'bulleted-list-item' },
+    { icon: 'format_list_numbered', label: 'Numbered list', type: 'numbered-list-item' },
+    { icon: 'check_box', label: 'To-do', type: 'todo' },
+    { icon: 'format_quote', label: 'Quote', type: 'quote' },
+  ];
   const contextMenuItemsForBlock = (block: MarkdownBlock): ContextMenuItem[] => {
     const ctx = columnsContextForBlock(block);
     const items: ContextMenuItem[] = [];
@@ -613,6 +640,17 @@ export default function MarkdownListScreen() {
     } else if (ctx.splitBefore) {
       const id = ctx.splitBefore;
       items.push({ icon: 'view_column', label: 'Split into columns here', onClick: () => splitBeforeBlock(id) });
+    }
+    if (hasText(block)) {
+      const cur = block as TextBlock;
+      items.push({
+        icon: 'sync_alt', label: 'Turn into',
+        submenu: TURN_INTO_OPTIONS.map(o => ({
+          icon: o.icon, label: o.label,
+          active: cur.type === o.type && (o.type !== 'heading' || (cur as MarkdownHeadingBlock).level === o.level),
+          onClick: () => changeBlockType(block.id, o.type, o.level),
+        })),
+      });
     }
     if (block.type !== 'divider' && blocks.length > 1) {
       items.push({ icon: 'delete', label: 'Delete block', danger: true, onClick: () => deleteBlock(block.id) });
@@ -629,11 +667,30 @@ export default function MarkdownListScreen() {
     if (tag === 'TEXTAREA' || tag === 'INPUT') return;
     if (contextMenuItemsForBlock(block).length === 0) return;
     e.preventDefault();
+    setCtxSubmenuOpen(false);
     setContextMenu({ blockId: block.id, x: e.clientX, y: e.clientY });
+  };
+
+  // Vertical center (px from the block row's top) of a block's first text line,
+  // so the drag grip and delete button line up with the content regardless of
+  // block type — a heading's line sits much lower than a paragraph's, which the
+  // old fixed padding ignored. Mirrors the paddings in `headingStyleFor` and
+  // the per-type content wrappers below.
+  const firstLineCenter = (block: MarkdownBlock): number => {
+    if (block.type === 'heading') {
+      const sizes = { 1: 26, 2: 21, 3: 17 } as const;
+      return 4 /* wrapper */ + 10 /* heading pad-top */ + (sizes[block.level] * 1.35) / 2;
+    }
+    if (block.type === 'divider') return 4 + 10 + 0.75;      // the hr line
+    if (block.type === 'image') return 4 + 8 + 10;           // near the image top
+    if (block.type === 'link') return 4 + 8 + (13.5 * 1.4) / 2;
+    const base = isMobile ? 14.5 : 15;                       // paragraph/list/todo/quote
+    return 4 + 6 + (base * 1.6) / 2;
   };
 
   const renderBlock = (block: MarkdownBlock, index: number) => {
     const hovered = hoveredBlockId === block.id;
+    const lineCenter = firstLineCenter(block);
     return (
       <div key={block.id}
         onMouseEnter={() => setHoveredBlockId(block.id)}
@@ -646,7 +703,7 @@ export default function MarkdownListScreen() {
           draggable
           onDragStart={() => setDragBlockId(block.id)}
           title="Drag to reorder"
-          style={{ cursor: 'grab', flexShrink: 0, width: 15, overflow: 'hidden', display: 'flex', alignItems: 'center', paddingTop: 12, opacity: hovered ? 1 : 0, transition: 'opacity 120ms' }}>
+          style={{ cursor: 'grab', flexShrink: 0, width: 15, overflow: 'hidden', display: 'flex', alignItems: 'center', height: 15, marginTop: Math.max(0, lineCenter - 7.5), opacity: hovered ? 1 : 0, transition: 'opacity 120ms ease, margin-top 200ms cubic-bezier(0.22,1,0.36,1)' }}>
           <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
         </span>
 
@@ -757,7 +814,9 @@ export default function MarkdownListScreen() {
         </div>
 
         <button onClick={() => deleteBlock(block.id)} title="Delete block"
-          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, marginTop: 12, borderRadius: 5, border: 'none', background: 'transparent', cursor: 'pointer', opacity: hovered ? 1 : 0, transition: 'opacity 120ms' }}>
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, marginTop: Math.max(0, lineCenter - 11), borderRadius: 5, border: 'none', background: 'transparent', cursor: 'pointer', opacity: hovered ? 1 : 0, transition: 'opacity 120ms ease, margin-top 200ms cubic-bezier(0.22,1,0.36,1), background 120ms ease' }}
+          onMouseEnter={e => { if (hovered) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
           <Icon name="close" size={13} color="var(--color-text-quaternary)" />
         </button>
       </div>
@@ -998,23 +1057,70 @@ export default function MarkdownListScreen() {
         const items = targetBlock ? contextMenuItemsForBlock(targetBlock) : [];
         if (items.length === 0) return null;
         const MENU_W = 224;
+        const SUB_W = 190;
         const estH = items.length * 40 + 10;
         const left = Math.min(contextMenu.x, window.innerWidth - MENU_W - 10);
         const top = Math.min(contextMenu.y, window.innerHeight - estH - 10);
+        // Flip the flyout to the parent's left edge when it would overflow.
+        const subOnLeft = left + MENU_W + SUB_W + 12 > window.innerWidth;
+        const itemStyle = (danger?: boolean): React.CSSProperties => ({
+          display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: 'none',
+          border: 'none', borderRadius: 8, cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font-heading)',
+          fontSize: 13, fontWeight: 500, color: danger ? 'var(--color-error)' : 'var(--color-text-primary)',
+          transition: 'background 120ms ease',
+        });
         return createPortal(
           <>
             <div onClick={() => setContextMenu(null)} onContextMenu={e => { e.preventDefault(); setContextMenu(null); }} style={{ position: 'fixed', inset: 0, zIndex: 1190 }} />
-            <div style={{ position: 'fixed', left, top, minWidth: MENU_W, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5, zIndex: 1200, animation: 'menuIn 140ms ease both' }}>
-              {items.map((item, ii) => (
-                <button key={ii}
-                  onClick={() => { item.onClick(); setContextMenu(null); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: 'none', border: 'none', borderRadius: 8, cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: item.danger ? 'var(--color-error)' : 'var(--color-text-primary)' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = item.danger ? 'var(--color-error-bg)' : 'var(--color-surface-tint)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                  <Icon name={item.icon} size={16} color={item.danger ? 'var(--color-error)' : 'var(--color-primary)'} />
-                  {item.label}
-                </button>
-              ))}
+            <div style={{ position: 'fixed', left, top, minWidth: MENU_W, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5, zIndex: 1200, animation: 'menuIn 150ms cubic-bezier(0.22,1,0.36,1) both' }}>
+              {items.map((item, ii) => {
+                if (item.submenu) {
+                  // Outer "bridge" wrapper is transparent and carries a 6px side
+                  // padding so the pointer can travel from the parent row to the
+                  // card without crossing a dead zone that would collapse it.
+                  const bridgePos: React.CSSProperties = subOnLeft
+                    ? { right: '100%', paddingRight: 6 }
+                    : { left: '100%', paddingLeft: 6 };
+                  return (
+                    <div key={ii} style={{ position: 'relative' }}
+                      onMouseEnter={() => setCtxSubmenuOpen(true)}
+                      onMouseLeave={() => setCtxSubmenuOpen(false)}>
+                      <button style={{ ...itemStyle(), background: ctxSubmenuOpen ? 'var(--color-surface-tint)' : 'none' }}>
+                        <Icon name={item.icon} size={16} color="var(--color-primary)" />
+                        <span style={{ flex: 1 }}>{item.label}</span>
+                        <Icon name={subOnLeft ? 'chevron_left' : 'chevron_right'} size={16} color="var(--color-text-quaternary)" />
+                      </button>
+                      {ctxSubmenuOpen && (
+                        <div style={{ position: 'absolute', top: -5, ...bridgePos, zIndex: 1201 }}>
+                          <div style={{ minWidth: SUB_W, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5, animation: 'menuIn 140ms cubic-bezier(0.22,1,0.36,1) both', transformOrigin: subOnLeft ? 'right top' : 'left top' }}>
+                            {item.submenu.map((sub, si) => (
+                              <button key={si}
+                                onClick={() => { sub.onClick?.(); setContextMenu(null); }}
+                                style={{ ...itemStyle(), background: sub.active ? 'var(--color-surface-tint)' : 'none', color: sub.active ? 'var(--color-primary)' : 'var(--color-text-primary)', fontWeight: sub.active ? 600 : 500 }}
+                                onMouseEnter={e => { if (!sub.active) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.background = sub.active ? 'var(--color-surface-tint)' : 'none'; }}>
+                                <Icon name={sub.icon} size={16} color={sub.active ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
+                                <span style={{ flex: 1 }}>{sub.label}</span>
+                                {sub.active && <Icon name="check" size={15} color="var(--color-primary)" />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+                return (
+                  <button key={ii}
+                    onClick={() => { item.onClick?.(); setContextMenu(null); }}
+                    style={itemStyle(item.danger)}
+                    onMouseEnter={e => (e.currentTarget.style.background = item.danger ? 'var(--color-error-bg)' : 'var(--color-surface-tint)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                    <Icon name={item.icon} size={16} color={item.danger ? 'var(--color-error)' : 'var(--color-primary)'} />
+                    {item.label}
+                  </button>
+                );
+              })}
             </div>
           </>,
           document.body
@@ -1028,6 +1134,9 @@ function headingStyleFor(block: MarkdownBlock, isMobile: boolean): React.CSSProp
   const base: React.CSSProperties = {
     fontFamily: 'var(--font-body)', fontSize: isMobile ? 14.5 : 15, color: 'var(--color-text-primary)', lineHeight: 1.6,
     border: 'none', outline: 'none', background: 'transparent', width: '100%', resize: 'none', padding: '6px 0',
+    // Smoothly morph when a block is converted to another type via the
+    // right-click "Turn into" menu (e.g. H1 → H2 eases its size/weight).
+    transition: 'font-size 240ms cubic-bezier(0.22,1,0.36,1), padding 240ms cubic-bezier(0.22,1,0.36,1), color 180ms ease, font-weight 180ms ease',
   };
   if (block.type === 'heading') {
     const sizes = { 1: 26, 2: 21, 3: 17 } as const;
