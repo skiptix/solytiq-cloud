@@ -930,6 +930,17 @@ export default function MarkdownListScreen() {
             {subtitle && <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', marginTop: 4 }}>{subtitle}</div>}
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexShrink: 0 }}>
+          {todoListId && (
+            <button
+              onClick={() => navigate(`/list/${todoListId}`)}
+              title="Open this page's Todo list"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: 32, width: isMobile ? 32 : undefined, padding: isMobile ? 0 : '0 11px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer', transition: 'all 120ms', animation: 'menuIn 160ms ease both', flexShrink: 0 }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-green-pale-1)'; e.currentTarget.style.borderColor = 'var(--color-success)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}>
+              <Icon name="checklist" size={15} color="var(--color-success)" />
+              {!isMobile && <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-success)' }}>Todo list</span>}
+            </button>
+          )}
           <MarkdownListAIAssist
             markdownListId={mdId}
             markdownListName={name}
