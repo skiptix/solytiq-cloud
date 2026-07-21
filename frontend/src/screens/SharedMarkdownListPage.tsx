@@ -13,6 +13,7 @@ interface MarkdownListMeta {
   color: string | null;
   colorBg: string | null;
   subtitle: string | null;
+  fullWidth: boolean;
   hasPassword: boolean;
   expiresAt: string | null;
   isExpired: boolean;
@@ -36,7 +37,7 @@ interface SharedBlock {
 }
 
 interface MarkdownListContentResponse {
-  markdownList: { name: string; emoji: string | null; color: string | null; colorBg: string | null; subtitle: string | null };
+  markdownList: { name: string; emoji: string | null; color: string | null; colorBg: string | null; subtitle: string | null; fullWidth?: boolean };
   content: { version: 1; blocks: SharedBlock[] };
 }
 
@@ -111,7 +112,8 @@ export default function SharedMarkdownListPage() {
   }
   usePageTitle(pageTitle);
 
-  const cardMaxWidth = state === 'ready' ? 720 : 460;
+  const fullWidth = content?.markdownList.fullWidth ?? meta?.fullWidth ?? false;
+  const cardMaxWidth = state === 'ready' ? (fullWidth ? 1400 : 720) : 460;
 
   // Numbering for contiguous numbered-list-item runs, same rule as the editor.
   const numberByBlockId: Record<string, number> = {};

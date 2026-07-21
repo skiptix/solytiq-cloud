@@ -588,14 +588,14 @@ app.get('/api/share/timeline/:token/content', async (req, res) => {
 
 interface ShareMarkdownListRow {
   id: string; name: string; emoji: string | null; color: string | null; color_bg: string | null;
-  subtitle: string | null; share_enabled: boolean; share_password_hash: string | null;
+  subtitle: string | null; full_width: boolean; share_enabled: boolean; share_password_hash: string | null;
   share_expires_at: string | null; created_at: string; todo_list_id: string | null;
   shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null;
 }
 
 async function resolveShareMarkdownList(token: string): Promise<ShareMarkdownListRow | null> {
   const result = await dbQuery<ShareMarkdownListRow>(
-    `SELECT m.id, m.name, m.emoji, m.color, m.color_bg, m.subtitle, m.share_enabled,
+    `SELECT m.id, m.name, m.emoji, m.color, m.color_bg, m.subtitle, m.full_width, m.share_enabled,
             m.share_password_hash, m.share_expires_at, m.created_at, m.todo_list_id,
             u.full_name AS shared_by_name, u.username AS shared_by_username, u.profile_image AS shared_by_image
      FROM markdown_lists m JOIN users u ON m.user_id = u.id
@@ -616,6 +616,7 @@ app.get('/api/share/markdown-list/:token', async (req, res) => {
       color: md.color,
       colorBg: md.color_bg,
       subtitle: md.subtitle,
+      fullWidth: md.full_width ?? false,
       ...shareOwnerMeta(md),
     });
   } catch (err) {
@@ -662,7 +663,7 @@ app.get('/api/share/markdown-list/:token/content', async (req, res) => {
     blocks = blocks.map((b) => { const { taskId: _taskId, ...rest } = b; return rest; });
 
     res.json({
-      markdownList: { name: md.name, emoji: md.emoji, color: md.color, colorBg: md.color_bg, subtitle: md.subtitle },
+      markdownList: { name: md.name, emoji: md.emoji, color: md.color, colorBg: md.color_bg, subtitle: md.subtitle, fullWidth: md.full_width ?? false },
       content: { version: 1, blocks },
     });
   } catch (err) {
