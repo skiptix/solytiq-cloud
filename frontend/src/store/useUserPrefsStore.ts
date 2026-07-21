@@ -15,6 +15,12 @@ interface UserPrefsState {
   defaultListViewMode: ListViewMode;
   setDefaultListViewMode: (v: ListViewMode) => void;
 
+  // Per-list sidebar expand state for lists that have sublists. Absent = the
+  // default collapsed state (only the parent list shows); `true` = expanded.
+  // Persisted so a list stays open/closed across refreshes.
+  sidebarExpandedSublists: Record<string, boolean>;
+  toggleSublistExpanded: (listId: string) => void;
+
   // ── Calendar UI preferences (persisted until logout / cache clear) ──
   calendarView: CalendarView;
   calendarHiddenWorkspaces: string[];
@@ -42,6 +48,11 @@ const useUserPrefsStore = create<UserPrefsState>()(
 
       defaultListViewMode: 'list',
       setDefaultListViewMode: (v) => set({ defaultListViewMode: v }),
+
+      sidebarExpandedSublists: {},
+      toggleSublistExpanded: (listId) => set((s) => ({
+        sidebarExpandedSublists: { ...s.sidebarExpandedSublists, [listId]: !(s.sidebarExpandedSublists[listId] ?? false) },
+      })),
 
       ...CALENDAR_DEFAULTS,
       setCalendarView: (v) => set({ calendarView: v }),

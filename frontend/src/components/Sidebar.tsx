@@ -6,6 +6,7 @@ import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import useMarkdownListsStore from '../store/useMarkdownListsStore';
+import useUserPrefsStore from '../store/useUserPrefsStore';
 import WorkspaceWizard from '../modals/WorkspaceWizard';
 import WorkspaceSettingsModal from '../modals/WorkspaceSettingsModal';
 import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSettingsModal';
@@ -879,16 +880,22 @@ interface StandaloneListWithSublistsProps {
 }
 
 function StandaloneListWithSublists({ list, sublists, active, activeListId, collapsed, dragOverId, dragOverTaskListId, recentlyDroppedListId, folders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop }: StandaloneListWithSublistsProps) {
-  const [subExpanded, setSubExpanded] = useState(true);
+  // Sublists default to collapsed (only the parent list shows); the per-list
+  // expand state is persisted in user prefs so it survives refreshes.
+  const subExpanded = useUserPrefsStore(s => s.sidebarExpandedSublists[list.id] ?? false);
+  const toggleSublistExpanded = useUserPrefsStore(s => s.toggleSublistExpanded);
   const isActive = active === 'list' && activeListId === list.id;
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center' }}>
         {!collapsed && sublists.length > 0 && (
-          <button onClick={() => setSubExpanded(e => !e)}
+          <button onClick={() => toggleSublistExpanded(list.id)}
+            title={subExpanded ? 'Collapse sublists' : 'Expand sublists'}
             style={{ display: 'flex', alignItems: 'center', padding: '0 2px', border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}>
-            <Icon name={subExpanded ? 'expand_more' : 'chevron_right'} size={14} color="var(--color-text-quaternary)" />
+            <span style={{ display: 'inline-flex', transform: subExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 180ms cubic-bezier(0.22,1,0.36,1)' }}>
+              <Icon name="chevron_right" size={14} color="var(--color-text-quaternary)" />
+            </span>
           </button>
         )}
         <div style={{ flex: 1 }}>
@@ -908,10 +915,10 @@ function StandaloneListWithSublists({ list, sublists, active, activeListId, coll
           />
         </div>
       </div>
-      {!collapsed && subExpanded && sublists.map(sub => {
+      {!collapsed && subExpanded && sublists.map((sub, subIdx) => {
         const isSubActive = active === 'list' && activeListId === sub.id;
         return (
-          <div key={sub.id} style={{ paddingLeft: (sub.depth ?? 1) * 12, borderLeft: '2px solid var(--color-border)', marginLeft: 10 }}>
+          <div key={sub.id} style={{ paddingLeft: (sub.depth ?? 1) * 12, borderLeft: '2px solid var(--color-border)', marginLeft: 10, animation: `menuItemIn 200ms cubic-bezier(0.22,1,0.36,1) both`, animationDelay: `${subIdx * 35}ms` }}>
             <ListItemRow
               list={sub}
               isActive={isSubActive}
@@ -1601,7 +1608,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.56.0
+              v1.57.0
             </div>
           )}
         </div>
@@ -1920,7 +1927,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="archive" label="Archived" active={false} onClick={() => onOpenModal('archived')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.56.0
+            v1.57.0
           </div>
         )}
       </div>
