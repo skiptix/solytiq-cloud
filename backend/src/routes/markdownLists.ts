@@ -320,7 +320,8 @@ export async function mutateMarkdownListBlocks(
     }
     mentionBefore = collectBlockText(currentBlocks);
     await pruneUnreferencedImages(exec, markdownListId, mutated);
-    const reconciled = await reconcileTodoBlocks(exec, userId, {
+    // Todo mirror stays owned by the doc owner even when a collaborator edits.
+    const reconciled = await reconcileTodoBlocks(exec, locked.user_id, {
       id: locked.id, name: locked.name, workspaceId: locked.workspace_id, todoListId: locked.todo_list_id,
     }, mutated);
     mentionAfter = collectBlockText(reconciled.blocks);
@@ -472,7 +473,10 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
         mentionBefore = collectBlockText(normalizeContent(locked.content).blocks);
         const incomingBlocks = normalizeContent(content).blocks;
         await pruneUnreferencedImages(exec, id, incomingBlocks);
-        const reconciled = await reconcileTodoBlocks(exec, req.userId!, {
+        // The auto-managed Todo mirror list is always owned by the DOC OWNER,
+        // never the editing collaborator — otherwise a collaborator's account
+        // deletion would cascade away a mirror backing someone else's page.
+        const reconciled = await reconcileTodoBlocks(exec, locked.user_id, {
           id: locked.id, name: mName ?? locked.name, workspaceId: locked.workspace_id, todoListId: locked.todo_list_id,
         }, incomingBlocks);
         todoListId = reconciled.todoListId;

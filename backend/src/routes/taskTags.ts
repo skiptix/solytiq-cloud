@@ -58,7 +58,8 @@ async function canViewTask(task: TaskInfo, userId: string): Promise<boolean> {
                      wm.user_id = $2
                      OR l.workspace_id IS NULL
                      OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public')
-                  )))`,
+                  ))
+               OR EXISTS (SELECT 1 FROM item_shares s WHERE s.item_type = 'list' AND s.item_id = l.id AND s.user_id = $2))`,
       [task.list_id, userId]
     );
     return r.rows.length > 0;

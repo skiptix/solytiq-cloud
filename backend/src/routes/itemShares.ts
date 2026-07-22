@@ -92,7 +92,7 @@ router.post('/item-shares/:itemType/:itemId/members', async (req: Request, res: 
     }
 
     const userRes = await query<{ id: string; username: string }>(
-      'SELECT id, username FROM users WHERE username = $1', [username.trim()]
+      'SELECT id, username FROM users WHERE LOWER(username) = LOWER($1)', [username.trim()]
     );
     if (userRes.rows.length === 0) { res.status(404).json({ error: 'User not found' }); return; }
     const invitee = userRes.rows[0];
@@ -127,13 +127,20 @@ router.delete('/item-shares/:itemType/:itemId/members/:userId', async (req: Requ
     const { itemId, userId } = req.params;
     const meta = await getItemMeta(type, itemId);
     if (!meta) { res.status(404).json({ error: 'Item not found' }); return; }
-    // Owner/admin can remove anyone; an invited user can remove themselves.
-    if (meta.ownerId !== req.userId && !req.user?.isAdmin && userId !== req.userId) {
+    const privileged = meta.ownerId === req.userId || req.user?.isAdmin === true;
+    // Owner/admin can remove anyone; anyone else may only remove THEIR OWN share.
+    if (!privileged && userId !== req.userId) {
       res.status(403).json({ error: 'Not authorized' });
       return;
     }
-    await removeItemShare(type, itemId, userId);
-    res.json({ members: await listItemShares(type, itemId) });
+    const removed = await removeItemShare(type, itemId, userId);
+    // A non-privileged caller who wasn't actually a member gets nothing back —
+    // otherwise a self-removal "probe" would leak the roster of any item.
+    if (!privileged && !removed) {
+      res.status(403).json({ error: 'Not authorized' });
+      return;
+    }
+    res.json({ members: privileged ? await listItemShares(type, itemId) : [] });
   } catch (err) {
     werr('item-shares DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -151,22 +158,19 @@ router.get('/shared-with-me', async (req: Request, res: Response) => {
       [userId]
     );
 
-    const lists: unknown[] = [];
-    const timelines: unknown[] = [];
-    const markdownLists: unknown[] = [];
-    for (const s of shares.rows) {
-      if (s.item_type === 'list') {
-        const l = await getListForUser(userId, s.item_id);
-        if (l) lists.push(l);
-      } else if (s.item_type === 'timeline') {
-        const t = await getTimelineForUser(userId, s.item_id);
-        if (t) timelines.push(t);
-      } else if (s.item_type === 'markdownList') {
-        const m = await getMarkdownListForUser(userId, s.item_id);
-        if (m) markdownLists.push(m);
-      }
-    }
-    res.json({ lists, timelines, markdownLists });
+    // Hydrate each shared item through its per-user builder (double access-check),
+    // in parallel, then drop any that no longer resolve (deleted / access revoked).
+    const hydrated = await Promise.all(shares.rows.map(async (s) => {
+      if (s.item_type === 'list') return { kind: 'list' as const, item: await getListForUser(userId, s.item_id) };
+      if (s.item_type === 'timeline') return { kind: 'timeline' as const, item: await getTimelineForUser(userId, s.item_id) };
+      if (s.item_type === 'markdownList') return { kind: 'markdownList' as const, item: await getMarkdownListForUser(userId, s.item_id) };
+      return { kind: 'list' as const, item: null };
+    }));
+    res.json({
+      lists: hydrated.filter((h) => h.kind === 'list' && h.item).map((h) => h.item),
+      timelines: hydrated.filter((h) => h.kind === 'timeline' && h.item).map((h) => h.item),
+      markdownLists: hydrated.filter((h) => h.kind === 'markdownList' && h.item).map((h) => h.item),
+    });
   } catch (err) {
     werr('shared-with-me GET error:', err);
     res.status(500).json({ error: 'Internal server error' });

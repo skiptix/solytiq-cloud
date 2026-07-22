@@ -50,9 +50,10 @@ export async function addItemShare(type: SharedItemType, itemId: string, userId:
   return (r.rowCount ?? 0) > 0;
 }
 
-/** Revoke a user's access to an item. */
-export async function removeItemShare(type: SharedItemType, itemId: string, userId: string): Promise<void> {
-  await query(`DELETE FROM item_shares WHERE item_type = $1 AND item_id = $2 AND user_id = $3`, [type, itemId, userId]);
+/** Revoke a user's access to an item. Returns true if a row was actually removed. */
+export async function removeItemShare(type: SharedItemType, itemId: string, userId: string): Promise<boolean> {
+  const r = await query(`DELETE FROM item_shares WHERE item_type = $1 AND item_id = $2 AND user_id = $3`, [type, itemId, userId]);
+  return (r.rowCount ?? 0) > 0;
 }
 
 /** Remove every invite for an item — call from the item's delete path. Accepts

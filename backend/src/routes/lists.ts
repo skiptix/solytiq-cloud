@@ -12,7 +12,7 @@ import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestr
 import type { MutationActor } from '../automationEngine';
 import { recordTaskChanges } from '../taskChangeLog';
 import { notifyNewMentions } from '../mentions';
-import { itemShareExists, isItemSharedWith, deleteItemShares } from '../itemShares';
+import { itemShareExists, isItemSharedWith } from '../itemShares';
 
 const router = Router();
 router.use(authenticate);
@@ -803,8 +803,7 @@ router.delete('/:listId', async (req: Request, res: Response) => {
     // Soft delete: the list AND every nested sublist are snapshotted to trash,
     // then their tasks and list rows are removed atomically (shared helper —
     // the AI delete_list tool uses the exact same path).
-    const sublistCount = await softDeleteListTree(listId);
-    await deleteItemShares(query, 'list', listId);
+    const sublistCount = await softDeleteListTree(listId); // clears item_shares for the whole tree
 
     wlog(`list DELETE ✓ id=${listId} (+${sublistCount} sublist(s)) → trashed by user ${req.userId}`);
     res.json({ success: true });

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Icon from './Icon';
 import MemberAvatar from './MemberAvatar';
 import useAuthStore from '../store/useAuthStore';
+import useMembersStore from '../store/useMembersStore';
 import {
   apiGetItemMembers, apiAddItemMember, apiRemoveItemMember, apiGetMembersBasic,
   type SharedItemType, type ItemMember,
@@ -29,6 +30,7 @@ function nameOf(m: { fullName?: string | null; username?: string | null } | unde
 
 export default function ItemMembersSection({ itemType, itemId, canManage, onChanged }: ItemMembersSectionProps) {
   const currentUserId = useAuthStore(s => s.userId);
+  const membersStore = useMembersStore(s => s.members);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [members, setMembers] = useState<ItemMember[]>([]);
   const [allUsers, setAllUsers] = useState<BasicUser[]>([]);
@@ -101,7 +103,7 @@ export default function ItemMembersSection({ itemType, itemId, canManage, onChan
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: 'var(--color-surface-tint-3)', border: '1px solid var(--color-purple-pale-23)' }}>
             <MemberAvatar userId={ownerId} size={26} />
             <span style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {ownerId === currentUserId ? 'You' : ''}
+              {ownerId === currentUserId ? 'You' : nameOf(membersStore[ownerId])}
             </span>
             <span style={{ fontFamily: 'var(--font-heading)', fontSize: 9.5, fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.04em', background: 'var(--color-surface-tint)', borderRadius: 9999, padding: '2px 8px' }}>Owner</span>
           </div>
