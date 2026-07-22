@@ -20,6 +20,11 @@ import Icon from '../components/Icon';
 import DonutChart from '../components/DonutChart';
 import TaskDialog from '../components/TaskDialog';
 import CreatorBubble from '../components/CreatorBubble';
+import NotificationItem from '../components/NotificationItem';
+import useNotificationsStore from '../store/useNotificationsStore';
+import useSyncStore from '../store/useSyncStore';
+import { notificationTarget } from '../utils/notifications';
+import type { AppNotification } from '../api/client';
 
 // ── Shared style tokens ────────────────────────────────────────────
 // Matches the surface used by the Folder Dashboard and To-Do screens.
@@ -387,6 +392,32 @@ function MeetingRow({ meeting, currentUserId, onOpen }: { meeting: Meeting; curr
 }
 
 function RightColumn({ meetings, currentUserId, onSeeCalendar }: { meetings: Meeting[]; currentUserId: string | null; onSeeCalendar: () => void }) {
+  const navigate = useNavigate();
+  const notifications = useNotificationsStore(s => s.items);
+  const unreadCount = useNotificationsStore(s => s.unreadCount);
+  const loaded = useNotificationsStore(s => s.loaded);
+  const load = useNotificationsStore(s => s.load);
+  const markRead = useNotificationsStore(s => s.markRead);
+  const dismiss = useNotificationsStore(s => s.dismiss);
+  const setPanelOpen = useNotificationsStore(s => s.setPanelOpen);
+  const setCurrentWorkspace = useWorkspaceStore(s => s.setCurrentWorkspace);
+  const notifRev = useSyncStore(s => s.entityRevisions.notification ?? 0);
+
+  // Load the feed for the dashboard, and keep it fresh on live signals.
+  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (notifRev > 0) void load(); }, [notifRev, load]);
+
+  const activateNotification = (n: AppNotification) => {
+    void markRead(n.id);
+    const target = notificationTarget(n);
+    if (target.workspaceId && target.workspaceId !== useWorkspaceStore.getState().currentWorkspaceId) {
+      setCurrentWorkspace(target.workspaceId);
+    }
+    navigate(target.path);
+  };
+
+  const feed = notifications.slice(0, 4);
+
   const sorted = [...meetings].sort((a, b) => {
     const ka = a.allDay ? -1 : (timeToMinutes(a.startTime) ?? 9999);
     const kb = b.allDay ? -1 : (timeToMinutes(b.startTime) ?? 9999);
@@ -394,24 +425,45 @@ function RightColumn({ meetings, currentUserId, onSeeCalendar }: { meetings: Mee
   });
   return (
     <section style={{ ...CARD, ...enterAnim(120), display: 'flex', flexDirection: 'column' }}>
-      {/* Notifications — WiP placeholder, intentionally not wired up. (Top) */}
-      <div style={{ padding: '18px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Notifications feed (Top) */}
+      <div style={{ padding: '18px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon name="notifications" size={17} color="var(--color-primary)" />
           </div>
           <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>Notifications</div>
           <div style={{ flex: 1 }} />
-          <span style={{ fontFamily: 'var(--font-body)', fontSize: 9.5, fontWeight: 700, color: 'var(--color-warning)', background: 'var(--color-orange-pale-3)', borderRadius: 9999, padding: '2px 8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Coming soon</span>
+          {unreadCount > 0 && (
+            <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, color: 'var(--color-white)', background: 'var(--color-primary)', borderRadius: 9999, padding: '2px 9px' }}>{unreadCount > 99 ? '99+' : unreadCount}</span>
+          )}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '20px 12px', textAlign: 'center' }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--color-surface-tint-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="notifications_paused" size={20} color="var(--color-text-quaternary)" />
+        {feed.length === 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '18px 12px', textAlign: 'center' }}>
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--color-surface-tint-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name={loaded ? 'notifications_off' : 'notifications'} size={20} color="var(--color-text-quaternary)" />
+            </div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)', maxWidth: 220, lineHeight: 1.5 }}>
+              {loaded ? "You're all caught up — mentions, invites and reminders will show up here." : 'Loading…'}
+            </div>
           </div>
-          <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)', maxWidth: 220, lineHeight: 1.5 }}>
-            Notifications are on the way — you'll see mentions, invites and reminders here.
-          </div>
-        </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {feed.map(n => (
+                <NotificationItem key={n.id} notification={n} onActivate={activateNotification} onDismiss={(x) => void dismiss(x.id)} compact />
+              ))}
+            </div>
+            <button
+              onClick={() => setPanelOpen(true)}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              style={{ width: '100%', background: 'transparent', border: 'none', borderRadius: 8, padding: '6px', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'background 140ms' }}
+            >
+              View all notifications
+              <Icon name="arrow_forward" size={13} color="var(--color-primary)" />
+            </button>
+          </>
+        )}
       </div>
 
       <div style={{ height: 1, background: 'var(--color-divider)', margin: '0 16px' }} />

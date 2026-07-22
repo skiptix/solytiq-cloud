@@ -3,6 +3,7 @@ import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
 import { ensureOwnedWorkspaceMemberships, ensurePersonalWorkspace, rehomeUserContentToPersonal, wlog, werr } from '../workspaceUtil';
+import { createNotification } from '../notifications';
 import { snapshotListToTrash, snapshotTimelineToTrash, snapshotFolderToTrash } from '../trashUtil';
 import { getPublicDescendants, buildRestrictConflict, restrictDescendants } from '../visibility';
 
@@ -325,7 +326,7 @@ router.post('/:id/members', async (req: Request, res: Response) => {
     const { username } = req.body as { username?: string };
     if (!username) { res.status(400).json({ error: 'username is required' }); return; }
 
-    const existing = await query<WorkspaceRow>('SELECT owner_id FROM workspaces WHERE id = $1', [id]);
+    const existing = await query<WorkspaceRow>('SELECT owner_id, name FROM workspaces WHERE id = $1', [id]);
     if (existing.rows.length === 0) { res.status(404).json({ error: 'Workspace not found' }); return; }
     if (existing.rows[0].owner_id !== req.userId) {
       res.status(403).json({ error: 'Only the owner can add members' }); return;
@@ -338,10 +339,24 @@ router.post('/:id/members', async (req: Request, res: Response) => {
     if (userResult.rows.length === 0) { res.status(404).json({ error: 'User not found' }); return; }
     const user = userResult.rows[0];
 
-    await query(
+    const added = await query(
       `INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1, $2, 'member') ON CONFLICT DO NOTHING`,
       [id, user.id]
     );
+    // Notify the added user — only on a genuinely new membership, not a re-add.
+    if ((added.rowCount ?? 0) > 0) {
+      await createNotification({
+        userId: user.id,
+        type: 'workspace_added',
+        actorId: req.userId!,
+        title: `added you to "${existing.rows[0].name}"`,
+        body: null,
+        entityType: 'workspace',
+        entityId: id,
+        workspaceId: id,
+        data: { workspaceName: existing.rows[0].name },
+      });
+    }
     res.status(201).json({
       member: {
         userId:       user.id,

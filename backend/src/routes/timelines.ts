@@ -9,6 +9,7 @@ import { checkVersionConflict } from '../concurrency';
 import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, werr } from '../workspaceUtil';
 import { snapshotTimelineToTrash } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestrictConflict } from '../visibility';
+import { notifyNewMentions } from '../mentions';
 
 const router = Router();
 router.use(authenticate);
@@ -714,8 +715,9 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
       timelineId?: string;
     };
 
-    const ownerCheck = await query<{ user_id: string; timeline_id: string }>(
-      `SELECT t.user_id, m.timeline_id FROM milestones m JOIN timelines t ON m.timeline_id = t.id WHERE m.id = $1`,
+    const ownerCheck = await query<{ user_id: string; timeline_id: string; workspace_id: string | null; before_description: string | null }>(
+      `SELECT t.user_id, m.timeline_id, t.workspace_id, m.description AS before_description
+         FROM milestones m JOIN timelines t ON m.timeline_id = t.id WHERE m.id = $1`,
       [milestoneId]
     );
     if (ownerCheck.rows.length === 0) {
@@ -787,8 +789,23 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
     if (targetTimelineId) {
       wlog(`milestone MOVE ✓ id=${milestoneId} ${ownerCheck.rows[0].timeline_id} → ${targetTimelineId} owner=${req.userId}`);
     }
-    res.json({ milestone: sanitizeMilestone(result.rows[0]) });
+    const savedMilestone = result.rows[0];
+    res.json({ milestone: sanitizeMilestone(savedMilestone) });
     broadcastToUser(req.userId!, 'timelines');
+
+    // @-mention notifications for a changed milestone note (description).
+    if (updateDescription && savedMilestone.description !== ownerCheck.rows[0].before_description) {
+      await notifyNewMentions({
+        beforeText: ownerCheck.rows[0].before_description,
+        afterText: savedMilestone.description,
+        workspaceId: ownerCheck.rows[0].workspace_id,
+        actorId: req.userId!,
+        title: `mentioned you in "${savedMilestone.title}"`,
+        entityType: 'milestone',
+        entityId: milestoneId,
+        data: { timelineId: savedMilestone.timeline_id },
+      });
+    }
   } catch (err) {
     werr('milestones PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });

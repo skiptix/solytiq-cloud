@@ -925,6 +925,62 @@ export const apiAddWorkspaceMember = (id: string, username: string) =>
 export const apiRemoveWorkspaceMember = (id: string, userId: string) =>
   apiFetch<{ ok: boolean }>(`/workspaces/${id}/members/${userId}`, { method: 'DELETE' });
 
+// ─── Notifications ─────────────────────────────────────────────────────────────
+export interface NotificationActor {
+  id: string;
+  username: string | null;
+  fullName: string | null;
+  hasImage: boolean;
+}
+export interface AppNotification {
+  id: string;
+  type: 'workspace_added' | 'meeting_invite' | 'item_tagged' | 'mention' | 'automation_run' | 'deadline_overdue' | string;
+  actorId: string | null;
+  actor: NotificationActor | null;
+  title: string;
+  body: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  workspaceId: string | null;
+  data: Record<string, unknown>;
+  read: boolean;
+  createdAt: string;
+}
+
+export const apiGetNotifications = (opts?: { limit?: number; before?: string }) => {
+  const p = new URLSearchParams();
+  if (opts?.limit) p.set('limit', String(opts.limit));
+  if (opts?.before) p.set('before', opts.before);
+  const qs = p.toString();
+  return apiFetch<{ notifications: AppNotification[]; unreadCount: number; hasMore: boolean }>(`/notifications${qs ? `?${qs}` : ''}`);
+};
+export const apiGetNotificationUnreadCount = () =>
+  apiFetch<{ unreadCount: number }>('/notifications/unread-count');
+export const apiMarkNotificationRead = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/notifications/${encodeURIComponent(id)}/read`, { method: 'POST' });
+export const apiMarkAllNotificationsRead = () =>
+  apiFetch<{ ok: boolean }>('/notifications/read-all', { method: 'POST' });
+export const apiDismissNotification = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const apiClearNotifications = () =>
+  apiFetch<{ ok: boolean }>('/notifications', { method: 'DELETE' });
+
+// ─── Task tags (users tagged onto an item) ─────────────────────────────────────
+export interface TaskTag {
+  userId: string;
+  username: string;
+  fullName: string | null;
+  hasImage: boolean;
+  taggedBy: string | null;
+  createdAt: string;
+}
+export const apiGetTaskTags = (taskId: number | string) =>
+  apiFetch<{ tags: TaskTag[] }>(`/tasks/${taskId}/tags`);
+export const apiAddTaskTag = (taskId: number | string, userId: string) =>
+  apiFetch<{ tags: TaskTag[] }>(`/tasks/${taskId}/tags`, { method: 'POST', body: JSON.stringify({ userId }) });
+export const apiRemoveTaskTag = (taskId: number | string, userId: string) =>
+  apiFetch<{ tags: TaskTag[] }>(`/tasks/${taskId}/tags/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+
 // ─── Delta-sync engine ────────────────────────────────────────────────────────
 export interface BootstrapResponse {
   cursor: number;

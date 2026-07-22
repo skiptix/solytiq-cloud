@@ -5,6 +5,7 @@ import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
 import { collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
+import { notifyNewMentions } from '../mentions';
 
 const router = Router();
 router.use(authenticate);
@@ -241,6 +242,15 @@ router.put('/:id', async (req: Request, res: Response) => {
     const linked_list_type = _llt_snake ?? _llt_camel;
     const updateLinkedList = 'linked_list_id' in req.body || 'linkedListId' in req.body;
 
+    // Capture the prior note so @-mentions added in this edit can be diffed.
+    const noteProvided = note !== undefined;
+    const beforeNote = noteProvided
+      ? (await query<{ note: string | null }>(
+          `SELECT note FROM tasks WHERE id = $1 AND user_id = $2 AND source = 'dash'`,
+          [taskId, req.userId]
+        )).rows[0]?.note ?? null
+      : null;
+
     wlog(`dash task UPDATE id=${taskId} userId=${req.userId}`);
     wlog(`dash task UPDATE body keys: ${Object.keys(req.body).join(', ')}`);
     wlog(`dash task UPDATE updateLinkedList=${updateLinkedList} linked_list_id=${linked_list_id} linked_list_type=${linked_list_type}`);
@@ -289,6 +299,21 @@ router.put('/:id', async (req: Request, res: Response) => {
     wlog(`dash task UPDATE ✓ updated → linked_list_id=${saved.linked_list_id} linked_list_type=${saved.linked_list_type}`);
     res.json({ task: sanitizeTask(saved) });
     broadcastToUser(req.userId!, 'tasks');
+
+    // @-mention notifications for a changed note (dash tasks can live in a
+    // shared workspace, so mentions may resolve to real members).
+    if (noteProvided && saved.note !== beforeNote) {
+      await notifyNewMentions({
+        beforeText: beforeNote,
+        afterText: saved.note,
+        workspaceId: saved.workspace_id ?? null,
+        actorId: req.userId!,
+        title: `mentioned you in "${saved.title}"`,
+        entityType: 'task',
+        entityId: String(saved.id),
+        data: { listId: null, source: 'dash' },
+      });
+    }
   } catch (err) {
     werr('tasks PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });

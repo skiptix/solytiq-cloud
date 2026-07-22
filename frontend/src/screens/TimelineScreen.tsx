@@ -4,7 +4,8 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import type { Milestone, MilestoneStatus, TimelineLayout, MilestoneAttachment, SharedFile } from '../types';
+import type { Milestone, MilestoneStatus, TimelineLayout, MilestoneAttachment, SharedFile, WorkspaceMember } from '../types';
+import type { MentionMember } from '../utils/mention';
 import useAppStore from '../store/useAppStore';
 import useAuthStore from '../store/useAuthStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
@@ -14,6 +15,7 @@ import {
   apiCreateMilestone, apiUpdateMilestone, apiDeleteMilestone,
   apiGetMilestoneAttachments, apiUploadMilestoneAttachment, apiLinkMilestoneAttachment,
   apiDeleteMilestoneAttachment, apiDownloadMilestoneAttachment, apiMilestoneAttachmentBlob,
+  apiGetWorkspaceMembers,
 } from '../api/client';
 import { genId } from '../utils/id';
 import Icon from '../components/Icon';
@@ -98,8 +100,10 @@ interface MilestoneEditorProps {
   onClose: () => void;
   /** Set to the timeline owner's id when the timeline is public — shows an Owner row. */
   ownerId?: string;
+  /** Workspace members that can be @-mentioned in the milestone note. */
+  mentionMembers?: MentionMember[];
 }
-function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }: MilestoneEditorProps) {
+function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, mentionMembers }: MilestoneEditorProps) {
   const isMobile = useMobile();
   const owner = useMembersStore(s => (ownerId ? s.members[ownerId] : undefined));
   const [title, setTitle] = useState(initial?.title ?? '');
@@ -354,6 +358,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId }
               value={description ?? ''}
               onChange={setDescription}
               minHeight={90}
+              mentionMembers={mentionMembers}
               aiContext={{
                 kind: 'milestone',
                 title,
@@ -513,6 +518,19 @@ export default function TimelineScreen() {
   const [renaming, setRenaming] = useState<Milestone | null>(null);
   const [moving, setMoving] = useState<Milestone | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; milestone: Milestone } | null>(null);
+
+  // Workspace members for the milestone note's @-mention typeahead.
+  const [wsMembers, setWsMembers] = useState<WorkspaceMember[]>([]);
+  const timelineWorkspaceId = timeline?.workspaceId ?? null;
+  useEffect(() => {
+    if (!timelineWorkspaceId) { setWsMembers([]); return; }
+    let alive = true;
+    apiGetWorkspaceMembers(timelineWorkspaceId).then(r => { if (alive) setWsMembers(r.members); }).catch(() => {});
+    return () => { alive = false; };
+  }, [timelineWorkspaceId]);
+  const mentionMembers: MentionMember[] = wsMembers
+    .filter(m => m.userId !== currentUserId)
+    .map(m => ({ id: m.userId, username: m.username, fullName: m.fullName ?? null }));
 
   // "New milestone" shortcut — same as the "Add Milestone" buttons (owner only,
   // and only when no milestone editor is already open).
@@ -821,8 +839,8 @@ export default function TimelineScreen() {
         )}
       </div>
 
-      {adding && <MilestoneEditor accent={accent} onSave={handleAdd} onClose={() => setAdding(false)} ownerId={timeline.isPublic ? timeline.userId : undefined} />}
-      {editing && <MilestoneEditor accent={accent} initial={editing} onSave={data => handleSave(editing.id, data)} onDelete={() => { handleDelete(editing.id); setEditing(null); }} onClose={() => setEditing(null)} ownerId={timeline.isPublic ? timeline.userId : undefined} />}
+      {adding && <MilestoneEditor accent={accent} onSave={handleAdd} onClose={() => setAdding(false)} ownerId={timeline.isPublic ? timeline.userId : undefined} mentionMembers={mentionMembers} />}
+      {editing && <MilestoneEditor accent={accent} initial={editing} onSave={data => handleSave(editing.id, data)} onDelete={() => { handleDelete(editing.id); setEditing(null); }} onClose={() => setEditing(null)} ownerId={timeline.isPublic ? timeline.userId : undefined} mentionMembers={mentionMembers} />}
       {deleting && (
         <DeleteConfirmModal
           name={deleting.title}

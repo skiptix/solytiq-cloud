@@ -11,7 +11,11 @@ import { useMobile } from '../hooks/useBreakpoint';
 import Icon from '../components/Icon';
 import { renderInline } from '../components/MarkdownView';
 import { toggleWrap, formatMarkerForKeyDown } from '../utils/textFormatting';
-import { apiUploadMarkdownImage, markdownImageUrl, type ShareInfo } from '../api/client';
+import { detectMention, applyMention, filterMentionMembers, type MentionMember } from '../utils/mention';
+import { apiUploadMarkdownImage, markdownImageUrl, apiGetWorkspaceMembers, type ShareInfo } from '../api/client';
+import type { WorkspaceMember } from '../types';
+import useAuthStore from '../store/useAuthStore';
+import MentionPopover from '../components/MentionPopover';
 import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSettingsModal';
 import MarkdownListAIAssist from '../components/AIAssistant/MarkdownListAIAssist';
 import SaveStatusDot from '../components/SaveStatusDot';
@@ -203,6 +207,27 @@ export default function MarkdownListScreen() {
   const blockRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // @-mention typeahead — workspace members that can be tagged in a block, and
+  // the in-progress mention (which block + where). Enabled only for docs in a
+  // shared workspace.
+  const currentUserId = useAuthStore(s => s.userId);
+  const [mdWorkspaceId, setMdWorkspaceId] = useState<string | null>(null);
+  const [wsMembers, setWsMembers] = useState<WorkspaceMember[]>([]);
+  const [mdMention, setMdMention] = useState<{ blockId: string; at: number; query: string } | null>(null);
+  const [mdMentionIndex, setMdMentionIndex] = useState(0);
+  useEffect(() => {
+    if (!mdWorkspaceId) { setWsMembers([]); return; }
+    let alive = true;
+    apiGetWorkspaceMembers(mdWorkspaceId).then(r => { if (alive) setWsMembers(r.members); }).catch(() => {});
+    return () => { alive = false; };
+  }, [mdWorkspaceId]);
+  useEffect(() => { setMdMention(null); }, [focusedBlockId]);
+  const mentionMembers: MentionMember[] = wsMembers
+    .filter(m => m.userId !== currentUserId)
+    .map(m => ({ id: m.userId, username: m.username, fullName: m.fullName ?? null }));
+  const mentionCandidates = mdMention ? filterMentionMembers(mentionMembers, mdMention.query) : [];
+  const mentionActive = mdMention !== null && mentionCandidates.length > 0;
+
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -211,6 +236,7 @@ export default function MarkdownListScreen() {
     getDetail(id).then(md => {
       if (cancelled) return;
       setMdId(md.id);
+      setMdWorkspaceId(md.workspaceId ?? null);
       setName(md.name);
       setEmoji(md.emoji);
       setColor(md.color);
@@ -472,18 +498,52 @@ export default function MarkdownListScreen() {
     setLinkEditingBlockId(null);
   };
 
+  // Detect an in-progress @mention in the just-edited block, reading the caret
+  // straight off the block's textarea (React has committed value + selection by
+  // the time onChange fires).
+  const detectBlockMention = (block: MarkdownBlock, text: string) => {
+    if (mentionMembers.length === 0) { if (mdMention) setMdMention(null); return; }
+    const caret = blockRefs.current[block.id]?.selectionStart ?? text.length;
+    const ctx = detectMention(text, caret);
+    if (ctx) { setMdMention({ blockId: block.id, at: ctx.at, query: ctx.query }); setMdMentionIndex(0); }
+    else if (mdMention?.blockId === block.id) setMdMention(null);
+  };
+
+  const pickBlockMention = (m: MentionMember) => {
+    if (!mdMention) return;
+    const block = blocks.find(b => b.id === mdMention.blockId);
+    if (!block || !hasText(block)) return;
+    const caret = blockRefs.current[block.id]?.selectionStart ?? block.text.length;
+    const { value, caret: nextCaret } = applyMention(block.text, mdMention.at, caret, m.username);
+    updateBlockText(block.id, value);
+    setMdMention(null);
+    requestAnimationFrame(() => {
+      const el = blockRefs.current[block.id];
+      if (el) { el.focus(); el.setSelectionRange(nextCaret, nextCaret); }
+    });
+  };
+
   const handleTextChange = (block: MarkdownBlock, text: string) => {
     updateBlockText(block.id, text);
     if (block.type === 'paragraph' && text.startsWith('/') && !text.includes(' ')) {
       setSlashMenu({ blockId: block.id, query: text.slice(1) });
-    } else if (slashMenu?.blockId === block.id) {
-      setSlashMenu(null);
+      if (mdMention) setMdMention(null);
+    } else {
+      if (slashMenu?.blockId === block.id) setSlashMenu(null);
+      detectBlockMention(block, text);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>, block: MarkdownBlock, index: number) => {
     const formatMarker = formatMarkerForKeyDown(e);
     if (formatMarker && hasText(block)) { e.preventDefault(); applyFormatToBlock(block, formatMarker, e.currentTarget); return; }
+    // @-mention typeahead intercepts navigation while it's open for this block.
+    if (mdMention?.blockId === block.id && mentionActive) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setMdMentionIndex(i => (i + 1) % mentionCandidates.length); return; }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setMdMentionIndex(i => (i - 1 + mentionCandidates.length) % mentionCandidates.length); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickBlockMention(mentionCandidates[mdMentionIndex]); return; }
+      if (e.key === 'Escape')    { e.preventDefault(); setMdMention(null); return; }
+    }
     if (slashMenu?.blockId === block.id) {
       if (e.key === 'Escape') { e.preventDefault(); setSlashMenu(null); return; }
       if (e.key === 'Enter') {
@@ -798,6 +858,16 @@ export default function MarkdownListScreen() {
               </button>
             ))}
             </div>
+          )}
+
+          {mdMention?.blockId === block.id && mentionActive && (
+            <MentionPopover
+              members={mentionCandidates}
+              activeIndex={mdMentionIndex}
+              onPick={pickBlockMention}
+              onHover={setMdMentionIndex}
+              style={{ top: '100%', left: 0, marginTop: 4 }}
+            />
           )}
 
           {linkEditingBlockId === block.id && (

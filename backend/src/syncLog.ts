@@ -24,7 +24,8 @@ import { broadcastToUsers } from './sse';
 
 export type SyncEntity =
   | 'task' | 'list' | 'folder' | 'timeline' | 'milestone'
-  | 'workspace' | 'trash' | 'meeting' | 'file' | 'automation' | 'markdownList';
+  | 'workspace' | 'trash' | 'meeting' | 'file' | 'automation' | 'markdownList'
+  | 'notification';
 
 /** The channel Postgres triggers NOTIFY on. */
 export const SYNC_CHANNEL = 'solytiq_sync';

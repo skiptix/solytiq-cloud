@@ -8,6 +8,7 @@ import useMembersStore from './store/useMembersStore';
 import useWorkspaceStore from './store/useWorkspaceStore';
 import useInstalledAppsStore from './store/useInstalledAppsStore';
 import useMarkdownListsStore from './store/useMarkdownListsStore';
+import useNotificationsStore from './store/useNotificationsStore';
 import { apiCheckSetupRequired, connectSSE, disconnectSSE, setUnauthorizedHandler } from './api/client';
 
 // Delta-sync engine is on by default; set VITE_SYNC_ENGINE=0 to fall back to the
@@ -245,6 +246,16 @@ function AppLayout() {
     void useMarkdownListsStore.getState().load(currentWorkspaceId ?? undefined);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [markdownListRev]);
+
+  // Refresh the notification feed/badge on a `notification` sync signal — the
+  // recipient's own devices are nudged when a notification is created (see the
+  // sync_log trigger in the backend). Refreshes the badge always, and the
+  // loaded feed when the panel is open.
+  const notificationRev = useSyncStore(s => s.entityRevisions.notification ?? 0);
+  useEffect(() => {
+    if (notificationRev === 0) return;
+    void useNotificationsStore.getState().syncRefresh();
+  }, [notificationRev]);
 
   // Self-heal after a load failure. The automatic recovery paths above
   // (workspace switch, SSE, tab visibility, the browser 'online' event) only

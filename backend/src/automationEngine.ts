@@ -42,6 +42,38 @@ import { QueryExec } from './workspaceUtil';
 import { getActionDef, getTriggerDef, serializeTriggerOutput, ActionRollbackSignal, type ActionResult, type TriggerContext } from './automationTypes';
 import { normalizeAutomationGraph, orderedActionNodes, AutomationGraph } from './automationGraph';
 import { buildScope, resolveExpressions } from './automationExpressions';
+import { createNotification } from './notifications';
+
+/**
+ * Tell the automation's owner it ran (live runs only). The actor is the system
+ * (actorId null) — an automation isn't a user — so this always reaches the
+ * owner even though other notification types suppress self-notification.
+ */
+async function notifyAutomationOwner(
+  automationId: string,
+  ownerId: string,
+  workspaceId: string | null,
+  status: 'success' | 'failed',
+  runId: string
+): Promise<void> {
+  try {
+    const r = await query<{ name: string }>(`SELECT name FROM automations WHERE id = $1`, [automationId]);
+    const name = r.rows[0]?.name ?? 'Automation';
+    await createNotification({
+      userId: ownerId,
+      type: 'automation_run',
+      actorId: null,
+      title: status === 'failed' ? `Automation "${name}" failed` : `Automation "${name}" ran`,
+      body: null,
+      entityType: 'automation',
+      entityId: automationId,
+      workspaceId,
+      data: { automationName: name, status, runId },
+    });
+  } catch (err) {
+    aerr('notifyAutomationOwner failed', automationId, err);
+  }
+}
 
 export type MutationActor =
   | { type: 'user'; userId: string }
@@ -275,6 +307,14 @@ export async function runAutomation(
   } else {
     alog(`run ✓ automation=${automation.id} trigger=${triggerType} steps=${steps.length}${isTest ? ' (test)' : ''}`);
   }
+
+  // Notify the automation's owner that it ran — live runs only (a Test button
+  // run from the editor is the owner watching it happen, so it self-suppresses).
+  // Best-effort, never awaited by the mutation that fired the trigger.
+  if (!isTest) {
+    void notifyAutomationOwner(automation.id, automation.user_id, automation.workspace_id, failed ? 'failed' : 'success', runId);
+  }
+
   return { runId, status: failed ? 'failed' : 'success', steps, error: failed ? errorMessage : null };
 }
 
