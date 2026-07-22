@@ -306,6 +306,31 @@ export async function getListForUser(userId: string, listId: string) {
   return sanitizeList(list, sections, progress);
 }
 
+/**
+ * Whether `userId` may READ this list — the same access boundary as
+ * buildListsForUser/getListForUser. Critically, `is_public` on its own is NOT
+ * sufficient: an in-app-public list is only visible to members of its workspace
+ * (or when it has no workspace, or the workspace is itself public). Using the
+ * bare `is_public` flag as a grant would expose a private workspace's list to
+ * any authenticated user. Shared by the progress/changelog read endpoints.
+ */
+async function userCanViewListRow(
+  listObj: { user_id: string; workspace_id: string | null; is_public: boolean },
+  userId: string,
+  isAdmin: boolean,
+): Promise<boolean> {
+  if (listObj.user_id === userId || isAdmin) return true;
+  if (!listObj.is_public) return false;
+  // Public list with no workspace is world-visible in-app (mirrors buildListsForUser).
+  if (listObj.workspace_id == null) return true;
+  const r = await query(
+    `SELECT 1 FROM workspace_members WHERE workspace_id = $1 AND user_id = $2
+     UNION SELECT 1 FROM workspaces WHERE id = $1 AND visibility = 'public'`,
+    [listObj.workspace_id, userId],
+  );
+  return r.rows.length > 0;
+}
+
 // ---------------------------------------------------------------------------
 // Lists CRUD
 // ---------------------------------------------------------------------------
@@ -1404,17 +1429,7 @@ router.get('/:listId/progress', async (req: Request, res: Response) => {
       return;
     }
     const listObj = listCheck.rows[0];
-    const isOwner = listObj.user_id === req.userId;
-    const isAdmin = req.user?.isAdmin === true;
-
-    // Check workspace membership if list belongs to a workspace
-    let hasWorkspaceAccess = false;
-    if (listObj.workspace_id) {
-       const wsMemberCheck = await query('SELECT 1 FROM workspace_members WHERE workspace_id = $1 AND user_id = $2', [listObj.workspace_id, req.userId]);
-       hasWorkspaceAccess = wsMemberCheck.rows.length > 0;
-    }
-
-    const canAccess = isOwner || isAdmin || listObj.is_public || hasWorkspaceAccess;
+    const canAccess = await userCanViewListRow(listObj, req.userId!, req.user?.isAdmin === true);
 
     if (!canAccess) {
       res.status(403).json({ error: 'Permission denied' });
@@ -1488,16 +1503,7 @@ router.get('/:listId/changelog', async (req: Request, res: Response) => {
       return;
     }
     const listObj = listCheck.rows[0];
-    const isOwner = listObj.user_id === req.userId;
-    const isAdmin = req.user?.isAdmin === true;
-
-    let hasWorkspaceAccess = false;
-    if (listObj.workspace_id) {
-      const wsMemberCheck = await query('SELECT 1 FROM workspace_members WHERE workspace_id = $1 AND user_id = $2', [listObj.workspace_id, req.userId]);
-      hasWorkspaceAccess = wsMemberCheck.rows.length > 0;
-    }
-
-    const canAccess = isOwner || isAdmin || listObj.is_public || hasWorkspaceAccess;
+    const canAccess = await userCanViewListRow(listObj, req.userId!, req.user?.isAdmin === true);
     if (!canAccess) {
       res.status(403).json({ error: 'Permission denied' });
       return;
@@ -1534,16 +1540,7 @@ router.get('/:listId/tasks/:taskId/changelog', async (req: Request, res: Respons
       return;
     }
     const listObj = listCheck.rows[0];
-    const isOwner = listObj.user_id === req.userId;
-    const isAdmin = req.user?.isAdmin === true;
-
-    let hasWorkspaceAccess = false;
-    if (listObj.workspace_id) {
-      const wsMemberCheck = await query('SELECT 1 FROM workspace_members WHERE workspace_id = $1 AND user_id = $2', [listObj.workspace_id, req.userId]);
-      hasWorkspaceAccess = wsMemberCheck.rows.length > 0;
-    }
-
-    const canAccess = isOwner || isAdmin || listObj.is_public || hasWorkspaceAccess;
+    const canAccess = await userCanViewListRow(listObj, req.userId!, req.user?.isAdmin === true);
     if (!canAccess) {
       res.status(403).json({ error: 'Permission denied' });
       return;
