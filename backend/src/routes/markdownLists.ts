@@ -14,6 +14,12 @@ import { softDeleteListTreeExec } from '../trashUtil';
 import { createListTask, updateListTaskFields, deleteTaskRow } from './lists';
 import { UPLOAD_DIR } from './files';
 import type { MutationActor } from '../automationEngine';
+import { notifyNewMentions } from '../mentions';
+
+/** Flatten every text-bearing block into one string for @-mention diffing. */
+function collectBlockText(blocks: MarkdownBlockLike[]): string {
+  return blocks.map((b) => (typeof b.text === 'string' ? b.text : '')).join('\n');
+}
 
 const router = Router();
 // Every route requires auth EXCEPT the image-serve GET below, which does its
@@ -296,6 +302,8 @@ export async function mutateMarkdownListBlocks(
   if (existing.rows[0].user_id !== userId) return { ok: false, error: 'permission denied' };
 
   let mutationError: string | null = null;
+  let mentionBefore = '';
+  let mentionAfter = '';
   const { result } = await withTransaction(async (client) => {
     const exec: QueryExec = (text, params) => client.query(text, params);
     const lockedRes = await exec('SELECT * FROM markdown_lists WHERE id = $1 FOR UPDATE', [markdownListId]);
@@ -306,10 +314,12 @@ export async function mutateMarkdownListBlocks(
       mutationError = mutated.error;
       return { result: lockedRes };
     }
+    mentionBefore = collectBlockText(currentBlocks);
     await pruneUnreferencedImages(exec, markdownListId, mutated);
     const reconciled = await reconcileTodoBlocks(exec, userId, {
       id: locked.id, name: locked.name, workspaceId: locked.workspace_id, todoListId: locked.todo_list_id,
     }, mutated);
+    mentionAfter = collectBlockText(reconciled.blocks);
     const contentJson = JSON.stringify({ version: 1, blocks: reconciled.blocks });
     const updateRes = await exec(
       `UPDATE markdown_lists SET content = $1, todo_list_id = $2, updated_at = NOW() WHERE id = $3 RETURNING *`,
@@ -323,6 +333,16 @@ export async function mutateMarkdownListBlocks(
   const [hydrated] = await hydrateTodoChecked([result.rows[0] as unknown as MarkdownListRow]);
   broadcastToUser(userId, 'markdownLists');
   broadcastToUser(userId, 'lists');
+  await notifyNewMentions({
+    beforeText: mentionBefore,
+    afterText: mentionAfter,
+    workspaceId: existing.rows[0].workspace_id,
+    actorId: userId,
+    title: `mentioned you in "${hydrated.name}"`,
+    entityType: 'markdownList',
+    entityId: markdownListId,
+    data: {},
+  });
   return { ok: true, markdownList: hydrated };
 }
 
@@ -419,6 +439,8 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
     // todo_list_id, independently decide to lazily create a new Todo list,
     // and then each overwrite the other's write — silently orphaning
     // whichever Todo list lost the race instead of reusing it.
+    let mentionBefore = '';
+    let mentionAfter = '';
     const { result, newTodoListId, priorTodoListId } = await withTransaction(async (client) => {
       const exec: QueryExec = (text, params) => client.query(text, params);
       const lockedRes = await exec('SELECT * FROM markdown_lists WHERE id = $1 FOR UPDATE', [id]);
@@ -427,12 +449,14 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
       let todoListId = locked.todo_list_id;
       let contentJson: string | null = null;
       if (content) {
+        mentionBefore = collectBlockText(normalizeContent(locked.content).blocks);
         const incomingBlocks = normalizeContent(content).blocks;
         await pruneUnreferencedImages(exec, id, incomingBlocks);
         const reconciled = await reconcileTodoBlocks(exec, req.userId!, {
           id: locked.id, name: name ?? locked.name, workspaceId: locked.workspace_id, todoListId: locked.todo_list_id,
         }, incomingBlocks);
         todoListId = reconciled.todoListId;
+        mentionAfter = collectBlockText(reconciled.blocks);
         contentJson = JSON.stringify({ version: 1, blocks: reconciled.blocks });
       }
 
@@ -463,6 +487,20 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
     broadcastToUser(req.userId!, 'markdownLists');
     if (newTodoListId && newTodoListId !== priorTodoListId) broadcastToUser(req.userId!, 'lists');
     else if (content) broadcastToUser(req.userId!, 'lists');
+
+    // @-mention notifications for newly-mentioned workspace members in the doc.
+    if (content) {
+      await notifyNewMentions({
+        beforeText: mentionBefore,
+        afterText: mentionAfter,
+        workspaceId: row.workspace_id,
+        actorId: req.userId!,
+        title: `mentioned you in "${hydrated.name}"`,
+        entityType: 'markdownList',
+        entityId: id,
+        data: {},
+      });
+    }
   } catch (err) {
     werr('markdown-lists PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });

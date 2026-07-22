@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { apiLogin, apiRegister } from '../api/client';
 import useUserPrefsStore from './useUserPrefsStore';
 import useShortcutsStore from './useShortcutsStore';
+import useNotificationsStore from './useNotificationsStore';
 import { clearAppStore } from './useAppStore';
 import { clearWorkspaceStore } from './useWorkspaceStore';
 import type { AuthState, AuthUser } from '../types';
@@ -89,6 +90,7 @@ const useAuthStore = create<AuthState>()(
         // Forget session-scoped UI preferences (calendar view + filter).
         useUserPrefsStore.getState().resetCalendarPrefs();
         useShortcutsStore.getState().reset();
+        useNotificationsStore.getState().reset();
         clearAppStore();
         clearWorkspaceStore();
         set({

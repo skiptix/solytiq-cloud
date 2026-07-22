@@ -7,6 +7,7 @@ import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import { apiUpdateProfile, apiUploadProfileImage, apiUploadFile } from '../api/client';
 import UserSettingsModal from '../modals/UserSettingsModal';
 import CommandPalette from './CommandPalette';
+import NotificationBell from './NotificationBell';
 import { SHORTCUT_DEFS, bindingFor, formatCombo } from '../shortcuts/registry';
 
 const focusSearchDef = SHORTCUT_DEFS.find(d => d.id === 'focus-search')!;
@@ -410,6 +411,9 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
               </div>
             )}
           </div>}
+
+          {/* Notification bell — left of the profile avatar */}
+          <NotificationBell isMobile={isMobile} onNavigate={onNavigate} />
 
           {/* Profile avatar + dropdown */}
           <div ref={profileDropRef} style={{ position: 'relative' }}>

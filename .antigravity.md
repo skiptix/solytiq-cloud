@@ -36,7 +36,9 @@ solytiq-cloud/
 │   │   ├── automationTypes.ts   # Automation Hub trigger/action node-type registry (schemas + action handlers)
 │   │   ├── automationGraph.ts   # Automation Hub graph validation (linear-chain enforcement, IDOR list-scope guard)
 │   │   ├── automationEngine.ts  # Automation Hub execution engine (fireTrigger/runAutomation, loop prevention, schedule sweep)
-│   │   ├── __tests__/        # Vitest tests — GPX parsing, workspace integrity/auth, CalDAV, Automation Hub, etc.
+│   │   ├── notifications.ts  # User Notification System — createNotification/createNotifications + overdue-deadline sweep
+│   │   ├── mentions.ts       # @-mention parsing (extractMentionUsernames) + diff-and-notify (notifyNewMentions)
+│   │   ├── __tests__/        # Vitest tests — GPX parsing, workspace integrity/auth, CalDAV, Automation Hub, mentions, etc.
 │   │   └── routes/           # One file per resource
 │   │       ├── auth.ts            # /api/auth — register, login, profile, TOTP 2FA
 │   │       ├── tasks.ts           # /api/tasks — CRUD, reorder
@@ -47,6 +49,8 @@ solytiq-cloud/
 │   │       ├── trash.ts           # /api/trash — soft delete, restore (tasks/lists/folders/timelines)
 │   │       ├── files.ts           # /api/files — upload/download (multer), share settings
 │   │       ├── taskAttachments.ts # /api/tasks/:taskId/attachments — upload/link files to tasks
+│   │       ├── taskTags.ts        # /api/tasks/:taskId/tags — tag/untag workspace members on an item
+│   │       ├── notifications.ts   # /api/notifications — feed list, unread count, read/dismiss/clear
 │   │       ├── gps.ts             # /api/gps — GPX/FIT upload, edit, route planning, POIs
 │   │       ├── admin.ts           # /api/admin — users, roles, nuke, settings, admin API keys (scoped)
 │   │       ├── adminReadApi.ts    # /api/admin-read — instance-wide Admin API (scoped read + write) via admin API keys
@@ -186,6 +190,8 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 | `automation_runs` | Execution log for one automation firing: `trigger_type`, `trigger_context JSONB`, `status` (`running｜success｜failed`), `steps JSONB` (per-action result), `error`, `is_test` (real-run started from the editor's per-node Test button rather than a live trigger) |
 | `installed_apps` | Admin-installable App Directory catalog state (Settings → System → Discover Apps): `app_id` on/off per instance. Catalog itself is code (`appsRegistry.ts`) — `gps`, `files`, `mcp`, `automations` |
 | `app_settings` | Key/value config (storage quota, `ai_assistant_enabled`, `ai_model`, `two_fa_feature_enabled`, `mcp_enabled`, `mobile_app_enabled`) |
+| `notifications` | Per-recipient notification feed (User Notification System): `user_id` (recipient), `type` (`workspace_added｜meeting_invite｜item_tagged｜mention｜automation_run｜deadline_overdue`), `actor_id` (nullable — null = system), `title`/`body`, `entity_type`/`entity_id`/`workspace_id` (deep-link target), `data JSONB`, `dedupe_key` (partial-unique per recipient — overdue sweep alerts once), `read_at`. Written only via `notifications.ts`; an AFTER-INSERT sync_log trigger pushes a `notification` signal to the recipient |
+| `task_tags` | Users tagged onto an item (task): `(task_id, user_id)` PK, `tagged_by`. Only the EXTRA tagged users — the item creator is the implicit owner, shown in the dialog's Tag row but never stored here. A new tag notifies the tagged user |
 | `ai_chat_sessions`, `ai_chats`, `ai_chat_files`, `ai_usage` | AI conversations, messages, uploaded files (30-day TTL), and per-call token usage |
 
 ### Authentication
@@ -223,6 +229,19 @@ router.get('/', async (req, res) => {
 
 export default router;
 ```
+
+### User Notification System
+
+A per-user notification feed surfaced by a **bell in the `TopBar`** (left of the profile avatar; unread badge; opens a right slide-in panel covering ~1/3 of the screen, full width on mobile) and by the **Dashboard's Notifications block** (`RightColumn` in `DashboardScreen.tsx`, replacing the former WiP placeholder). Both read the same **`useNotificationsStore`** (`items`, `unreadCount`, mark-read/dismiss/clear, cursor pagination).
+
+- **One general-purpose table (`notifications`)**, written ONLY through **`backend/src/notifications.ts`** (`createNotification`/`createNotifications`): recipient is never notified of their own action (recipient === actor is a silent no-op), and an optional `dedupeKey` makes a notification idempotent per recipient. Read/managed via **`routes/notifications.ts`** (`GET /api/notifications` (paginated + `unreadCount`), `GET /unread-count`, `POST /:id/read`, `POST /read-all`, `DELETE /:id`, `DELETE /` clear-all) — every row hard-scoped to the verified `req.userId`.
+- **What generates a notification** (each best-effort, never breaks the mutation that triggered it): another user **adds you to a workspace** (`routes/workspaces.ts`) or **invites you to a meeting** (`routes/meetings.ts`, newly-added attendees only), **tags you on an item** (`routes/taskTags.ts`), **@mentions you** in a note or markdown block (`mentions.ts`, see below), an **automation you own runs** (`automationEngine.ts`, live runs only — a Test run self-suppresses), or a **task deadline goes overdue** (`sweepOverdueDeadlines()` in `notifications.ts`, an hourly cron registered in `index.ts`'s `start()`; notifies the task's creator + everyone tagged on it, exactly once per (task, deadline) via `dedupeKey`).
+- **Realtime**: the `notifications` table has an AFTER-INSERT `sync_log` trigger that emits a `notification` signal scoped to the recipient (`workspace_id` NULL, `owner_id` = recipient), so it rides the existing delta-sync pipeline. `notification` is a SIGNAL sync entity (in `SIGNAL_ENTITIES`); `App.tsx` bumps `entityRevisions.notification` and calls `useNotificationsStore.syncRefresh()` (refreshes the badge always; the loaded feed too once any surface has shown it). The bell/feed navigate to the notification's target via `notificationTarget()` (`utils/notifications.ts`), switching workspace first when needed.
+
+### Item tagging + @-mentions (members-only, notify-only)
+
+- **Item dialog "Tag" row** (`TaggedUsersRow.tsx`, in `TaskDialog.tsx`) — **replaces the old badge chips AND the Owner row**. It always shows the item **creator** as a non-removable "Owner" chip, plus any tagged users; the item's owner (or an admin) can tag/untag other **workspace members** (`POST`/`DELETE /api/tasks/:taskId/tags`). Tagging is **notify-only**: it never changes who can see the item — you can only tag someone already in the item's workspace, so a deep-link always resolves. (The `badge` column still exists and renders on cards; it's just no longer editable from the dialog.)
+- **@-mentions in notes & markdown** — typing `@` in a `NotesEditor` (task notes + milestone notes) or a Markdown List block opens a **`MentionPopover`** of workspace members (arrow/enter/tab to pick; `utils/mention.ts` does the pure caret/token math). Mentions are stored as plain `@username` text (no UUIDs in user-visible content). On save the backend (`mentions.ts` `notifyNewMentions`) extracts `@username` tokens, resolves them ONLY against the item's workspace members, **diffs against the prior text**, and notifies the newly-added ones — so a re-save never re-notifies. The resolver is a pure, bounded, case-insensitive lookup (no injection path).
 
 ### Real-time Sync (SSE)
 
@@ -381,7 +400,7 @@ All shared interfaces are in `src/types.ts`. Key types:
 Routes are defined in `App.tsx` using React Router v7. Authenticated app routes render inside the layout shell; public/auth routes render standalone. Protected access is enforced by the `loggedIn` flag in `useAuthStore`.
 
 Authenticated routes:
-- `/dashboard` → `DashboardScreen` — the **Overall Dashboard**: an all-workspace overview (opened from the top-left logo, independent of the active-workspace switcher). Fetches cross-workspace data directly via the unscoped list/task/timeline/meeting endpoints (not the workspace-scoped `useAppStore`), scoping list tasks to the membership-checked accessible-list set from `apiGetLists()`. Three columns — **My Tasks** (left: every open to-do across workspaces you own/are a member of, incl. markdown-page todos; Today / Next-7-days filters; a deliberately non-scrolling capped list + an "All tasks" dialog; each row badged with its workspace icon + source list/page name), a **middle** pair of completed-vs-open donuts (`DonutChart.tsx`: all tasks + next 7 days) over a dropdown-switched vertical timeline (newest-created tasks by default, **or** recent milestones — a custom `ModeDropdown` popover, not a native `<select>`), and a **right** column with a **Notifications** WiP placeholder (top) above today's **My Meetings** (bottom; "See all meetings" deep-links to a meetings-only Calendar via `?show=meetings`). The three columns stretch to equal full height and animate in on open (`cardIn`, staggered); the `DonutChart`s carry no legend (a hover tooltip breaks down Completed/Open); overdue open tasks surface at the top of the Today / Next-7-days lists with an "Overdue" label; cards use the shared `--color-surface-gray` surface. Pure date/counting/source helpers live in `utils/dashboard.ts` (unit-tested)
+- `/dashboard` → `DashboardScreen` — the **Overall Dashboard**: an all-workspace overview (opened from the top-left logo, independent of the active-workspace switcher). Fetches cross-workspace data directly via the unscoped list/task/timeline/meeting endpoints (not the workspace-scoped `useAppStore`), scoping list tasks to the membership-checked accessible-list set from `apiGetLists()`. Three columns — **My Tasks** (left: every open to-do across workspaces you own/are a member of, incl. markdown-page todos; Today / Next-7-days filters; a deliberately non-scrolling capped list + an "All tasks" dialog; each row badged with its workspace icon + source list/page name), a **middle** pair of completed-vs-open donuts (`DonutChart.tsx`: all tasks + next 7 days) over a dropdown-switched vertical timeline (newest-created tasks by default, **or** recent milestones — a custom `ModeDropdown` popover, not a native `<select>`), and a **right** column with the live **Notifications** feed (top — see User Notification System; recent items, unread count, "View all" opens the TopBar slide-in panel) above today's **My Meetings** (bottom; "See all meetings" deep-links to a meetings-only Calendar via `?show=meetings`). The three columns stretch to equal full height and animate in on open (`cardIn`, staggered); the `DonutChart`s carry no legend (a hover tooltip breaks down Completed/Open); overdue open tasks surface at the top of the Today / Next-7-days lists with an "Overdue" label; cards use the shared `--color-surface-gray` surface. Pure date/counting/source helpers live in `utils/dashboard.ts` (unit-tested)
 - `/folder/:folderId` → `FolderDashboardScreen`
 - `/list/:listId` → `ListScreen` (labeled "To-Do" in the UI — see below; the `list` entity name, route, and store fields are unchanged)
 - `/timeline/:timelineId` → `TimelineScreen`
@@ -408,7 +427,7 @@ Top-level modal visibility is managed by a single `modal` string state in `App.t
 
 The per-item **"More settings…"** menu in the `Sidebar` opens `ItemSettingsModal`, which is where accessibility (workspace Public/Private), color, emoji, folder, and the **public Share link** controls live for lists and timelines.
 
-The two editor dialogs — `TaskDialog` (task/item editing) and the milestone editor in `TimelineScreen` — share one chrome: a wide (800px) card with a colored accent stripe, a large title-with-emoji/checkbox heading row, a light-purple **properties panel** of icon+label rows (`PropRow`), a Notes section, and an explicit **Cancel / Save** footer. When the containing list/timeline is **workspace-public**, the panel also shows an **Owner** row — a `CreatorBubble` avatar + name (task `creatorId` for items; the timeline owner for milestones). Both use **buffered editing** — field edits live in local state and only persist on Save; Cancel/close/Escape discards them. (In `TaskDialog`, attachments and sub-items are the exception: they remain immediate actions.)
+The two editor dialogs — `TaskDialog` (task/item editing) and the milestone editor in `TimelineScreen` — share one chrome: a wide (800px) card with a colored accent stripe, a large title-with-emoji/checkbox heading row, a light-purple **properties panel** of icon+label rows (`PropRow`), a Notes section, and an explicit **Cancel / Save** footer. `TaskDialog`'s properties panel has a **Tag** row (`TaggedUsersRow`) that folds in the old Owner row — it always shows the item creator as a non-removable "Owner" chip and lets the owner tag other workspace members (see Item tagging + @-mentions); its Notes field enables the `@`-mention typeahead from the same workspace members. Both dialogs use **buffered editing** — field edits live in local state and only persist on Save; Cancel/close/Escape discards them. (In `TaskDialog`, attachments, sub-items, and tags are the exception: they remain immediate actions.)
 
 ### Mobile Responsiveness
 

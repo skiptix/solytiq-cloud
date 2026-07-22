@@ -4,20 +4,22 @@ import type { Task, TaskAttachment, SharedFile } from '../types';
 import Icon from './Icon';
 import { useMobile } from '../hooks/useBreakpoint';
 import CalendarPicker from './CalendarPicker';
-import CreatorBubble from './CreatorBubble';
 import TaskChangeHistory from './TaskChangeHistory';
 import NotesEditor from './NotesEditor';
+import TaggedUsersRow from './TaggedUsersRow';
 import AttachmentPreviewModal from './AttachmentPreview';
 import { isPreviewable } from '../utils/attachmentPreview';
 import { DeleteConfirmModal } from './TaskItem';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
-import useMembersStore from '../store/useMembersStore';
+import useAuthStore from '../store/useAuthStore';
 import {
   apiCreateList, apiCreateSection, apiAddListTask, apiUpdateTask, apiUpdateListTask,
   apiGetTaskAttachments, apiUploadTaskAttachment, apiLinkTaskAttachment, apiDeleteTaskAttachment, apiDownloadTaskAttachment,
-  apiTaskAttachmentBlob, apiGetFiles,
+  apiTaskAttachmentBlob, apiGetFiles, apiGetWorkspaceMembers,
 } from '../api/client';
+import type { WorkspaceMember } from '../types';
+import type { MentionMember } from '../utils/mention';
 
 function fmtAttSize(bytes: number): string {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
@@ -189,13 +191,6 @@ export function FilePicker({ onSelect, onClose }: { onSelect: (file: SharedFile)
 
 const PRIORITIES = ['High', 'Medium', 'Low'] as const;
 const PRIORITY_COLORS: Record<string, string> = { High: 'var(--color-orange)', Medium: 'var(--color-warning-alt)', Low: 'var(--color-text-tertiary)' };
-const BADGE_COLORS: Record<string, { bg: string; color: string }> = {
-  Work: { bg: 'var(--color-yellow-tint-3)', color: 'var(--color-yellow-deep-1)' },
-  Personal: { bg: 'var(--color-surface-tint)', color: 'var(--color-primary)' },
-  Urgent: { bg: 'var(--color-error-bg)', color: 'var(--color-error)' },
-  Tip: { bg: 'var(--color-blue-pale-2)', color: 'var(--color-blue-mid-7)' },
-};
-const TAGS = ['Work', 'Personal', 'Urgent', 'Tip'] as const;
 
 function localIso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -252,21 +247,19 @@ interface TaskDialogProps {
   onUpdate: (id: number, updates: Partial<Task>) => void;
   onDelete: (id: number) => void;
   onClose: () => void;
-  /** When the containing list is public (workspace-visible), show an Owner row. */
+  /** Deprecated: the old Owner row is now folded into the Tag row (which always
+   *  shows the creator). Kept optional so existing callers still type-check. */
   isPublic?: boolean;
 }
 
-export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic }: TaskDialogProps) {
+export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDialogProps) {
   const isMobile = useMobile();
-  const owner = useMembersStore(s => (task.creatorId ? s.members[task.creatorId] : undefined));
-  const showOwner = Boolean(isPublic && task.creatorId);
   const isListTask = task._source === 'list' && Boolean(task._listId);
   const [showChangelog, setShowChangelog] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(task.note ?? '');
   const [deadline, setDeadline] = useState(task.deadline ?? '');
   const [priority, setPriority] = useState<string>(task.priority ?? '');
-  const [tag, setTag] = useState(task.badge ?? '');
   const [checked, setChecked] = useState(task.checked);
   const [showCal, setShowCal] = useState(false);
   const [calPos, setCalPos] = useState<{ top: number; left: number } | null>(null);
@@ -299,6 +292,30 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
 
   const { lists, setLists, updateListTask, loadFromApi } = useAppStore();
   const { currentWorkspaceId } = useWorkspaceStore();
+  const currentUserId = useAuthStore(s => s.userId);
+  const isAdmin = useAuthStore(s => s.isAdmin);
+
+  // Which workspace the item lives in — list tasks inherit it from their list;
+  // dash tasks carry it directly (falling back to the active workspace).
+  const taskWorkspaceId = isListTask
+    ? (lists.find(l => l.id === task._listId)?.workspaceId ?? null)
+    : (task.workspaceId ?? currentWorkspaceId ?? null);
+  // Only the item's creator (or an admin) may add/remove tags — mirrors who can
+  // edit the item itself.
+  const canEditTags = Boolean((task.creatorId && task.creatorId === currentUserId) || isAdmin);
+
+  // Workspace members — powers both the Tag row's picker and the note's
+  // @-mention typeahead. Only fetched for items that live in a workspace.
+  const [wsMembers, setWsMembers] = useState<WorkspaceMember[]>([]);
+  useEffect(() => {
+    if (!taskWorkspaceId) { setWsMembers([]); return; }
+    let alive = true;
+    apiGetWorkspaceMembers(taskWorkspaceId).then(r => { if (alive) setWsMembers(r.members); }).catch(() => {});
+    return () => { alive = false; };
+  }, [taskWorkspaceId]);
+  const mentionMembers: MentionMember[] = wsMembers
+    .filter(m => m.userId !== currentUserId)
+    .map(m => ({ id: m.userId, username: m.username, fullName: m.fullName ?? null }));
 
   const linkedList = linkedListId ? lists.find(l => l.id === linkedListId) : null;
   const subItems = linkedList?.sections.flatMap(s => s.tasks) ?? [];
@@ -346,7 +363,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
     if (checked !== task.checked) updates.checked = checked;
     if ((deadline || '') !== (task.deadline ?? '')) updates.deadline = deadline || undefined;
     if ((priority || '') !== (task.priority ?? '')) updates.priority = (priority as Task['priority']) || undefined;
-    if ((tag || '') !== (task.badge ?? '')) updates.badge = tag || undefined;
     if ((notes || '') !== (task.note ?? '')) updates.note = notes || undefined;
     if (!task.noteMarkdown) updates.noteMarkdown = true;
     if (Object.keys(updates).length > 0) onUpdate(task.id, updates);
@@ -623,47 +639,26 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
                 </div>
               </PropRow>
 
-              <PropRow icon="label" label="Tag">
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {TAGS.map(t => {
-                    const c = BADGE_COLORS[t];
-                    const active = tag === t;
-                    return (
-                      <button key={t}
-                        onClick={() => setTag(prev => (prev === t ? '' : t))}
-                        style={{
-                          padding: '4px 12px', borderRadius: 9999,
-                          border: `1px solid ${active ? c.color : 'var(--color-border-alt)'}`,
-                          background: active ? c.bg : 'transparent',
-                          fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600,
-                          color: active ? c.color : 'var(--color-text-tertiary)',
-                          cursor: 'pointer', transition: 'all 120ms',
-                        }}>
-                        {t}
-                      </button>
-                    );
-                  })}
-                </div>
+              {/* Tagged users — replaces the old badge chips AND the Owner row.
+                  Defaults to the item creator (shown as the "Owner" chip); the
+                  owner can tag other workspace members, who get notified. */}
+              <PropRow icon="group" label="Tag">
+                <TaggedUsersRow
+                  taskId={task.id}
+                  workspaceId={taskWorkspaceId}
+                  creatorId={task.creatorId}
+                  canEdit={canEditTags}
+                  members={wsMembers}
+                />
               </PropRow>
 
-              <PropRow icon="history" label="Timeline" last={!task._listName && !showOwner}>
+              <PropRow icon="history" label="Timeline" last={!task._listName}>
                 <TaskMiniTimeline createdAt={task.createdAt} completedAt={task.completedAt} checked={task.checked} />
               </PropRow>
 
               {task._listName && (
-                <PropRow icon="format_list_bulleted" label="In list" last={!showOwner}>
+                <PropRow icon="format_list_bulleted" label="In list" last>
                   <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-secondary)' }}>{task._listName}</span>
-                </PropRow>
-              )}
-
-              {showOwner && task.creatorId && (
-                <PropRow icon="account_circle" label="Owner" last>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <CreatorBubble creatorId={task.creatorId} taskHovered />
-                    <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-secondary)' }}>
-                      {owner ? (owner.fullName || owner.username) : 'Unknown'}
-                    </span>
-                  </div>
                 </PropRow>
               )}
             </div>
@@ -679,6 +674,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
                 value={notes}
                 onChange={setNotes}
                 minHeight={160}
+                mentionMembers={mentionMembers}
                 aiContext={{
                   kind: 'task',
                   title,
@@ -686,7 +682,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose, isPublic
                     Status: checked ? 'Completed' : 'Open',
                     Deadline: deadline || undefined,
                     Priority: priority || undefined,
-                    Tag: tag || undefined,
+                    Tag: task.badge || undefined,
                     List: task._listName,
                   },
                 }}

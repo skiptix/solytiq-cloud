@@ -5,6 +5,7 @@ import { broadcastToUser } from '../sse';
 import { werr } from '../workspaceUtil';
 import { parseRecurrenceRule, computeRecurrenceDates } from '../recurrence';
 import { resolveInviteeIds, setMeetingAttendees } from '../meetingAttendees';
+import { createNotifications } from '../notifications';
 
 const router = Router();
 router.use(authenticate);
@@ -148,6 +149,17 @@ router.post('/', async (req: Request, res: Response) => {
     });
     broadcastToUser(req.userId!, 'meetings');
     for (const userId of invitees) broadcastToUser(userId, 'meetings');
+    // Every invitee is newly invited on a create — notify them all.
+    await createNotifications(invitees, {
+      type: 'meeting_invite',
+      actorId: req.userId!,
+      title: `invited you to "${title.trim()}"`,
+      body: null,
+      entityType: 'meeting',
+      entityId: meetingId,
+      workspaceId: null,
+      data: { date: dates[0], meetingTitle: title.trim() },
+    });
   } catch (err) {
     werr('meetings POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -216,10 +228,23 @@ router.put('/:id', async (req: Request, res: Response) => {
       await setMeetingAttendees(req.params.id, attendeeIds);
     }
 
-    res.json({ meeting: sanitizeMeeting({ ...result.rows[0], attendee_ids: attendeeIds }, req.userId!) });
+    const saved = result.rows[0];
+    res.json({ meeting: sanitizeMeeting({ ...saved, attendee_ids: attendeeIds }, req.userId!) });
     broadcastToUser(req.userId!, 'meetings');
     const notify = new Set([...before, ...attendeeIds]);
     for (const userId of notify) broadcastToUser(userId, 'meetings');
+    // Notify only NEWLY added attendees (present now, absent before).
+    const newlyInvited = attendeeIds.filter(uid => !before.has(uid));
+    await createNotifications(newlyInvited, {
+      type: 'meeting_invite',
+      actorId: req.userId!,
+      title: `invited you to "${saved.title}"`,
+      body: null,
+      entityType: 'meeting',
+      entityId: req.params.id,
+      workspaceId: null,
+      data: { date: saved.meeting_date, meetingTitle: saved.title },
+    });
   } catch (err) {
     werr('meetings PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });

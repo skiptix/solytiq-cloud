@@ -11,6 +11,7 @@ import { softDeleteListTree, collectDescendantListIds as collectDescendantListId
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestrictConflict } from '../visibility';
 import type { MutationActor } from '../automationEngine';
 import { recordTaskChanges } from '../taskChangeLog';
+import { notifyNewMentions } from '../mentions';
 
 const router = Router();
 router.use(authenticate);
@@ -1144,6 +1145,24 @@ export async function updateListTaskFields(
     { title: saved.title, note: saved.note, deadline: saved.deadline, priority: saved.priority, badge: saved.badge, section_id: saved.section_id, checked: saved.checked },
     actor
   );
+
+  // @-mention notifications — only for genuine USER note edits that changed the
+  // text (an automation's writes never mention-notify). notifyNewMentions diffs
+  // old→new so re-saving the same note never re-notifies.
+  if (actor.type === 'user' && fields.note != null && saved.note !== beforeRow.note) {
+    const listInfo = await exec(`SELECT workspace_id FROM lists WHERE id = $1`, [listId]);
+    const wsId = listInfo.rows.length > 0 ? (listInfo.rows[0] as { workspace_id: string | null }).workspace_id : null;
+    await notifyNewMentions({
+      beforeText: beforeRow.note,
+      afterText: saved.note,
+      workspaceId: wsId,
+      actorId: actor.userId,
+      title: `mentioned you in "${saved.title}"`,
+      entityType: 'task',
+      entityId: String(saved.id),
+      data: { listId, source: 'list' },
+    });
+  }
 
   // Fire triggers only on a false → true checked transition, and only for
   // genuine user actions (see file header). A list-all-completed check piggy

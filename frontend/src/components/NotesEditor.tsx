@@ -2,7 +2,9 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import Icon from './Icon';
 import CopyButton from './CopyButton';
 import MarkdownView from './MarkdownView';
+import MentionPopover from './MentionPopover';
 import { toggleWrap, formatMarkerForKeyDown, type FormatMarker as Marker } from '../utils/textFormatting';
+import { detectMention, applyMention, filterMentionMembers, type MentionMember, type MentionContext } from '../utils/mention';
 import useAIStore from '../store/useAIStore';
 import { apiGetAISettings, apiAIChat } from '../api/client';
 
@@ -154,11 +156,21 @@ interface NotesEditorProps {
   minHeight?: number;
   /** When provided, shows a tiny "Ask AI" button scoped to this item's full context. */
   aiContext?: NoteAIContext;
+  /** Workspace members that can be @-mentioned. Enables the mention typeahead. */
+  mentionMembers?: MentionMember[];
 }
 
-export default function NotesEditor({ value, onChange, placeholder = 'Add notes, context, or any details…', minHeight = 120, aiContext }: NotesEditorProps) {
+export default function NotesEditor({ value, onChange, placeholder = 'Add notes, context, or any details…', minHeight = 120, aiContext, mentionMembers }: NotesEditorProps) {
   const [tab, setTab] = useState<'write' | 'preview'>('preview');
   const taRef = useRef<HTMLTextAreaElement>(null);
+
+  // @-mention typeahead state (only active when mentionMembers is provided).
+  const [mention, setMention] = useState<MentionContext | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const mentionCandidates = mention && mentionMembers?.length
+    ? filterMentionMembers(mentionMembers, mention.query)
+    : [];
+  const mentionActive = mention !== null && mentionCandidates.length > 0;
   // Snapshot of the note right before an AI-generated replacement, so a quick
   // "Undo" is available without forcing the user to Cancel the whole dialog.
   const [undoNote, setUndoNote] = useState<string | null>(null);
@@ -186,7 +198,38 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
     });
   };
 
+  // Recompute mention context from the textarea's current value + caret.
+  const refreshMention = (el: HTMLTextAreaElement) => {
+    if (!mentionMembers?.length) { if (mention) setMention(null); return; }
+    const ctx = detectMention(el.value, el.selectionStart ?? 0);
+    setMention(ctx);
+    setMentionIndex(0);
+  };
+
+  const pickMention = (m: MentionMember) => {
+    const el = taRef.current;
+    if (!el || !mention) return;
+    const caret = el.selectionStart ?? el.value.length;
+    const { value: nextVal, caret: nextCaret } = applyMention(value, mention.at, caret, m.username);
+    onChange(nextVal);
+    setUndoNote(null);
+    setMention(null);
+    requestAnimationFrame(() => {
+      const now = taRef.current;
+      if (!now) return;
+      now.focus();
+      now.setSelectionRange(nextCaret, nextCaret);
+      resize();
+    });
+  };
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionActive) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex(i => (i + 1) % mentionCandidates.length); return; }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setMentionIndex(i => (i - 1 + mentionCandidates.length) % mentionCandidates.length); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mentionCandidates[mentionIndex]); return; }
+      if (e.key === 'Escape')    { e.preventDefault(); setMention(null); return; }
+    }
     const marker = formatMarkerForKeyDown(e);
     if (marker) { e.preventDefault(); applyFormat(marker); }
   };
@@ -254,20 +297,40 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
             : <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', fontStyle: 'italic' }}>Nothing to preview yet.</div>}
         </div>
       ) : (
-        <textarea
-          ref={taRef}
-          value={value}
-          onChange={e => { onChange(e.target.value); setUndoNote(null); resize(); }}
-          onKeyDown={onKeyDown}
-          placeholder={placeholder}
-          style={{
-            width: '100%', fontFamily: 'var(--font-mono)',
-            fontSize: 13, color: 'var(--color-text-secondary)',
-            background: 'transparent', border: 'none', outline: 'none', resize: 'none',
-            lineHeight: 1.75, padding: 0, overflowY: 'hidden', minHeight,
-          }}
-          rows={4}
-        />
+        <div style={{ position: 'relative' }}>
+          <textarea
+            ref={taRef}
+            value={value}
+            onChange={e => { onChange(e.target.value); setUndoNote(null); resize(); refreshMention(e.target); }}
+            onKeyDown={onKeyDown}
+            onClick={e => refreshMention(e.currentTarget)}
+            onBlur={() => { /* let the popover's own mousedown handler pick first */ setTimeout(() => setMention(null), 120); }}
+            placeholder={mentionMembers?.length ? `${placeholder}  •  type @ to tag someone` : placeholder}
+            style={{
+              width: '100%', fontFamily: 'var(--font-mono)',
+              fontSize: 13, color: 'var(--color-text-secondary)',
+              background: 'transparent', border: 'none', outline: 'none', resize: 'none',
+              lineHeight: 1.75, padding: 0, overflowY: 'hidden', minHeight,
+            }}
+            rows={4}
+          />
+          {mentionActive && (() => {
+            // Anchor below the field by default, but flip above when the field's
+            // bottom is close to the viewport bottom so the list stays on-screen
+            // (e.g. inside the scroll-bounded TaskDialog body).
+            const rect = taRef.current?.getBoundingClientRect();
+            const flipUp = !!rect && rect.bottom + 252 > window.innerHeight;
+            return (
+              <MentionPopover
+                members={mentionCandidates}
+                activeIndex={mentionIndex}
+                onPick={pickMention}
+                onHover={setMentionIndex}
+                style={flipUp ? { bottom: 'calc(100% + 4px)', left: 0 } : { top: 'calc(100% + 4px)', left: 0 }}
+              />
+            );
+          })()}
+        </div>
       )}
     </div>
   );

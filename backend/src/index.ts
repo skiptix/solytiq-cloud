@@ -37,9 +37,12 @@ import templatesRouter from './routes/templates';
 import appsRouter from './routes/apps';
 import automationsRouter from './routes/automations';
 import markdownListsRouter, { MARKDOWN_IMAGE_DIR } from './routes/markdownLists';
+import notificationsRouter from './routes/notifications';
+import taskTagsRouter from './routes/taskTags';
 import { isAppInstalled } from './appsRegistry';
 import { startSyncDispatcher, SYNC_CHANNEL } from './syncLog';
 import { sweepScheduledAutomations } from './automationEngine';
+import { sweepOverdueDeadlines } from './notifications';
 import { getPublicBaseUrl } from './publicUrl';
 import { comparePassword } from './auth';
 import { query as dbQuery } from './db';
@@ -183,6 +186,7 @@ app.use('/api/admin/nuke', setupLimiter);
 
 app.use('/api/auth',       authRouter);
 app.use('/api/tasks/:taskId/attachments', taskAttachmentsRouter);
+app.use('/api/tasks/:taskId/tags', taskTagsRouter);
 app.use('/api/tasks',      tasksRouter);
 app.use('/api/lists',      listsRouter);
 app.use('/api/trash',      trashRouter);
@@ -205,6 +209,7 @@ app.use('/api/templates',  templatesRouter);
 app.use('/api/apps',       appsRouter);
 app.use('/api/automations', automationsRouter);
 app.use('/api/markdown-lists', markdownListsRouter);
+app.use('/api/notifications', notificationsRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
@@ -1691,6 +1696,54 @@ async function runMigrations() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS markdown_list_images_list_idx ON markdown_list_images(markdown_list_id)`);
 
+  // ── User Notification System ─────────────────────────────────────────────────
+  // A single general-purpose per-recipient notification feed (bell in the
+  // TopBar + Dashboard feed). Written only through backend/src/notifications.ts
+  // (createNotification), read/managed via routes/notifications.ts. `dedupe_key`
+  // (optional) makes a notification idempotent per recipient — the overdue
+  // deadline sweep uses it to alert exactly once per task. An AFTER-INSERT
+  // sync_log trigger (below) pushes a `notification` signal to the recipient so
+  // the bell updates live over the existing SSE pipeline.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id           VARCHAR(100) PRIMARY KEY,
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type         VARCHAR(50) NOT NULL,
+      actor_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+      title        TEXT NOT NULL,
+      body         TEXT,
+      entity_type  VARCHAR(50),
+      entity_id    VARCHAR(100),
+      workspace_id VARCHAR(100),
+      data         JSONB NOT NULL DEFAULT '{}'::jsonb,
+      dedupe_key   VARCHAR(200),
+      read_at      TIMESTAMPTZ,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS notifications_user_idx ON notifications (user_id, created_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS notifications_user_unread_idx ON notifications (user_id) WHERE read_at IS NULL`);
+  // Partial-unique dedupe: ON CONFLICT (user_id, dedupe_key) DO NOTHING relies
+  // on this. NULL dedupe_key rows never collide (multiple NULLs are allowed).
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS notifications_dedupe_idx ON notifications (user_id, dedupe_key) WHERE dedupe_key IS NOT NULL`);
+
+  // Additional users tagged onto an item (task). The item's creator is the
+  // implicit owner (shown in the dialog's Tag row, never stored here); this
+  // table holds only the EXTRA tagged users. FK to tasks(id) so a deleted task
+  // cleans up its tags automatically.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS task_tags (
+      task_id    BIGINT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      user_id    UUID   NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      tagged_by  UUID   REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (task_id, user_id)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS task_tags_user_idx ON task_tags (user_id)`);
+  // Supports the hourly overdue-deadline sweep's `WHERE checked = false AND deadline < CURRENT_DATE`.
+  await pool.query(`CREATE INDEX IF NOT EXISTS tasks_open_deadline_idx ON tasks (deadline) WHERE checked = false AND deadline IS NOT NULL`);
+
   // ── Optimistic concurrency ──────────────────────────────────────────────────
   // A `version` that auto-increments on every UPDATE (BEFORE trigger). Clients
   // echo the version they edited; a conditional PUT then 409s instead of
@@ -1870,6 +1923,16 @@ async function runMigrations() {
       PERFORM sync_emit('markdownList', NEW.id, 'upsert', NEW.workspace_id, NEW.user_id); RETURN NEW;
     END; $$ LANGUAGE plpgsql
   `);
+  // Notifications are user-global (workspace_id NULL, owner_id = recipient) so
+  // the delta endpoint's `(workspace_id IS NULL AND owner_id = reader)` filter
+  // delivers a `notification` signal to exactly the recipient's own devices.
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_notifications() RETURNS trigger AS $$
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN PERFORM sync_emit('notification', OLD.id, 'delete', NULL, OLD.user_id); RETURN OLD; END IF;
+      PERFORM sync_emit('notification', NEW.id, 'upsert', NULL, NEW.user_id); RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
 
   // Attach every trigger idempotently (DROP + CREATE so re-runs are safe).
   const syncTriggers: Array<[string, string]> = [
@@ -1880,6 +1943,7 @@ async function runMigrations() {
     ['trash', 'trash'], ['trash_lists', 'trash'], ['trash_folders', 'trash'],
     ['trash_timelines', 'trash'], ['trash_milestones', 'trash'], ['trash_markdown_lists', 'trash'],
     ['templates', 'templates'], ['automations', 'automations'], ['markdown_lists', 'markdown_lists'],
+    ['notifications', 'notifications'],
   ];
   for (const [table, fn] of syncTriggers) {
     await pool.query(`DROP TRIGGER IF EXISTS synclog_${table} ON ${table}`);
@@ -1982,6 +2046,11 @@ async function start() {
   // routes/lists.ts and don't go through this sweep.
   sweepScheduledAutomations();
   setInterval(sweepScheduledAutomations, 5 * 60 * 1000);
+
+  // Notifications: alert task owners + tagged users about overdue deadlines,
+  // once per (task, deadline). Hourly is plenty — deadlines have day precision.
+  sweepOverdueDeadlines();
+  setInterval(sweepOverdueDeadlines, 60 * 60 * 1000);
 
   // Delta-sync: prune the outbox daily, and start the realtime dispatcher that
   // fans committed changes out to every affected user's devices.
