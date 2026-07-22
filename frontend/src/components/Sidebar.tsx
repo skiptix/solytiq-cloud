@@ -6,6 +6,7 @@ import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import useMarkdownListsStore from '../store/useMarkdownListsStore';
+import useSharedItemsStore from '../store/useSharedItemsStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
 import WorkspaceWizard from '../modals/WorkspaceWizard';
 import WorkspaceSettingsModal from '../modals/WorkspaceSettingsModal';
@@ -1289,6 +1290,11 @@ function fmtDistShort(m?: number | null) {
 export default function Sidebar({ active, activeListId, activeTimelineId, activeFolderId, activeGpsFileId, activeMarkdownListId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList, isMobile, drawerOpen, resizing }: SidebarProps) {
   const markdownLists = useMarkdownListsStore(s => s.markdownLists);
   const mdTodoListIds = new Set(markdownLists.map(m => m.todoListId).filter((x): x is string => !!x));
+  // Items other users shared with me — de-duped against the current workspace's
+  // own items (a same-workspace share already appears above in the normal view).
+  const sharedLists = useSharedItemsStore(s => s.lists);
+  const sharedTimelines = useSharedItemsStore(s => s.timelines);
+  const sharedMarkdown = useSharedItemsStore(s => s.markdownLists);
   const collapsed = isMobile ? false : width <= 72;
   const [addHov, setAddHov] = useState(false);
   const [folderHov, setFolderHov] = useState(false);
@@ -1615,7 +1621,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.60.1
+              v1.61.0
             </div>
           )}
         </div>
@@ -1926,6 +1932,45 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
             onDrop={e => timelineDragHandlers.onTimelineDrop(timeline.id, e)}
           />
         ))}
+
+        {/* Shared with me — items invited to me, from any workspace (de-duped
+            against the current workspace's own items above). */}
+        {(() => {
+          const listIds = new Set(lists.map(l => l.id));
+          const timelineIds = new Set(timelines.map(t => t.id));
+          const mdIds = new Set(markdownLists.map(m => m.id));
+          const extraLists = sharedLists.filter(l => !listIds.has(l.id));
+          const extraTimelines = sharedTimelines.filter(t => !timelineIds.has(t.id));
+          const extraMarkdown = sharedMarkdown.filter(m => !mdIds.has(m.id));
+          const total = extraLists.length + extraTimelines.length + extraMarkdown.length;
+          if (total === 0) return null;
+          const row = (key: string, icon: string, color: string | undefined, emoji: string | null | undefined, name: string, activeRow: boolean, path: string) => (
+            <button
+              key={key}
+              onClick={() => onNavigate(path)}
+              title={collapsed ? name : undefined}
+              style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', border: 'none', width: '100%', textAlign: 'left', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: activeRow ? 600 : 450, color: activeRow ? (color ?? 'var(--color-primary)') : 'var(--color-text-secondary)', background: activeRow ? 'var(--color-surface-tint)' : 'transparent', transition: 'background 150ms' }}
+              onMouseEnter={e => { if (!activeRow) e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
+              onMouseLeave={e => { if (!activeRow) e.currentTarget.style.background = 'transparent'; }}>
+              {emoji ? <span style={{ fontSize: 15, width: 18, textAlign: 'center', flexShrink: 0 }}>{emoji}</span> : <Icon name={icon} size={16} color={activeRow ? (color ?? 'var(--color-primary)') : 'var(--color-text-tertiary)'} />}
+              {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>}
+            </button>
+          );
+          return (
+            <div style={{ marginTop: 6 }}>
+              {!collapsed && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px 4px' }}>
+                  <Icon name="group" size={13} color="var(--color-text-quaternary)" />
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 700, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Shared with me</span>
+                </div>
+              )}
+              {collapsed && <div style={{ height: 1, background: 'var(--color-border)', margin: '6px 8px' }} />}
+              {extraLists.map(l => row(`sl-${l.id}`, 'format_list_bulleted', l.color, l.emoji, l.name, active === 'list' && activeListId === l.id, `/list/${l.id}`))}
+              {extraTimelines.map(t => row(`st-${t.id}`, 'timeline', t.color ?? undefined, t.emoji, t.name, active === 'timeline' && activeTimelineId === t.id, `/timeline/${t.id}`))}
+              {extraMarkdown.map(m => row(`sm-${m.id}`, 'notes', m.color ?? undefined, m.emoji, m.name, active === 'markdownList' && activeMarkdownListId === m.id, `/markdown-list/${m.id}`))}
+            </div>
+          );
+        })()}
       </div>
 
       <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -1934,7 +1979,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="archive" label="Archived" active={false} onClick={() => onOpenModal('archived')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.60.1
+            v1.61.0
           </div>
         )}
       </div>

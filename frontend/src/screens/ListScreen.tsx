@@ -4,6 +4,7 @@ import { useMobile } from '../hooks/useBreakpoint';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Task } from '../types';
 import useAppStore from '../store/useAppStore';
+import useSharedItemsStore from '../store/useSharedItemsStore';
 import useAuthStore from '../store/useAuthStore';
 import TaskItem, { QuickAdd } from '../components/TaskItem';
 import TaskDialog from '../components/TaskDialog';
@@ -18,7 +19,10 @@ export default function ListScreen() {
   const navigate = useNavigate();
   const { userId: currentUserId } = useAuthStore();
   const { lists, listsLoading, updateList, updateListTask, deleteListTask, addToTrash, setLists } = useAppStore();
-  const list = lists.find(l => l.id === listId);
+  const sharedLists = useSharedItemsStore(s => s.lists);
+  // Fall back to a list shared with me (from another workspace) when it isn't in
+  // the active workspace's data.
+  const list = lists.find(l => l.id === listId) ?? sharedLists.find(l => l.id === listId);
   const isMobile = useMobile();
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);

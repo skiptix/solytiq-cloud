@@ -38,26 +38,40 @@ export function extractMentionUsernames(text: string | null | undefined): Set<st
   return out;
 }
 
+export interface MentionShareScope {
+  itemType: 'list' | 'timeline' | 'markdownList';
+  itemId: string;
+}
+
 /**
- * Resolve a set of mentioned usernames to real user ids that are BOTH members
- * of the given workspace AND not the actor. A null workspace (personal/global
- * items) has no other members, so nothing resolves — the safe default.
+ * Resolve a set of mentioned usernames to real user ids that are not the actor
+ * and can actually see the item — i.e. they are a member of the item's
+ * workspace OR they've been invited to the specific item (item_shares). A note
+ * in a personal (no-workspace) item can still mention someone it's been shared
+ * with. Nothing resolves when there's neither a workspace nor a share scope.
  */
 export async function resolveMentionUserIds(
   workspaceId: string | null,
   usernames: Set<string>,
-  actorId: string
+  actorId: string,
+  shareItem?: MentionShareScope | null
 ): Promise<string[]> {
-  if (!workspaceId || usernames.size === 0) return [];
+  if (usernames.size === 0 || (!workspaceId && !shareItem)) return [];
   const lower = [...usernames];
   const rows = await query<{ id: string }>(
     `SELECT u.id
        FROM users u
-       JOIN workspace_members wm ON wm.user_id = u.id
-      WHERE wm.workspace_id = $1
-        AND LOWER(u.username) = ANY($2::text[])
-        AND u.id <> $3`,
-    [workspaceId, lower, actorId]
+      WHERE LOWER(u.username) = ANY($1::text[])
+        AND u.id <> $2
+        AND (
+          ($3::text IS NOT NULL AND EXISTS (
+            SELECT 1 FROM workspace_members wm WHERE wm.user_id = u.id AND wm.workspace_id = $3
+          ))
+          OR ($4::text IS NOT NULL AND $5::text IS NOT NULL AND EXISTS (
+            SELECT 1 FROM item_shares s WHERE s.user_id = u.id AND s.item_type = $4 AND s.item_id = $5
+          ))
+        )`,
+    [lower, actorId, workspaceId, shareItem?.itemType ?? null, shareItem?.itemId ?? null]
   );
   return rows.rows.map((r) => r.id);
 }
@@ -77,6 +91,8 @@ export async function notifyNewMentions(opts: {
   entityId: string;
   data?: Record<string, unknown>;
   type?: NotificationType;
+  /** The item whose invitees (item_shares) may also be mentioned, beyond workspace members. */
+  shareItem?: MentionShareScope | null;
 }): Promise<void> {
   try {
     const before = extractMentionUsernames(opts.beforeText);
@@ -84,7 +100,7 @@ export async function notifyNewMentions(opts: {
     const added = new Set([...after].filter((u) => !before.has(u)));
     if (added.size === 0) return;
 
-    const userIds = await resolveMentionUserIds(opts.workspaceId, added, opts.actorId);
+    const userIds = await resolveMentionUserIds(opts.workspaceId, added, opts.actorId, opts.shareItem);
     for (const userId of userIds) {
       await createNotification({
         userId,

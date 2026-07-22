@@ -1,20 +1,30 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from './Icon';
 import MemberAvatar from './MemberAvatar';
 import useMembersStore from '../store/useMembersStore';
-import { apiGetTaskTags, apiAddTaskTag, apiRemoveTaskTag, apiGetWorkspaceMembers, type TaskTag } from '../api/client';
+import useSharedItemsStore from '../store/useSharedItemsStore';
+import {
+  apiGetTaskTags, apiAddTaskTag, apiRemoveTaskTag, apiGetItemMembers,
+  apiAddItemMember, apiAddWorkspaceMember, apiGetMembersBasic,
+  type TaskTag,
+} from '../api/client';
 import type { WorkspaceMember } from '../types';
 
 // ── Item "Tag" row ────────────────────────────────────────────────────────────
-// Replaces the old badge chips AND the Owner row in the item dialog. Shows the
-// item creator (implicit, non-removable "Owner" chip) plus any tagged users, and
-// — for the item owner — an add control that tags another workspace member. A
-// tagged member always gets a notification (handled server-side). Members-only:
-// only users already in the item's workspace can be tagged.
+// Replaces the old badge chips AND the Owner row. Shows the item creator (the
+// non-removable "Owner" chip) plus any tagged users, and lets the owner tag
+// anyone on the instance. Tagging notifies the tagged user; if that user can't
+// yet see the item, a prompt offers to share JUST this item (a per-item invite)
+// or add them to the whole workspace.
+
+interface BasicUser { id: string; username: string; fullName: string | null; hasImage: boolean }
 
 interface TaggedUsersRowProps {
   taskId: number;
   workspaceId?: string | null;
+  /** The task's parent list (list tasks only) — the item shared by "just this item". */
+  listId?: string | null;
   creatorId?: string;
   /** Only the item owner (or admin) may add/remove tags. */
   canEdit: boolean;
@@ -26,15 +36,19 @@ function nameOf(m: { fullName?: string | null; username?: string | null } | unde
   return m?.fullName || m?.username || fallback;
 }
 
-export default function TaggedUsersRow({ taskId, workspaceId, creatorId, canEdit, members: membersProp }: TaggedUsersRowProps) {
+export default function TaggedUsersRow({ taskId, workspaceId, listId, creatorId, canEdit, members: membersProp }: TaggedUsersRowProps) {
   const [tags, setTags] = useState<TaskTag[]>([]);
-  const [fetchedMembers, setFetchedMembers] = useState<WorkspaceMember[]>([]);
-  const members = membersProp && membersProp.length > 0 ? membersProp : fetchedMembers;
+  const [allUsers, setAllUsers] = useState<BasicUser[]>([]);
+  const [invitedIds, setInvitedIds] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
+  const [prompt, setPrompt] = useState<BasicUser | null>(null);
   const membersStore = useMembersStore((s) => s.members);
+  const refreshShared = useSharedItemsStore((s) => s.load);
   const wrapRef = useRef<HTMLDivElement>(null);
+
+  const workspaceMemberIds = new Set((membersProp ?? []).map((m) => m.userId));
 
   useEffect(() => {
     let alive = true;
@@ -42,12 +56,19 @@ export default function TaggedUsersRow({ taskId, workspaceId, creatorId, canEdit
     return () => { alive = false; };
   }, [taskId]);
 
-  const loadMembers = useCallback(() => {
-    if (!workspaceId || membersProp?.length || fetchedMembers.length > 0) return;
-    apiGetWorkspaceMembers(workspaceId).then((r) => setFetchedMembers(r.members)).catch(() => {});
-  }, [workspaceId, membersProp, fetchedMembers.length]);
+  // Who already has direct access to this specific item (so we don't re-prompt).
+  useEffect(() => {
+    if (!canEdit || !listId) return;
+    let alive = true;
+    apiGetItemMembers('list', listId).then((r) => { if (alive) setInvitedIds(new Set(r.members.map((m) => m.userId))); }).catch(() => {});
+    return () => { alive = false; };
+  }, [canEdit, listId]);
 
-  // Close the add popover on outside click.
+  const loadUsers = useCallback(() => {
+    if (!canEdit || allUsers.length > 0) return;
+    apiGetMembersBasic().then((r) => setAllUsers(r.members)).catch(() => {});
+  }, [canEdit, allUsers.length]);
+
   useEffect(() => {
     if (!adding) return;
     const handler = (e: MouseEvent) => {
@@ -58,27 +79,53 @@ export default function TaggedUsersRow({ taskId, workspaceId, creatorId, canEdit
   }, [adding]);
 
   const taggedIds = new Set(tags.map((t) => t.userId));
-  const addable = members.filter((m) =>
-    m.userId !== creatorId &&
-    !taggedIds.has(m.userId) &&
-    nameOf(m).toLowerCase().includes(search.toLowerCase())
-  );
+  const addable = allUsers.filter((u) =>
+    u.id !== creatorId && !taggedIds.has(u.id) &&
+    (nameOf(u).toLowerCase().includes(search.toLowerCase()) || u.username.toLowerCase().includes(search.toLowerCase()))
+  ).slice(0, 8);
 
-  const handleAdd = async (userId: string) => {
+  /** True if this user can already see the item (so we can tag without sharing). */
+  const canAlreadyView = (userId: string) => workspaceMemberIds.has(userId) || invitedIds.has(userId);
+
+  const tagUser = async (userId: string) => {
+    const r = await apiAddTaskTag(taskId, userId);
+    setTags(r.tags);
+  };
+
+  const handlePick = async (u: BasicUser) => {
+    // Already has access → tag straight away.
+    if (canAlreadyView(u.id)) {
+      setBusy(true);
+      try { await tagUser(u.id); setSearch(''); } catch { /* silent */ } finally { setBusy(false); }
+      return;
+    }
+    // Needs access → ask how to share.
+    setPrompt(u);
+    setAdding(false);
+  };
+
+  const shareAndTag = async (mode: 'item' | 'workspace') => {
+    if (!prompt) return;
     setBusy(true);
     try {
-      const r = await apiAddTaskTag(taskId, userId);
-      setTags(r.tags);
+      if (mode === 'item') {
+        if (listId) await apiAddItemMember('list', listId, prompt.username);
+      } else {
+        if (workspaceId) await apiAddWorkspaceMember(workspaceId, prompt.username).catch(() => {});
+        // Guarantee they can see THIS item even if the list is private.
+        if (listId) await apiAddItemMember('list', listId, prompt.username);
+      }
+      setInvitedIds((prev) => new Set(prev).add(prompt.id));
+      await tagUser(prompt.id);
+      setPrompt(null);
       setSearch('');
+      void refreshShared();
     } catch { /* silent */ } finally { setBusy(false); }
   };
 
   const handleRemove = async (userId: string) => {
     setBusy(true);
-    try {
-      const r = await apiRemoveTaskTag(taskId, userId);
-      setTags(r.tags);
-    } catch { /* silent */ } finally { setBusy(false); }
+    try { const r = await apiRemoveTaskTag(taskId, userId); setTags(r.tags); } catch { /* silent */ } finally { setBusy(false); }
   };
 
   const chip = (userId: string, label: string, opts: { owner?: boolean; removable?: boolean }) => (
@@ -93,12 +140,8 @@ export default function TaggedUsersRow({ taskId, workspaceId, creatorId, canEdit
         <span style={{ fontFamily: 'var(--font-heading)', fontSize: 8.5, fontWeight: 700, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.04em', background: 'var(--color-white)', borderRadius: 9999, padding: '1px 5px' }}>Owner</span>
       )}
       {opts.removable && (
-        <button
-          onClick={() => void handleRemove(userId)}
-          disabled={busy}
-          title="Remove tag"
-          style={{ display: 'inline-flex', alignItems: 'center', border: 'none', background: 'transparent', cursor: busy ? 'default' : 'pointer', padding: 1, borderRadius: 9999 }}
-        >
+        <button onClick={() => void handleRemove(userId)} disabled={busy} title="Remove tag"
+          style={{ display: 'inline-flex', alignItems: 'center', border: 'none', background: 'transparent', cursor: busy ? 'default' : 'pointer', padding: 1, borderRadius: 9999 }}>
           <Icon name="close" size={12} color="var(--color-text-quaternary)" />
         </button>
       )}
@@ -107,70 +150,91 @@ export default function TaggedUsersRow({ taskId, workspaceId, creatorId, canEdit
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-      {/* Owner (creator) chip — always present, non-removable */}
       {creatorId && chip(creatorId, nameOf(membersStore[creatorId], 'Owner'), { owner: true })}
+      {tags.filter((t) => t.userId !== creatorId).map((t) => chip(t.userId, nameOf(t), { removable: canEdit }))}
 
-      {/* Tagged users */}
-      {tags.filter((t) => t.userId !== creatorId).map((t) =>
-        chip(t.userId, nameOf(t), { removable: canEdit })
-      )}
-
-      {/* Add control */}
       {canEdit && (
         <div style={{ position: 'relative' }}>
           <button
-            onClick={() => { setAdding((v) => !v); loadMembers(); }}
-            title="Tag a workspace member"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 9999,
-              border: '1px dashed var(--color-purple-pale-44)', background: adding ? 'var(--color-surface-tint)' : 'transparent',
-              cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', transition: 'all 120ms',
-            }}
+            onClick={() => { setAdding((v) => !v); loadUsers(); }}
+            title="Tag a person"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 9999, border: '1px dashed var(--color-purple-pale-44)', background: adding ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', transition: 'all 120ms' }}
             onMouseEnter={(e) => { if (!adding) e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
-            onMouseLeave={(e) => { if (!adding) e.currentTarget.style.background = 'transparent'; }}
-          >
+            onMouseLeave={(e) => { if (!adding) e.currentTarget.style.background = 'transparent'; }}>
             <Icon name="add" size={13} color="var(--color-primary)" /> Tag
           </button>
 
           {adding && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 60, width: Math.min(240, window.innerWidth - 32),
-              background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12,
-              boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 8, animation: 'menuIn 140ms ease both',
-            }}>
+            <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 60, width: Math.min(260, window.innerWidth - 32), background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 8, animation: 'menuIn 140ms ease both' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '6px 9px', marginBottom: 6 }}>
                 <Icon name="search" size={14} color="var(--color-text-quaternary)" />
-                <input
-                  autoFocus value={search} onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search members…"
-                  style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)' }}
-                />
+                <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search people…"
+                  style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)' }} />
               </div>
-              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-                {!workspaceId ? (
-                  <div style={{ padding: '12px 8px', textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>Only items in a shared workspace can be tagged.</div>
-                ) : addable.length === 0 ? (
-                  <div style={{ padding: '12px 8px', textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>{search ? 'No matching members' : 'No one else to tag'}</div>
-                ) : (
-                  addable.map((m) => (
-                    <button
-                      key={m.userId}
-                      onClick={() => void handleAdd(m.userId)}
-                      disabled={busy}
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '6px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: busy ? 'default' : 'pointer', textAlign: 'left' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                    >
-                      <MemberAvatar userId={m.userId} size={24} fallbackName={nameOf(m)} />
-                      <span style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(m)}</span>
-                      <Icon name="add" size={15} color="var(--color-border-strong)" />
-                    </button>
-                  ))
-                )}
+              <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                {addable.length === 0 ? (
+                  <div style={{ padding: '12px 8px', textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>{search ? 'No matching people' : 'No one to tag'}</div>
+                ) : addable.map((u) => (
+                  <button key={u.id} onClick={() => void handlePick(u)} disabled={busy}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '6px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: busy ? 'default' : 'pointer', textAlign: 'left' }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+                    <MemberAvatar userId={u.id} size={24} fallbackName={nameOf(u)} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(u)}</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)' }}>@{u.username}{!canAlreadyView(u.id) && <span style={{ color: 'var(--color-warning)' }}> · needs access</span>}</div>
+                    </div>
+                    <Icon name="add" size={15} color="var(--color-border-strong)" />
+                  </button>
+                ))}
               </div>
             </div>
           )}
         </div>
+      )}
+
+      {/* Share-access prompt for a user who can't yet see the item */}
+      {prompt && createPortal(
+        <div onClick={() => { if (!busy) setPrompt(null); }}
+          style={{ position: 'fixed', inset: 0, zIndex: 1600, background: 'rgba(var(--color-black-rgb), 0.32)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 400, background: 'var(--color-white)', borderRadius: 18, boxShadow: '0 24px 60px rgba(var(--color-black-rgb), 0.22)', padding: 22, animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 8 }}>
+              <MemberAvatar userId={prompt.id} size={38} fallbackName={nameOf(prompt)} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>Share with {nameOf(prompt)}?</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>They can't see this item yet.</div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+              {listId && (
+                <button onClick={() => void shareAndTag('item')} disabled={busy}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 11, border: '1.5px solid var(--color-purple-pale-38)', background: 'var(--color-surface-tint-3)', cursor: busy ? 'default' : 'pointer', textAlign: 'left' }}>
+                  <Icon name="description" size={18} color="var(--color-primary)" />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>Share just this item</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>They get access to this list only.</div>
+                  </div>
+                </button>
+              )}
+              {workspaceId && (
+                <button onClick={() => void shareAndTag('workspace')} disabled={busy}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 11, border: '1.5px solid var(--color-purple-pale-38)', background: 'var(--color-surface-tint-3)', cursor: busy ? 'default' : 'pointer', textAlign: 'left' }}>
+                  <Icon name="workspaces" size={18} color="var(--color-primary)" />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>Add to the whole workspace</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>They join the workspace and see this item.</div>
+                  </div>
+                </button>
+              )}
+              <button onClick={() => setPrompt(null)} disabled={busy}
+                style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 9, padding: '9px 0', cursor: 'pointer', marginTop: 2 }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

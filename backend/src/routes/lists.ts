@@ -12,6 +12,7 @@ import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestr
 import type { MutationActor } from '../automationEngine';
 import { recordTaskChanges } from '../taskChangeLog';
 import { notifyNewMentions } from '../mentions';
+import { itemShareExists, isItemSharedWith, deleteItemShares } from '../itemShares';
 
 const router = Router();
 router.use(authenticate);
@@ -184,6 +185,7 @@ export async function buildListsForUser(userId: string, workspaceId?: string, in
       OR l.workspace_id IS NULL
       OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public')
     ))
+    OR ${itemShareExists('l', 'list')}
   )`;
   // Archived lists are hidden from the normal workspace view (sidebar, dashboards,
   // etc.) — surfaced only via the dedicated Archived modal (GET /?archived=true).
@@ -272,6 +274,7 @@ export async function getListForUser(userId: string, listId: string) {
       OR l.workspace_id IS NULL
       OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public')
     ))
+    OR ${itemShareExists('l', 'list')}
   )`;
   const listRes = await query<ListRow>(
     `SELECT l.* FROM lists l
@@ -801,6 +804,7 @@ router.delete('/:listId', async (req: Request, res: Response) => {
     // then their tasks and list rows are removed atomically (shared helper —
     // the AI delete_list tool uses the exact same path).
     const sublistCount = await softDeleteListTree(listId);
+    await deleteItemShares(query, 'list', listId);
 
     wlog(`list DELETE ✓ id=${listId} (+${sublistCount} sublist(s)) → trashed by user ${req.userId}`);
     res.json({ success: true });
@@ -843,7 +847,7 @@ router.post('/:listId/sections', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'List not found' });
       return;
     }
-    if (listCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+    if (listCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('list', listId, req.userId!))) {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }
@@ -884,16 +888,16 @@ router.put('/sections/:sectionId', async (req: Request, res: Response) => {
       position?: number;
     };
 
-    // Only owner or admin can update sections
-    const ownerCheck = await query<{ user_id: string }>(
-      `SELECT l.user_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1`,
+    // Owner, admin, or an invited collaborator can update sections
+    const ownerCheck = await query<{ user_id: string; list_id: string }>(
+      `SELECT l.user_id, l.id AS list_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1`,
       [sectionId]
     );
     if (ownerCheck.rows.length === 0) {
       res.status(404).json({ error: 'Section not found' });
       return;
     }
-    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('list', ownerCheck.rows[0].list_id, req.userId!))) {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }
@@ -935,7 +939,7 @@ router.put('/:listId/sections/reorder', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'List not found' });
       return;
     }
-    if (listCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+    if (listCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('list', listId, req.userId!))) {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }
@@ -973,7 +977,7 @@ router.put('/:listId/sections/:sectionId/tasks/reorder', async (req: Request, re
       res.status(404).json({ error: 'Section not found' });
       return;
     }
-    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('list', listId, req.userId!))) {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }
@@ -997,16 +1001,16 @@ router.delete('/sections/:sectionId', async (req: Request, res: Response) => {
   try {
     const { sectionId } = req.params;
 
-    // Only owner or admin can delete sections
-    const ownerCheck = await query<{ user_id: string }>(
-      `SELECT l.user_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1`,
+    // Owner, admin, or an invited collaborator can delete sections
+    const ownerCheck = await query<{ user_id: string; list_id: string }>(
+      `SELECT l.user_id, l.id AS list_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1`,
       [sectionId]
     );
     if (ownerCheck.rows.length === 0) {
       res.status(404).json({ error: 'Section not found' });
       return;
     }
-    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('list', ownerCheck.rows[0].list_id, req.userId!))) {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }
@@ -1186,6 +1190,7 @@ export async function updateListTaskFields(
       entityType: 'task',
       entityId: String(saved.id),
       data: { listId, source: 'list' },
+      shareItem: { itemType: 'list', itemId: listId },
     });
   }
 
@@ -1269,7 +1274,7 @@ router.post('/:listId/sections/:sectionId/tasks', async (req: Request, res: Resp
       res.status(404).json({ error: 'List or section not found' });
       return;
     }
-    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('list', listId, req.userId!))) {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }
@@ -1345,7 +1350,7 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Task not found' });
       return;
     }
-    if (permCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+    if (permCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('list', listId, req.userId!))) {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }
@@ -1395,7 +1400,7 @@ router.delete('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Task not found' });
       return;
     }
-    if (permCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+    if (permCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('list', listId, req.userId!))) {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }
@@ -1584,7 +1589,7 @@ router.post('/:listId/sections/:sectionId/tasks/sublist', async (req: Request, r
       res.status(404).json({ error: 'List or section not found' });
       return;
     }
-    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('list', listId, req.userId!))) {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }
@@ -1663,7 +1668,7 @@ router.post('/:listId/sections/:sectionId/tasks/link', async (req: Request, res:
       res.status(404).json({ error: 'List or section not found' });
       return;
     }
-    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('list', listId, req.userId!))) {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }

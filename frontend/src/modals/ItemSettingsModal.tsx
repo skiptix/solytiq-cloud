@@ -5,6 +5,8 @@ import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
 import CalendarPicker from '../components/CalendarPicker';
 import CreatorBubble from '../components/CreatorBubble';
+import ItemMembersSection from '../components/ItemMembersSection';
+import type { SharedItemType } from '../api/client';
 import { useMobile } from '../hooks/useBreakpoint';
 import {
   apiUpdateListShare, apiUpdateTimelineShare, apiUpdateMarkdownListShare,
@@ -378,14 +380,14 @@ function AccessibilitySection({ kind, itemId, initialPublic, onApplied }: {
 }
 
 // ── Tab type ──────────────────────────────────────────────────────────────────
-type ItemTab = 'appearance' | 'access' | 'organization' | 'share' | 'admin';
+type ItemTab = 'appearance' | 'access' | 'organization' | 'share' | 'people' | 'admin';
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, fullWidth, folders, folderId, itemId, creatorId, share, onShareUpdated, onVisibilityApplied, onChange, onClose }: ItemSettingsModalProps) {
   const isMobile = useMobile();
   const accent = color ?? 'var(--color-primary)';
   const [fw, setFw] = useState(Boolean(fullWidth));
-  const { isAdmin } = useAuthStore();
+  const { isAdmin, userId } = useAuthStore();
   const { lists, timelines } = useAppStore();
   const { markdownLists } = useMarkdownListsStore();
   const [copiedAdminId, setCopiedAdminId] = useState(false);
@@ -414,6 +416,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
     { id: 'access',       label: 'Access',     icon: 'shield_lock' },
     ...(hasFolders ? [{ id: 'organization' as const, label: 'Folder', icon: 'folder_open' }] : []),
     ...(hasShare   ? [{ id: 'share' as const,        label: 'Share',  icon: 'link' }]        : []),
+    ...(itemId && kind !== 'folder' ? [{ id: 'people' as const, label: 'People', icon: 'group' }] : []),
     ...(isAdmin && itemId && kind !== 'folder' ? [{ id: 'admin' as const, label: 'Admin', icon: 'admin_panel_settings' }] : []),
   ];
 
@@ -658,6 +661,16 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
           {activeTab === 'share' && hasShare && itemId && (
             <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
               <ShareSection kind={kind as 'list' | 'timeline' | 'markdownList'} itemId={itemId} share={share} onShareUpdated={onShareUpdated} />
+            </div>
+          )}
+
+          {/* ── PEOPLE (per-item invitations) ── */}
+          {activeTab === 'people' && itemId && kind !== 'folder' && (
+            <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
+              <p style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-tertiary)', margin: '0 0 14px', lineHeight: 1.5 }}>
+                Invite people to collaborate on this {kind === 'timeline' ? 'timeline' : kind === 'markdownList' ? 'page' : 'list'} directly — they can view and edit it even if it's not shared with the whole workspace.
+              </p>
+              <ItemMembersSection itemType={kind as SharedItemType} itemId={itemId} canManage={creatorId === userId || isAdmin} />
             </div>
           )}
         </div>

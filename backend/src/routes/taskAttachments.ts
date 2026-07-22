@@ -54,14 +54,16 @@ async function ownsTask(taskId: string, userId: string): Promise<boolean> {
   return r.rows.length > 0;
 }
 
-// Broader access check: owner OR task is in a list this user can see
+// Broader access check: owner OR task is in a list this user can see (workspace-
+// public, owned, or invited to via item_shares).
 async function canAccessTask(taskId: string, userId: string): Promise<boolean> {
   const r = await query<{ id: string }>(
     `SELECT t.id FROM tasks t
      LEFT JOIN lists l ON t.list_id = l.id
      WHERE t.id = $1
        AND (t.user_id = $2
-            OR (t.source = 'list' AND (l.is_public = true OR l.user_id = $2)))`,
+            OR (t.source = 'list' AND (l.is_public = true OR l.user_id = $2
+                 OR EXISTS (SELECT 1 FROM item_shares s WHERE s.item_type = 'list' AND s.item_id = l.id AND s.user_id = $2))))`,
     [taskId, userId]
   );
   return r.rows.length > 0;

@@ -24,6 +24,7 @@ import { query } from './db';
 
 export type NotificationType =
   | 'workspace_added'
+  | 'item_invite'
   | 'meeting_invite'
   | 'item_tagged'
   | 'mention'

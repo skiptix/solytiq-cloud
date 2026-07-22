@@ -18,6 +18,10 @@ export function notificationTarget(n: AppNotification): NotificationTarget {
   switch (n.entityType) {
     case 'workspace':
       return { path: '/dashboard', workspaceId: n.entityId };
+    case 'list':
+      return { path: n.entityId ? `/list/${n.entityId}` : '/dashboard', workspaceId: n.workspaceId };
+    case 'timeline':
+      return { path: n.entityId ? `/timeline/${n.entityId}` : '/dashboard', workspaceId: n.workspaceId };
     case 'meeting':
       return { path: '/calendar?show=meetings', workspaceId: null };
     case 'task': {
@@ -51,6 +55,8 @@ export function notificationVisual(n: AppNotification): NotificationVisual {
   switch (n.type) {
     case 'workspace_added':
       return { icon: 'group_add', color: 'var(--color-primary)', bg: 'var(--color-surface-tint)' };
+    case 'item_invite':
+      return { icon: 'person_add', color: 'var(--color-primary)', bg: 'var(--color-surface-tint)' };
     case 'meeting_invite':
       return { icon: 'event', color: 'var(--color-blue-mid-7)', bg: 'var(--color-blue-pale-2)' };
     case 'item_tagged':

@@ -7,6 +7,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import type { Milestone, MilestoneStatus, TimelineLayout, MilestoneAttachment, SharedFile, WorkspaceMember } from '../types';
 import type { MentionMember } from '../utils/mention';
 import useAppStore from '../store/useAppStore';
+import useSharedItemsStore from '../store/useSharedItemsStore';
 import useAuthStore from '../store/useAuthStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
 import { todayInTz, minutesSinceMidnightInTz } from '../utils/date';
@@ -15,7 +16,7 @@ import {
   apiCreateMilestone, apiUpdateMilestone, apiDeleteMilestone,
   apiGetMilestoneAttachments, apiUploadMilestoneAttachment, apiLinkMilestoneAttachment,
   apiDeleteMilestoneAttachment, apiDownloadMilestoneAttachment, apiMilestoneAttachmentBlob,
-  apiGetWorkspaceMembers,
+  apiGetWorkspaceMembers, apiGetItemMembers,
 } from '../api/client';
 import { genId } from '../utils/id';
 import Icon from '../components/Icon';
@@ -510,7 +511,8 @@ export default function TimelineScreen() {
   const { timelines, listsLoading, setTimelines, loadFromApi } = useAppStore();
   const timezone = useUserPrefsStore(s => s.timezone);
   const today = todayInTz(timezone);
-  const timeline = timelines.find(t => t.id === timelineId);
+  const sharedTimelines = useSharedItemsStore(s => s.timelines);
+  const timeline = timelines.find(t => t.id === timelineId) ?? sharedTimelines.find(t => t.id === timelineId);
 
   const [editing, setEditing] = useState<Milestone | null>(null);
   const [adding, setAdding] = useState(false);
@@ -521,6 +523,7 @@ export default function TimelineScreen() {
 
   // Workspace members for the milestone note's @-mention typeahead.
   const [wsMembers, setWsMembers] = useState<WorkspaceMember[]>([]);
+  const [timelineInvitees, setTimelineInvitees] = useState<MentionMember[]>([]);
   const timelineWorkspaceId = timeline?.workspaceId ?? null;
   useEffect(() => {
     if (!timelineWorkspaceId) { setWsMembers([]); return; }
@@ -528,9 +531,20 @@ export default function TimelineScreen() {
     apiGetWorkspaceMembers(timelineWorkspaceId).then(r => { if (alive) setWsMembers(r.members); }).catch(() => {});
     return () => { alive = false; };
   }, [timelineWorkspaceId]);
-  const mentionMembers: MentionMember[] = wsMembers
-    .filter(m => m.userId !== currentUserId)
-    .map(m => ({ id: m.userId, username: m.username, fullName: m.fullName ?? null }));
+  useEffect(() => {
+    if (!timelineId) { setTimelineInvitees([]); return; }
+    let alive = true;
+    apiGetItemMembers('timeline', timelineId)
+      .then(r => { if (alive) setTimelineInvitees(r.members.map(m => ({ id: m.userId, username: m.username, fullName: m.fullName }))); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [timelineId]);
+  const mentionMembers: MentionMember[] = (() => {
+    const byId = new Map<string, MentionMember>();
+    for (const m of wsMembers) if (m.userId !== currentUserId) byId.set(m.userId, { id: m.userId, username: m.username, fullName: m.fullName ?? null });
+    for (const m of timelineInvitees) if (m.id !== currentUserId) byId.set(m.id, m);
+    return [...byId.values()];
+  })();
 
   // "New milestone" shortcut — same as the "Add Milestone" buttons (owner only,
   // and only when no milestone editor is already open).

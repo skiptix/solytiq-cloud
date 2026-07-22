@@ -10,6 +10,7 @@ import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, werr } from '../
 import { snapshotTimelineToTrash } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestrictConflict } from '../visibility';
 import { notifyNewMentions } from '../mentions';
+import { itemShareExists, isItemSharedWith, deleteItemShares } from '../itemShares';
 
 const router = Router();
 router.use(authenticate);
@@ -129,6 +130,7 @@ export async function buildTimelinesForUser(userId: string, workspaceId?: string
       OR t.workspace_id IS NULL
       OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = t.workspace_id AND w.visibility = 'public')
     ))
+    OR ${itemShareExists('t', 'timeline')}
   )`;
 
   const [timelinesResult, milestonesResult] = await Promise.all([
@@ -182,6 +184,7 @@ export async function getTimelineForUser(userId: string, timelineId: string) {
       OR t.workspace_id IS NULL
       OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = t.workspace_id AND w.visibility = 'public')
     ))
+    OR ${itemShareExists('t', 'timeline')}
   )`;
   const tRes = await query<TimelineRow>(
     `SELECT t.* FROM timelines t
@@ -234,6 +237,7 @@ router.get('/upcoming', async (req: Request, res: Response) => {
         OR t.workspace_id IS NULL
         OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = t.workspace_id AND w.visibility = 'public')
       ))
+      OR ${itemShareExists('t', 'timeline')}
     )`;
 
     let wsFilter = '';
@@ -626,6 +630,7 @@ router.delete('/:timelineId', async (req: Request, res: Response) => {
       const exec = (text: string, params?: unknown[]) => client.query(text, params);
       await snapshotTimelineToTrash(exec, timelineId);
       await client.query('DELETE FROM timelines WHERE id = $1', [timelineId]);
+      await deleteItemShares(exec, 'timeline', timelineId);
     });
 
     wlog(`timeline DELETE ✓ id=${timelineId} → trashed by user ${req.userId}`);
@@ -645,7 +650,7 @@ router.delete('/:timelineId', async (req: Request, res: Response) => {
 async function assertTimelineOwner(timelineId: string, req: Request): Promise<'ok' | 404 | 403> {
   const check = await query<{ user_id: string }>('SELECT user_id FROM timelines WHERE id = $1', [timelineId]);
   if (check.rows.length === 0) return 404;
-  if (check.rows[0].user_id !== req.userId && !req.user?.isAdmin) return 403;
+  if (check.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('timeline', timelineId, req.userId!))) return 403;
   return 'ok';
 }
 
@@ -724,7 +729,7 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Milestone not found' });
       return;
     }
-    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+    if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('timeline', ownerCheck.rows[0].timeline_id, req.userId!))) {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }
@@ -739,7 +744,7 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
         res.status(404).json({ error: 'Target timeline not found' });
         return;
       }
-      if (targetOwner.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+      if (targetOwner.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('timeline', timelineId, req.userId!))) {
         res.status(403).json({ error: 'Permission denied for target timeline' });
         return;
       }
@@ -804,6 +809,7 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
         entityType: 'milestone',
         entityId: milestoneId,
         data: { timelineId: savedMilestone.timeline_id },
+        shareItem: { itemType: 'timeline', itemId: savedMilestone.timeline_id },
       });
     }
   } catch (err) {
@@ -855,7 +861,7 @@ router.delete('/milestones/:milestoneId', async (req: Request, res: Response) =>
       return;
     }
     const row = existing.rows[0];
-    if (row.user_id !== req.userId && !req.user?.isAdmin) {
+    if (row.user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('timeline', row.timeline_id, req.userId!))) {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }

@@ -4,6 +4,7 @@ import { apiLogin, apiRegister } from '../api/client';
 import useUserPrefsStore from './useUserPrefsStore';
 import useShortcutsStore from './useShortcutsStore';
 import useNotificationsStore from './useNotificationsStore';
+import useSharedItemsStore from './useSharedItemsStore';
 import { clearAppStore } from './useAppStore';
 import { clearWorkspaceStore } from './useWorkspaceStore';
 import type { AuthState, AuthUser } from '../types';
@@ -91,6 +92,7 @@ const useAuthStore = create<AuthState>()(
         useUserPrefsStore.getState().resetCalendarPrefs();
         useShortcutsStore.getState().reset();
         useNotificationsStore.getState().reset();
+        useSharedItemsStore.getState().reset();
         clearAppStore();
         clearWorkspaceStore();
         set({

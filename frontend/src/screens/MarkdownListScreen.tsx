@@ -12,7 +12,7 @@ import Icon from '../components/Icon';
 import { renderInline } from '../components/MarkdownView';
 import { toggleWrap, formatMarkerForKeyDown } from '../utils/textFormatting';
 import { detectMention, applyMention, filterMentionMembers, type MentionMember } from '../utils/mention';
-import { apiUploadMarkdownImage, markdownImageUrl, apiGetWorkspaceMembers, type ShareInfo } from '../api/client';
+import { apiUploadMarkdownImage, markdownImageUrl, apiGetWorkspaceMembers, apiGetItemMembers, type ShareInfo } from '../api/client';
 import type { WorkspaceMember } from '../types';
 import useAuthStore from '../store/useAuthStore';
 import MentionPopover from '../components/MentionPopover';
@@ -213,6 +213,7 @@ export default function MarkdownListScreen() {
   const currentUserId = useAuthStore(s => s.userId);
   const [mdWorkspaceId, setMdWorkspaceId] = useState<string | null>(null);
   const [wsMembers, setWsMembers] = useState<WorkspaceMember[]>([]);
+  const [mdInvitees, setMdInvitees] = useState<MentionMember[]>([]);
   const [mdMention, setMdMention] = useState<{ blockId: string; at: number; query: string } | null>(null);
   const [mdMentionIndex, setMdMentionIndex] = useState(0);
   useEffect(() => {
@@ -221,10 +222,23 @@ export default function MarkdownListScreen() {
     apiGetWorkspaceMembers(mdWorkspaceId).then(r => { if (alive) setWsMembers(r.members); }).catch(() => {});
     return () => { alive = false; };
   }, [mdWorkspaceId]);
+  // People invited directly to this page can be @-mentioned even with no
+  // workspace members (a private page in a solo workspace shared with someone).
+  useEffect(() => {
+    if (!mdId) { setMdInvitees([]); return; }
+    let alive = true;
+    apiGetItemMembers('markdownList', mdId)
+      .then(r => { if (alive) setMdInvitees(r.members.map(m => ({ id: m.userId, username: m.username, fullName: m.fullName }))); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [mdId]);
   useEffect(() => { setMdMention(null); }, [focusedBlockId]);
-  const mentionMembers: MentionMember[] = wsMembers
-    .filter(m => m.userId !== currentUserId)
-    .map(m => ({ id: m.userId, username: m.username, fullName: m.fullName ?? null }));
+  const mentionMembers: MentionMember[] = (() => {
+    const byId = new Map<string, MentionMember>();
+    for (const m of wsMembers) if (m.userId !== currentUserId) byId.set(m.userId, { id: m.userId, username: m.username, fullName: m.fullName ?? null });
+    for (const m of mdInvitees) if (m.id !== currentUserId) byId.set(m.id, m);
+    return [...byId.values()];
+  })();
   const mentionCandidates = mdMention ? filterMentionMembers(mentionMembers, mdMention.query) : [];
   const mentionActive = mdMention !== null && mentionCandidates.length > 0;
 
