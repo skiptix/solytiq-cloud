@@ -410,7 +410,8 @@ function RightColumn({ meetings, currentUserId, onSeeCalendar }: { meetings: Mee
   const activateNotification = (n: AppNotification) => {
     void markRead(n.id);
     const target = notificationTarget(n);
-    if (target.workspaceId && target.workspaceId !== useWorkspaceStore.getState().currentWorkspaceId) {
+    const ws = useWorkspaceStore.getState();
+    if (target.workspaceId && target.workspaceId !== ws.currentWorkspaceId && ws.workspaces.some(w => w.id === target.workspaceId)) {
       setCurrentWorkspace(target.workspaceId);
     }
     navigate(target.path);

@@ -934,7 +934,7 @@ export interface NotificationActor {
 }
 export interface AppNotification {
   id: string;
-  type: 'workspace_added' | 'meeting_invite' | 'item_tagged' | 'mention' | 'automation_run' | 'deadline_overdue' | string;
+  type: 'workspace_added' | 'item_invite' | 'meeting_invite' | 'item_tagged' | 'mention' | 'automation_run' | 'deadline_overdue' | string;
   actorId: string | null;
   actor: NotificationActor | null;
   title: string;
@@ -980,6 +980,25 @@ export const apiAddTaskTag = (taskId: number | string, userId: string) =>
   apiFetch<{ tags: TaskTag[] }>(`/tasks/${taskId}/tags`, { method: 'POST', body: JSON.stringify({ userId }) });
 export const apiRemoveTaskTag = (taskId: number | string, userId: string) =>
   apiFetch<{ tags: TaskTag[] }>(`/tasks/${taskId}/tags/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+
+// ─── Per-item invitations ("Shared with me") ───────────────────────────────────
+export type SharedItemType = 'list' | 'timeline' | 'markdownList';
+export interface ItemMember {
+  userId: string;
+  username: string;
+  fullName: string | null;
+  hasImage: boolean;
+  invitedBy: string | null;
+  createdAt: string;
+}
+export const apiGetItemMembers = (type: SharedItemType, itemId: string) =>
+  apiFetch<{ ownerId: string; members: ItemMember[] }>(`/item-shares/${type}/${encodeURIComponent(itemId)}/members`);
+export const apiAddItemMember = (type: SharedItemType, itemId: string, username: string) =>
+  apiFetch<{ members: ItemMember[] }>(`/item-shares/${type}/${encodeURIComponent(itemId)}/members`, { method: 'POST', body: JSON.stringify({ username }) });
+export const apiRemoveItemMember = (type: SharedItemType, itemId: string, userId: string) =>
+  apiFetch<{ members: ItemMember[] }>(`/item-shares/${type}/${encodeURIComponent(itemId)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+export const apiGetSharedWithMe = () =>
+  apiFetch<{ lists: List[]; timelines: Timeline[]; markdownLists: MarkdownList[] }>('/shared-with-me');
 
 // ─── Delta-sync engine ────────────────────────────────────────────────────────
 export interface BootstrapResponse {

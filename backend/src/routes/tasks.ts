@@ -6,6 +6,7 @@ import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
 import { collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
 import { notifyNewMentions } from '../mentions';
+import { itemShareExists } from '../itemShares';
 
 const router = Router();
 router.use(authenticate);
@@ -82,7 +83,7 @@ export async function buildTasksForUser(userId: string, workspaceId?: string) {
      FROM tasks t
      LEFT JOIN lists l ON t.list_id = l.id
      WHERE ((t.user_id = $1 AND t.source = 'dash')
-        OR (t.source = 'list' AND (l.user_id = $1 OR l.is_public = true)))
+        OR (t.source = 'list' AND (l.user_id = $1 OR l.is_public = true OR ${itemShareExists('l', 'list')})))
      ${wsClause}
      ORDER BY t.position ASC, t.created_at ASC`,
     params

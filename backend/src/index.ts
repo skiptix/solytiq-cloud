@@ -39,6 +39,7 @@ import automationsRouter from './routes/automations';
 import markdownListsRouter, { MARKDOWN_IMAGE_DIR } from './routes/markdownLists';
 import notificationsRouter from './routes/notifications';
 import taskTagsRouter from './routes/taskTags';
+import itemSharesRouter from './routes/itemShares';
 import { isAppInstalled } from './appsRegistry';
 import { startSyncDispatcher, SYNC_CHANNEL } from './syncLog';
 import { sweepScheduledAutomations } from './automationEngine';
@@ -210,6 +211,7 @@ app.use('/api/apps',       appsRouter);
 app.use('/api/automations', automationsRouter);
 app.use('/api/markdown-lists', markdownListsRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api', itemSharesRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
@@ -1741,6 +1743,24 @@ async function runMigrations() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS task_tags_user_idx ON task_tags (user_id)`);
+
+  // Per-item invitations ("Shared with me") — grants one user full-collaborator
+  // access to a single list/timeline/markdown list, independent of workspace
+  // membership. Polymorphic (item_type + item_id), so no FK on item_id; the
+  // item's delete path removes its shares via deleteItemShares().
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS item_shares (
+      item_type   VARCHAR(20) NOT NULL,
+      item_id     VARCHAR(100) NOT NULL,
+      user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      invited_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (item_type, item_id, user_id)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS item_shares_user_idx ON item_shares (user_id, item_type)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS item_shares_item_idx ON item_shares (item_type, item_id)`);
+
   // Supports the hourly overdue-deadline sweep's `WHERE checked = false AND deadline < CURRENT_DATE`.
   await pool.query(`CREATE INDEX IF NOT EXISTS tasks_open_deadline_idx ON tasks (deadline) WHERE checked = false AND deadline IS NOT NULL`);
 

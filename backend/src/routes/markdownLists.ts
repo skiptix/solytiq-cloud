@@ -15,6 +15,7 @@ import { createListTask, updateListTaskFields, deleteTaskRow } from './lists';
 import { UPLOAD_DIR } from './files';
 import type { MutationActor } from '../automationEngine';
 import { notifyNewMentions } from '../mentions';
+import { itemShareExists, isItemSharedWith, deleteItemShares } from '../itemShares';
 
 /** Flatten every text-bearing block into one string for @-mention diffing. */
 function collectBlockText(blocks: MarkdownBlockLike[]): string {
@@ -163,6 +164,7 @@ const ACCESS_CONDITION = `(
     OR m.workspace_id IS NULL
     OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = m.workspace_id AND w.visibility = 'public')
   ))
+  OR ${itemShareExists('m', 'markdownList')}
 )`;
 
 export async function buildMarkdownListsForUser(userId: string, workspaceId?: string) {
@@ -299,7 +301,9 @@ export async function mutateMarkdownListBlocks(
 ): Promise<{ ok: true; markdownList: ReturnType<typeof sanitize> } | { ok: false; error: string }> {
   const existing = await query<MarkdownListRow>('SELECT * FROM markdown_lists WHERE id = $1', [markdownListId]);
   if (existing.rows.length === 0) return { ok: false, error: 'markdown list not found' };
-  if (existing.rows[0].user_id !== userId) return { ok: false, error: 'permission denied' };
+  if (existing.rows[0].user_id !== userId && !(await isItemSharedWith('markdownList', markdownListId, userId))) {
+    return { ok: false, error: 'permission denied' };
+  }
 
   let mutationError: string | null = null;
   let mentionBefore = '';
@@ -316,7 +320,8 @@ export async function mutateMarkdownListBlocks(
     }
     mentionBefore = collectBlockText(currentBlocks);
     await pruneUnreferencedImages(exec, markdownListId, mutated);
-    const reconciled = await reconcileTodoBlocks(exec, userId, {
+    // Todo mirror stays owned by the doc owner even when a collaborator edits.
+    const reconciled = await reconcileTodoBlocks(exec, locked.user_id, {
       id: locked.id, name: locked.name, workspaceId: locked.workspace_id, todoListId: locked.todo_list_id,
     }, mutated);
     mentionAfter = collectBlockText(reconciled.blocks);
@@ -342,6 +347,7 @@ export async function mutateMarkdownListBlocks(
     entityType: 'markdownList',
     entityId: markdownListId,
     data: {},
+    shareItem: { itemType: 'markdownList', itemId: markdownListId },
   });
   return { ok: true, markdownList: hydrated };
 }
@@ -422,7 +428,12 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
     if (existing.rows.length === 0) { res.status(404).json({ error: 'Markdown list not found' }); return; }
     const row = existing.rows[0];
     const isOwner = row.user_id === req.userId;
-    if (!isOwner && !req.user?.isAdmin) { res.status(403).json({ error: 'Permission denied' }); return; }
+    const isAdmin = req.user?.isAdmin === true;
+    // Invited collaborators may edit CONTENT; only the owner/admin manages the
+    // page itself (name/emoji/colors/visibility/folder/position).
+    const canManage = isOwner || isAdmin;
+    const canEdit = canManage || await isItemSharedWith('markdownList', id, req.userId!);
+    if (!canEdit) { res.status(403).json({ error: 'Permission denied' }); return; }
 
     const conflict = await checkVersionConflict('markdown_lists', id, expectedVersion);
     if (conflict !== null) {
@@ -430,7 +441,17 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
       return;
     }
 
-    const updateFolderId = 'folderId' in req.body;
+    // Metadata fields only take effect for an owner/admin; a collaborator's PUT
+    // is content-only (the rest fall through COALESCE unchanged).
+    const mName = canManage ? name : undefined;
+    const mEmoji = canManage ? emoji : undefined;
+    const mColor = canManage ? color : undefined;
+    const mColorBg = canManage ? colorBg : undefined;
+    const mSubtitle = canManage ? subtitle : undefined;
+    const mIsPublic = canManage ? isPublic : undefined;
+    const mFullWidth = canManage ? fullWidth : undefined;
+    const mPosition = canManage ? position : undefined;
+    const updateFolderId = canManage && 'folderId' in req.body;
 
     // The whole read-reconcile-write sequence runs inside ONE transaction,
     // locking this row with SELECT ... FOR UPDATE before deciding anything.
@@ -452,8 +473,11 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
         mentionBefore = collectBlockText(normalizeContent(locked.content).blocks);
         const incomingBlocks = normalizeContent(content).blocks;
         await pruneUnreferencedImages(exec, id, incomingBlocks);
-        const reconciled = await reconcileTodoBlocks(exec, req.userId!, {
-          id: locked.id, name: name ?? locked.name, workspaceId: locked.workspace_id, todoListId: locked.todo_list_id,
+        // The auto-managed Todo mirror list is always owned by the DOC OWNER,
+        // never the editing collaborator — otherwise a collaborator's account
+        // deletion would cascade away a mirror backing someone else's page.
+        const reconciled = await reconcileTodoBlocks(exec, locked.user_id, {
+          id: locked.id, name: mName ?? locked.name, workspaceId: locked.workspace_id, todoListId: locked.todo_list_id,
         }, incomingBlocks);
         todoListId = reconciled.todoListId;
         mentionAfter = collectBlockText(reconciled.blocks);
@@ -476,8 +500,8 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
              updated_at = NOW()
          WHERE id = $7
          RETURNING *`,
-        [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? null, id,
-          updateFolderId, folderId ?? null, position ?? null, contentJson, todoListId, fullWidth ?? null]
+        [mName ?? null, mEmoji ?? null, mColor ?? null, mColorBg ?? null, mSubtitle ?? null, mIsPublic ?? null, id,
+          updateFolderId, folderId ?? null, mPosition ?? null, contentJson, todoListId, mFullWidth ?? null]
       );
       return { result: updateRes, newTodoListId: todoListId, priorTodoListId: locked.todo_list_id };
     });
@@ -499,6 +523,7 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
         entityType: 'markdownList',
         entityId: id,
         data: {},
+        shareItem: { itemType: 'markdownList', itemId: id },
       });
     }
   } catch (err) {
@@ -530,6 +555,7 @@ router.delete('/:id', authenticate, async (req: Request, res: Response) => {
         [row.id, row.user_id, JSON.stringify(sanitize(row))]
       );
       if (row.todo_list_id) await softDeleteListTreeExec(exec, row.todo_list_id);
+      await deleteItemShares(exec, 'markdownList', id);
       await exec('DELETE FROM markdown_list_images WHERE markdown_list_id = $1', [id]);
       await exec('DELETE FROM markdown_lists WHERE id = $1', [id]);
     });
@@ -623,7 +649,7 @@ router.post('/:id/images', authenticate, (req: Request, res: Response) => {
         res.status(404).json({ error: 'Markdown list not found' });
         return;
       }
-      if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin) {
+      if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('markdownList', id, req.userId!))) {
         if (req.file) fs.unlinkSync(path.join(MARKDOWN_IMAGE_DIR, req.file.filename));
         res.status(403).json({ error: 'Permission denied' });
         return;
@@ -694,6 +720,8 @@ router.get('/:id/images/:imageId', async (req: Request, res: Response) => {
         canView = member.rows.length > 0;
       }
     }
+    // An invited collaborator on a private page must also see its images.
+    if (!canView) canView = await isItemSharedWith('markdownList', id, userId);
     if (!canView) { res.status(403).json({ error: 'Permission denied' }); return; }
 
     const imgRes = await query<{ file_path: string; mime_type: string; original_name: string | null }>(

@@ -125,6 +125,10 @@ export async function softDeleteListTreeExec(exec: QueryExec, rootListId: string
     await snapshotListToTrash(exec, id);
   }
   await exec('DELETE FROM tasks WHERE list_id = ANY($1::varchar[])', [allListIds]);
+  // Clean up per-item invitations for the whole tree — this is the shared path
+  // every list delete (interactive, AI, automation, admin, markdown todo cascade)
+  // funnels through, so no orphan item_shares rows are left behind.
+  await exec(`DELETE FROM item_shares WHERE item_type = 'list' AND item_id = ANY($1::varchar[])`, [allListIds]);
   await exec('DELETE FROM lists WHERE id = ANY($1::varchar[])', [allListIds]);
   return descendantIds.length;
 }

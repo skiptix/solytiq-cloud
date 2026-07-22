@@ -9,6 +9,7 @@ import useWorkspaceStore from './store/useWorkspaceStore';
 import useInstalledAppsStore from './store/useInstalledAppsStore';
 import useMarkdownListsStore from './store/useMarkdownListsStore';
 import useNotificationsStore from './store/useNotificationsStore';
+import useSharedItemsStore from './store/useSharedItemsStore';
 import { apiCheckSetupRequired, connectSSE, disconnectSSE, setUnauthorizedHandler } from './api/client';
 
 // Delta-sync engine is on by default; set VITE_SYNC_ENGINE=0 to fall back to the
@@ -255,7 +256,13 @@ function AppLayout() {
   useEffect(() => {
     if (notificationRev === 0) return;
     void useNotificationsStore.getState().syncRefresh();
+    // A notification may be an invite to a new item — refresh "Shared with me".
+    void useSharedItemsStore.getState().load();
   }, [notificationRev]);
+
+  // Load items other users have shared with me (independent of the active
+  // workspace). Refreshed on invite notifications (above) and on reconnect.
+  useEffect(() => { void useSharedItemsStore.getState().load(); }, []);
 
   // Self-heal after a load failure. The automatic recovery paths above
   // (workspace switch, SSE, tab visibility, the browser 'online' event) only

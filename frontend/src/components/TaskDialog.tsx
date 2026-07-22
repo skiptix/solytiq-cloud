@@ -16,7 +16,7 @@ import useAuthStore from '../store/useAuthStore';
 import {
   apiCreateList, apiCreateSection, apiAddListTask, apiUpdateTask, apiUpdateListTask,
   apiGetTaskAttachments, apiUploadTaskAttachment, apiLinkTaskAttachment, apiDeleteTaskAttachment, apiDownloadTaskAttachment,
-  apiTaskAttachmentBlob, apiGetFiles, apiGetWorkspaceMembers,
+  apiTaskAttachmentBlob, apiGetFiles, apiGetWorkspaceMembers, apiGetItemMembers,
 } from '../api/client';
 import type { WorkspaceMember } from '../types';
 import type { MentionMember } from '../utils/mention';
@@ -307,15 +307,29 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
   // Workspace members — powers both the Tag row's picker and the note's
   // @-mention typeahead. Only fetched for items that live in a workspace.
   const [wsMembers, setWsMembers] = useState<WorkspaceMember[]>([]);
+  const [itemInvitees, setItemInvitees] = useState<MentionMember[]>([]);
   useEffect(() => {
     if (!taskWorkspaceId) { setWsMembers([]); return; }
     let alive = true;
     apiGetWorkspaceMembers(taskWorkspaceId).then(r => { if (alive) setWsMembers(r.members); }).catch(() => {});
     return () => { alive = false; };
   }, [taskWorkspaceId]);
-  const mentionMembers: MentionMember[] = wsMembers
-    .filter(m => m.userId !== currentUserId)
-    .map(m => ({ id: m.userId, username: m.username, fullName: m.fullName ?? null }));
+  // People invited to the task's list can be @-mentioned too (covers a private
+  // list in a solo/other workspace where there are no workspace members).
+  useEffect(() => {
+    if (!isListTask || !task._listId) { setItemInvitees([]); return; }
+    let alive = true;
+    apiGetItemMembers('list', task._listId)
+      .then(r => { if (alive) setItemInvitees(r.members.map(m => ({ id: m.userId, username: m.username, fullName: m.fullName }))); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [isListTask, task._listId]);
+  const mentionMembers: MentionMember[] = (() => {
+    const byId = new Map<string, MentionMember>();
+    for (const m of wsMembers) if (m.userId !== currentUserId) byId.set(m.userId, { id: m.userId, username: m.username, fullName: m.fullName ?? null });
+    for (const m of itemInvitees) if (m.id !== currentUserId) byId.set(m.id, m);
+    return [...byId.values()];
+  })();
 
   const linkedList = linkedListId ? lists.find(l => l.id === linkedListId) : null;
   const subItems = linkedList?.sections.flatMap(s => s.tasks) ?? [];
@@ -646,6 +660,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                 <TaggedUsersRow
                   taskId={task.id}
                   workspaceId={taskWorkspaceId}
+                  listId={isListTask ? task._listId : null}
                   creatorId={task.creatorId}
                   canEdit={canEditTags}
                   members={wsMembers}

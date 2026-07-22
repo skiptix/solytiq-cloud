@@ -50,7 +50,11 @@ export default function NotificationBell({ isMobile, onNavigate }: NotificationB
   const activate = (n: AppNotification) => {
     void markRead(n.id);
     const target = notificationTarget(n);
-    if (target.workspaceId && target.workspaceId !== useWorkspaceStore.getState().currentWorkspaceId) {
+    // Only switch workspace if it's one the user can actually open — a "shared
+    // with me" item lives in a workspace they're not a member of, and its screen
+    // renders it from the shared-items store without a switch.
+    const ws = useWorkspaceStore.getState();
+    if (target.workspaceId && target.workspaceId !== ws.currentWorkspaceId && ws.workspaces.some(w => w.id === target.workspaceId)) {
       setCurrentWorkspace(target.workspaceId);
     }
     setPanelOpen(false);

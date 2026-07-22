@@ -3,6 +3,7 @@ import { apiSyncBootstrap, apiSyncDelta, setMutationSettledHandler, ApiError } f
 import type { SseFrame, DeltaChange } from '../api/client';
 import useAppStore from './useAppStore';
 import useWorkspaceStore from './useWorkspaceStore';
+import useSharedItemsStore from './useSharedItemsStore';
 
 // Entities the app store patches from full payloads. Everything else is a
 // refetch signal owned by a screen/store (meetings → Calendar, files → Files,
@@ -146,6 +147,13 @@ setMutationSettledHandler(() => {
   reconcileTimer = setTimeout(() => {
     reconcileTimer = null;
     void useSyncStore.getState().pullDelta();
+    // Edits to a "shared with me" item (from another workspace) don't ride the
+    // active workspace's delta — refresh that set too, but only for users who
+    // actually have shared items so it costs nothing for everyone else.
+    const shared = useSharedItemsStore.getState();
+    if (shared.lists.length || shared.timelines.length || shared.markdownLists.length) {
+      void shared.load();
+    }
   }, 300);
 });
 
