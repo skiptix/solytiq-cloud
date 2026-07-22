@@ -134,7 +134,7 @@ export default function TaggedUsersRow({ taskId, workspaceId, creatorId, canEdit
 
           {adding && (
             <div style={{
-              position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 60, width: 240,
+              position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 60, width: Math.min(240, window.innerWidth - 32),
               background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12,
               boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 8, animation: 'menuIn 140ms ease both',
             }}>

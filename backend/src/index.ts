@@ -1741,6 +1741,8 @@ async function runMigrations() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS task_tags_user_idx ON task_tags (user_id)`);
+  // Supports the hourly overdue-deadline sweep's `WHERE checked = false AND deadline < CURRENT_DATE`.
+  await pool.query(`CREATE INDEX IF NOT EXISTS tasks_open_deadline_idx ON tasks (deadline) WHERE checked = false AND deadline IS NOT NULL`);
 
   // ── Optimistic concurrency ──────────────────────────────────────────────────
   // A `version` that auto-increments on every UPDATE (BEFORE trigger). Clients

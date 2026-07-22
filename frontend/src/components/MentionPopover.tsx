@@ -17,10 +17,14 @@ interface MentionPopoverProps {
 
 export default function MentionPopover({ members, activeIndex, onPick, onHover, style }: MentionPopoverProps) {
   if (members.length === 0) return null;
+  // Clamp to the viewport so the picker never runs off-screen on mobile (matches
+  // the CalendarPicker/TimePicker convention). Kept above the sibling slash
+  // menu (z 210) so a block-anchored mention popover is never occluded.
+  const width = Math.min(240, (typeof window !== 'undefined' ? window.innerWidth : 400) - 32);
   return (
     <div
       style={{
-        position: 'absolute', zIndex: 80, width: 236, maxHeight: 232, overflowY: 'auto',
+        position: 'absolute', zIndex: 220, width, maxHeight: 232, overflowY: 'auto',
         background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12,
         boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 6,
         animation: 'menuIn 120ms ease both',

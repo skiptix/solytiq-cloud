@@ -59,6 +59,12 @@ async function notifyAutomationOwner(
   try {
     const r = await query<{ name: string }>(`SELECT name FROM automations WHERE id = $1`, [automationId]);
     const name = r.rows[0]?.name ?? 'Automation';
+    // A high-frequency trigger (e.g. task_completed on a busy list) would flood
+    // the owner's feed with success pings. Coalesce successes to at most one per
+    // automation per hour via a dedupe key; always surface failures individually.
+    const dedupeKey = status === 'failed'
+      ? null
+      : `autorun:${automationId}:success:${new Date().toISOString().slice(0, 13)}`;
     await createNotification({
       userId: ownerId,
       type: 'automation_run',
@@ -69,6 +75,7 @@ async function notifyAutomationOwner(
       entityId: automationId,
       workspaceId,
       data: { automationName: name, status, runId },
+      dedupeKey,
     });
   } catch (err) {
     aerr('notifyAutomationOwner failed', automationId, err);

@@ -314,15 +314,22 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
             }}
             rows={4}
           />
-          {mentionActive && (
-            <MentionPopover
-              members={mentionCandidates}
-              activeIndex={mentionIndex}
-              onPick={pickMention}
-              onHover={setMentionIndex}
-              style={{ top: 'calc(100% + 4px)', left: 0 }}
-            />
-          )}
+          {mentionActive && (() => {
+            // Anchor below the field by default, but flip above when the field's
+            // bottom is close to the viewport bottom so the list stays on-screen
+            // (e.g. inside the scroll-bounded TaskDialog body).
+            const rect = taRef.current?.getBoundingClientRect();
+            const flipUp = !!rect && rect.bottom + 252 > window.innerHeight;
+            return (
+              <MentionPopover
+                members={mentionCandidates}
+                activeIndex={mentionIndex}
+                onPick={pickMention}
+                onHover={setMentionIndex}
+                style={flipUp ? { bottom: 'calc(100% + 4px)', left: 0 } : { top: 'calc(100% + 4px)', left: 0 }}
+              />
+            );
+          })()}
         </div>
       )}
     </div>

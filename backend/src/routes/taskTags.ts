@@ -66,15 +66,6 @@ async function canViewTask(task: TaskInfo, userId: string): Promise<boolean> {
   return false;
 }
 
-/** True if the candidate user is a member (or owner) of the workspace. */
-async function isWorkspaceMember(workspaceId: string, candidateId: string): Promise<boolean> {
-  const r = await query(
-    `SELECT 1 FROM workspace_members WHERE workspace_id = $1 AND user_id = $2
-     UNION SELECT 1 FROM workspaces WHERE id = $1 AND owner_id = $2`,
-    [workspaceId, candidateId]
-  );
-  return r.rows.length > 0;
-}
 
 interface TaggedRow {
   user_id: string;
@@ -138,9 +129,14 @@ router.post('/', async (req: Request, res: Response) => {
       res.status(403).json({ error: 'Permission denied' });
       return;
     }
-    // Members-only: the tagged user must be able to see this workspace already.
-    if (!task.workspace_id || !(await isWorkspaceMember(task.workspace_id, userId))) {
-      res.status(400).json({ error: 'User is not a member of this workspace' });
+    // Members-only, notify-only: the tagged user must ALREADY be able to see
+    // this item (a workspace member whose list/timeline is workspace-visible).
+    // Gating on actual visibility — not just workspace membership — means a tag
+    // never discloses a private item's title and the notification's deep-link
+    // always resolves. (Tagging yourself is a no-op the owner check already
+    // permits; it's harmless and never notifies — see createNotification.)
+    if (userId !== task.user_id && !(await canViewTask(task, userId))) {
+      res.status(400).json({ error: "This user can't see this item — make its list visible to the workspace first" });
       return;
     }
 
@@ -179,6 +175,9 @@ router.delete('/:userId', async (req: Request, res: Response) => {
   try {
     const taskId = (req.params as { taskId: string; userId: string }).taskId;
     const userId = (req.params as { taskId: string; userId: string }).userId;
+    // Guard the UUID cast — a malformed :userId would otherwise 500 on the
+    // `user_id = $2` comparison instead of cleanly no-opping.
+    if (!UUID_RE.test(userId)) { res.status(400).json({ error: 'Invalid userId' }); return; }
     const task = await getTask(taskId);
     if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
     if (task.user_id !== req.userId && !req.user?.isAdmin) {

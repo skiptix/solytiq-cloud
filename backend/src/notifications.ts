@@ -68,10 +68,15 @@ export async function createNotification(input: CreateNotificationInput): Promis
 
     const id = `notif_${uuidv4()}`;
     await query(
+      // The dedupe uniqueness is a PARTIAL index (WHERE dedupe_key IS NOT NULL),
+      // so the ON CONFLICT arbiter MUST repeat that predicate — otherwise
+      // Postgres can't infer the partial index and the whole INSERT throws at
+      // plan time (for every row, dedupe_key NULL or not). Rows with a NULL
+      // dedupe_key simply never conflict and always insert.
       `INSERT INTO notifications
          (id, user_id, type, actor_id, title, body, entity_type, entity_id, workspace_id, data, dedupe_key)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       ON CONFLICT (user_id, dedupe_key) DO NOTHING`,
+       ON CONFLICT (user_id, dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,
       [
         id,
         input.userId,
