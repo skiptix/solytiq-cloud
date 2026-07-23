@@ -35,6 +35,13 @@
 - 📅 **CalDAV Server** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing meetings.
 - 🗑️ **Trash & Restore** — Comprehensive protection against accidental deletions with a 30-day recovery window.
 - 📋 **Templates** — Capture any list or timeline as a reusable template, keeping relative dates and recursive sublist structures intact.
+- ⚙️ **Automation Hub** — Flow-chart automations with loop prevention, secured by isolated-vm.
+- 📝 **Markdown Pages** — Rich document editing with `/` slash commands, block-level AI tools, and auto-managed Todo lists.
+- 🪄 **Inline AI Assist** — Context-aware AI for drafting and summarizing content directly in Notes and Markdown pages.
+- 📦 **App Directory** — Installable modules (GPS, Files, MCP, Automations) managed instance-wide.
+- 🔔 **User Notification System** — A real-time feed for mentions, tags, invites, and overdue deadlines.
+- 🤝 **Per-item Sharing** — Invite users as full-collaborators to specific lists, timelines, or markdown pages independent of workspace membership.
+- 🏷️ **Tagging & Mentions** — Notify-only tags and `@`-mentions for enhanced team communication.
 
 ---
 
@@ -170,6 +177,12 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **Security** — IDOR prevention using verified JWT `userId`, strict file path traversal checks, `bcryptjs` for password and share-link hashing, and transaction-based quota checks. Avoid using synchronous I/O operations (like `fs.readFileSync`) in Express route handlers to prevent blocking the Node.js event loop.
 - **Rate Limiting** — Configured in three tiers (`apiLimiter` for general API, `authLimiter` for logins/2FA, and `setupLimiter` for registration/nuke endpoints). The `apiLimiter` is automatically applied to all routes mounted under `/api/` in `backend/src/index.ts`.
 - **Testing** — Vitest is the standard for both frontend and backend suites. To run tests, navigate to their respective directories and run `npm install && npm run test`.
+- **Automation Hub** — Uses `isolated-vm` for secure JS execution, expression-substituted HTTP requests with SSRF guards, and strictly linear V1 graphs validated on save.
+- **User Notification System** — A general-purpose `notifications` table where events (invites, mentions, tags, overdue deadlines) push real-time SSE signals to specific users.
+- **Inline AI Assist & Markdown Pages** — Full programmatic control over Markdown (create, edit, reorder blocks) via the AI tool registry.
+- **Item tagging & Mentions** — `@`-mentions resolve purely against workspace members, and per-item tagging acts as a notify-only event rather than an access modifier.
+- **Per-item Invitations** — Managed by a polymorphic `item_shares` table, allowing cross-workspace full-collaborator access.
+- **App Directory** — Dynamic catalog (`appsRegistry.ts`) gating optional features like `gps`, `files`, `mcp`, and `automations`.
 
 ---
 
