@@ -1041,9 +1041,18 @@ export default function MarkdownListScreen() {
           <MarkdownListAIAssist
             markdownListId={mdId}
             markdownListName={name}
-            onUpdated={(updatedBlocks, updatedTodoListId) => {
+            onUpdated={(md) => {
+              const updatedBlocks = md.content.blocks;
               setBlocks(updatedBlocks.length > 0 ? updatedBlocks : [makeEmptyBlock('paragraph')]);
-              setTodoListId(updatedTodoListId);
+              setTodoListId(md.todoListId ?? null);
+              // The page's own settings can change too (via update_markdown_list),
+              // so keep the header/appearance in sync with the re-fetched page.
+              setName(md.name);
+              setEmoji(md.emoji);
+              setColor(md.color);
+              setSubtitle(md.subtitle ?? undefined);
+              setIsPublic(Boolean(md.isPublic));
+              setFullWidth(Boolean(md.fullWidth));
             }}
           />
           <div style={{ position: 'relative', flexShrink: 0 }}>

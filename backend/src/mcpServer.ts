@@ -19,7 +19,7 @@ export function buildMcpServer(userId: string, baseUrl: string): Server {
     {
       name: 'solytiq-cloud',
       title: 'Solytiq Cloud',
-      version: '1.15.0',
+      version: '1.16.0',
       websiteUrl: baseUrl,
       icons: [
         { src: `${baseUrl}/solytiq-cloud.png`, mimeType: 'image/png', sizes: ['512x512'] },

@@ -23,7 +23,12 @@ import { resolveWorkspaceForUser } from './workspaceUtil';
 import { softDeleteListTree, snapshotTimelineToTrash } from './trashUtil';
 import { extractTextFromBuffer, MAX_TEXT_CHARS } from './fileText';
 import { UPLOAD_DIR } from './routes/files';
-import { mutateMarkdownListBlocks, type MarkdownBlockLike } from './routes/markdownLists';
+import {
+  mutateMarkdownListBlocks,
+  createMarkdownListForUser,
+  deleteMarkdownListForUser,
+  type MarkdownBlockLike,
+} from './routes/markdownLists';
 import { parseRecurrenceRule, computeRecurrenceDates } from './recurrence';
 import { resolveInviteeIds, setMeetingAttendees } from './meetingAttendees';
 import { hashPassword } from './auth';
@@ -80,7 +85,11 @@ function fail(result: string): ToolResult {
 
 // ── markdown list block helpers ────────────────────────────────────────────
 
+// Block types the AI may CREATE from scratch (image is excluded — it needs a
+// real file upload from the UI; it can only ever be preserved/reordered).
 const MARKDOWN_BLOCK_TYPES = new Set(['heading', 'paragraph', 'bulleted-list-item', 'numbered-list-item', 'todo', 'quote', 'divider', 'link']);
+// Plain text-bearing block types (build a block from just its `text`).
+const MARKDOWN_TEXT_BLOCK_TYPES = new Set(['paragraph', 'bulleted-list-item', 'numbered-list-item', 'quote']);
 
 function genBlockId(): string {
   return `blk_${uuidv4()}`;
@@ -90,10 +99,72 @@ function describeMarkdownBlock(b: MarkdownBlockLike): string {
   switch (b.type) {
     case 'heading': return `[heading h${b.level}] ${(b.text as string) || '(empty)'}`;
     case 'todo': return `[todo${b.checked ? ' x' : ' '}] ${(b.text as string) || '(empty)'}`;
-    case 'divider': return '[divider] ───';
+    case 'divider': return b.layout === 'columns' ? '[divider · 2-column layout] ───' : '[divider] ───';
     case 'link': return `[link] ${(b.title as string) || (b.url as string)} (${b.url})${b.description ? ` — ${b.description}` : ''}`;
-    case 'image': return `[image] ${b.caption ? `caption: "${b.caption}"` : '(no caption)'}`;
+    case 'image': return `[image] (image_id: ${(b.imageId as string) ?? '?'})${b.caption ? ` caption: "${b.caption}"` : ''}`;
     default: return `[${b.type}] ${(b.text as string) || '(empty)'}`;
+  }
+}
+
+/**
+ * Build (and validate) one markdown block from a loose spec object — shared by
+ * add_markdown_block, add_markdown_blocks, create_markdown_list, and
+ * set_markdown_content so every entry point constructs blocks identically.
+ *
+ * `ctx.allowImagePreserve` (used only by set_markdown_content) permits an image
+ * block, but strictly as a *reference to an already-existing* image on the page
+ * — never a newly-invented one — because images require a real file upload the
+ * AI cannot perform. Todos may carry over their mirror task by referencing an
+ * existing todo block's id (`ctx.todoTaskIdByBlockId`).
+ */
+interface BlockBuildContext {
+  allowImagePreserve?: boolean;
+  existingImageIds?: Set<string>;
+  todoTaskIdByBlockId?: Map<string, string | null>;
+}
+
+function buildMarkdownBlockFromSpec(
+  spec: Record<string, unknown>,
+  ctx?: BlockBuildContext
+): { block: MarkdownBlockLike } | { error: string } {
+  const type = str(spec.type);
+  if (!type) return { error: 'each block needs a "type"' };
+  const providedId = str(spec.id);
+  const blockId = providedId ?? genBlockId();
+
+  switch (type) {
+    case 'divider': {
+      const layout = str(spec.layout);
+      if (layout && layout !== 'stack' && layout !== 'columns') return { error: 'divider layout must be "stack" or "columns"' };
+      return { block: layout === 'columns' ? { id: blockId, type: 'divider', layout: 'columns' } : { id: blockId, type: 'divider' } };
+    }
+    case 'heading': {
+      const level = Number(spec.level);
+      if (![1, 2, 3].includes(level)) return { error: 'heading blocks require level 1, 2, or 3' };
+      return { block: { id: blockId, type: 'heading', level, text: str(spec.text) ?? '' } };
+    }
+    case 'todo': {
+      const priorTaskId = providedId ? (ctx?.todoTaskIdByBlockId?.get(providedId) ?? null) : null;
+      return { block: { id: blockId, type: 'todo', text: str(spec.text) ?? '', checked: spec.checked === true, taskId: priorTaskId } };
+    }
+    case 'link': {
+      const url = str(spec.url);
+      if (!url) return { error: 'link blocks require a "url"' };
+      return { block: { id: blockId, type: 'link', url, title: str(spec.title) ?? null, description: str(spec.description) ?? null } };
+    }
+    case 'image': {
+      if (!ctx?.allowImagePreserve) return { error: 'image blocks cannot be created by AI — they require a real file upload from the UI' };
+      const imageId = str(spec.image_id) ?? str(spec.imageId);
+      if (!imageId) return { error: 'to keep an image block, pass its image_id (from get_markdown_list)' };
+      if (ctx.existingImageIds && !ctx.existingImageIds.has(imageId)) return { error: `image ${imageId} is not an existing image on this page (images cannot be created by AI)` };
+      const block: MarkdownBlockLike = { id: blockId, type: 'image', imageId };
+      const caption = str(spec.caption);
+      if (caption !== undefined) block.caption = caption;
+      return { block };
+    }
+    default:
+      if (!MARKDOWN_TEXT_BLOCK_TYPES.has(type)) return { error: `unknown block type "${type}"` };
+      return { block: { id: blockId, type, text: str(spec.text) ?? '' } };
   }
 }
 
@@ -104,16 +175,26 @@ function insertAtPosition(
   position: string | undefined,
   afterBlockId: string | undefined
 ): MarkdownBlockLike[] | { error: string } {
-  if (position === 'start') return [block, ...blocks];
+  return insertManyAtPosition(blocks, [block], position, afterBlockId);
+}
+
+/** Splices `newBlocks` (in order) into `blocks` at the shared start/end/after position. */
+function insertManyAtPosition(
+  blocks: MarkdownBlockLike[],
+  newBlocks: MarkdownBlockLike[],
+  position: string | undefined,
+  afterBlockId: string | undefined
+): MarkdownBlockLike[] | { error: string } {
+  if (position === 'start') return [...newBlocks, ...blocks];
   if (position === 'after') {
     if (!afterBlockId) return { error: 'after_block_id is required when position is "after"' };
     const idx = blocks.findIndex((b) => b.id === afterBlockId);
     if (idx === -1) return { error: `block ${afterBlockId} not found` };
     const next = [...blocks];
-    next.splice(idx + 1, 0, block);
+    next.splice(idx + 1, 0, ...newBlocks);
     return next;
   }
-  return [...blocks, block]; // 'end', or unspecified
+  return [...blocks, ...newBlocks]; // 'end', or unspecified
 }
 
 // ── tool definitions ───────────────────────────────────────────────────────
@@ -841,8 +922,131 @@ export const aiTools: AiTool[] = [
     },
   },
   {
+    name: 'create_markdown_list',
+    description: "Create a new Markdown page — a freeform document built from '/' command blocks (headings, paragraphs, bulleted/numbered lists, to-dos, quotes, dividers, links). Optionally seed it with initial blocks in one call. If the user didn't say which workspace, omit workspace_id to use the current/personal workspace.",
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Page name/title' },
+        emoji: { type: 'string', description: 'Optional emoji icon' },
+        color: { type: 'string', description: 'Optional accent color hex (e.g. "#5e4dbb")' },
+        subtitle: { type: 'string', description: 'Optional subtitle shown under the title' },
+        is_public: { type: 'boolean', description: 'Workspace visibility to members (default false)' },
+        folder_id: { type: 'string', description: 'Optional folder ID to place the page in' },
+        workspace_id: { type: 'string', description: 'Target workspace ID (from list_workspaces). Omit to use the current/personal workspace.' },
+        blocks: {
+          type: 'array',
+          description: 'Optional initial blocks, inserted in order. Each block is an object like { type, text?, level?, checked?, url?, title?, description?, layout? } — same shape as add_markdown_block. Image blocks are not allowed here.',
+          items: { type: 'object' },
+        },
+      },
+      required: ['name'],
+    },
+    handler: async (userId, args) => {
+      const name = str(args.name);
+      if (!name) return fail('name is required');
+      const folderId = str(args.folder_id);
+      if (folderId) {
+        const f = await query(`SELECT 1 FROM folders WHERE id = $1 AND user_id = $2`, [folderId, userId]);
+        if (!f.rows.length) return fail('folder not found');
+      }
+      // Validate every seed block BEFORE creating the page, so a bad spec can't
+      // leave an empty page behind.
+      const specs = Array.isArray(args.blocks) ? args.blocks : [];
+      const initialBlocks: MarkdownBlockLike[] = [];
+      for (const spec of specs) {
+        if (!spec || typeof spec !== 'object') return fail('each block must be an object');
+        const built = buildMarkdownBlockFromSpec(spec as Record<string, unknown>);
+        if ('error' in built) return fail(built.error);
+        initialBlocks.push(built.block);
+      }
+      const created = await createMarkdownListForUser(userId, {
+        name,
+        emoji: str(args.emoji) ?? null,
+        color: str(args.color) ?? null,
+        subtitle: str(args.subtitle) ?? null,
+        isPublic: args.is_public === true,
+        folderId: folderId ?? null,
+        workspaceId: str(args.workspace_id) ?? null,
+      });
+      if (initialBlocks.length > 0) {
+        const seeded = await mutateMarkdownListBlocks(userId, created.id, () => initialBlocks);
+        if (!seeded.ok) return fail(seeded.error);
+      }
+      const blockNote = initialBlocks.length ? ` with ${initialBlocks.length} block${initialBlocks.length === 1 ? '' : 's'}` : '';
+      return ok(`Created Markdown page "${name}" (markdown_list_id: ${created.id})${blockNote}`, `Created page "${name}"`);
+    },
+  },
+  {
+    name: 'update_markdown_list',
+    description: "Update a Markdown page's own settings — name, emoji, accent color, subtitle, workspace visibility, full-width layout, or folder. This edits the page itself, not its block content (use the block tools / set_markdown_content for content). Owner only.",
+    parameters: {
+      type: 'object',
+      properties: {
+        markdown_list_id: { type: 'string' },
+        name: { type: 'string' },
+        emoji: { type: 'string' },
+        color: { type: 'string', description: 'Accent color hex, or "" to clear' },
+        subtitle: { type: 'string', description: 'Subtitle, or "" to clear' },
+        is_public: { type: 'boolean', description: 'Workspace visibility to members' },
+        full_width: { type: 'boolean', description: 'Stretch content to full app width instead of the centered reading column' },
+        folder_id: { type: 'string', description: 'Move into this folder, or "" to remove from its folder' },
+      },
+      required: ['markdown_list_id'],
+    },
+    handler: async (userId, args) => {
+      const id = str(args.markdown_list_id);
+      if (!id) return fail('markdown_list_id is required');
+      // Page settings are owner-only (content edits allow invited collaborators,
+      // but not the page's own settings).
+      const owned = await query<{ name: string }>(`SELECT name FROM markdown_lists WHERE id = $1 AND user_id = $2`, [id, userId]);
+      if (!owned.rows.length) return fail('markdown list not found');
+      const folderId = str(args.folder_id);
+      if (folderId) {
+        const f = await query(`SELECT 1 FROM folders WHERE id = $1 AND user_id = $2`, [folderId, userId]);
+        if (!f.rows.length) return fail('folder not found');
+      }
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      let i = 1;
+      if (args.name !== undefined) { sets.push(`name = $${i++}`); params.push(str(args.name)); }
+      if (args.emoji !== undefined) { sets.push(`emoji = $${i++}`); params.push(str(args.emoji) ?? null); }
+      if (args.color !== undefined) { sets.push(`color = $${i++}`); params.push(str(args.color) ?? null); }
+      if (args.subtitle !== undefined) { sets.push(`subtitle = $${i++}`); params.push(str(args.subtitle) ?? null); }
+      if (args.is_public !== undefined) { sets.push(`is_public = $${i++}`); params.push(Boolean(args.is_public)); }
+      if (args.full_width !== undefined) { sets.push(`full_width = $${i++}`); params.push(Boolean(args.full_width)); }
+      if (args.folder_id !== undefined) { sets.push(`folder_id = $${i++}`); params.push(str(args.folder_id) ?? null); }
+      if (!sets.length) return fail('no fields to update');
+      sets.push('updated_at = NOW()');
+      params.push(id, userId);
+      const r = await query<{ name: string }>(
+        `UPDATE markdown_lists SET ${sets.join(', ')} WHERE id = $${i++} AND user_id = $${i} RETURNING name`,
+        params
+      );
+      if (!r.rows.length) return fail('markdown list not found');
+      broadcastToUser(userId, 'markdownLists');
+      return ok(`Updated Markdown page "${r.rows[0].name}"`, `Updated page "${r.rows[0].name}"`);
+    },
+  },
+  {
+    name: 'delete_markdown_list',
+    description: 'Delete a Markdown page (soft delete — moved to Trash, recoverable for 30 days; its auto-managed Todo list goes with it). Confirm with the user first.',
+    parameters: {
+      type: 'object',
+      properties: { markdown_list_id: { type: 'string' } },
+      required: ['markdown_list_id'],
+    },
+    handler: async (userId, args) => {
+      const id = str(args.markdown_list_id);
+      if (!id) return fail('markdown_list_id is required');
+      const result = await deleteMarkdownListForUser(userId, id);
+      if (!result.ok) return fail(result.error);
+      return ok(`Deleted Markdown page "${result.name}" (moved to trash)`, `Deleted page "${result.name}"`);
+    },
+  },
+  {
     name: 'get_markdown_list',
-    description: "Get a Markdown page's full block-by-block content, with each block's id and type — use the ids with add/update/remove/move_markdown_block. Valid block types (matching the document's own '/' commands): heading (level 1-3), paragraph, bulleted-list-item, numbered-list-item, todo (mirrors to an auto-managed Todo list), quote, divider, link (url/title/description), and image (read/reorder/caption-edit only — cannot be created by AI, it requires a real file upload from the UI).",
+    description: "Get a Markdown page's full block-by-block content, with each block's id and type — use the ids with the block tools (add/update/remove/move/reorder_markdown_block(s), set_markdown_content). Valid block types (matching the document's own '/' commands): heading (level 1-3), paragraph, bulleted-list-item, numbered-list-item, todo (mirrors to an auto-managed Todo list), quote, divider (optional 2-column layout — shown as '· 2-column layout'), link (url/title/description), and image (read/reorder/caption-edit only — cannot be created by AI, it requires a real file upload from the UI; its image_id is shown so you can keep it when restructuring).",
     parameters: {
       type: 'object',
       properties: { markdown_list_id: { type: 'string' } },
@@ -867,7 +1071,7 @@ export const aiTools: AiTool[] = [
   },
   {
     name: 'add_markdown_block',
-    description: "Insert a new block into a Markdown page — the same thing a '/' slash command does in the editor. type maps to: heading → /h1,/h2,/h3 (set level), paragraph → plain text, bulleted-list-item → /bullet, numbered-list-item → /number, todo → /todo (checked todos mirror live to this page's auto-managed Todo list), quote → /quote, divider → /divider (no text), link → /link (needs url). Image blocks cannot be created this way — they require a real file upload from the UI. Call get_markdown_list first to see existing block ids for positioning.",
+    description: "Insert a new block into a Markdown page — the same thing a '/' slash command does in the editor. type maps to: heading → /h1,/h2,/h3 (set level), paragraph → plain text, bulleted-list-item → /bullet, numbered-list-item → /number, todo → /todo (checked todos mirror live to this page's auto-managed Todo list), quote → /quote, divider → /divider (set layout:'columns' to make the sections on either side sit side-by-side in 2 columns), link → /link (needs url). Image blocks cannot be created this way — they require a real file upload from the UI. Call get_markdown_list first to see existing block ids for positioning. To add several blocks at once, use add_markdown_blocks.",
     parameters: {
       type: 'object',
       properties: {
@@ -879,6 +1083,7 @@ export const aiTools: AiTool[] = [
         url: { type: 'string', description: 'Required when type is "link".' },
         title: { type: 'string', description: 'Optional link title.' },
         description: { type: 'string', description: 'Optional link description.' },
+        layout: { type: 'string', enum: ['stack', 'columns'], description: "For divider blocks only — 'columns' pairs the sections on either side of the divider into a 2-column side-by-side layout; 'stack' (default) keeps them full-width." },
         position: { type: 'string', enum: ['start', 'end', 'after'], description: "Where to insert — 'start' (top of doc), 'end' (bottom, default), or 'after' (needs after_block_id)." },
         after_block_id: { type: 'string', description: 'Required when position is "after" — the block to insert immediately after.' },
       },
@@ -889,27 +1094,58 @@ export const aiTools: AiTool[] = [
       const type = str(args.type);
       if (!id || !type) return fail('markdown_list_id and type are required');
       if (!MARKDOWN_BLOCK_TYPES.has(type)) return fail(`type must be one of: ${[...MARKDOWN_BLOCK_TYPES].join(', ')} (image blocks cannot be created by AI)`);
-      if (type === 'heading' && ![1, 2, 3].includes(Number(args.level))) return fail('level (1, 2, or 3) is required when type is "heading"');
-      if (type === 'link' && !str(args.url)) return fail('url is required when type is "link"');
-
-      const blockId = genBlockId();
-      let block: MarkdownBlockLike;
-      if (type === 'divider') block = { id: blockId, type: 'divider' };
-      else if (type === 'heading') block = { id: blockId, type: 'heading', level: Number(args.level), text: str(args.text) ?? '' };
-      else if (type === 'todo') block = { id: blockId, type: 'todo', text: str(args.text) ?? '', checked: args.checked === true, taskId: null };
-      else if (type === 'link') block = { id: blockId, type: 'link', url: str(args.url)!, title: str(args.title) ?? null, description: str(args.description) ?? null };
-      else block = { id: blockId, type, text: str(args.text) ?? '' };
+      const built = buildMarkdownBlockFromSpec(args);
+      if ('error' in built) return fail(built.error);
+      const block = built.block;
 
       const position = str(args.position);
       const afterBlockId = str(args.after_block_id);
       const result = await mutateMarkdownListBlocks(userId, id, (blocks) => insertAtPosition(blocks, block, position, afterBlockId));
       if (!result.ok) return fail(result.error);
-      return ok(`Added ${type} block (block_id: ${blockId}) to "${result.markdownList.name}"`, `Added a ${type} block`);
+      return ok(`Added ${type} block (block_id: ${block.id}) to "${result.markdownList.name}"`, `Added a ${type} block`);
+    },
+  },
+  {
+    name: 'add_markdown_blocks',
+    description: "Insert SEVERAL blocks into a Markdown page in one call, in the given order, at one position — use this to build out a whole section at once (e.g. a heading followed by several bullets and a divider) instead of many add_markdown_block calls. Same block types/fields as add_markdown_block; image blocks cannot be created.",
+    parameters: {
+      type: 'object',
+      properties: {
+        markdown_list_id: { type: 'string' },
+        blocks: {
+          type: 'array',
+          description: 'Ordered list of blocks to insert. Each: { type, text?, level?, checked?, url?, title?, description?, layout? }.',
+          items: { type: 'object' },
+        },
+        position: { type: 'string', enum: ['start', 'end', 'after'], description: "Where to insert the whole group — 'start', 'end' (default), or 'after' (needs after_block_id)." },
+        after_block_id: { type: 'string', description: 'Required when position is "after" — the block the group is inserted immediately after.' },
+      },
+      required: ['markdown_list_id', 'blocks'],
+    },
+    handler: async (userId, args) => {
+      const id = str(args.markdown_list_id);
+      if (!id) return fail('markdown_list_id is required');
+      const specs = Array.isArray(args.blocks) ? args.blocks : null;
+      if (!specs || specs.length === 0) return fail('blocks (a non-empty array) is required');
+      const newBlocks: MarkdownBlockLike[] = [];
+      for (const spec of specs) {
+        if (!spec || typeof spec !== 'object') return fail('each block must be an object');
+        const type = str((spec as Record<string, unknown>).type);
+        if (type && !MARKDOWN_BLOCK_TYPES.has(type)) return fail(`type must be one of: ${[...MARKDOWN_BLOCK_TYPES].join(', ')} (image blocks cannot be created by AI)`);
+        const built = buildMarkdownBlockFromSpec(spec as Record<string, unknown>);
+        if ('error' in built) return fail(built.error);
+        newBlocks.push(built.block);
+      }
+      const position = str(args.position);
+      const afterBlockId = str(args.after_block_id);
+      const result = await mutateMarkdownListBlocks(userId, id, (blocks) => insertManyAtPosition(blocks, newBlocks, position, afterBlockId));
+      if (!result.ok) return fail(result.error);
+      return ok(`Added ${newBlocks.length} block${newBlocks.length === 1 ? '' : 's'} to "${result.markdownList.name}"`, `Added ${newBlocks.length} blocks`);
     },
   },
   {
     name: 'update_markdown_block',
-    description: "Edit an existing block in a Markdown page. Pass only the fields relevant to that block's type (text for heading/paragraph/bulleted-list-item/numbered-list-item/todo/quote; level for heading; checked for todo; url/title/description for link; caption for image). Call get_markdown_list first to find the block_id.",
+    description: "Edit an existing block in a Markdown page. Pass only the fields relevant to that block's type (text for heading/paragraph/bulleted-list-item/numbered-list-item/todo/quote; level for heading; checked for todo; url/title/description for link; caption for image; layout for divider). Call get_markdown_list first to find the block_id.",
     parameters: {
       type: 'object',
       properties: {
@@ -922,6 +1158,7 @@ export const aiTools: AiTool[] = [
         title: { type: 'string' },
         description: { type: 'string' },
         caption: { type: 'string', description: 'Caption for an image block.' },
+        layout: { type: 'string', enum: ['stack', 'columns'], description: "For divider blocks — 'columns' pairs the sections on either side into a 2-column layout; 'stack' reverts to full-width." },
       },
       required: ['markdown_list_id', 'block_id'],
     },
@@ -955,6 +1192,11 @@ export const aiTools: AiTool[] = [
             next[idx] = { ...b, caption: args.caption !== undefined ? (str(args.caption) ?? null) : b.caption };
             break;
           case 'divider':
+            if (args.layout !== undefined) {
+              const layout = str(args.layout);
+              if (layout && layout !== 'stack' && layout !== 'columns') return { error: 'divider layout must be "stack" or "columns"' };
+              next[idx] = { ...b, layout: layout === 'columns' ? 'columns' : 'stack' };
+            }
             break;
           default:
             if (args.text !== undefined) next[idx] = { ...b, text: str(args.text) ?? '' };
@@ -1016,6 +1258,83 @@ export const aiTools: AiTool[] = [
       });
       if (!result.ok) return fail(result.error);
       return ok(`Moved block in "${result.markdownList.name}"`, 'Reordered a block');
+    },
+  },
+  {
+    name: 'reorder_markdown_blocks',
+    description: "Reorder ALL blocks in a Markdown page at once by giving the full list of block ids in the new top-to-bottom order. block_ids must contain exactly the page's current block ids — every one, each once, with nothing added or removed (call get_markdown_list first to read them). Use add/remove_markdown_block or set_markdown_content to add or remove blocks.",
+    parameters: {
+      type: 'object',
+      properties: {
+        markdown_list_id: { type: 'string' },
+        block_ids: { type: 'array', items: { type: 'string' }, description: "Every current block id, in the desired new top-to-bottom order." },
+      },
+      required: ['markdown_list_id', 'block_ids'],
+    },
+    handler: async (userId, args) => {
+      const id = str(args.markdown_list_id);
+      if (!id) return fail('markdown_list_id is required');
+      const orderRaw = Array.isArray(args.block_ids) ? args.block_ids : null;
+      if (!orderRaw) return fail('block_ids (an array) is required');
+      const order = orderRaw.filter((x): x is string => typeof x === 'string');
+      const result = await mutateMarkdownListBlocks(userId, id, (blocks) => {
+        const orderSet = new Set(order);
+        if (order.length !== blocks.length || orderSet.size !== order.length || blocks.some((b) => !orderSet.has(b.id))) {
+          return { error: `block_ids must list every current block id exactly once. Page has ${blocks.length} block(s): ${blocks.map((b) => b.id).join(', ')}` };
+        }
+        const byId = new Map(blocks.map((b) => [b.id, b]));
+        return order.map((bid) => byId.get(bid)!);
+      });
+      if (!result.ok) return fail(result.error);
+      return ok(`Reordered blocks in "${result.markdownList.name}"`, 'Reordered the page');
+    },
+  },
+  {
+    name: 'set_markdown_content',
+    description: "Replace a Markdown page's ENTIRE content with a new ordered list of blocks in one call — the most powerful way to fully restructure a page (reorder, retype, rewrite, regroup all at once). Each block: { type, text?, level?, checked?, url?, title?, description?, layout? }. IMPORTANT: this overwrites everything, so include EVERY block you want to keep. To keep an existing image, include a block { type:'image', image_id:'<its image_id from get_markdown_list>' } (optionally with a caption) — any image not included is permanently removed. To keep a to-do's live checkbox link, include its original block id as `id` (from get_markdown_list); otherwise a new mirror task is created. Passing an empty array clears the page to a single empty paragraph. Prefer the targeted block tools for small edits; use this for wholesale restructuring.",
+    parameters: {
+      type: 'object',
+      properties: {
+        markdown_list_id: { type: 'string' },
+        blocks: {
+          type: 'array',
+          description: 'The full new ordered block list. Each is an object like { type, text?, level?, checked?, url?, title?, description?, layout?, id?, image_id? }.',
+          items: { type: 'object' },
+        },
+      },
+      required: ['markdown_list_id', 'blocks'],
+    },
+    handler: async (userId, args) => {
+      const id = str(args.markdown_list_id);
+      if (!id) return fail('markdown_list_id is required');
+      const specs = Array.isArray(args.blocks) ? args.blocks : null;
+      if (!specs) return fail('blocks (an array) is required');
+      const result = await mutateMarkdownListBlocks(userId, id, (current) => {
+        const existingImageIds = new Set(
+          current.filter((b) => b.type === 'image' && typeof b.imageId === 'string').map((b) => b.imageId as string)
+        );
+        const todoTaskIdByBlockId = new Map<string, string | null>();
+        for (const b of current) {
+          if (b.type === 'todo') todoTaskIdByBlockId.set(b.id, typeof b.taskId === 'string' ? b.taskId : null);
+        }
+        const ctx: BlockBuildContext = { allowImagePreserve: true, existingImageIds, todoTaskIdByBlockId };
+        const built: MarkdownBlockLike[] = [];
+        const seenIds = new Set<string>();
+        for (const spec of specs) {
+          if (!spec || typeof spec !== 'object') return { error: 'each block must be an object' };
+          const res = buildMarkdownBlockFromSpec(spec as Record<string, unknown>, ctx);
+          if ('error' in res) return { error: res.error };
+          // Guard against duplicate ids (e.g. the model reusing one) — a fresh
+          // id keeps blocks distinct; todo mirror linkage is by taskId, which
+          // was already resolved above, so it survives an id change.
+          if (seenIds.has(res.block.id)) res.block.id = genBlockId();
+          seenIds.add(res.block.id);
+          built.push(res.block);
+        }
+        return built.length > 0 ? built : [{ id: genBlockId(), type: 'paragraph', text: '' }];
+      });
+      if (!result.ok) return fail(result.error);
+      return ok(`Replaced the content of "${result.markdownList.name}" (${specs.length} block${specs.length === 1 ? '' : 's'})`, 'Restructured the page');
     },
   },
 

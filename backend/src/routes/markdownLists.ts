@@ -380,6 +380,42 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
   }
 });
 
+// Create a brand-new (empty) Markdown page for a user. Shared by the POST
+// route and the AI tool registry (aiTools.ts create_markdown_list), so both
+// paths compute position, resolve the workspace, and seed empty content
+// identically. Returns the sanitized row (does NOT seed blocks — callers that
+// want initial content follow up with mutateMarkdownListBlocks).
+export interface CreateMarkdownListInput {
+  id?: string;
+  name: string;
+  emoji?: string | null;
+  color?: string | null;
+  colorBg?: string | null;
+  subtitle?: string | null;
+  isPublic?: boolean;
+  folderId?: string | null;
+  workspaceId?: string | null;
+}
+
+export async function createMarkdownListForUser(userId: string, input: CreateMarkdownListInput) {
+  const listId = input.id ?? `mdlist_${uuidv4()}`;
+  const resolvedWs = await resolveWorkspaceForUser(userId, input.workspaceId ?? undefined);
+
+  const posResult = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM markdown_lists WHERE user_id = $1', [userId]);
+  const nextPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
+
+  const result = await query<MarkdownListRow>(
+    `INSERT INTO markdown_lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, folder_id, workspace_id, position, content)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+    [listId, userId, input.name, input.emoji ?? null, input.color ?? null, input.colorBg ?? null, input.subtitle ?? null,
+      input.isPublic ?? false, input.folderId ?? null, resolvedWs, nextPos, JSON.stringify({ version: 1, blocks: [] })]
+  );
+
+  wlog(`markdown-list CREATE ✓ id=${result.rows[0].id} owner=${userId} workspace=${resolvedWs}`);
+  broadcastToUser(userId, 'markdownLists');
+  return sanitize(result.rows[0]);
+}
+
 // POST /api/markdown-lists
 router.post('/', authenticate, async (req: Request, res: Response) => {
   try {
@@ -389,22 +425,10 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
     };
     if (!name) { res.status(400).json({ error: 'name is required' }); return; }
 
-    const listId = id ?? `mdlist_${uuidv4()}`;
-    const resolvedWs = await resolveWorkspaceForUser(req.userId!, workspaceId);
-
-    const posResult = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM markdown_lists WHERE user_id = $1', [req.userId]);
-    const nextPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
-
-    const result = await query<MarkdownListRow>(
-      `INSERT INTO markdown_lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, folder_id, workspace_id, position, content)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false,
-        folderId ?? null, resolvedWs, nextPos, JSON.stringify({ version: 1, blocks: [] })]
-    );
-
-    wlog(`markdown-list CREATE ✓ id=${result.rows[0].id} owner=${req.userId} workspace=${resolvedWs}`);
-    res.status(201).json({ markdownList: sanitize(result.rows[0]) });
-    broadcastToUser(req.userId!, 'markdownLists');
+    const markdownList = await createMarkdownListForUser(req.userId!, {
+      id, name, emoji, color, colorBg, subtitle, isPublic, folderId, workspaceId,
+    });
+    res.status(201).json({ markdownList });
   } catch (err) {
     werr('markdown-lists POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -532,44 +556,58 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/markdown-lists/:id — soft delete: snapshot to trash, cascade
-// the linked Todo list through the same soft-delete path a normal list
-// delete uses, remove image rows/files, then remove the row itself.
+// Soft-delete a Markdown page: snapshot to trash, cascade the linked Todo
+// list through the same soft-delete path a normal list delete uses, remove
+// image rows/files, then remove the row itself. Shared by the DELETE route
+// and the AI tool registry (aiTools.ts delete_markdown_list) so both land the
+// page in Trash identically. `isAdmin` lets an admin delete another user's
+// page; otherwise only the owner may.
+export async function deleteMarkdownListForUser(
+  userId: string,
+  id: string,
+  isAdmin = false,
+): Promise<{ ok: true; name: string } | { ok: false; status: number; error: string }> {
+  const existing = await query<MarkdownListRow>('SELECT * FROM markdown_lists WHERE id = $1', [id]);
+  if (existing.rows.length === 0) return { ok: false, status: 404, error: 'Markdown list not found' };
+  const row = existing.rows[0];
+  if (row.user_id !== userId && !isAdmin) return { ok: false, status: 403, error: 'Permission denied' };
+
+  const images = await query<{ id: string; file_path: string }>(
+    'SELECT id, file_path FROM markdown_list_images WHERE markdown_list_id = $1', [id]
+  );
+
+  await withTransaction(async (client) => {
+    const exec: QueryExec = (text, params) => client.query(text, params);
+    await exec(
+      `INSERT INTO trash_markdown_lists (markdown_list_id, user_id, markdown_list_data) VALUES ($1, $2, $3)`,
+      [row.id, row.user_id, JSON.stringify(sanitize(row))]
+    );
+    if (row.todo_list_id) await softDeleteListTreeExec(exec, row.todo_list_id);
+    await deleteItemShares(exec, 'markdownList', id);
+    await exec('DELETE FROM markdown_list_images WHERE markdown_list_id = $1', [id]);
+    await exec('DELETE FROM markdown_lists WHERE id = $1', [id]);
+  });
+
+  for (const img of images.rows) {
+    const p = path.join(MARKDOWN_IMAGE_DIR, path.basename(img.file_path));
+    if (fs.existsSync(p)) { try { fs.unlinkSync(p); } catch { /* best-effort cleanup */ } }
+  }
+
+  // Broadcast to the page OWNER (whose stores changed), which is also the
+  // acting user on the owner-delete path.
+  wlog(`markdown-list DELETE ✓ id=${id} owner=${row.user_id}`);
+  broadcastToUser(row.user_id, 'markdownLists');
+  broadcastToUser(row.user_id, 'trash');
+  if (row.todo_list_id) broadcastToUser(row.user_id, 'lists');
+  return { ok: true, name: row.name };
+}
+
+// DELETE /api/markdown-lists/:id
 router.delete('/:id', authenticate, async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const existing = await query<MarkdownListRow>('SELECT * FROM markdown_lists WHERE id = $1', [id]);
-    if (existing.rows.length === 0) { res.status(404).json({ error: 'Markdown list not found' }); return; }
-    const row = existing.rows[0];
-    const isOwner = row.user_id === req.userId;
-    if (!isOwner && !req.user?.isAdmin) { res.status(403).json({ error: 'Permission denied' }); return; }
-
-    const images = await query<{ id: string; file_path: string }>(
-      'SELECT id, file_path FROM markdown_list_images WHERE markdown_list_id = $1', [id]
-    );
-
-    await withTransaction(async (client) => {
-      const exec: QueryExec = (text, params) => client.query(text, params);
-      await exec(
-        `INSERT INTO trash_markdown_lists (markdown_list_id, user_id, markdown_list_data) VALUES ($1, $2, $3)`,
-        [row.id, row.user_id, JSON.stringify(sanitize(row))]
-      );
-      if (row.todo_list_id) await softDeleteListTreeExec(exec, row.todo_list_id);
-      await deleteItemShares(exec, 'markdownList', id);
-      await exec('DELETE FROM markdown_list_images WHERE markdown_list_id = $1', [id]);
-      await exec('DELETE FROM markdown_lists WHERE id = $1', [id]);
-    });
-
-    for (const img of images.rows) {
-      const p = path.join(MARKDOWN_IMAGE_DIR, path.basename(img.file_path));
-      if (fs.existsSync(p)) { try { fs.unlinkSync(p); } catch { /* best-effort cleanup */ } }
-    }
-
-    wlog(`markdown-list DELETE ✓ id=${id} owner=${req.userId}`);
+    const result = await deleteMarkdownListForUser(req.userId!, req.params.id, req.user?.isAdmin === true);
+    if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
     res.json({ success: true });
-    broadcastToUser(req.userId!, 'markdownLists');
-    broadcastToUser(req.userId!, 'trash');
-    if (row.todo_list_id) broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     werr('markdown-lists DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
