@@ -3,30 +3,40 @@ import Icon from '../Icon';
 import useAIStore from '../../store/useAIStore';
 import useMarkdownListsStore from '../../store/useMarkdownListsStore';
 import { apiGetAISettings, apiAIChat, apiGetAiToolDefs, apiExecuteAiTool } from '../../api/client';
-import type { MarkdownBlock } from '../../types';
+import type { MarkdownList } from '../../types';
 
 // ── Scoped "full access" AI editor for a single Markdown page ──────────────
 // Unlike the global Sol assistant (which can touch every list/task/timeline
 // the user owns), this panel is deliberately narrowed to ONE document: the
-// model only ever sees the 5 markdown-block tools from the shared registry
+// model only ever sees this page's markdown tools from the shared registry
 // (aiTools.ts), and every tool call's markdown_list_id is force-overwritten
 // to the currently open page before execution — so even a hallucinated or
-// malicious id can never touch a different document.
+// malicious id can never touch a different document. It has FULL control over
+// this page: read it, edit/add/remove/move/reorder any block, wholesale
+// restructure it, and change the page's own settings (name/emoji/etc.).
 
 const MARKDOWN_TOOL_NAMES = new Set([
   'get_markdown_list',
+  'update_markdown_list',
   'add_markdown_block',
+  'add_markdown_blocks',
   'update_markdown_block',
   'remove_markdown_block',
   'move_markdown_block',
+  'reorder_markdown_blocks',
+  'set_markdown_content',
 ]);
 
 const MAX_ROUNDS = 15;
 
+// Tools that never change the document (pure reads) — used to decide whether a
+// round mutated anything worth re-fetching / logging.
+const MARKDOWN_READ_ONLY_TOOLS = new Set(['get_markdown_list']);
+
 const SUGGESTIONS = [
   'Add a to-do section for grocery shopping',
   'Turn the bullet points into a numbered list',
-  'Summarize this page into a short intro paragraph',
+  'Restructure this page with clear headings and sections',
 ];
 
 interface LogEntry {
@@ -37,9 +47,10 @@ interface LogEntry {
 
 function buildSystemPrompt(markdownListId: string, name: string): string {
   return [
-    `You are an editing assistant embedded in a Markdown page called "${name}" (markdown_list_id: ${markdownListId}) inside Solytiq Cloud, a task/project management app.`,
+    `You are an editing assistant embedded in a Markdown page called "${name}" (markdown_list_id: ${markdownListId}) inside Solytiq Cloud, a task/project management app. You have FULL control over this one page.`,
     `You may ONLY read and edit THIS one page — always pass markdown_list_id "${markdownListId}" to every tool call (it is enforced server-side regardless of what you pass, so never reference any other page's id).`,
-    `Call get_markdown_list first to see the current blocks and their ids. Then use add_markdown_block / update_markdown_block / remove_markdown_block / move_markdown_block to make the requested changes — these correspond exactly to the page's own '/' slash commands (heading, paragraph, bulleted-list-item, numbered-list-item, todo, quote, divider, link). Image blocks cannot be created by AI (they require a real file upload from the UI) but you may still remove, move, or re-caption an existing one.`,
+    `Call get_markdown_list first to see the current blocks and their ids. Block types match the page's own '/' slash commands: heading (level 1-3), paragraph, bulleted-list-item, numbered-list-item, todo, quote, divider (layout 'columns' makes the sections on either side sit side-by-side), and link. Image blocks cannot be created by AI (they require a real file upload from the UI) but you may still remove, move, re-caption, or keep an existing one.`,
+    `Choose the right tool: add_markdown_block / add_markdown_blocks to insert; update_markdown_block to edit one block; remove_markdown_block to delete; move_markdown_block or reorder_markdown_blocks to reorder; set_markdown_content to wholesale restructure the whole page at once (include EVERY block you want to keep — for images pass their image_id, for todos pass their existing id to keep the checkbox link). Use update_markdown_list to change the page's own settings (name, emoji, color, subtitle, visibility, full-width, folder).`,
     `Make as many tool calls as needed to fully satisfy the request. When you're done, reply with a brief, plain-language confirmation of what you changed — no need to repeat the whole document back.`,
   ].join('\n\n');
 }
@@ -47,7 +58,9 @@ function buildSystemPrompt(markdownListId: string, name: string): string {
 interface MarkdownListAIAssistProps {
   markdownListId: string;
   markdownListName: string;
-  onUpdated: (blocks: MarkdownBlock[], todoListId: string | null) => void;
+  /** Called after any mutation with the freshly re-fetched page, so both its
+   *  content (blocks/todo mirror) and its settings (name/emoji/…) stay live. */
+  onUpdated: (md: MarkdownList) => void;
 }
 
 export default function MarkdownListAIAssist({ markdownListId, markdownListName, onUpdated }: MarkdownListAIAssistProps) {
@@ -71,7 +84,7 @@ export default function MarkdownListAIAssist({ markdownListId, markdownListName,
   const refreshDoc = useCallback(async () => {
     try {
       const md = await getDetail(markdownListId);
-      onUpdated(md.content.blocks, md.todoListId ?? null);
+      onUpdated(md);
     } catch {
       // best-effort — the next manual reload will still pick up the change
     }
@@ -107,7 +120,7 @@ export default function MarkdownListAIAssist({ markdownListId, markdownListName,
           try { result = await apiExecuteAiTool(call.function.name, args); }
           catch (e) { result = { ok: false, result: `Error: ${e instanceof Error ? e.message : 'request failed'}` }; }
 
-          if (call.function.name !== 'get_markdown_list') {
+          if (!MARKDOWN_READ_ONLY_TOOLS.has(call.function.name)) {
             if (result.ok) { mutated = true; setLog((l) => [...l, { id: crypto.randomUUID(), role: 'action', text: result.summary ?? result.result }]); }
             else setLog((l) => [...l, { id: crypto.randomUUID(), role: 'error', text: result.result }]);
           }
