@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
+import { randomBytes } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
+import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, werr } from '../workspaceUtil';
 import { softDeleteFolderExec, collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
@@ -25,6 +27,11 @@ interface FolderRow {
   is_public: boolean;
   created_at: string;
   workspace_id: string | null;
+  share_token: string | null;
+  share_enabled: boolean;
+  share_password_hash: string | null;
+  share_expires_at: string | null;
+  share_include_all: boolean;
 }
 
 function summarizeFolderRows(rows: FolderRow[]): string {
@@ -46,6 +53,11 @@ function sanitizeFolder(f: FolderRow) {
     collapsed:   f.collapsed,
     isPublic:    f.is_public,
     workspaceId: f.workspace_id ?? undefined,
+    shareEnabled:     f.share_enabled ?? false,
+    shareToken:       f.share_token ?? null,
+    shareHasPassword: f.share_password_hash != null,
+    shareExpiresAt:   f.share_expires_at ?? null,
+    shareIncludeAll:  f.share_include_all ?? false,
   };
 }
 
@@ -368,6 +380,102 @@ router.put('/:id/workspace', async (req: Request, res: Response) => {
     broadcastToUser(req.userId!, 'workspaces');
   } catch (err) {
     werr('folders PUT /workspace error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/folders/:id/share — manage the public "navigator" share link.
+// Body: { enabled?, password?: string|null, expiresAt?: string|null, includeAll? }
+//  - password/expiresAt: omit = unchanged, null = clear, value = set.
+//  - includeAll: the dialog choice. When true AND the link is enabled, sharing
+//    cascades to every list/timeline/markdown page in the folder — each gets its
+//    own live share link (token minted where missing) inheriting the folder's
+//    password + expiry, so one password unlocks the whole set. When false, only
+//    items the owner already shared individually surface in the navigator.
+router.put('/:id/share', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { enabled, password, expiresAt, includeAll } = req.body as {
+      enabled?: boolean; password?: string | null; expiresAt?: string | null; includeAll?: boolean;
+    };
+
+    const existing = await query<FolderRow>('SELECT * FROM folders WHERE id = $1', [id]);
+    if (existing.rows.length === 0) { res.status(404).json({ error: 'Folder not found' }); return; }
+    const row = existing.rows[0];
+    const isOwner = row.user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+    if (!isOwner && !isAdmin) { res.status(403).json({ error: 'Permission denied' }); return; }
+
+    const updatePw = 'password' in req.body;
+    const updateExp = 'expiresAt' in req.body;
+    const updateEnabled = 'enabled' in req.body;
+    const updateIncludeAll = 'includeAll' in req.body;
+
+    const willBeEnabled = updateEnabled ? Boolean(enabled) : row.share_enabled;
+    let token = row.share_token;
+    if (willBeEnabled && !token) token = randomBytes(24).toString('hex');
+
+    let pwHash: string | null = null;
+    if (updatePw && typeof password === 'string' && password.length > 0) {
+      pwHash = await hashPassword(password);
+    }
+
+    const result = await query<FolderRow>(
+      `UPDATE folders
+       SET share_enabled       = COALESCE($2, share_enabled),
+           share_token         = $3,
+           share_password_hash = CASE WHEN $4 THEN $5 ELSE share_password_hash END,
+           share_expires_at    = CASE WHEN $6 THEN $7 ELSE share_expires_at END,
+           share_include_all   = COALESCE($8, share_include_all)
+       WHERE id = $1
+       RETURNING *`,
+      [id, updateEnabled ? enabled : null, token, updatePw, pwHash, updateExp, expiresAt ?? null, updateIncludeAll ? includeAll : null]
+    );
+    const saved = result.rows[0];
+
+    // Cascade: when "share all" is on and the folder link is live, publish every
+    // item in the folder with the folder's own password + expiry so the navigator
+    // links all resolve. Turning "share all" off does NOT auto-unshare items — a
+    // page the owner shared stays shared; they can revoke each one individually.
+    if (saved.share_enabled && saved.share_include_all) {
+      const cascade = async (table: 'lists' | 'timelines' | 'markdown_lists') => {
+        const missing = await query<{ id: string }>(
+          `SELECT id FROM ${table} WHERE folder_id = $1 AND (share_token IS NULL)`, [id]
+        );
+        for (const r of missing.rows) {
+          await query(`UPDATE ${table} SET share_token = $2 WHERE id = $1 AND share_token IS NULL`, [r.id, randomBytes(24).toString('hex')]);
+        }
+        await query(
+          `UPDATE ${table}
+           SET share_enabled = true,
+               share_password_hash = $2,
+               share_expires_at = $3
+           WHERE folder_id = $1`,
+          [id, saved.share_password_hash, saved.share_expires_at]
+        );
+      };
+      await cascade('lists');
+      await cascade('timelines');
+      await cascade('markdown_lists');
+    }
+
+    res.json({
+      share: {
+        enabled: saved.share_enabled,
+        token: saved.share_token,
+        hasPassword: saved.share_password_hash != null,
+        expiresAt: saved.share_expires_at ?? null,
+        includeAll: saved.share_include_all,
+      },
+    });
+    broadcastToUser(req.userId!, 'folders');
+    if (saved.share_enabled && saved.share_include_all) {
+      broadcastToUser(req.userId!, 'lists');
+      broadcastToUser(req.userId!, 'timelines');
+      broadcastToUser(req.userId!, 'markdownLists');
+    }
+  } catch (err) {
+    werr('folders PUT /share error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -716,6 +716,123 @@ app.get('/api/share/markdown-list/:token/images/:imageId', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Public folder share endpoints — a folder published as a read-only navigator
+// page listing the shared items inside it. No auth required.
+// ---------------------------------------------------------------------------
+
+interface ShareFolderRow {
+  id: string; name: string; emoji: string | null; color: string | null;
+  share_enabled: boolean; share_password_hash: string | null; share_expires_at: string | null;
+  share_include_all: boolean; created_at: string;
+  shared_by_name: string | null; shared_by_username: string; shared_by_image: string | null;
+}
+
+async function resolveShareFolder(token: string): Promise<ShareFolderRow | null> {
+  const result = await dbQuery<ShareFolderRow>(
+    `SELECT f.id, f.name, f.emoji, f.color, f.share_enabled, f.share_password_hash,
+            f.share_expires_at, f.share_include_all, f.created_at,
+            u.full_name AS shared_by_name, u.username AS shared_by_username, u.profile_image AS shared_by_image
+     FROM folders f JOIN users u ON f.user_id = u.id
+     WHERE f.share_token = $1`,
+    [token]
+  );
+  return result.rows[0] ?? null;
+}
+
+// GET /api/share/folder/:token — folder metadata (no contents)
+app.get('/api/share/folder/:token', async (req, res) => {
+  try {
+    const folder = await resolveShareFolder(req.params.token);
+    if (!folder || !folder.share_enabled) { res.status(404).json({ error: 'Folder not found' }); return; }
+    res.json({
+      name: folder.name,
+      emoji: folder.emoji,
+      color: folder.color,
+      ...shareOwnerMeta(folder),
+    });
+  } catch (err) {
+    console.error('share folder info error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/share/folder/:token/content — the navigator's item list. Only items
+// whose OWN share link is live (enabled + unexpired) are surfaced, so every
+// entry deep-links to a working public page. In "share all" mode every item in
+// the folder was cascade-shared when the folder was published; in "only shared"
+// mode this naturally reflects whatever the owner has individually shared.
+app.get('/api/share/folder/:token/content', async (req, res) => {
+  try {
+    const pw = (req.query.password ?? '') as string;
+    const folder = await resolveShareFolder(req.params.token);
+    if (!folder || !folder.share_enabled) { res.status(404).json({ error: 'Folder not found' }); return; }
+    if (folder.share_expires_at && new Date(folder.share_expires_at) < new Date()) { res.status(410).json({ error: 'Share link has expired' }); return; }
+    if (folder.share_password_hash) {
+      if (!pw) { res.status(401).json({ error: 'Password required', passwordRequired: true }); return; }
+      const valid = await comparePassword(pw, folder.share_password_hash);
+      if (!valid) { res.status(401).json({ error: 'Invalid password' }); return; }
+    }
+
+    const liveShare = `share_enabled = true AND (share_expires_at IS NULL OR share_expires_at > NOW())`;
+
+    const listRes = await dbQuery<{ id: string; name: string; emoji: string | null; color: string | null; color_bg: string | null; share_token: string; total: string; completed: string }>(
+      `SELECT l.id, l.name, l.emoji, l.color, l.color_bg, l.share_token,
+              COUNT(t.id) AS total,
+              COUNT(t.id) FILTER (WHERE t.checked) AS completed
+       FROM lists l
+       LEFT JOIN tasks t ON t.list_id = l.id AND t.source = 'list'
+       WHERE l.folder_id = $1 AND l.${liveShare} AND l.share_token IS NOT NULL
+       GROUP BY l.id
+       ORDER BY l.position ASC, l.created_at ASC`,
+      [folder.id]
+    );
+
+    const timelineRes = await dbQuery<{ id: string; name: string; emoji: string | null; color: string | null; color_bg: string | null; share_token: string; total: string; completed: string }>(
+      `SELECT t.id, t.name, t.emoji, t.color, t.color_bg, t.share_token,
+              COUNT(m.id) AS total,
+              COUNT(m.id) FILTER (WHERE m.status = 'done') AS completed
+       FROM timelines t
+       LEFT JOIN milestones m ON m.timeline_id = t.id
+       WHERE t.folder_id = $1 AND t.${liveShare} AND t.share_token IS NOT NULL
+       GROUP BY t.id
+       ORDER BY t.position ASC, t.created_at ASC`,
+      [folder.id]
+    );
+
+    const markdownRes = await dbQuery<{ id: string; name: string; emoji: string | null; color: string | null; color_bg: string | null; share_token: string }>(
+      `SELECT m.id, m.name, m.emoji, m.color, m.color_bg, m.share_token
+       FROM markdown_lists m
+       WHERE m.folder_id = $1 AND m.${liveShare} AND m.share_token IS NOT NULL
+       ORDER BY m.position ASC, m.created_at ASC`,
+      [folder.id]
+    );
+
+    const items = [
+      ...listRes.rows.map(r => ({
+        type: 'list' as const, name: r.name, emoji: r.emoji, color: r.color, colorBg: r.color_bg,
+        shareToken: r.share_token, progress: { total: parseInt(r.total, 10), completed: parseInt(r.completed, 10) },
+      })),
+      ...timelineRes.rows.map(r => ({
+        type: 'timeline' as const, name: r.name, emoji: r.emoji, color: r.color, colorBg: r.color_bg,
+        shareToken: r.share_token, progress: { total: parseInt(r.total, 10), completed: parseInt(r.completed, 10) },
+      })),
+      ...markdownRes.rows.map(r => ({
+        type: 'markdownList' as const, name: r.name, emoji: r.emoji, color: r.color, colorBg: r.color_bg,
+        shareToken: r.share_token, progress: null,
+      })),
+    ];
+
+    res.json({
+      folder: { name: folder.name, emoji: folder.emoji, color: folder.color },
+      items,
+    });
+  } catch (err) {
+    console.error('share folder content error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // SSE — real-time sync endpoint
 app.get('/api/events', async (req, res) => {
   const token =
@@ -1189,6 +1306,19 @@ async function runMigrations() {
   await pool.query(`ALTER TABLE lists   ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(100) REFERENCES workspaces(id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE folders ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(100) REFERENCES workspaces(id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE tasks   ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(100) REFERENCES workspaces(id) ON DELETE SET NULL`);
+
+  // Folder public share link — a folder can be published as a read-only
+  // "navigator" page at /share/folder/:token that lists the shared items
+  // inside it. Same opaque-token / optional-password / optional-expiry shape
+  // as list/timeline/markdown shares. `share_include_all` is the dialog choice:
+  // true  = "share every item in the folder" (sharing cascades to each item),
+  // false = "only items already shared individually" appear in the navigator.
+  await pool.query(`ALTER TABLE folders ADD COLUMN IF NOT EXISTS share_token VARCHAR(64)`);
+  await pool.query(`ALTER TABLE folders ADD COLUMN IF NOT EXISTS share_enabled BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE folders ADD COLUMN IF NOT EXISTS share_password_hash VARCHAR(255)`);
+  await pool.query(`ALTER TABLE folders ADD COLUMN IF NOT EXISTS share_expires_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE folders ADD COLUMN IF NOT EXISTS share_include_all BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS folders_share_token_idx ON folders(share_token) WHERE share_token IS NOT NULL`);
 
   // Seed: create "Personal" workspace for every user that doesn't have one yet
   {

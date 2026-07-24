@@ -307,6 +307,7 @@ export interface ShareUpdate {
   expiresAt?: string | null;  // omit = unchanged, null = clear, value = set
   subpages?: boolean;         // lists only
   viewMode?: 'list' | 'kanban' | 'timeline';   // lists only — which layout the public page renders
+  includeAll?: boolean;       // folders only — share every item vs only already-shared
 }
 export interface ShareInfo {
   enabled: boolean;
@@ -315,10 +316,14 @@ export interface ShareInfo {
   expiresAt: string | null;
   subpages?: boolean;
   viewMode?: 'list' | 'kanban' | 'timeline' | null;
+  includeAll?: boolean;       // folders only
 }
 
 export const apiUpdateListShare = (id: string, data: ShareUpdate) =>
   apiFetch<{ share: ShareInfo }>(`/lists/${id}/share`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const apiUpdateFolderShare = (id: string, data: ShareUpdate) =>
+  apiFetch<{ share: ShareInfo }>(`/folders/${id}/share`, { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiUpdateMarkdownListShare = (id: string, data: ShareUpdate) =>
   apiFetch<{ share: ShareInfo }>(`/markdown-lists/${id}/share`, { method: 'PUT', body: JSON.stringify(data) });

@@ -9,7 +9,7 @@ import ItemMembersSection from '../components/ItemMembersSection';
 import type { SharedItemType } from '../api/client';
 import { useMobile } from '../hooks/useBreakpoint';
 import {
-  apiUpdateListShare, apiUpdateTimelineShare, apiUpdateMarkdownListShare,
+  apiUpdateListShare, apiUpdateTimelineShare, apiUpdateMarkdownListShare, apiUpdateFolderShare,
   apiUpdateList, apiUpdateTimeline, apiUpdateFolder, apiUpdateMarkdownList,
   asVisibilityConflict, type VisibilityConflict,
   type ShareInfo, type ShareUpdate,
@@ -67,6 +67,7 @@ interface ItemSettingsModalProps {
     expiresAt?: string | null;
     subpages?: boolean;
     viewMode?: 'list' | 'kanban' | 'timeline' | null;
+    includeAll?: boolean;   // folders only
   };
   onShareUpdated?: (share: ShareInfo) => void;
   onVisibilityApplied?: (isPublic: boolean) => void;
@@ -89,16 +90,16 @@ const card: React.CSSProperties = {
 
 // URL path segment for the public share route — distinct from the modal's
 // `kind` prop value (e.g. `markdownList` -&gt; `/share/markdown-list/:token`).
-const SHARE_URL_SEGMENT: Record<'list' | 'timeline' | 'markdownList', string> = {
-  list: 'list', timeline: 'timeline', markdownList: 'markdown-list',
+const SHARE_URL_SEGMENT: Record<'list' | 'timeline' | 'markdownList' | 'folder', string> = {
+  list: 'list', timeline: 'timeline', markdownList: 'markdown-list', folder: 'folder',
 };
-const SHARE_UPDATE_FN: Record<'list' | 'timeline' | 'markdownList', (id: string, data: ShareUpdate) => Promise<{ share: ShareInfo }>> = {
-  list: apiUpdateListShare, timeline: apiUpdateTimelineShare, markdownList: apiUpdateMarkdownListShare,
+const SHARE_UPDATE_FN: Record<'list' | 'timeline' | 'markdownList' | 'folder', (id: string, data: ShareUpdate) => Promise<{ share: ShareInfo }>> = {
+  list: apiUpdateListShare, timeline: apiUpdateTimelineShare, markdownList: apiUpdateMarkdownListShare, folder: apiUpdateFolderShare,
 };
 
 // ── Share via link ────────────────────────────────────────────────────────────
 function ShareSection({ kind, itemId, share, onShareUpdated }: {
-  kind: 'list' | 'timeline' | 'markdownList';
+  kind: 'list' | 'timeline' | 'markdownList' | 'folder';
   itemId: string;
   share?: ItemSettingsModalProps['share'];
   onShareUpdated?: (share: ShareInfo) => void;
@@ -108,6 +109,7 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
   const [hasPassword, setHasPassword] = useState(Boolean(share?.hasPassword));
   const [expiresAt, setExpiresAt]     = useState<string>(share?.expiresAt ? share.expiresAt.slice(0, 10) : '');
   const [subpages, setSubpages]       = useState(Boolean(share?.subpages));
+  const [includeAll, setIncludeAll]   = useState(Boolean(share?.includeAll));
   const [viewMode, setViewMode]       = useState<'list' | 'kanban' | 'timeline'>(
     share?.viewMode === 'kanban' || share?.viewMode === 'timeline' ? share.viewMode : 'list'
   );
@@ -129,6 +131,7 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
       setHasPassword(next.hasPassword);
       setExpiresAt(next.expiresAt ? next.expiresAt.slice(0, 10) : '');
       if (next.subpages !== undefined) setSubpages(next.subpages);
+      if (next.includeAll !== undefined) setIncludeAll(next.includeAll);
       if (next.viewMode) setViewMode(next.viewMode);
       onShareUpdated?.(next);
     } catch (err) {
@@ -188,6 +191,37 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', lineHeight: 1.4, marginTop: 6, paddingLeft: 2 }}>
                 <span style={{ marginTop: 1, flexShrink: 0, display: 'flex' }}><Icon name="visibility" size={13} color="var(--color-text-quaternary)" /></span>
                 Anyone with this link can view a read-only copy. No sign-in required.
+              </div>
+            </div>
+          )}
+
+          {/* What to share (folders only) — every item vs only already-shared */}
+          {kind === 'folder' && (
+            <div>
+              {sectionLabel('What to share')}
+              <div style={card}>
+                <div style={{ padding: '4px', display: 'flex', gap: 4 }}>
+                  {([
+                    { label: 'All items', icon: 'folder_open', val: true },
+                    { label: 'Only shared', icon: 'lock_open', val: false },
+                  ] as const).map(opt => {
+                    const selected = includeAll === opt.val;
+                    return (
+                      <button key={opt.label}
+                        disabled={saving}
+                        onClick={() => { if (includeAll !== opt.val) apply({ includeAll: opt.val }); }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 8px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'transparent', cursor: saving ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: selected ? 600 : 500, color: selected ? 'var(--color-white)' : 'var(--color-primary)', transition: 'all 120ms' }}>
+                        <Icon name={opt.icon} size={14} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', marginTop: 6, lineHeight: 1.4, paddingLeft: 2 }}>
+                {includeAll
+                  ? 'Every to-do, timeline and page in this folder is published publicly (inheriting this link’s password & expiry).'
+                  : 'Only items you’ve already shared individually appear in the folder’s public navigator.'}
               </div>
             </div>
           )}
@@ -395,7 +429,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
   // Lists, timelines and markdown pages can all live inside a folder; only
   // folders themselves can't be nested.
   const hasFolders = kind !== 'folder' && folders && folders.length > 0;
-  const hasShare   = kind !== 'folder' && !!itemId;
+  const hasShare   = !!itemId;
   const currentList = kind === 'list' && itemId ? lists.find(l => l.id === itemId) : undefined;
   const currentTimeline = kind === 'timeline' && itemId ? timelines.find(t => t.id === itemId) : undefined;
   const currentMarkdownList = kind === 'markdownList' && itemId ? markdownLists.find(m => m.id === itemId) : undefined;
@@ -659,7 +693,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
           {/* ── SHARE ── */}
           {activeTab === 'share' && hasShare && itemId && (
             <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
-              <ShareSection kind={kind as 'list' | 'timeline' | 'markdownList'} itemId={itemId} share={share} onShareUpdated={onShareUpdated} />
+              <ShareSection kind={kind} itemId={itemId} share={share} onShareUpdated={onShareUpdated} />
             </div>
           )}
 
