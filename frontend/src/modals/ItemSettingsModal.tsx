@@ -392,10 +392,9 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
   const { markdownLists } = useMarkdownListsStore();
   const [copiedAdminId, setCopiedAdminId] = useState(false);
 
-  // Markdown lists have no folder-nesting UI yet (they always render at the
-  // workspace root in the Sidebar) — hide the Folder tab rather than show a
-  // picker that silently has no effect.
-  const hasFolders = kind !== 'folder' && kind !== 'markdownList' && folders && folders.length > 0;
+  // Lists, timelines and markdown pages can all live inside a folder; only
+  // folders themselves can't be nested.
+  const hasFolders = kind !== 'folder' && folders && folders.length > 0;
   const hasShare   = kind !== 'folder' && !!itemId;
   const currentList = kind === 'list' && itemId ? lists.find(l => l.id === itemId) : undefined;
   const currentTimeline = kind === 'timeline' && itemId ? timelines.find(t => t.id === itemId) : undefined;

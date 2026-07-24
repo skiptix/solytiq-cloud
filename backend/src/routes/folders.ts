@@ -277,6 +277,12 @@ router.put('/:id/workspace', async (req: Request, res: Response) => {
     const timelineRows = await query<{ id: string; is_public: boolean; name: string }>(
       'SELECT id, is_public, name FROM timelines WHERE folder_id = $1', [id]
     );
+    // Markdown pages can also live in a folder — they (and their auto-managed
+    // Todo mirror lists) must ride along so the folder-vs-contents workspace
+    // invariant holds.
+    const markdownRows = await query<{ id: string; is_public: boolean; name: string; todo_list_id: string | null }>(
+      'SELECT id, is_public, name, todo_list_id FROM markdown_lists WHERE folder_id = $1', [id]
+    );
 
     let allListIds: string[] = [];
     for (const l of listRows.rows) {
@@ -285,12 +291,15 @@ router.put('/:id/workspace', async (req: Request, res: Response) => {
     }
     allListIds = Array.from(new Set(allListIds));
     const timelineIds = timelineRows.rows.map(t => t.id);
+    const markdownIds = markdownRows.rows.map(m => m.id);
+    const markdownTodoListIds = markdownRows.rows.map(m => m.todo_list_id).filter((x): x is string => !!x);
 
     const targetWs = await query<{ visibility: string }>('SELECT visibility FROM workspaces WHERE id = $1', [workspaceId]);
     const targetIsPrivate = targetWs.rows[0]?.visibility !== 'public';
 
     let forcePrivateListIds: string[] = [];
     let forcePrivateTimelineIds: string[] = [];
+    let forcePrivateMarkdownIds: string[] = [];
     let forceFolderPrivate = false;
     const conflictDescendants: ConflictDescendant[] = [];
     if (targetIsPrivate) {
@@ -305,6 +314,11 @@ router.put('/:id/workspace', async (req: Request, res: Response) => {
       const publicTimelines = timelineRows.rows.filter(t => t.is_public);
       forcePrivateTimelineIds = publicTimelines.map(t => t.id);
       conflictDescendants.push(...publicTimelines.map(t => ({ type: 'timeline' as const, id: t.id, name: t.name })));
+      // Markdown pages aren't a distinct visibility-hierarchy type, so surface
+      // them as plain "list" descendants in the confirmation.
+      const publicMarkdown = markdownRows.rows.filter(m => m.is_public);
+      forcePrivateMarkdownIds = publicMarkdown.map(m => m.id);
+      conflictDescendants.push(...publicMarkdown.map(m => ({ type: 'list' as const, id: m.id, name: m.name })));
     }
 
     if (conflictDescendants.length > 0) {
@@ -322,6 +336,9 @@ router.put('/:id/workspace', async (req: Request, res: Response) => {
       if (forcePrivateTimelineIds.length > 0) {
         await client.query('UPDATE timelines SET is_public = false WHERE id = ANY($1::varchar[])', [forcePrivateTimelineIds]);
       }
+      if (forcePrivateMarkdownIds.length > 0) {
+        await client.query('UPDATE markdown_lists SET is_public = false WHERE id = ANY($1::varchar[])', [forcePrivateMarkdownIds]);
+      }
       await client.query('UPDATE folders SET workspace_id = $1 WHERE id = $2', [workspaceId, id]);
       if (allListIds.length > 0) {
         await client.query('UPDATE lists SET workspace_id = $1 WHERE id = ANY($2::varchar[])', [workspaceId, allListIds]);
@@ -330,13 +347,23 @@ router.put('/:id/workspace', async (req: Request, res: Response) => {
       if (timelineIds.length > 0) {
         await client.query('UPDATE timelines SET workspace_id = $1 WHERE id = ANY($2::varchar[])', [workspaceId, timelineIds]);
       }
+      if (markdownIds.length > 0) {
+        await client.query('UPDATE markdown_lists SET workspace_id = $1 WHERE id = ANY($2::varchar[])', [workspaceId, markdownIds]);
+      }
+      // The markdown pages' auto-managed Todo mirror lists (and their tasks)
+      // aren't in the folder themselves, so move them by id explicitly.
+      if (markdownTodoListIds.length > 0) {
+        await client.query('UPDATE lists SET workspace_id = $1 WHERE id = ANY($2::varchar[])', [workspaceId, markdownTodoListIds]);
+        await client.query('UPDATE tasks SET workspace_id = $1 WHERE list_id = ANY($2::varchar[])', [workspaceId, markdownTodoListIds]);
+      }
     });
 
-    wlog(`folder MOVE-WORKSPACE ✓ id=${id} (+${allListIds.length} list(s), +${timelineIds.length} timeline(s)) → workspace=${workspaceId} owner=${req.userId}`);
+    wlog(`folder MOVE-WORKSPACE ✓ id=${id} (+${allListIds.length} list(s), +${timelineIds.length} timeline(s), +${markdownIds.length} markdown page(s)) → workspace=${workspaceId} owner=${req.userId}`);
     res.json({ ok: true, folder: await getFolderForUser(req.userId!, id) });
     broadcastToUser(req.userId!, 'folders');
     broadcastToUser(req.userId!, 'lists');
     broadcastToUser(req.userId!, 'timelines');
+    broadcastToUser(req.userId!, 'markdownLists');
     broadcastToUser(req.userId!, 'tasks');
     broadcastToUser(req.userId!, 'workspaces');
   } catch (err) {

@@ -4,12 +4,12 @@ import Icon from '../components/Icon';
 import VisibilityConflictModal from '../components/VisibilityConflictModal';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import {
-  apiMoveListWorkspace, apiMoveTimelineWorkspace, apiMoveFolderWorkspace,
+  apiMoveListWorkspace, apiMoveTimelineWorkspace, apiMoveFolderWorkspace, apiMoveMarkdownListWorkspace,
   asVisibilityConflict, ApiError, type VisibilityConflict,
 } from '../api/client';
 
 interface MoveToWorkspaceModalProps {
-  kind: 'list' | 'timeline' | 'folder';
+  kind: 'list' | 'timeline' | 'folder' | 'markdownList';
   itemId: string;
   itemName: string;
   currentWorkspaceId?: string;
@@ -22,6 +22,7 @@ const moveFn = {
   list: apiMoveListWorkspace,
   timeline: apiMoveTimelineWorkspace,
   folder: apiMoveFolderWorkspace,
+  markdownList: apiMoveMarkdownListWorkspace,
 };
 
 export default function MoveToWorkspaceModal({ kind, itemId, itemName, currentWorkspaceId, onMoved, onClose }: MoveToWorkspaceModalProps) {

@@ -1397,8 +1397,16 @@ export const apiGetMarkdownList = (id: string) =>
 export const apiCreateMarkdownList = (data: { id?: string; name: string; emoji?: string; color?: string; colorBg?: string; subtitle?: string; isPublic?: boolean; folderId?: string; workspaceId?: string }) =>
   apiFetch<{ markdownList: MarkdownList }>('/markdown-lists', { method: 'POST', body: JSON.stringify(data) });
 
-export const apiUpdateMarkdownList = (id: string, data: Partial<Pick<MarkdownList, 'name' | 'emoji' | 'color' | 'colorBg' | 'subtitle' | 'isPublic' | 'fullWidth' | 'folderId' | 'position'>> & { content?: MarkdownListContent; expectedVersion?: number; cascade?: boolean }) =>
+export const apiUpdateMarkdownList = (id: string, data: Partial<Pick<MarkdownList, 'name' | 'emoji' | 'color' | 'colorBg' | 'subtitle' | 'isPublic' | 'fullWidth' | 'position'>> & { folderId?: string | null; content?: MarkdownListContent; expectedVersion?: number; cascade?: boolean }) =>
   apiFetch<{ markdownList: MarkdownList }>(`/markdown-lists/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+// Persist the order of markdown lists by id (positions are global per user).
+export const apiReorderMarkdownLists = (ids: string[]) =>
+  apiFetch<{ success: boolean }>('/markdown-lists/reorder', { method: 'PUT', body: JSON.stringify({ ids }) });
+
+// Move a markdown page (and its auto-managed Todo list) into another workspace.
+export const apiMoveMarkdownListWorkspace = (id: string, workspaceId: string, cascade?: boolean) =>
+  apiFetch<{ markdownList: MarkdownList }>(`/markdown-lists/${id}/workspace`, { method: 'PUT', body: JSON.stringify({ workspaceId, cascade }) });
 
 export const apiDeleteMarkdownList = (id: string) =>
   apiFetch<{ success: boolean }>(`/markdown-lists/${id}`, { method: 'DELETE' });

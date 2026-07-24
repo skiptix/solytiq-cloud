@@ -8,8 +8,9 @@ import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { verifyToken, hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
-import { resolveWorkspaceForUser, wlog, werr, QueryExec } from '../workspaceUtil';
+import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, werr, QueryExec } from '../workspaceUtil';
 import { checkVersionConflict } from '../concurrency';
+import { buildRestrictConflict } from '../visibility';
 import { softDeleteListTreeExec } from '../trashUtil';
 import { createListTask, updateListTaskFields, deleteTaskRow } from './lists';
 import { UPLOAD_DIR } from './files';
@@ -435,6 +436,32 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
   }
 });
 
+// PUT /api/markdown-lists/reorder — persist the order of markdown lists by id.
+// Declared before the `/:id` routes so "reorder" isn't captured as an id.
+// Positions are global per user (same convention as lists/timelines reorder),
+// so the client passes every markdown list in the desired order.
+router.put('/reorder', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { ids } = req.body as { ids?: string[] };
+    if (!Array.isArray(ids)) {
+      res.status(400).json({ error: 'ids must be an array' });
+      return;
+    }
+
+    await Promise.all(
+      ids.map((markdownListId, index) =>
+        query('UPDATE markdown_lists SET position = $1 WHERE id = $2 AND user_id = $3', [index, markdownListId, req.userId])
+      )
+    );
+
+    res.json({ success: true });
+    broadcastToUser(req.userId!, 'markdownLists');
+  } catch (err) {
+    werr('markdown-lists reorder error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // PUT /api/markdown-lists/:id — metadata and/or content. When `content` is
 // present, every `/todo` block is reconciled against the auto-managed Todo
 // list (created lazily on first use) and every `/image` block no longer
@@ -552,6 +579,90 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
     }
   } catch (err) {
     werr('markdown-lists PUT error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/markdown-lists/:id/workspace — move this markdown page (and its
+// auto-managed Todo mirror list + that list's tasks) into a different
+// workspace the user has access to. Mirrors the timelines.ts endpoint of the
+// same shape (see comment there for the visibility-conflict rationale).
+router.put('/:id/workspace', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { workspaceId, cascade } = req.body as { workspaceId?: string; cascade?: boolean };
+    if (!workspaceId) {
+      res.status(400).json({ error: 'workspaceId is required' });
+      return;
+    }
+
+    const existing = await query<MarkdownListRow>('SELECT * FROM markdown_lists WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'Markdown list not found' });
+      return;
+    }
+    const md = existing.rows[0];
+    const isOwner = md.user_id === req.userId;
+    const isAdmin = req.user?.isAdmin === true;
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: 'Permission denied' });
+      return;
+    }
+
+    if (md.workspace_id === workspaceId) {
+      res.json({ markdownList: await getMarkdownListForUser(req.userId!, id) });
+      return;
+    }
+
+    const canAccess = await userCanAccessWorkspace(req.userId!, workspaceId);
+    if (!canAccess) {
+      res.status(403).json({ error: 'You do not have access to that workspace' });
+      return;
+    }
+
+    const targetWs = await query<{ visibility: string }>('SELECT visibility FROM workspaces WHERE id = $1', [workspaceId]);
+    const targetIsPrivate = targetWs.rows[0]?.visibility !== 'public';
+    const willForcePrivate = targetIsPrivate && md.is_public;
+
+    if (willForcePrivate) {
+      // Markdown lists aren't part of the folder visibility hierarchy type, so
+      // surface the conflict as a plain leaf "list" — the name still reads right.
+      const conflict = buildRestrictConflict('list', md.name, [{ type: 'list', id, name: md.name }]);
+      if (!cascade) { res.status(409).json(conflict); return; }
+    }
+
+    // If the page's current folder isn't in the target workspace, detach it —
+    // a folder and its contents must always share one workspace.
+    let detachFolder = false;
+    if (md.folder_id) {
+      const f = await query<{ workspace_id: string | null }>('SELECT workspace_id FROM folders WHERE id = $1', [md.folder_id]);
+      if (f.rows[0]?.workspace_id !== workspaceId) detachFolder = true;
+    }
+
+    await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE markdown_lists
+         SET workspace_id = $1,
+             is_public = CASE WHEN $3 THEN false ELSE is_public END
+             ${detachFolder ? ', folder_id = NULL' : ''}
+         WHERE id = $2`,
+        [workspaceId, id, willForcePrivate]
+      );
+      // The auto-managed Todo mirror list (and its tasks) rides along so it
+      // isn't orphaned in the old workspace.
+      if (md.todo_list_id) {
+        await client.query(`UPDATE lists SET workspace_id = $1 WHERE id = $2`, [workspaceId, md.todo_list_id]);
+        await client.query(`UPDATE tasks SET workspace_id = $1 WHERE list_id = $2`, [workspaceId, md.todo_list_id]);
+      }
+    });
+
+    wlog(`markdown-list MOVE-WORKSPACE ✓ id=${id} → workspace=${workspaceId} owner=${req.userId}`);
+    res.json({ markdownList: await getMarkdownListForUser(req.userId!, id) });
+    broadcastToUser(req.userId!, 'markdownLists');
+    if (md.todo_list_id) { broadcastToUser(req.userId!, 'lists'); broadcastToUser(req.userId!, 'tasks'); }
+    broadcastToUser(req.userId!, 'workspaces');
+  } catch (err) {
+    werr('markdown-lists PUT /workspace error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
