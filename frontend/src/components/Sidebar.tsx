@@ -466,13 +466,17 @@ interface FolderRowProps {
   folder: Folder;
   lists: List[];
   timelines: Timeline[];
+  markdownLists: MarkdownList[];
+  markdownTodoLists: List[];
   active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList';
   activeListId?: string;
   activeTimelineId?: string;
   activeFolderId?: string;
+  activeMarkdownListId?: string;
   collapsed: boolean;
   dragOverId: string | null;
   dragOverTimelineId: string | null;
+  dragOverMarkdownId: string | null;
   dragOverFolderId: string | null;
   dragOverFolderReorderId: string | null;
   dragOverTaskListId: string | null;
@@ -487,6 +491,10 @@ interface FolderRowProps {
   onTimelineDragOver: (timelineId: string, e: React.DragEvent) => void;
   onTimelineDragLeave: () => void;
   onTimelineDrop: (timelineId: string, e: React.DragEvent) => void;
+  onMarkdownDragStart: (markdownListId: string, e: React.DragEvent) => void;
+  onMarkdownDragOver: (markdownListId: string, e: React.DragEvent) => void;
+  onMarkdownDragLeave: () => void;
+  onMarkdownDrop: (markdownListId: string, e: React.DragEvent) => void;
   onFolderDragStart: (folderId: string, e: React.DragEvent) => void;
   onFolderDragOver: (folderId: string, e: React.DragEvent) => void;
   onFolderDragLeave: () => void;
@@ -495,7 +503,7 @@ interface FolderRowProps {
   onFolderReorderDragLeave: () => void;
   onFolderReorderDrop: (folderId: string, e: React.DragEvent) => void;
 }
-function FolderRow({ folder, lists, timelines, active, activeListId, activeTimelineId, activeFolderId, collapsed, dragOverId, dragOverTimelineId, dragOverFolderId, dragOverFolderReorderId, dragOverTaskListId, recentlyDroppedListId, allFolders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop, onTimelineDragStart, onTimelineDragOver, onTimelineDragLeave, onTimelineDrop, onFolderDragStart, onFolderDragOver, onFolderDragLeave, onFolderDrop, onFolderReorderDragOver, onFolderReorderDragLeave, onFolderReorderDrop }: FolderRowProps) {
+function FolderRow({ folder, lists, timelines, markdownLists, markdownTodoLists, active, activeListId, activeTimelineId, activeFolderId, activeMarkdownListId, collapsed, dragOverId, dragOverTimelineId, dragOverMarkdownId, dragOverFolderId, dragOverFolderReorderId, dragOverTaskListId, recentlyDroppedListId, allFolders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop, onTimelineDragStart, onTimelineDragOver, onTimelineDragLeave, onTimelineDrop, onMarkdownDragStart, onMarkdownDragOver, onMarkdownDragLeave, onMarkdownDrop, onFolderDragStart, onFolderDragOver, onFolderDragLeave, onFolderDrop, onFolderReorderDragOver, onFolderReorderDragLeave, onFolderReorderDrop }: FolderRowProps) {
   const [hov, setHov] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -506,6 +514,8 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
   const [showMoveWorkspace, setShowMoveWorkspace] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
   const { updateFolder, deleteFolder, setFolders, setLists, setTimelines } = useAppStore();
+  const patchMarkdown = useMarkdownListsStore(s => s.patch);
+  const dropMarkdown = useMarkdownListsStore(s => s.dropLocal);
   const currentWorkspaceId = useWorkspaceStore(s => s.currentWorkspaceId);
 
   // Collapsed-sidebar fold-out: a folder's contents are otherwise unreachable
@@ -524,7 +534,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
       // Rough content-height estimate (header row + divider + one row per item)
       // so a folder near the bottom of the viewport opens upward instead of
       // running off-screen — cheaper than a post-render measure-and-reflow pass.
-      const estimatedHeight = 46 + Math.max(1, lists.length + timelines.length) * 33;
+      const estimatedHeight = 46 + Math.max(1, lists.length + timelines.length + markdownLists.length) * 33;
       const top = Math.min(rect.top, Math.max(16, window.innerHeight - estimatedHeight - 16));
       setFlyoutPos({ top, left: rect.right + 8 });
     }
@@ -709,7 +719,33 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
               />
             );
           })}
-          {lists.length === 0 && timelines.length === 0 && (
+          {markdownLists.map(md => (
+            <MarkdownListWithTodo
+              key={md.id}
+              markdownList={md}
+              todoList={md.todoListId ? markdownTodoLists.find(l => l.id === md.todoListId) : undefined}
+              active={active}
+              activeListId={activeListId}
+              activeMarkdownListId={activeMarkdownListId}
+              collapsed={collapsed}
+              indented
+              dragOverId={dragOverId}
+              dragOverTaskListId={dragOverTaskListId}
+              dragOverMarkdownId={dragOverMarkdownId}
+              recentlyDroppedListId={recentlyDroppedListId}
+              folders={allFolders}
+              onNavigate={onNavigate}
+              onListDragStart={onListDragStart}
+              onListDragOver={onListDragOver}
+              onListDragLeave={onListDragLeave}
+              onListDrop={onListDrop}
+              onMarkdownDragStart={onMarkdownDragStart}
+              onMarkdownDragOver={onMarkdownDragOver}
+              onMarkdownDragLeave={onMarkdownDragLeave}
+              onMarkdownDrop={onMarkdownDrop}
+            />
+          ))}
+          {lists.length === 0 && timelines.length === 0 && markdownLists.length === 0 && (
             <div style={{ padding: '6px 10px', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', fontStyle: 'italic' }}>
               Empty folder
             </div>
@@ -744,7 +780,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{folder.name}</span>
           </button>
           <div style={{ height: 1, background: 'var(--color-divider)', margin: '4px 4px 6px' }} />
-          {lists.length === 0 && timelines.length === 0 ? (
+          {lists.length === 0 && timelines.length === 0 && markdownLists.length === 0 ? (
             <div style={{ padding: '6px 8px', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', fontStyle: 'italic' }}>
               Empty folder
             </div>
@@ -786,6 +822,24 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
                   </button>
                 );
               })}
+              {markdownLists.map(md => {
+                const isActive = active === 'markdownList' && activeMarkdownListId === md.id;
+                return (
+                  <button
+                    key={md.id}
+                    onClick={() => navigateFromFlyout(`/markdown-list/${md.id}`)}
+                    title={md.name}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 8px', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 8, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: isActive ? 600 : 450, color: isActive ? (md.color ?? 'var(--color-primary)') : 'var(--color-text-secondary)', textAlign: 'left' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = md.colorBg ?? 'var(--color-surface-tint-2)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    {md.emoji
+                      ? <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{md.emoji}</span>
+                      : <Icon name="notes" size={16} color={isActive ? (md.color ?? 'var(--color-primary)') : 'var(--color-text-tertiary)'} />}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{md.name}</span>
+                  </button>
+                );
+              })}
             </>
           )}
         </div>,
@@ -813,7 +867,7 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
         />
       )}
 
-      {/* Move to another workspace — cascades to every list/timeline inside */}
+      {/* Move to another workspace — cascades to every list/timeline/markdown page inside */}
       {showMoveWorkspace && (
         <MoveToWorkspaceModal
           kind="folder"
@@ -825,10 +879,12 @@ function FolderRow({ folder, lists, timelines, active, activeListId, activeTimel
               setFolders(prev => prev.filter(f => f.id !== folder.id));
               setLists(prev => prev.filter(l => l.folderId !== folder.id));
               setTimelines(prev => prev.filter(t => t.folderId !== folder.id));
+              markdownLists.forEach(m => dropMarkdown(m.id));
             } else {
               setFolders(prev => prev.map(f => f.id === folder.id ? { ...f, workspaceId } : f));
               setLists(prev => prev.map(l => l.folderId === folder.id ? { ...l, workspaceId } : l));
               setTimelines(prev => prev.map(t => t.folderId === folder.id ? { ...t, workspaceId } : t));
+              markdownLists.forEach(m => patchMarkdown(m.id, { workspaceId }));
             }
           }}
           onClose={() => setShowMoveWorkspace(false)}
@@ -946,17 +1002,26 @@ interface MarkdownListRowProps {
   markdownList: MarkdownList;
   isActive: boolean;
   collapsed: boolean;
+  indented?: boolean;
+  folders: Folder[];
+  dragOverId?: string | null;
   onNavigate: (path: string) => void;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragLeave?: () => void;
+  onDrop?: (e: React.DragEvent) => void;
 }
-function MarkdownListRow({ markdownList, isActive, collapsed, onNavigate }: MarkdownListRowProps) {
+function MarkdownListRow({ markdownList, isActive, collapsed, indented, folders, dragOverId, onNavigate, onDragStart, onDragOver, onDragLeave, onDrop }: MarkdownListRowProps) {
   const [hov, setHov] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showMoveWorkspace, setShowMoveWorkspace] = useState(false);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
-  const { update, remove, patch } = useMarkdownListsStore();
+  const { update, remove, patch, dropLocal } = useMarkdownListsStore();
+  const currentWorkspaceId = useWorkspaceStore(s => s.currentWorkspaceId);
 
   const openMenu = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -984,17 +1049,27 @@ function MarkdownListRow({ markdownList, isActive, collapsed, onNavigate }: Mark
   const menuItems: ContextMenuEntry[] = [
     { key: 'rename', label: 'Edit name', icon: 'edit', onClick: () => setEditingName(true) },
     { key: 'settings', label: 'More settings…', icon: 'tune', onClick: () => setShowSettings(true) },
+    { key: 'move-ws', label: 'Move to workspace…', icon: 'drive_file_move', onClick: () => setShowMoveWorkspace(true) },
     { key: 'div1', divider: true },
     { key: 'delete', label: 'Delete markdown list', icon: 'delete', danger: true, onClick: () => setShowDeleteDialog(true) },
   ];
 
   return (
     <>
-      <div onContextMenu={openContextMenu} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-        style={{ display: 'flex', alignItems: 'center', borderRadius: 8 }}>
+      <div
+        draggable={!collapsed && !editingName}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        onContextMenu={openContextMenu} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, position: 'relative', paddingLeft: indented ? 8 : 0, borderTop: dragOverId === markdownList.id ? '2px solid var(--color-accent-purple-light)' : '2px solid transparent', transition: 'border-color 120ms' }}>
         <button title={collapsed ? markdownList.name : undefined}
           onClick={() => onNavigate(`/markdown-list/${markdownList.id}`)}
           style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: hov ? (markdownList.colorBg ?? 'var(--color-surface-tint-2)') : 'transparent', color: isActive ? (markdownList.color ?? 'var(--color-primary)') : 'var(--color-text-secondary)', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+          {!collapsed && (
+            <Icon name={markdownList.isPublic ? 'public' : 'lock'} size={13} color="var(--color-text-quaternary)" />
+          )}
           {markdownList.emoji
             ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{markdownList.emoji}</span>
             : <Icon name="notes" size={19} color={isActive ? (markdownList.color ?? 'var(--color-primary)') : 'var(--color-text-tertiary)'} />
@@ -1002,10 +1077,17 @@ function MarkdownListRow({ markdownList, isActive, collapsed, onNavigate }: Mark
           {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{markdownList.name}</span>}
         </button>
         {!collapsed && (
-          <button ref={menuBtnRef} onClick={openMenu} title="Markdown list options"
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms', marginRight: 4, flexShrink: 0 }}>
-            <Icon name="more_vert" size={15} color="var(--color-accent-purple-light)" />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 4, flexShrink: 0 }}>
+            <button ref={menuBtnRef} onClick={openMenu} title="Markdown list options"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-pale-39)')}
+              onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background = 'transparent'; }}>
+              <Icon name="more_vert" size={15} color="var(--color-accent-purple-light)" />
+            </button>
+            <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
+              <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
+            </div>
+          </div>
         )}
       </div>
 
@@ -1024,12 +1106,34 @@ function MarkdownListRow({ markdownList, isActive, collapsed, onNavigate }: Mark
           emoji={markdownList.emoji}
           color={markdownList.color}
           isPublic={markdownList.isPublic}
+          fullWidth={markdownList.fullWidth}
+          folders={folders}
+          folderId={markdownList.folderId}
           itemId={markdownList.id}
+          creatorId={markdownList.userId}
           share={{ enabled: markdownList.shareEnabled, token: markdownList.shareToken, hasPassword: markdownList.shareHasPassword, expiresAt: markdownList.shareExpiresAt }}
           onShareUpdated={(s: ShareInfo) => patch(markdownList.id, { shareEnabled: s.enabled, shareToken: s.token, shareHasPassword: s.hasPassword, shareExpiresAt: s.expiresAt })}
           onVisibilityApplied={(p: boolean) => patch(markdownList.id, { isPublic: p })}
           onChange={(updates: ItemSettingsUpdates) => void update(markdownList.id, updates as Parameters<typeof update>[1])}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {/* Move to another workspace */}
+      {showMoveWorkspace && (
+        <MoveToWorkspaceModal
+          kind="markdownList"
+          itemId={markdownList.id}
+          itemName={markdownList.name}
+          currentWorkspaceId={markdownList.workspaceId}
+          onMoved={(workspaceId) => {
+            if (currentWorkspaceId && workspaceId !== currentWorkspaceId) {
+              dropLocal(markdownList.id);
+            } else {
+              patch(markdownList.id, { workspaceId });
+            }
+          }}
+          onClose={() => setShowMoveWorkspace(false)}
         />
       )}
 
@@ -1071,8 +1175,10 @@ interface MarkdownListWithTodoProps {
   activeListId?: string;
   activeMarkdownListId?: string;
   collapsed: boolean;
+  indented?: boolean;
   dragOverId: string | null;
   dragOverTaskListId: string | null;
+  dragOverMarkdownId?: string | null;
   recentlyDroppedListId: string | null;
   folders: Folder[];
   onNavigate: (path: string) => void;
@@ -1080,8 +1186,12 @@ interface MarkdownListWithTodoProps {
   onListDragOver: (listId: string, e: React.DragEvent) => void;
   onListDragLeave: () => void;
   onListDrop: (listId: string, e: React.DragEvent) => void;
+  onMarkdownDragStart?: (markdownListId: string, e: React.DragEvent) => void;
+  onMarkdownDragOver?: (markdownListId: string, e: React.DragEvent) => void;
+  onMarkdownDragLeave?: () => void;
+  onMarkdownDrop?: (markdownListId: string, e: React.DragEvent) => void;
 }
-function MarkdownListWithTodo({ markdownList, todoList, active, activeListId, activeMarkdownListId, collapsed, dragOverId, dragOverTaskListId, recentlyDroppedListId, folders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop }: MarkdownListWithTodoProps) {
+function MarkdownListWithTodo({ markdownList, todoList, active, activeListId, activeMarkdownListId, collapsed, indented, dragOverId, dragOverTaskListId, dragOverMarkdownId, recentlyDroppedListId, folders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop, onMarkdownDragStart, onMarkdownDragOver, onMarkdownDragLeave, onMarkdownDrop }: MarkdownListWithTodoProps) {
   // Same collapsed-by-default, persisted-per-item behaviour as
   // StandaloneListWithSublists — keyed by the Markdown List's id so the fold-out
   // state survives refreshes instead of springing back open.
@@ -1102,7 +1212,19 @@ function MarkdownListWithTodo({ markdownList, todoList, active, activeListId, ac
           </button>
         )}
         <div style={{ flex: 1 }}>
-          <MarkdownListRow markdownList={markdownList} isActive={isActive} collapsed={collapsed} onNavigate={onNavigate} />
+          <MarkdownListRow
+            markdownList={markdownList}
+            isActive={isActive}
+            collapsed={collapsed}
+            indented={indented}
+            folders={folders}
+            dragOverId={dragOverMarkdownId}
+            onNavigate={onNavigate}
+            onDragStart={onMarkdownDragStart ? e => onMarkdownDragStart(markdownList.id, e) : undefined}
+            onDragOver={onMarkdownDragOver ? e => onMarkdownDragOver(markdownList.id, e) : undefined}
+            onDragLeave={onMarkdownDragLeave}
+            onDrop={onMarkdownDrop ? e => onMarkdownDrop(markdownList.id, e) : undefined}
+          />
         </div>
       </div>
       {!collapsed && subExpanded && todoList && (
@@ -1289,6 +1411,8 @@ function fmtDistShort(m?: number | null) {
 
 export default function Sidebar({ active, activeListId, activeTimelineId, activeFolderId, activeGpsFileId, activeMarkdownListId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList, isMobile, drawerOpen, resizing }: SidebarProps) {
   const markdownLists = useMarkdownListsStore(s => s.markdownLists);
+  const reorderMarkdown = useMarkdownListsStore(s => s.reorder);
+  const updateMarkdown = useMarkdownListsStore(s => s.update);
   const mdTodoListIds = new Set(markdownLists.map(m => m.todoListId).filter((x): x is string => !!x));
   // Items other users shared with me — de-duped against the current workspace's
   // own items (a same-workspace share already appears above in the normal view).
@@ -1308,6 +1432,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [dragOverFolderReorderId, setDragOverFolderReorderId] = useState<string | null>(null);
   const [dragOverTaskListId, setDragOverTaskListId] = useState<string | null>(null);
+  const [dragOverMarkdownId, setDragOverMarkdownId] = useState<string | null>(null);
   const [recentlyDroppedListId, setRecentlyDroppedListId] = useState<string | null>(null);
   const [addingFolder, setAddingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -1333,7 +1458,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   }, [drawerOpen, isMobile]);
 
   useEffect(() => {
-    const clearTaskDrag = () => { setDragOverTaskListId(null); setDragOverTimelineId(null); };
+    const clearTaskDrag = () => { setDragOverTaskListId(null); setDragOverTimelineId(null); setDragOverMarkdownId(null); };
     document.addEventListener('dragend', clearTaskDrag);
     return () => document.removeEventListener('dragend', clearTaskDrag);
   }, []);
@@ -1393,8 +1518,14 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
     if (timelineId) {
       updateTimeline(timelineId, { folderId });
       setDragOverFolderId(null);
+      return;
     }
-  }, [updateList, updateTimeline]);
+    const markdownListId = e.dataTransfer.getData('markdownlistid');
+    if (markdownListId) {
+      void updateMarkdown(markdownListId, { folderId });
+      setDragOverFolderId(null);
+    }
+  }, [updateList, updateTimeline, updateMarkdown]);
 
   // Reorder timelines (and move them between scopes) by dropping one onto another.
   // The dragged timeline inherits the drop target's folder, so dropping onto a
@@ -1429,6 +1560,42 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
     },
     onTimelineDragLeave: () => setDragOverTimelineId(null),
     onTimelineDrop: handleTimelineReorderDrop,
+  };
+
+  // Reorder markdown pages (and move them between folders/root) by dropping one
+  // onto another — mirrors handleTimelineReorderDrop. The dragged page inherits
+  // the drop target's folder, so dropping onto a page inside a folder moves it
+  // in, and onto a root page moves it out.
+  const handleMarkdownReorderDrop = useCallback((toId: string, e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverMarkdownId(null);
+    const fromId = e.dataTransfer.getData('markdownlistid');
+    if (!fromId || fromId === toId) return;
+
+    const arr = [...markdownLists];
+    const fromIdx = arr.findIndex(m => m.id === fromId);
+    const target = arr.find(m => m.id === toId);
+    if (fromIdx === -1 || !target) return;
+
+    const [moved] = arr.splice(fromIdx, 1);
+    const insertIdx = arr.findIndex(m => m.id === toId);
+    arr.splice(insertIdx, 0, moved);
+
+    const folderChanged = (moved.folderId ?? null) !== (target.folderId ?? null);
+    void reorderMarkdown(
+      arr.map(m => m.id),
+      folderChanged ? { id: moved.id, folderId: target.folderId ?? null } : undefined,
+    );
+  }, [markdownLists, reorderMarkdown]);
+
+  const markdownDragHandlers = {
+    onMarkdownDragStart: (markdownListId: string, e: React.DragEvent) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('markdownlistid', markdownListId); },
+    onMarkdownDragOver: (markdownListId: string, e: React.DragEvent) => {
+      if (e.dataTransfer.types.includes('markdownlistid')) { e.preventDefault(); setDragOverMarkdownId(markdownListId); }
+    },
+    onMarkdownDragLeave: () => setDragOverMarkdownId(null),
+    onMarkdownDrop: handleMarkdownReorderDrop,
   };
 
   const onFolderReorderDrop = useCallback((toId: string, e: React.DragEvent) => {
@@ -1473,6 +1640,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   // rather than again as its own standalone entry.
   const standaloneListItems = lists.filter(l => (!l.folderId || !loadedFolderIds.has(l.folderId)) && !mdTodoListIds.has(l.id));
   const standaloneTimelines = timelines.filter(t => !t.folderId || !loadedFolderIds.has(t.folderId));
+  const standaloneMarkdownLists = markdownLists.filter(m => !m.folderId || !loadedFolderIds.has(m.folderId));
 
   // ── GPS sidebar mode ───────────────────────────────────────────────────────
   if (active === 'gps') {
@@ -1621,7 +1789,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.62.0
+              v1.63.0
             </div>
           )}
         </div>
@@ -1791,19 +1959,24 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         {[...folders].sort((a, b) => a.position - b.position).map(folder => {
           const folderLists = lists.filter(l => l.folderId === folder.id);
           const folderTimelines = timelines.filter(t => t.folderId === folder.id);
+          const folderMarkdown = markdownLists.filter(m => m.folderId === folder.id);
           return (
             <FolderRow
               key={folder.id}
               folder={folder}
               lists={folderLists}
               timelines={folderTimelines}
+              markdownLists={folderMarkdown}
+              markdownTodoLists={lists}
               active={active}
               activeListId={activeListId}
               activeTimelineId={activeTimelineId}
               activeFolderId={activeFolderId}
+              activeMarkdownListId={activeMarkdownListId}
               collapsed={collapsed}
               dragOverId={dragOverId}
               dragOverTimelineId={dragOverTimelineId}
+              dragOverMarkdownId={dragOverMarkdownId}
               dragOverFolderId={dragOverFolderId}
               dragOverFolderReorderId={dragOverFolderReorderId}
               dragOverTaskListId={dragOverTaskListId}
@@ -1811,6 +1984,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
               allFolders={folders}
               onNavigate={onNavigate}
               {...timelineDragHandlers}
+              {...markdownDragHandlers}
               onListDragStart={(listId, e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('listId', listId); }}
               onListDragOver={(listId, e) => {
                 if (e.dataTransfer.types.includes('dashtaskid') || e.dataTransfer.types.includes('listtaskid')) {
@@ -1827,7 +2001,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
               onListDrop={(listId, e) => handleListDrop(listId, e)}
               onFolderDragStart={(folderId, e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('folderId', folderId); }}
               onFolderDragOver={(folderId, e) => {
-                const canDrop = e.dataTransfer.types.includes('listid') || e.dataTransfer.types.includes('timelineid');
+                const canDrop = e.dataTransfer.types.includes('listid') || e.dataTransfer.types.includes('timelineid') || e.dataTransfer.types.includes('markdownlistid');
                 if (canDrop) {
                   e.preventDefault();
                   setDragOverFolderId(folderId);
@@ -1888,8 +2062,8 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           );
         })}
 
-        {/* Markdown Lists (root level — not yet foldered, see CLAUDE.md) */}
-        {markdownLists.map((md) => (
+        {/* Markdown Lists (root level — reorderable, draggable into folders) */}
+        {standaloneMarkdownLists.map((md) => (
           <MarkdownListWithTodo
             key={md.id}
             markdownList={md}
@@ -1900,6 +2074,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
             collapsed={collapsed}
             dragOverId={dragOverId}
             dragOverTaskListId={dragOverTaskListId}
+            dragOverMarkdownId={dragOverMarkdownId}
             recentlyDroppedListId={recentlyDroppedListId}
             folders={folders}
             onNavigate={onNavigate}
@@ -1913,6 +2088,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
             }}
             onListDragLeave={() => { setDragOverId(null); setDragOverTaskListId(null); }}
             onListDrop={(listId, e) => handleListDrop(listId, e)}
+            {...markdownDragHandlers}
           />
         ))}
 
@@ -1979,7 +2155,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="archive" label="Archived" active={false} onClick={() => onOpenModal('archived')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.62.0
+            v1.63.0
           </div>
         )}
       </div>
