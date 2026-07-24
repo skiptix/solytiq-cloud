@@ -23,7 +23,14 @@ import { getTimelineForUser } from './timelines';
 import { getMarkdownListForUser } from './markdownLists';
 
 const router = Router();
-router.use(authenticate);
+// NOTE: this router is mounted at the broad `/api` prefix (see index.ts) so it
+// can serve both `/api/item-shares/*` and `/api/shared-with-me`. It therefore
+// MUST NOT use a blanket `router.use(authenticate)` — that would run on every
+// `/api/*` request that reaches this mount, including the public, intentionally
+// unauthenticated `/api/share/*` endpoints registered after it, 401ing every
+// anonymous share visitor before the public handler is ever reached. Auth is
+// applied per-route instead, so a non-matching path (e.g. `/api/share/folder`)
+// falls straight through to the next handler.
 
 const TYPE_TABLE: Record<SharedItemType, string> = {
   list: 'lists',
@@ -56,7 +63,7 @@ async function canViewItem(type: SharedItemType, itemId: string, userId: string)
 }
 
 // GET /api/item-shares/:itemType/:itemId/members
-router.get('/item-shares/:itemType/:itemId/members', async (req: Request, res: Response) => {
+router.get('/item-shares/:itemType/:itemId/members', authenticate, async (req: Request, res: Response) => {
   try {
     const type = parseType(req.params.itemType);
     if (!type) { res.status(400).json({ error: 'Invalid item type' }); return; }
@@ -75,7 +82,7 @@ router.get('/item-shares/:itemType/:itemId/members', async (req: Request, res: R
 });
 
 // POST /api/item-shares/:itemType/:itemId/members  { username }
-router.post('/item-shares/:itemType/:itemId/members', async (req: Request, res: Response) => {
+router.post('/item-shares/:itemType/:itemId/members', authenticate, async (req: Request, res: Response) => {
   try {
     const type = parseType(req.params.itemType);
     if (!type) { res.status(400).json({ error: 'Invalid item type' }); return; }
@@ -120,7 +127,7 @@ router.post('/item-shares/:itemType/:itemId/members', async (req: Request, res: 
 });
 
 // DELETE /api/item-shares/:itemType/:itemId/members/:userId
-router.delete('/item-shares/:itemType/:itemId/members/:userId', async (req: Request, res: Response) => {
+router.delete('/item-shares/:itemType/:itemId/members/:userId', authenticate, async (req: Request, res: Response) => {
   try {
     const type = parseType(req.params.itemType);
     if (!type) { res.status(400).json({ error: 'Invalid item type' }); return; }
@@ -150,7 +157,7 @@ router.delete('/item-shares/:itemType/:itemId/members/:userId', async (req: Requ
 // GET /api/shared-with-me — every list/timeline/markdown list this user has been
 // INVITED to (they aren't the owner), fully hydrated so the client can render
 // them exactly like their own items, independent of the active workspace.
-router.get('/shared-with-me', async (req: Request, res: Response) => {
+router.get('/shared-with-me', authenticate, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
     const shares = await query<{ item_type: string; item_id: string }>(
