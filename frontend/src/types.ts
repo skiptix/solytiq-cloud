@@ -119,6 +119,14 @@ export interface Folder {
   collapsed: boolean;
   isPublic?: boolean;
   workspaceId?: string;
+  // Public "navigator" share link (distinct from the workspace `isPublic` flag).
+  shareEnabled?: boolean;
+  shareToken?: string | null;
+  shareHasPassword?: boolean;
+  shareExpiresAt?: string | null;
+  /** Dialog choice: true = every item in the folder is shared publicly;
+   *  false = only items already shared individually appear in the navigator. */
+  shareIncludeAll?: boolean;
 }
 
 // ─── Timelines ────────────────────────────────────────────────────────────────

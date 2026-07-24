@@ -861,6 +861,8 @@ function FolderRow({ folder, lists, timelines, markdownLists, markdownTodoLists,
           isPublic={folder.isPublic ?? false}
           itemId={folder.id}
           creatorId={folder.userId}
+          share={{ enabled: folder.shareEnabled, token: folder.shareToken, hasPassword: folder.shareHasPassword, expiresAt: folder.shareExpiresAt, includeAll: folder.shareIncludeAll }}
+          onShareUpdated={(s: ShareInfo) => setFolders(prev => prev.map(f => f.id === folder.id ? { ...f, shareEnabled: s.enabled, shareToken: s.token, shareHasPassword: s.hasPassword, shareExpiresAt: s.expiresAt, shareIncludeAll: s.includeAll ?? f.shareIncludeAll } : f))}
           onVisibilityApplied={(p: boolean) => setFolders(prev => prev.map(f => f.id === folder.id ? { ...f, isPublic: p } : f))}
           onChange={updates => updateFolder(folder.id, updates as Partial<Folder>)}
           onClose={() => setShowSettings(false)}
@@ -1789,7 +1791,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.63.0
+              v1.64.0
             </div>
           )}
         </div>
@@ -2155,7 +2157,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="archive" label="Archived" active={false} onClick={() => onOpenModal('archived')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.63.0
+            v1.64.0
           </div>
         )}
       </div>
