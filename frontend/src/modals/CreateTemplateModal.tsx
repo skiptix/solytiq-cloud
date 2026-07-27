@@ -84,7 +84,7 @@ export default function CreateTemplateModal({ onClose, onCreated, initialType }:
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-purple-pale-34)'; e.currentTarget.style.background = 'var(--color-white)'; e.currentTarget.style.transform = 'translateY(0)'; }}>
                   <Icon name={k === 'list' ? 'format_list_bulleted' : 'timeline'} size={22} color="var(--color-primary)" />
                   <div>
-                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14.5, fontWeight: 700, color: 'var(--color-text-primary)' }}>{k === 'list' ? 'To-Do' : 'Timeline'}</div>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14.5, fontWeight: 700, color: 'var(--color-text-primary)' }}>{k === 'list' ? 'Board' : 'Timeline'}</div>
                     <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>Save an existing {k} as a reusable template</div>
                   </div>
                 </button>
@@ -96,7 +96,7 @@ export default function CreateTemplateModal({ onClose, onCreated, initialType }:
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18, animation: 'wizardStepIn 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
               <div>
                 <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 6 }}>
-                  Source {type === 'list' ? 'To-Do' : 'Timeline'} *
+                  Source {type === 'list' ? 'Board' : 'Timeline'} *
                 </label>
                 {sourceOptions === null ? (
                   <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Loading…</div>

@@ -184,7 +184,7 @@ export default function TemplatesScreen() {
           <div>
             <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 28, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>Templates</h1>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-              Save a to-do or timeline's full structure to reuse — or shared by others on this instance.
+              Save a board or timeline's full structure to reuse — or shared by others on this instance.
             </div>
           </div>
           <button onClick={() => setShowCreate(true)}
@@ -201,7 +201,7 @@ export default function TemplatesScreen() {
             {(['all', 'list', 'timeline'] as const).map((f) => (
               <button key={f} onClick={() => setFilter(f)}
                 style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, padding: '6px 14px', borderRadius: 9999, border: 'none', cursor: 'pointer', background: filter === f ? 'var(--color-primary)' : 'transparent', color: filter === f ? 'var(--color-white)' : 'var(--color-text-tertiary)', transform: filter === f ? 'scale(1.04)' : 'scale(1)', transition: 'background 180ms, color 180ms, transform 220ms cubic-bezier(0.34,1.56,0.64,1)' }}>
-                {f === 'all' ? 'All' : f === 'list' ? 'To-Dos' : 'Timelines'}
+                {f === 'all' ? 'All' : f === 'list' ? 'Boards' : 'Timelines'}
               </button>
             ))}
           </div>
@@ -306,7 +306,7 @@ export default function TemplatesScreen() {
           onClick={(e) => { if (e.target === e.currentTarget) setConfirmDelete(null); }}>
           <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 380, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', padding: 24, animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Delete "{confirmDelete.name}"?</div>
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: 20 }}>This can't be undone. To-Dos/timelines already created from it are not affected.</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: 20 }}>This can't be undone. Boards/timelines already created from it are not affected.</div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button onClick={() => setConfirmDelete(null)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 16px' }}>Cancel</button>
               <button onClick={() => { remove(confirmDelete.id); setConfirmDelete(null); }}

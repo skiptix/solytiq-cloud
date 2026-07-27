@@ -83,7 +83,7 @@ function fail(result: string): ToolResult {
   return { ok: false, result: result.startsWith('Error') ? result : `Error: ${result}` };
 }
 
-// ── markdown list block helpers ────────────────────────────────────────────
+// ── markdown page block helpers ────────────────────────────────────────────
 
 // Block types the AI may CREATE from scratch (image is excluded — it needs a
 // real file upload from the UI; it can only ever be preserved/reordered).
@@ -905,7 +905,7 @@ export const aiTools: AiTool[] = [
     },
   },
 
-  // ───────────────────────────── markdown lists ─────────────────────────────
+  // ───────────────────────────── markdown pages ─────────────────────────────
   {
     name: 'list_markdown_lists',
     description: "List all of the user's Markdown pages (freeform documents built from '/' command blocks — headings, paragraphs, lists, to-dos, quotes, dividers, links, images), across every workspace.",
@@ -1000,7 +1000,7 @@ export const aiTools: AiTool[] = [
       // Page settings are owner-only (content edits allow invited collaborators,
       // but not the page's own settings).
       const owned = await query<{ name: string }>(`SELECT name FROM markdown_lists WHERE id = $1 AND user_id = $2`, [id, userId]);
-      if (!owned.rows.length) return fail('markdown list not found');
+      if (!owned.rows.length) return fail('markdown page not found');
       const folderId = str(args.folder_id);
       if (folderId) {
         const f = await query(`SELECT 1 FROM folders WHERE id = $1 AND user_id = $2`, [folderId, userId]);
@@ -1023,7 +1023,7 @@ export const aiTools: AiTool[] = [
         `UPDATE markdown_lists SET ${sets.join(', ')} WHERE id = $${i++} AND user_id = $${i} RETURNING name`,
         params
       );
-      if (!r.rows.length) return fail('markdown list not found');
+      if (!r.rows.length) return fail('markdown page not found');
       broadcastToUser(userId, 'markdownLists');
       return ok(`Updated Markdown page "${r.rows[0].name}"`, `Updated page "${r.rows[0].name}"`);
     },
@@ -1059,7 +1059,7 @@ export const aiTools: AiTool[] = [
         `SELECT name, emoji, content FROM markdown_lists WHERE id = $1 AND user_id = $2`,
         [id, userId]
       );
-      if (!r.rows.length) return fail('markdown list not found');
+      if (!r.rows.length) return fail('markdown page not found');
       const blocks = ((r.rows[0].content as { blocks?: MarkdownBlockLike[] } | null)?.blocks ?? []);
       if (!blocks.length) return ok(`${r.rows[0].emoji ?? ''} "${r.rows[0].name}" (markdown_list_id: ${id}) — empty document.`);
       const lines = [

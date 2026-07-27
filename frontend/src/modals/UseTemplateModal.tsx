@@ -61,7 +61,7 @@ export default function UseTemplateModal({ template, onClose, onCreatedList, onC
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
           <span style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>
-            New {template.type === 'list' ? 'To-Do' : 'Timeline'} from Template
+            New {template.type === 'list' ? 'Board' : 'Timeline'} from Template
           </span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}>
             <Icon name="close" size={18} color="var(--color-text-tertiary)" />
@@ -83,7 +83,7 @@ export default function UseTemplateModal({ template, onClose, onCreatedList, onC
 
           <div style={{ animation: 'wizardStepIn 260ms cubic-bezier(0.22,1,0.36,1) 40ms both' }}>
             <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 6 }}>
-              {template.type === 'list' ? 'To-Do' : 'Timeline'} Name *
+              {template.type === 'list' ? 'Board' : 'Timeline'} Name *
             </label>
             <input autoFocus value={name} onChange={(e) => setName(e.target.value)}
               style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, border: 'none', borderBottom: '1.5px solid var(--color-border-alt)', padding: '8px 0', outline: 'none', color: 'var(--color-text-primary)', background: 'transparent' }}

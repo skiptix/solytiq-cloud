@@ -111,7 +111,7 @@ router.get('/', async (req: Request, res: Response) => {
         type: 'task',
         id: String(t.id),
         label: t.title,
-        sub: t.source === 'list' && t.list_id ? `List` : 'Dashboard',
+        sub: t.source === 'list' && t.list_id ? `Board` : 'Dashboard',
         path: t.source === 'list' && t.list_id ? `/list/${t.list_id}` : '/dashboard',
       });
     }

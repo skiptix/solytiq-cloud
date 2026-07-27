@@ -612,11 +612,11 @@ async function resolveShareMarkdownList(token: string): Promise<ShareMarkdownLis
   return result.rows[0] ?? null;
 }
 
-// GET /api/share/markdown-list/:token — markdown list metadata (no content)
+// GET /api/share/markdown-list/:token — markdown page metadata (no content)
 app.get('/api/share/markdown-list/:token', async (req, res) => {
   try {
     const md = await resolveShareMarkdownList(req.params.token);
-    if (!md || !md.share_enabled) { res.status(404).json({ error: 'Markdown list not found' }); return; }
+    if (!md || !md.share_enabled) { res.status(404).json({ error: 'Markdown page not found' }); return; }
     res.json({
       name: md.name,
       emoji: md.emoji,
@@ -637,7 +637,7 @@ app.get('/api/share/markdown-list/:token/content', async (req, res) => {
   try {
     const pw = (req.query.password ?? '') as string;
     const md = await resolveShareMarkdownList(req.params.token);
-    if (!md || !md.share_enabled) { res.status(404).json({ error: 'Markdown list not found' }); return; }
+    if (!md || !md.share_enabled) { res.status(404).json({ error: 'Markdown page not found' }); return; }
     if (md.share_expires_at && new Date(md.share_expires_at) < new Date()) { res.status(410).json({ error: 'Share link has expired' }); return; }
     if (md.share_password_hash) {
       if (!pw) { res.status(401).json({ error: 'Password required', passwordRequired: true }); return; }
@@ -1750,8 +1750,8 @@ async function runMigrations() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS automation_notifications_user_idx ON automation_notifications (user_id, created_at DESC)`);
 
-  // ── Markdown Lists ───────────────────────────────────────────────────────
-  // A block-based document type ("Markdown List"): headings, paragraphs,
+  // ── Markdown Pages ───────────────────────────────────────────────────────
+  // A block-based document type ("Markdown Page"): headings, paragraphs,
   // bulleted/numbered list items, quotes, dividers, images, links and todo
   // items authored via `/` slash commands — parallel to `lists`/`timelines`,
   // not a mode of List. `content` is a versioned JSONB block array (see
@@ -1759,8 +1759,8 @@ async function runMigrations() {
   // an auto-managed regular `lists` row that mirrors every `/todo` block as
   // a real task — created lazily on the first todo block and kept in sync on
   // every content save (see routes/markdownLists.ts) — so the Todo summary
-  // can be browsed/checked off like any other To-Do list and folded out
-  // under the Markdown List in the Sidebar.
+  // can be browsed/checked off like any other Board and folded out
+  // under the Markdown Page in the Sidebar.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS markdown_lists (
       id           VARCHAR(100) PRIMARY KEY,
@@ -1786,7 +1786,7 @@ async function runMigrations() {
 
   // Public read-only link sharing — same shape/semantics as lists/timelines
   // (an opaque token minted on first enable, optional bcrypt password,
-  // optional expiry). No `share_subpages` — markdown lists have no nesting.
+  // optional expiry). No `share_subpages` — markdown pages have no nesting.
   await pool.query(`ALTER TABLE markdown_lists ADD COLUMN IF NOT EXISTS share_token VARCHAR(64)`);
   await pool.query(`ALTER TABLE markdown_lists ADD COLUMN IF NOT EXISTS share_enabled BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`ALTER TABLE markdown_lists ADD COLUMN IF NOT EXISTS share_password_hash VARCHAR(255)`);
@@ -1875,7 +1875,7 @@ async function runMigrations() {
   await pool.query(`CREATE INDEX IF NOT EXISTS task_tags_user_idx ON task_tags (user_id)`);
 
   // Per-item invitations ("Shared with me") — grants one user full-collaborator
-  // access to a single list/timeline/markdown list, independent of workspace
+  // access to a single list/timeline/markdown page, independent of workspace
   // membership. Polymorphic (item_type + item_id), so no FK on item_id; the
   // item's delete path removes its shares via deleteItemShares().
   await pool.query(`
@@ -2119,7 +2119,7 @@ async function runMigrations() {
     )
   `);
 
-  // Per-list layout preference — the To-Do screen's List/Kanban/Timeline tab switcher.
+  // Per-list layout preference — the Board screen's List/Kanban/Timeline tab switcher.
   // Persisted (not just local UI state) so it's the same on every device.
   await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS view_mode VARCHAR(20) NOT NULL DEFAULT 'list'`);
 

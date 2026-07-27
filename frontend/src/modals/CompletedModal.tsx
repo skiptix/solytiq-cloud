@@ -114,7 +114,7 @@ export default function CompletedModal({ onClose }: CompletedModalProps) {
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {pill('all', 'All')} {pill('dash', 'Dashboard')} {pill('list', 'To-Dos')}
+            {pill('all', 'All')} {pill('dash', 'Dashboard')} {pill('list', 'Boards')}
             {visible.length > 0 && (
               <button
                 onClick={clearAll}

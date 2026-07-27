@@ -910,7 +910,7 @@ router.delete('/milestones/:trashId', async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// Markdown list trash routes
+// Markdown page trash routes
 // ---------------------------------------------------------------------------
 
 interface TrashMarkdownListRow {
@@ -950,7 +950,7 @@ router.get('/markdown-lists', async (req: Request, res: Response) => {
 // POST /api/trash/markdown-lists/:trashId/restore — recreates the markdown
 // list from its JSONB snapshot. The auto-managed Todo list (if it had one) is
 // NOT restored alongside it — that list went to trash_lists via the normal
-// list-delete path when the markdown list was deleted, and is separately
+// list-delete path when the markdown page was deleted, and is separately
 // restorable from the Lists tab. Restoring here simply drops the stale
 // todoListId/taskId references so every `/todo` block is treated as unlinked;
 // the next content save lazily recreates a fresh Todo list for them.

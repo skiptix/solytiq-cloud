@@ -6,8 +6,8 @@ import useSaveStatusStore, { type SaveStatus } from '../store/useSaveStatusStore
 //   amber  = saving… (gently pulses)
 //   red    = a save failed
 // Hovering reveals a tooltip with the full status text. Pass `state` to drive
-// it from a screen's own save state (markdown lists do this); omit it to read
-// the global list-content save signal (To-Do / Timeline screens).
+// it from a screen's own save state (markdown pages do this); omit it to read
+// the global list-content save signal (Board / Timeline screens).
 const CONFIG: Record<SaveStatus, { color: string; halo: string; label: string }> = {
   idle:   { color: 'var(--color-success)', halo: 'rgba(var(--color-success-rgb), 0.22)', label: 'All changes saved' },
   saved:  { color: 'var(--color-success)', halo: 'rgba(var(--color-success-rgb), 0.22)', label: 'All changes saved' },

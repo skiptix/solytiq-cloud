@@ -252,7 +252,7 @@ export default function FolderDashboardScreen() {
                 </span>
               </div>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', marginTop: 5 }}>
-                {folderLists.length} to-do{folderLists.length !== 1 ? 's' : ''} · {total} task{total !== 1 ? 's' : ''}
+                {folderLists.length} board{folderLists.length !== 1 ? 's' : ''} · {total} task{total !== 1 ? 's' : ''}
               </div>
             </div>
           </div>
@@ -285,7 +285,7 @@ export default function FolderDashboardScreen() {
           <StatCard num={open} label="Open Tasks" sub="remaining" icon="inventory_2" iconBg="var(--color-surface-tint)" iconColor="var(--color-primary)" />
           <StatCard num={done} label="Completed" sub={total > 0 ? `${pct}%` : 'none yet'} icon="check_circle" iconBg="rgba(var(--color-success-rgb), 0.10)" iconColor="var(--color-success)" accent="var(--color-success)" />
           <StatCard num={todayTasks.length} label="Due Today" sub="urgent" icon="today" iconBg="rgba(var(--color-orange-rgb), 0.10)" iconColor="var(--color-orange)" accent="var(--color-orange)" />
-          <StatCard num={folderLists.length} label="To-Dos" sub="in folder" icon="folder_open" iconBg={acBg} iconColor={ac} accent={ac} />
+          <StatCard num={folderLists.length} label="Boards" sub="in folder" icon="folder_open" iconBg={acBg} iconColor={ac} accent={ac} />
         </section>
 
         {/* ── Task panels ─────────────────────────────────────── */}
@@ -306,13 +306,13 @@ export default function FolderDashboardScreen() {
         <section style={{ animation: 'folderDashIn 420ms 240ms ease both' }}>
           <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Icon name="folder_open" size={18} color={ac} />
-            To-Dos in {folder.name}
+            Boards in {folder.name}
           </div>
           {folderLists.length === 0 ? (
             <div style={{ background: 'var(--color-surface-gray)', border: '1px dashed var(--color-border-alt)', borderRadius: 14, padding: '56px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
               <Icon name="playlist_add" size={36} color="var(--color-text-quaternary)" />
-              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, color: 'var(--color-text-quaternary)' }}>No to-dos yet</div>
-              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Move or add a to-do to this folder from the sidebar</div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, color: 'var(--color-text-quaternary)' }}>No boards yet</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Move or add a board to this folder from the sidebar</div>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>

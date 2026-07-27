@@ -19,7 +19,7 @@ const OPTIONS = [
   {
     key: 'list' as const,
     icon: 'format_list_bulleted',
-    title: 'To-Do',
+    title: 'Board',
     desc: 'Organize tasks into sections with progress, sharing and more.',
     color: 'var(--color-primary)',
     bg: 'var(--color-surface-tint)',
@@ -35,7 +35,7 @@ const OPTIONS = [
   {
     key: 'markdownList' as const,
     icon: 'notes',
-    title: 'Markdown List',
+    title: 'Markdown Page',
     desc: 'Craft a document with / commands — headings, images, links, and checkable todos.',
     color: 'var(--color-teal-deep-4)',
     bg: 'var(--color-green-pale-2)',
@@ -71,7 +71,7 @@ export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, o
     return <AddTimelineWizard onClose={() => setMode('timeline-templates')} onCreated={onCreatedTimeline} />;
   }
   if (mode === 'markdownList') {
-    // No template step yet — Markdown Lists aren't a supported template type.
+    // No template step yet — Markdown Pages aren't a supported template type.
     return <AddMarkdownListWizard onClose={() => setMode('choose')} onCreated={onCreatedMarkdownList} />;
   }
 

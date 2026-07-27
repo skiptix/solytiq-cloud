@@ -37,7 +37,7 @@ interface FolderContent {
 type PageState = 'loading' | 'password' | 'ready' | 'expired' | 'notfound' | 'error';
 
 const ITEM_META: Record<SharedFolderItemType, { icon: string; label: string; path: string }> = {
-  list: { icon: 'format_list_bulleted', label: 'To-Do', path: 'list' },
+  list: { icon: 'format_list_bulleted', label: 'Board', path: 'list' },
   timeline: { icon: 'timeline', label: 'Timeline', path: 'timeline' },
   markdownList: { icon: 'notes', label: 'Page', path: 'markdown-list' },
 };

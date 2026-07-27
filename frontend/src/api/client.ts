@@ -1391,7 +1391,7 @@ export const apiGetAutomationRuns = (id: string, limit?: number) =>
 export const apiTestAutomationNode = (id: string, nodeId?: string) =>
   apiFetch<{ result: AutomationRunResult }>(`/automations/${id}/test`, { method: 'POST', body: JSON.stringify({ nodeId }) });
 
-// ── Markdown Lists ────────────────────────────────────────────────────────
+// ── Markdown Pages ────────────────────────────────────────────────────────
 
 export const apiGetMarkdownLists = (workspaceId?: string) =>
   apiFetch<{ markdownLists: MarkdownList[] }>(`/markdown-lists${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`);
@@ -1405,7 +1405,7 @@ export const apiCreateMarkdownList = (data: { id?: string; name: string; emoji?:
 export const apiUpdateMarkdownList = (id: string, data: Partial<Pick<MarkdownList, 'name' | 'emoji' | 'color' | 'colorBg' | 'subtitle' | 'isPublic' | 'fullWidth' | 'position'>> & { folderId?: string | null; content?: MarkdownListContent; expectedVersion?: number; cascade?: boolean }) =>
   apiFetch<{ markdownList: MarkdownList }>(`/markdown-lists/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
-// Persist the order of markdown lists by id (positions are global per user).
+// Persist the order of markdown pages by id (positions are global per user).
 export const apiReorderMarkdownLists = (ids: string[]) =>
   apiFetch<{ success: boolean }>('/markdown-lists/reorder', { method: 'PUT', body: JSON.stringify({ ids }) });
 
@@ -1452,7 +1452,7 @@ export function apiUploadMarkdownImage(
   });
 }
 
-// ── Markdown List trash ──────────────────────────────────────────────────
+// ── Markdown Page trash ──────────────────────────────────────────────────
 
 export const apiGetTrashMarkdownLists = () =>
   apiFetch<{ trash: Array<{ id: number; markdownListId: string; markdownListData: MarkdownList; deletedAt: string; expiresAt: string }> }>('/trash/markdown-lists');

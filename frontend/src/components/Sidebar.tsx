@@ -154,7 +154,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
             <button
               ref={menuBtnRef}
               onClick={openMenu}
-              title="To-Do options"
+              title="Board options"
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-pale-39)')}
               onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background = 'transparent'; }}
@@ -1053,7 +1053,7 @@ function MarkdownListRow({ markdownList, isActive, collapsed, indented, folders,
     { key: 'settings', label: 'More settings…', icon: 'tune', onClick: () => setShowSettings(true) },
     { key: 'move-ws', label: 'Move to workspace…', icon: 'drive_file_move', onClick: () => setShowMoveWorkspace(true) },
     { key: 'div1', divider: true },
-    { key: 'delete', label: 'Delete markdown list', icon: 'delete', danger: true, onClick: () => setShowDeleteDialog(true) },
+    { key: 'delete', label: 'Delete markdown page', icon: 'delete', danger: true, onClick: () => setShowDeleteDialog(true) },
   ];
 
   return (
@@ -1080,7 +1080,7 @@ function MarkdownListRow({ markdownList, isActive, collapsed, indented, folders,
         </button>
         {!collapsed && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 4, flexShrink: 0 }}>
-            <button ref={menuBtnRef} onClick={openMenu} title="Markdown list options"
+            <button ref={menuBtnRef} onClick={openMenu} title="Markdown page options"
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-pale-39)')}
               onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background = 'transparent'; }}>
@@ -1149,7 +1149,7 @@ function MarkdownListRow({ markdownList, isActive, collapsed, indented, folders,
             <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
               <Icon name="delete" size={20} color="var(--color-error)" />
             </div>
-            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Delete markdown list?</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Delete markdown page?</div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.5, marginBottom: 24 }}>
               "<span style={{ color: 'var(--color-text-primary)', fontWeight: 500 }}>{markdownList.name}</span>" and its Todo list will be moved to Trash.
             </div>
@@ -1168,7 +1168,7 @@ function MarkdownListRow({ markdownList, isActive, collapsed, indented, folders,
 // ── MarkdownListWithTodo ──────────────────────────────────────────────────────
 // Mirrors StandaloneListWithSublists' fold-out chevron pattern: the
 // auto-managed Todo list (one real `lists` row per `/todo` block in the doc)
-// is revealed/collapsed under its owning Markdown List rather than shown
+// is revealed/collapsed under its owning Markdown Page rather than shown
 // separately at root.
 interface MarkdownListWithTodoProps {
   markdownList: MarkdownList;
@@ -1195,7 +1195,7 @@ interface MarkdownListWithTodoProps {
 }
 function MarkdownListWithTodo({ markdownList, todoList, active, activeListId, activeMarkdownListId, collapsed, indented, dragOverId, dragOverTaskListId, dragOverMarkdownId, recentlyDroppedListId, folders, onNavigate, onListDragStart, onListDragOver, onListDragLeave, onListDrop, onMarkdownDragStart, onMarkdownDragOver, onMarkdownDragLeave, onMarkdownDrop }: MarkdownListWithTodoProps) {
   // Same collapsed-by-default, persisted-per-item behaviour as
-  // StandaloneListWithSublists — keyed by the Markdown List's id so the fold-out
+  // StandaloneListWithSublists — keyed by the Markdown Page's id so the fold-out
   // state survives refreshes instead of springing back open.
   const subExpanded = useUserPrefsStore(s => s.sidebarExpandedSublists[markdownList.id] ?? false);
   const toggleSublistExpanded = useUserPrefsStore(s => s.toggleSublistExpanded);
@@ -1637,8 +1637,8 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   // standalone — filtering it into a folder that isn't on screen would make it
   // silently disappear from the sidebar even though the API returned it.
   const loadedFolderIds = new Set(folders.map(f => f.id));
-  // A Markdown List's auto-managed Todo list is a real `lists` row, but it's
-  // rendered nested under its owning Markdown List (MarkdownListWithTodo)
+  // A Markdown Page's auto-managed Todo list is a real `lists` row, but it's
+  // rendered nested under its owning Markdown Page (MarkdownListWithTodo)
   // rather than again as its own standalone entry.
   const standaloneListItems = lists.filter(l => (!l.folderId || !loadedFolderIds.has(l.folderId)) && !mdTodoListIds.has(l.id));
   const standaloneTimelines = timelines.filter(t => !t.folderId || !loadedFolderIds.has(t.folderId));
@@ -1791,7 +1791,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.64.1
+              v1.65.0
             </div>
           )}
         </div>
@@ -2064,7 +2064,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           );
         })}
 
-        {/* Markdown Lists (root level — reorderable, draggable into folders) */}
+        {/* Markdown Pages (root level — reorderable, draggable into folders) */}
         {standaloneMarkdownLists.map((md) => (
           <MarkdownListWithTodo
             key={md.id}
@@ -2157,7 +2157,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <NavItem icon="archive" label="Archived" active={false} onClick={() => onOpenModal('archived')} collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.64.1
+            v1.65.0
           </div>
         )}
       </div>

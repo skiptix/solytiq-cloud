@@ -154,7 +154,7 @@ router.delete('/item-shares/:itemType/:itemId/members/:userId', authenticate, as
   }
 });
 
-// GET /api/shared-with-me — every list/timeline/markdown list this user has been
+// GET /api/shared-with-me — every list/timeline/markdown page this user has been
 // INVITED to (they aren't the owner), fully hydrated so the client can render
 // them exactly like their own items, independent of the active workspace.
 router.get('/shared-with-me', authenticate, async (req: Request, res: Response) => {

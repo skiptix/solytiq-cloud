@@ -27,7 +27,7 @@ interface Props {
 
 const VIEW_LABELS: Record<string, string> = {
   dashboard: 'Dashboard',
-  list: 'To-Do',
+  list: 'Board',
   calendar: 'Calendar',
   files: 'Files',
   settings: 'Settings',

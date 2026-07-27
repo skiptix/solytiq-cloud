@@ -226,7 +226,7 @@ function AppLayout() {
     } else {
       loadFromApi(currentWorkspaceId);
     }
-    // Markdown Lists aren't part of the app-store snapshot/delta pipeline (a
+    // Markdown Pages aren't part of the app-store snapshot/delta pipeline (a
     // SIGNAL sync entity, like templates/automations) — load them for the
     // Sidebar directly, scoped to the same workspace.
     void useMarkdownListsStore.getState().load(currentWorkspaceId);
@@ -239,7 +239,7 @@ function AppLayout() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspaceId]);
 
-  // Refetch Markdown Lists when a sync frame signals a change (create/update/
+  // Refetch Markdown Pages when a sync frame signals a change (create/update/
   // delete on any device) — same pattern TemplatesScreen/AutomationsScreen use
   // for their own SIGNAL entity.
   const markdownListRev = useSyncStore(s => s.entityRevisions.markdownList ?? 0);
