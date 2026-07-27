@@ -512,6 +512,14 @@ export default function MarkdownListScreen() {
     setLinkEditingBlockId(null);
   };
 
+  // Re-open the inline link editor (same one used when creating a `/link` block)
+  // pre-filled with an existing link block's fields — wired to a right-click on
+  // the rendered link so its title/description/URL can be edited after creation.
+  const openLinkEditor = (block: MarkdownLinkBlock) => {
+    setLinkDraft({ url: block.url, title: block.title ?? '', description: block.description ?? '' });
+    setLinkEditingBlockId(block.id);
+  };
+
   // Detect an in-progress @mention in the just-edited block, reading the caret
   // straight off the block's textarea (React has committed value + selection by
   // the time onChange fires).
@@ -814,8 +822,10 @@ export default function MarkdownListScreen() {
                 onChange={e => updateBlocks(prev => prev.map(b => b.id === block.id ? { ...b, caption: e.target.value } as MarkdownBlock : b))}
                 style={{ marginTop: 6, padding: '0 4px 4px', width: '100%', fontFamily: 'var(--font-body)', fontSize: 12.5, fontStyle: 'italic', color: 'var(--color-text-tertiary)', border: 'none', outline: 'none', background: 'transparent' }} />
             </div>
-          ) : block.type === 'link' ? (
+          ) : block.type === 'link' && linkEditingBlockId !== block.id ? (
             <a href={block.url} target="_blank" rel="noopener noreferrer"
+              onContextMenu={e => { e.preventDefault(); openLinkEditor(block); }}
+              title="Right-click to edit this link"
               style={{ display: 'flex', flexDirection: 'column', gap: 3, textDecoration: 'none', padding: '8px 2px' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-primary)' }}>
                 <Icon name="link" size={14} color="var(--color-primary)" /> {block.title || block.url}
