@@ -75,7 +75,7 @@ export function resolveTaskSource(
     if (md) return { kind: 'markdown', name: md.name, emoji: md.emoji, workspaceId: md.workspaceId ?? task.workspaceId ?? null };
     const list = listById.get(listId);
     if (list) return { kind: 'list', name: list.name, emoji: list.emoji, workspaceId: list.workspaceId ?? task.workspaceId ?? null };
-    return { kind: 'list', name: task._listName ?? 'To-Do', workspaceId: task.workspaceId ?? null };
+    return { kind: 'list', name: task._listName ?? 'Board', workspaceId: task.workspaceId ?? null };
   }
   return { kind: 'dashboard', name: 'Dashboard', workspaceId: task.workspaceId ?? null };
 }

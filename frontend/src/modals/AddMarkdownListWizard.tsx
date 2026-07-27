@@ -41,7 +41,7 @@ export default function AddMarkdownListWizard({ onClose, onCreated }: AddMarkdow
       onCreated(created);
     } catch (e) {
       console.error('createMarkdownList failed', e);
-      setCreateError('Failed to create markdown list. Please check your connection and try again.');
+      setCreateError('Failed to create markdown page. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -54,7 +54,7 @@ export default function AddMarkdownListWizard({ onClose, onCreated }: AddMarkdow
         onClick={e => e.stopPropagation()}>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
-          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>New Markdown List</span>
+          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>New Markdown Page</span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}>
             <Icon name="close" size={18} color="var(--color-text-tertiary)" />
           </button>
@@ -97,7 +97,7 @@ export default function AddMarkdownListWizard({ onClose, onCreated }: AddMarkdow
               </button>
             </div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
-              {isPublic ? 'Everyone in this workspace can see this markdown list.' : 'Only you can see and edit this markdown list.'}
+              {isPublic ? 'Everyone in this workspace can see this markdown page.' : 'Only you can see and edit this markdown page.'}
             </div>
           </div>
           <div>
@@ -119,7 +119,7 @@ export default function AddMarkdownListWizard({ onClose, onCreated }: AddMarkdow
         <div style={{ display: 'flex', gap: 10, padding: '0 24px 24px', justifyContent: 'flex-end' }}>
           <button onClick={handleCreate} disabled={loading || !name.trim()}
             style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: (loading || !name.trim()) ? 'var(--color-border-strong)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: (loading || !name.trim()) ? 'not-allowed' : 'pointer' }}>
-            {loading ? 'Creating…' : 'Create Markdown List'}
+            {loading ? 'Creating…' : 'Create Markdown Page'}
           </button>
         </div>
       </div>

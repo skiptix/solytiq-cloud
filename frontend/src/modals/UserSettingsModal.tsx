@@ -548,9 +548,9 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                 </div>
                 <div style={{ height: 1, background: 'var(--color-surface-tint-2)' }} />
                 <div style={{ padding: '14px 18px' }}>
-                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Default To-Do View</div>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Default Board View</div>
                   <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 10, lineHeight: 1.5 }}>
-                    Layout new to-dos start in. Existing to-dos keep whatever view they're already set to.
+                    Layout new boards start in. Existing boards keep whatever view they're already set to.
                   </div>
                   <div style={{ display: 'flex', gap: 10 }}>
                     {(['list', 'kanban'] as const).map(v => (

@@ -100,7 +100,7 @@ export interface List {
   shareSubpages?: boolean;
   shareViewMode?: 'list' | 'kanban' | 'timeline' | null;   // which layout the public share page renders — null falls back to viewMode
   version?: number;   // optimistic-concurrency token (bumps on every server-side update)
-  viewMode?: 'list' | 'kanban' | 'timeline';   // To-Do screen's layout — persisted per list, synced across devices
+  viewMode?: 'list' | 'kanban' | 'timeline';   // Board screen's layout — persisted per list, synced across devices
   isArchived?: boolean;   // hidden from the normal workspace view; see the Archived modal
   archivedAt?: string | null;
   linkedProgress?: {
@@ -505,7 +505,7 @@ export interface AutomationRunResult {
   error: string | null;
 }
 
-// ─── Markdown Lists ─────────────────────────────────────────────────────────
+// ─── Markdown Pages ─────────────────────────────────────────────────────────
 // A block-based document type authored via `/` slash commands (headings,
 // paragraphs, bulleted/numbered list items, quotes, dividers, images, links,
 // and checkable todo items) — a top-level entity parallel to List/Timeline,

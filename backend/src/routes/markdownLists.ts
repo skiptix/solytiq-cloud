@@ -301,7 +301,7 @@ export async function mutateMarkdownListBlocks(
   mutate: (blocks: MarkdownBlockLike[]) => MarkdownBlockLike[] | { error: string }
 ): Promise<{ ok: true; markdownList: ReturnType<typeof sanitize> } | { ok: false; error: string }> {
   const existing = await query<MarkdownListRow>('SELECT * FROM markdown_lists WHERE id = $1', [markdownListId]);
-  if (existing.rows.length === 0) return { ok: false, error: 'markdown list not found' };
+  if (existing.rows.length === 0) return { ok: false, error: 'markdown page not found' };
   if (existing.rows[0].user_id !== userId && !(await isItemSharedWith('markdownList', markdownListId, userId))) {
     return { ok: false, error: 'permission denied' };
   }
@@ -373,7 +373,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 router.get('/:id', authenticate, async (req: Request, res: Response) => {
   try {
     const list = await getMarkdownListForUser(req.userId!, req.params.id);
-    if (!list) { res.status(404).json({ error: 'Markdown list not found' }); return; }
+    if (!list) { res.status(404).json({ error: 'Markdown page not found' }); return; }
     res.json({ markdownList: list });
   } catch (err) {
     werr('markdown-lists GET :id error:', err);
@@ -436,10 +436,10 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
   }
 });
 
-// PUT /api/markdown-lists/reorder — persist the order of markdown lists by id.
+// PUT /api/markdown-lists/reorder — persist the order of markdown pages by id.
 // Declared before the `/:id` routes so "reorder" isn't captured as an id.
 // Positions are global per user (same convention as lists/timelines reorder),
-// so the client passes every markdown list in the desired order.
+// so the client passes every markdown page in the desired order.
 router.put('/reorder', authenticate, async (req: Request, res: Response) => {
   try {
     const { ids } = req.body as { ids?: string[] };
@@ -476,7 +476,7 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
     };
 
     const existing = await query<MarkdownListRow>('SELECT * FROM markdown_lists WHERE id = $1', [id]);
-    if (existing.rows.length === 0) { res.status(404).json({ error: 'Markdown list not found' }); return; }
+    if (existing.rows.length === 0) { res.status(404).json({ error: 'Markdown page not found' }); return; }
     const row = existing.rows[0];
     const isOwner = row.user_id === req.userId;
     const isAdmin = req.user?.isAdmin === true;
@@ -598,7 +598,7 @@ router.put('/:id/workspace', authenticate, async (req: Request, res: Response) =
 
     const existing = await query<MarkdownListRow>('SELECT * FROM markdown_lists WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
-      res.status(404).json({ error: 'Markdown list not found' });
+      res.status(404).json({ error: 'Markdown page not found' });
       return;
     }
     const md = existing.rows[0];
@@ -625,7 +625,7 @@ router.put('/:id/workspace', authenticate, async (req: Request, res: Response) =
     const willForcePrivate = targetIsPrivate && md.is_public;
 
     if (willForcePrivate) {
-      // Markdown lists aren't part of the folder visibility hierarchy type, so
+      // Markdown pages aren't part of the folder visibility hierarchy type, so
       // surface the conflict as a plain leaf "list" — the name still reads right.
       const conflict = buildRestrictConflict('list', md.name, [{ type: 'list', id, name: md.name }]);
       if (!cascade) { res.status(409).json(conflict); return; }
@@ -679,7 +679,7 @@ export async function deleteMarkdownListForUser(
   isAdmin = false,
 ): Promise<{ ok: true; name: string } | { ok: false; status: number; error: string }> {
   const existing = await query<MarkdownListRow>('SELECT * FROM markdown_lists WHERE id = $1', [id]);
-  if (existing.rows.length === 0) return { ok: false, status: 404, error: 'Markdown list not found' };
+  if (existing.rows.length === 0) return { ok: false, status: 404, error: 'Markdown page not found' };
   const row = existing.rows[0];
   if (row.user_id !== userId && !isAdmin) return { ok: false, status: 403, error: 'Permission denied' };
 
@@ -728,7 +728,7 @@ router.delete('/:id', authenticate, async (req: Request, res: Response) => {
 // PUT /api/markdown-lists/:id/share — manage the public read-only share
 // link. Body: { enabled?, password?: string|null, expiresAt?: string|null }
 // (password/expiresAt: omit = unchanged, null = clear, value = set). Mirrors
-// PUT /api/lists/:listId/share minus the subpage cascade (markdown lists
+// PUT /api/lists/:listId/share minus the subpage cascade (markdown pages
 // have no nesting concept).
 router.put('/:id/share', authenticate, async (req: Request, res: Response) => {
   try {
@@ -738,7 +738,7 @@ router.put('/:id/share', authenticate, async (req: Request, res: Response) => {
     };
 
     const existing = await query<MarkdownListRow>('SELECT * FROM markdown_lists WHERE id = $1', [id]);
-    if (existing.rows.length === 0) { res.status(404).json({ error: 'Markdown list not found' }); return; }
+    if (existing.rows.length === 0) { res.status(404).json({ error: 'Markdown page not found' }); return; }
     const row = existing.rows[0];
     const isOwner = row.user_id === req.userId;
     if (!isOwner && !req.user?.isAdmin) { res.status(403).json({ error: 'Permission denied' }); return; }
@@ -795,7 +795,7 @@ router.post('/:id/images', authenticate, (req: Request, res: Response) => {
       const ownerCheck = await query<{ user_id: string }>('SELECT user_id FROM markdown_lists WHERE id = $1', [id]);
       if (ownerCheck.rows.length === 0) {
         if (req.file) fs.unlinkSync(path.join(MARKDOWN_IMAGE_DIR, req.file.filename));
-        res.status(404).json({ error: 'Markdown list not found' });
+        res.status(404).json({ error: 'Markdown page not found' });
         return;
       }
       if (ownerCheck.rows[0].user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('markdownList', id, req.userId!))) {

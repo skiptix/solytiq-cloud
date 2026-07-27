@@ -27,7 +27,7 @@ import { notificationTarget } from '../utils/notifications';
 import type { AppNotification } from '../api/client';
 
 // ── Shared style tokens ────────────────────────────────────────────
-// Matches the surface used by the Folder Dashboard and To-Do screens.
+// Matches the surface used by the Folder Dashboard and Board screens.
 const CARD: React.CSSProperties = {
   background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)',
   borderRadius: 16,

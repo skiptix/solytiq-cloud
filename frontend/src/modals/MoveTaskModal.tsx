@@ -11,9 +11,9 @@ interface MoveTaskModalProps {
   onClose: () => void;
 }
 
-/** Picker for "Move to another to-do" — spans every workspace the user belongs
+/** Picker for "Move to another board" — spans every workspace the user belongs
  *  to (a task can move across workspaces), grouped by workspace so a large
- *  to-do directory stays navigable. */
+ *  board directory stays navigable. */
 export default function MoveTaskModal({ task, onClose }: MoveTaskModalProps) {
   const { moveTaskToList, moveTaskToDashboard } = useAppStore();
   const { workspaces } = useWorkspaceStore();
@@ -63,7 +63,7 @@ export default function MoveTaskModal({ task, onClose }: MoveTaskModalProps) {
             <Icon name="drive_file_move" size={19} color="var(--color-primary)" />
           </div>
           <div style={{ flex: 1, overflow: 'hidden' }}>
-            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>Move to another to-do</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>Move to another board</div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</div>
           </div>
         </div>
@@ -75,7 +75,7 @@ export default function MoveTaskModal({ task, onClose }: MoveTaskModalProps) {
               autoFocus
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Search to-dos…"
+              placeholder="Search boards…"
               style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)' }}
             />
           </div>
@@ -94,10 +94,10 @@ export default function MoveTaskModal({ task, onClose }: MoveTaskModalProps) {
           )}
 
           {lists === null && (
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '12px 2px' }}>Loading to-dos…</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '12px 2px' }}>Loading boards…</div>
           )}
           {lists !== null && filtered.length === 0 && (
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '12px 2px' }}>No matching to-dos.</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '12px 2px' }}>No matching boards.</div>
           )}
 
           {grouped.map(([wsName, wsLists]) => (

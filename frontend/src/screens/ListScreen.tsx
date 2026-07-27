@@ -79,9 +79,9 @@ export default function ListScreen() {
     };
   }, [setViewMode]);
 
-  let pageTitle = 'Loading to-do...';
+  let pageTitle = 'Loading board...';
   if (!list && !listsLoading) {
-    pageTitle = 'To-Do not found';
+    pageTitle = 'Board not found';
   } else if (list) {
     const openTasks = totalCount - completedCount;
     const taskBadge = openTasks > 0 ? `(${openTasks})` : '(Done)';
@@ -101,7 +101,7 @@ export default function ListScreen() {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>To-Do not found</div>
+          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Board not found</div>
           <button onClick={() => navigate('/dashboard')} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Go to Dashboard</button>
         </div>
       </div>

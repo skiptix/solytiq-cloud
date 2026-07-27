@@ -8,7 +8,7 @@ interface SaveStatusStore {
 }
 
 // A tiny global signal for the header save-status dot on the list-type screens
-// (To-Do, Timeline). It reflects in-flight writes to list *content* endpoints
+// (Board, Timeline). It reflects in-flight writes to list *content* endpoints
 // only — auth/AI/file/settings/admin writes are ignored so the dot never
 // flickers for activity unrelated to the list you're looking at. Markdown
 // lists pass their own local, debounce-aware state to the dot instead (it

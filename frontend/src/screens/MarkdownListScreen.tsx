@@ -21,7 +21,7 @@ import MarkdownListAIAssist from '../components/AIAssistant/MarkdownListAIAssist
 import SaveStatusDot from '../components/SaveStatusDot';
 
 // Matches TaskItem.tsx's hand-drawn checkmark so a `/todo` block's checkbox
-// looks identical to a task row in the To-Do screen.
+// looks identical to a task row in the Board screen.
 function Checkmark() {
   return (
     <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
@@ -295,7 +295,7 @@ export default function MarkdownListScreen() {
       setBlocks(res.content.blocks.length > 0 ? res.content.blocks : [makeEmptyBlock('paragraph')]);
       setSaveState('saved');
     } catch (e) {
-      console.error('markdown list save failed', e);
+      console.error('markdown page save failed', e);
       setSaveState('error');
     } finally {
       savingRef.current = false;
@@ -611,7 +611,7 @@ export default function MarkdownListScreen() {
     if (updates.color !== undefined) setColor(updates.color);
     if (updates.isPublic !== undefined) setIsPublic(updates.isPublic);
     if (updates.fullWidth !== undefined) setFullWidth(updates.fullWidth);
-    // Markdown lists don't expose the Folder tab (no folder-nesting UI yet),
+    // Markdown pages don't expose the Folder tab (no folder-nesting UI yet),
     // so `folderId` never actually arrives here in practice — the cast just
     // satisfies ItemSettingsUpdates' shared shape (folderId: string | null)
     // against the store's Partial<MarkdownList> (folderId?: string).
@@ -625,7 +625,7 @@ export default function MarkdownListScreen() {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
         <Icon name="notes" size={40} color="var(--color-border-strong)" />
-        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>Markdown list not found</div>
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>Markdown page not found</div>
         <button onClick={() => navigate('/dashboard')} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer' }}>Back to Dashboard</button>
       </div>
     );
@@ -1158,7 +1158,7 @@ export default function MarkdownListScreen() {
             </div>
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Delete "{name}"?</div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.5, marginBottom: 24 }}>
-              This markdown list{todoListId ? ' and its Todo list' : ''} will be moved to Trash.
+              This markdown page{todoListId ? ' and its Todo list' : ''} will be moved to Trash.
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>

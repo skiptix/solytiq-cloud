@@ -2,7 +2,7 @@
 // Per-item invitations ("Shared with me").
 //
 // A single `item_shares` table grants a specific user access to ONE list,
-// timeline, or markdown list — independent of workspace membership. This is the
+// timeline, or markdown page — independent of workspace membership. This is the
 // "share just this item" half of the tag/mention prompt, and the standalone
 // "Invite people" control on a list/timeline/markdown page.
 //

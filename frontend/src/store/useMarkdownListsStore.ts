@@ -20,7 +20,7 @@ interface MarkdownListsStore {
   create: (data: { name: string; emoji?: string; color?: string; colorBg?: string; subtitle?: string; isPublic?: boolean; folderId?: string; workspaceId?: string }) => Promise<MarkdownList>;
   update: (id: string, data: Partial<Pick<MarkdownList, 'name' | 'emoji' | 'color' | 'colorBg' | 'subtitle' | 'isPublic' | 'fullWidth' | 'position'>> & { folderId?: string | null; content?: MarkdownListContent; expectedVersion?: number }) => Promise<MarkdownList>;
   remove: (id: string) => Promise<void>;
-  /** Optimistically reorder markdown lists (assigning `position` by index) and
+  /** Optimistically reorder markdown pages (assigning `position` by index) and
    *  persist the new global order. `folderChange` moves one item into/out of a
    *  folder as part of the same drop. Reverts on failure. */
   reorder: (orderedIds: string[], folderChange?: { id: string; folderId: string | null }) => Promise<void>;

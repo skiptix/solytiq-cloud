@@ -599,8 +599,8 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Stats</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   {[
-                    ['To-Dos', workspaceLists.length, 'format_list_bulleted'],
-                    ['Private to-dos', workspaceLists.filter(l => !l.isPublic).length, 'lock'],
+                    ['Boards', workspaceLists.length, 'format_list_bulleted'],
+                    ['Private boards', workspaceLists.filter(l => !l.isPublic).length, 'lock'],
                     ['Timelines', workspaceTimelines.length, 'timeline'],
                     ['Private timelines', workspaceTimelines.filter(t => !t.isPublic).length, 'lock_clock'],
                   ].map(([label, value, icon]) => (

@@ -26,7 +26,7 @@ const FOLDER_COLORS = [
 ];
 
 const KIND_DISPLAY_NAME: Record<'list' | 'folder' | 'timeline' | 'markdownList', string> = {
-  list: 'to-do', folder: 'folder', timeline: 'timeline', markdownList: 'markdown list',
+  list: 'board', folder: 'folder', timeline: 'timeline', markdownList: 'markdown page',
 };
 
 const LIST_COLORS = [
@@ -53,7 +53,7 @@ interface ItemSettingsModalProps {
   emoji?: string;
   color?: string;
   isPublic?: boolean;
-  /** Markdown lists only — whether the page renders full-width in-app. */
+  /** Markdown pages only — whether the page renders full-width in-app. */
   fullWidth?: boolean;
   folders?: Folder[];
   folderId?: string;
@@ -220,7 +220,7 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
               </div>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', marginTop: 6, lineHeight: 1.4, paddingLeft: 2 }}>
                 {includeAll
-                  ? 'Every to-do, timeline and page in this folder is published publicly (inheriting this link’s password & expiry).'
+                  ? 'Every board, timeline and page in this folder is published publicly (inheriting this link’s password & expiry).'
                   : 'Only items you’ve already shared individually appear in the folder’s public navigator.'}
               </div>
             </div>
@@ -475,7 +475,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
             <div>
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? 200 : 420 }}>{name}</div>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', marginTop: 1 }}>
-                {kind === 'folder' ? 'Folder settings' : kind === 'timeline' ? 'Timeline settings' : kind === 'markdownList' ? 'Markdown List settings' : 'To-Do settings'}
+                {kind === 'folder' ? 'Folder settings' : kind === 'timeline' ? 'Timeline settings' : kind === 'markdownList' ? 'Markdown Page settings' : 'Board settings'}
               </div>
             </div>
           </div>
@@ -561,7 +561,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                 </div>
               </div>
 
-              {/* Page width (markdown lists only) */}
+              {/* Page width (markdown pages only) */}
               {kind === 'markdownList' && (
                 <div style={{ marginTop: 20 }}>
                   {sectionLabel('Page width')}
@@ -653,7 +653,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
           {/* ── ADMIN ── */}
           {activeTab === 'admin' && isAdmin && itemId && kind !== 'folder' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18, animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
-              {sectionLabel(`${kind === 'timeline' ? 'Timeline' : kind === 'markdownList' ? 'Markdown List' : 'To-Do'} ID`)}
+              {sectionLabel(`${kind === 'timeline' ? 'Timeline' : kind === 'markdownList' ? 'Markdown Page' : 'Board'} ID`)}
               <div style={{ background: 'var(--color-surface-tint)', border: '1px solid var(--color-border)', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <code style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemId}</code>
                 <button onClick={copyAdminId} style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, color: copiedAdminId ? 'var(--color-success)' : 'var(--color-primary)', background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', flexShrink: 0 }}>

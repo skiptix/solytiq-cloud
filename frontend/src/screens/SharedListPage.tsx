@@ -100,9 +100,9 @@ export default function SharedListPage() {
   const completed = allTasks.filter(t => t.checked || (t.linkedProgress && t.linkedProgress.total > 0 && t.linkedProgress.completed === t.linkedProgress.total)).length;
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-  let pageTitle = 'Loading to-do...';
+  let pageTitle = 'Loading board...';
   if (state === 'notfound') {
-    pageTitle = 'To-Do not found';
+    pageTitle = 'Board not found';
   } else if (meta) {
     const prefix = meta.emoji ? `${meta.emoji} ` : '';
     pageTitle = `${prefix}${meta.name}`;
@@ -151,12 +151,12 @@ export default function SharedListPage() {
             </div>
             <div>
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 6 }}>
-                {state === 'notfound' ? 'To-Do not found' : state === 'expired' ? 'Link expired' : 'Something went wrong'}
+                {state === 'notfound' ? 'Board not found' : state === 'expired' ? 'Link expired' : 'Something went wrong'}
               </div>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)', lineHeight: 1.5 }}>
                 {state === 'notfound' ? "This share link doesn't exist or has been removed." :
                  state === 'expired'  ? 'This share link has expired and is no longer available.' :
-                                        'Unable to load this to-do. Please try again.'}
+                                        'Unable to load this board. Please try again.'}
               </div>
             </div>
           </div>
@@ -169,8 +169,8 @@ export default function SharedListPage() {
               <Icon name="lock" size={28} color="var(--color-primary)" />
             </div>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>{meta?.name ?? 'Protected to-do'}</div>
-              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)' }}>This to-do is password protected.</div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>{meta?.name ?? 'Protected board'}</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)' }}>This board is password protected.</div>
             </div>
             <div style={{ width: '100%' }}>
               <input
@@ -189,7 +189,7 @@ export default function SharedListPage() {
               disabled={loadingContent || !password}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-white)', background: loadingContent || !password ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', border: 'none', borderRadius: 12, padding: '13px', cursor: loadingContent || !password ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}>
               {loadingContent ? <div style={{ width: 16, height: 16, border: '2px solid rgba(var(--color-white-rgb), 0.4)', borderTopColor: 'var(--color-white)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> : <Icon name="visibility" size={18} color="var(--color-white)" />}
-              View to-do
+              View board
             </button>
           </div>
         )}
@@ -218,7 +218,7 @@ export default function SharedListPage() {
             {/* Content — layout follows the owner's "Shared view" setting */}
             <div style={{ padding: '24px 32px 32px' }}>
               {content.sections.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-quaternary)' }}>This to-do is empty.</div>
+                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-quaternary)' }}>This board is empty.</div>
               ) : content.list.viewMode === 'kanban' ? (
                 <SharedKanbanView sections={content.sections} accent={accent} onTaskClick={handleTaskClick} />
               ) : content.list.viewMode === 'timeline' ? (

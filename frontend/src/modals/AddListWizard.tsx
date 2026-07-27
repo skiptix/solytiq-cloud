@@ -79,7 +79,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
           <span style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>
-            {step === 0 ? 'New To-Do' : step === 1 ? 'Add Sections' : 'Review & Create'}
+            {step === 0 ? 'New Board' : step === 1 ? 'Add Sections' : 'Review & Create'}
           </span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}>
             <Icon name="close" size={18} color="var(--color-text-tertiary)" />
@@ -104,7 +104,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
               </div>
               {/* Name */}
               <div>
-                <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 6 }}>To-Do Name *</label>
+                <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 6 }}>Board Name *</label>
                 <input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Work Projects"
                   style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, border: 'none', borderBottom: '1.5px solid var(--color-border-alt)', padding: '8px 0', outline: 'none', color: 'var(--color-text-primary)', background: 'transparent' }}
                   onFocus={e => (e.target.style.borderBottomColor = 'var(--color-primary)')}
@@ -134,7 +134,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
                   </button>
                 </div>
                 <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
-                  {isPublic ? 'Everyone in this workspace can see this to-do.' : 'Only you can see and edit this to-do.'}
+                  {isPublic ? 'Everyone in this workspace can see this board.' : 'Only you can see and edit this board.'}
                 </div>
               </div>
               {/* Color */}
@@ -151,7 +151,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
               <div style={{ background: selectedColor.bg, border: `1px solid ${selectedColor.color}40`, borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 20 }}>{emoji}</span>
                 <div>
-                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>{name || 'To-Do Name'}</div>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>{name || 'Board Name'}</div>
                   {subtitle && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>{subtitle}</div>}
                 </div>
               </div>
@@ -160,7 +160,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
 
           {step === 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)' }}>Sections organize tasks within your to-do. You can add or skip them.</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)' }}>Sections organize tasks within your board. You can add or skip them.</div>
               {sections.map(sec => (
                 <div key={sec.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--color-purple-pale-11)', borderRadius: 10, border: '1px solid var(--color-border)' }}>
                   <span style={{ fontSize: 16 }}>{sec.emoji}</span>
@@ -231,7 +231,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
           ) : (
             <button onClick={handleCreate} disabled={loading}
               style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: loading ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: loading ? 'wait' : 'pointer' }}>
-              {loading ? 'Creating…' : 'Create To-Do'}
+              {loading ? 'Creating…' : 'Create Board'}
             </button>
           )}
         </div>

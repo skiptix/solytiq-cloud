@@ -191,7 +191,7 @@ export async function rehomeUserContentToPersonal(
     `UPDATE timelines SET workspace_id = $1 WHERE workspace_id = $2 AND user_id = $3`,
     [personal, fromWorkspaceId, userId]
   );
-  // The auto-managed Todo list a markdown list points at is a regular `lists`
+  // The auto-managed Todo list a markdown page points at is a regular `lists`
   // row owned by the same user, so it's already re-homed by the UPDATE above.
   await exec(
     `UPDATE markdown_lists SET workspace_id = $1 WHERE workspace_id = $2 AND user_id = $3`,

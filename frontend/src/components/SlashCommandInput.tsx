@@ -26,7 +26,7 @@ interface SlashCommandInputProps {
 
 const SLASH_COMMANDS = [
   { id: 'list' as const, icon: 'format_list_bulleted', label: 'New Sublist', desc: 'Create a nested sublist', hint: '/list' },
-  { id: 'link' as const, icon: 'link', label: 'Link To-Do', desc: 'Link an existing to-do', hint: '/link' },
+  { id: 'link' as const, icon: 'link', label: 'Link Board', desc: 'Link an existing board', hint: '/link' },
 ];
 
 type MenuState =
@@ -212,7 +212,7 @@ export default function SlashCommandInput({
 
           {/* Section label */}
           <div style={{ padding: '8px 14px 3px', fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 700, color: 'var(--color-border-strong)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            To-Do commands
+            Board commands
           </div>
 
           {/* Commands */}
@@ -255,7 +255,7 @@ export default function SlashCommandInput({
         <div style={dropdownBase}>
           {searchResults.length === 0 ? (
             <div style={{ padding: '10px 14px', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-border-strong)' }}>
-              No to-dos found
+              No boards found
             </div>
           ) : (
             searchResults.map((list, idx) => (

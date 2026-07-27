@@ -10,7 +10,7 @@ interface UserPrefsState {
   timezone: string;
   setTimezone: (tz: string) => void;
 
-  // Layout newly created To-Dos start in (List or Kanban). Applied client-side
+  // Layout newly created Boards start in (List or Kanban). Applied client-side
   // at creation time only — existing lists keep whatever view_mode they have.
   defaultListViewMode: ListViewMode;
   setDefaultListViewMode: (v: ListViewMode) => void;

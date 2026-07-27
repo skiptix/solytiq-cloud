@@ -45,7 +45,7 @@ export default function TemplateSelectStep({ type, onBack, onBlank, onCreatedLis
             <Icon name="chevron_left" size={20} color="var(--color-text-tertiary)" />
           </button>
           <span style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>
-            New {type === 'list' ? 'To-Do' : 'Timeline'}
+            New {type === 'list' ? 'Board' : 'Timeline'}
           </span>
         </div>
 
