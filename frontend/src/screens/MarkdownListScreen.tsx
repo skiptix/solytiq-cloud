@@ -9,6 +9,8 @@ import type {
 import useMarkdownListsStore from '../store/useMarkdownListsStore';
 import { useMobile } from '../hooks/useBreakpoint';
 import Icon from '../components/Icon';
+import MarkdownTable from '../components/MarkdownTable';
+import { makeEmptyTableBlock } from '../utils/markdownTable';
 import { renderInline } from '../components/MarkdownView';
 import { toggleWrap, formatMarkerForKeyDown } from '../utils/textFormatting';
 import { detectMention, applyMention, filterMentionMembers, type MentionMember } from '../utils/mention';
@@ -52,6 +54,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { cmd: 'columns', label: '2 columns', icon: 'view_column', type: 'divider', columns: true },
   { cmd: 'image', label: 'Image', icon: 'image', type: 'image' },
   { cmd: 'link', label: 'Link', icon: 'link', type: 'link' },
+  { cmd: 'table', label: 'Table', icon: 'table', type: 'table' },
 ];
 
 let blockSeq = 0;
@@ -66,6 +69,7 @@ function makeEmptyBlock(type: MarkdownBlockType, level?: 1 | 2 | 3): MarkdownBlo
     case 'heading': return { id, type, level: level ?? 3, text: '' };
     case 'todo': return { id, type, text: '', checked: false, taskId: null };
     case 'divider': return { id, type };
+    case 'table': return makeEmptyTableBlock(id);
     default: return { id, type: type as 'paragraph' | 'bulleted-list-item' | 'numbered-list-item' | 'quote', text: '' };
   }
 }
@@ -487,6 +491,22 @@ export default function MarkdownListScreen() {
       focusBlock(nextParagraph.id, false);
       return;
     }
+    if (command.type === 'table') {
+      // Replace the current block with a fresh table and drop a trailing empty
+      // paragraph after it so there's always a text block to continue in below.
+      const nextParagraph = makeEmptyBlock('paragraph');
+      flushSync(() => {
+        updateBlocks(prev => {
+          const idx = prev.findIndex(b => b.id === blockId);
+          const next = [...prev];
+          next[idx] = makeEmptyTableBlock(blockId);
+          next.splice(idx + 1, 0, nextParagraph);
+          return next;
+        });
+      });
+      focusBlock(nextParagraph.id, false);
+      return;
+    }
     updateBlocks(prev => prev.map(b => b.id === blockId ? makeEmptyBlockKeepingId(b.id, command) : b));
     focusBlock(blockId, false);
   };
@@ -775,6 +795,7 @@ export default function MarkdownListScreen() {
     if (block.type === 'divider') return 4 + 10 + 0.75;      // the hr line
     if (block.type === 'image') return 4 + 8 + 10;           // near the image top
     if (block.type === 'link') return 4 + 8 + (13.5 * 1.4) / 2;
+    if (block.type === 'table') return 4 + 18;               // near the header row's top
     const base = isMobile ? 14.5 : 15;                       // paragraph/list/todo/quote
     return 4 + 6 + (base * 1.6) / 2;
   };
@@ -836,6 +857,9 @@ export default function MarkdownListScreen() {
               {block.description && <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>{block.description}</span>}
               <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{block.url}</span>
             </a>
+          ) : block.type === 'table' ? (
+            <MarkdownTable block={block}
+              onChange={next => updateBlocks(prev => prev.map(b => b.id === block.id ? next : b))} />
           ) : (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               {block.type === 'bulleted-list-item' && <span style={{ paddingTop: 9, color: 'var(--color-text-tertiary)', fontSize: 16, lineHeight: 1, flexShrink: 0 }}>•</span>}
