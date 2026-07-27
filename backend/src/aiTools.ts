@@ -87,7 +87,8 @@ function fail(result: string): ToolResult {
 
 // Block types the AI may CREATE from scratch (image is excluded — it needs a
 // real file upload from the UI; it can only ever be preserved/reordered).
-const MARKDOWN_BLOCK_TYPES = new Set(['heading', 'paragraph', 'bulleted-list-item', 'numbered-list-item', 'todo', 'quote', 'divider', 'link']);
+const MARKDOWN_BLOCK_TYPES = new Set(['heading', 'paragraph', 'bulleted-list-item', 'numbered-list-item', 'todo', 'quote', 'divider', 'link', 'table']);
+const MARKDOWN_TABLE_AGGREGATES = new Set(['sum', 'avg', 'median', 'max', 'min']);
 // Plain text-bearing block types (build a block from just its `text`).
 const MARKDOWN_TEXT_BLOCK_TYPES = new Set(['paragraph', 'bulleted-list-item', 'numbered-list-item', 'quote']);
 
@@ -102,6 +103,11 @@ function describeMarkdownBlock(b: MarkdownBlockLike): string {
     case 'divider': return b.layout === 'columns' ? '[divider · 2-column layout] ───' : '[divider] ───';
     case 'link': return `[link] ${(b.title as string) || (b.url as string)} (${b.url})${b.description ? ` — ${b.description}` : ''}`;
     case 'image': return `[image] (image_id: ${(b.imageId as string) ?? '?'})${b.caption ? ` caption: "${b.caption}"` : ''}`;
+    case 'table': {
+      const cols = Array.isArray(b.columns) ? b.columns.length : 0;
+      const rws = Array.isArray(b.rows) ? b.rows.length : 0;
+      return `[table] ${cols} column(s) × ${rws} row(s) incl. header`;
+    }
     default: return `[${b.type}] ${(b.text as string) || '(empty)'}`;
   }
 }
@@ -161,6 +167,32 @@ function buildMarkdownBlockFromSpec(
       const caption = str(spec.caption);
       if (caption !== undefined) block.caption = caption;
       return { block };
+    }
+    case 'table': {
+      const rawCols = Array.isArray(spec.columns) ? spec.columns : null;
+      if (!rawCols || rawCols.length === 0) return { error: 'table blocks require a non-empty "columns" array of header labels' };
+      // A column may be a plain header string or { text, aggregate }.
+      const headerLabels = rawCols.map((c) => {
+        if (typeof c === 'string') return c;
+        if (c && typeof c === 'object' && typeof (c as Record<string, unknown>).text === 'string') return (c as Record<string, string>).text;
+        return '';
+      });
+      const n = headerLabels.length;
+      const cell = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v));
+      const padRow = (arr: unknown): string[] => {
+        const src = Array.isArray(arr) ? arr : [];
+        return Array.from({ length: n }, (_, i) => cell(src[i]));
+      };
+      // Per-column aggregate: from an explicit `aggregates` array, or a column object's own `aggregate`.
+      const rawAggs = Array.isArray(spec.aggregates) ? spec.aggregates : [];
+      const columns = headerLabels.map((_, i) => {
+        const fromCol = rawCols[i] && typeof rawCols[i] === 'object' ? (rawCols[i] as Record<string, unknown>).aggregate : undefined;
+        const a = str(rawAggs[i]) ?? str(fromCol);
+        return { id: `col_${uuidv4()}`, width: 160, aggregate: a && MARKDOWN_TABLE_AGGREGATES.has(a) ? a : null };
+      });
+      const headerRow = { id: `row_${uuidv4()}`, height: 40, cells: padRow(headerLabels) };
+      const bodyRows = (Array.isArray(spec.rows) ? spec.rows : []).map((r) => ({ id: `row_${uuidv4()}`, height: 40, cells: padRow(r) }));
+      return { block: { id: blockId, type: 'table', columns, rows: [headerRow, ...bodyRows] } };
     }
     default:
       if (!MARKDOWN_TEXT_BLOCK_TYPES.has(type)) return { error: `unknown block type "${type}"` };
@@ -908,7 +940,7 @@ export const aiTools: AiTool[] = [
   // ───────────────────────────── markdown pages ─────────────────────────────
   {
     name: 'list_markdown_lists',
-    description: "List all of the user's Markdown pages (freeform documents built from '/' command blocks — headings, paragraphs, lists, to-dos, quotes, dividers, links, images), across every workspace.",
+    description: "List all of the user's Markdown pages (freeform documents built from '/' command blocks — headings, paragraphs, lists, to-dos, quotes, dividers, links, images, tables), across every workspace.",
     parameters: { type: 'object', properties: {} },
     handler: async (userId) => {
       const rows = await query<{ id: string; name: string; emoji: string | null; workspace_id: string | null; workspace_name: string | null }>(
@@ -923,7 +955,7 @@ export const aiTools: AiTool[] = [
   },
   {
     name: 'create_markdown_list',
-    description: "Create a new Markdown page — a freeform document built from '/' command blocks (headings, paragraphs, bulleted/numbered lists, to-dos, quotes, dividers, links). Optionally seed it with initial blocks in one call. If the user didn't say which workspace, omit workspace_id to use the current/personal workspace.",
+    description: "Create a new Markdown page — a freeform document built from '/' command blocks (headings, paragraphs, bulleted/numbered lists, to-dos, quotes, dividers, links, tables). Optionally seed it with initial blocks in one call. If the user didn't say which workspace, omit workspace_id to use the current/personal workspace.",
     parameters: {
       type: 'object',
       properties: {
@@ -936,7 +968,7 @@ export const aiTools: AiTool[] = [
         workspace_id: { type: 'string', description: 'Target workspace ID (from list_workspaces). Omit to use the current/personal workspace.' },
         blocks: {
           type: 'array',
-          description: 'Optional initial blocks, inserted in order. Each block is an object like { type, text?, level?, checked?, url?, title?, description?, layout? } — same shape as add_markdown_block. Image blocks are not allowed here.',
+          description: 'Optional initial blocks, inserted in order. Each block is an object like { type, text?, level?, checked?, url?, title?, description?, layout?, columns?, rows?, aggregates? } — same shape as add_markdown_block (columns/rows/aggregates build a table). Image blocks are not allowed here.',
           items: { type: 'object' },
         },
       },
@@ -1071,12 +1103,12 @@ export const aiTools: AiTool[] = [
   },
   {
     name: 'add_markdown_block',
-    description: "Insert a new block into a Markdown page — the same thing a '/' slash command does in the editor. type maps to: heading → /h1,/h2,/h3 (set level), paragraph → plain text, bulleted-list-item → /bullet, numbered-list-item → /number, todo → /todo (checked todos mirror live to this page's auto-managed Todo list), quote → /quote, divider → /divider (set layout:'columns' to make the sections on either side sit side-by-side in 2 columns), link → /link (needs url). Image blocks cannot be created this way — they require a real file upload from the UI. Call get_markdown_list first to see existing block ids for positioning. To add several blocks at once, use add_markdown_blocks.",
+    description: "Insert a new block into a Markdown page — the same thing a '/' slash command does in the editor. type maps to: heading → /h1,/h2,/h3 (set level), paragraph → plain text, bulleted-list-item → /bullet, numbered-list-item → /number, todo → /todo (checked todos mirror live to this page's auto-managed Todo list), quote → /quote, divider → /divider (set layout:'columns' to make the sections on either side sit side-by-side in 2 columns), link → /link (needs url), table → /table (a grid — pass `columns` header labels and optional `rows` of body cells, plus optional per-column `aggregates`). Image blocks cannot be created this way — they require a real file upload from the UI. Call get_markdown_list first to see existing block ids for positioning. To add several blocks at once, use add_markdown_blocks.",
     parameters: {
       type: 'object',
       properties: {
         markdown_list_id: { type: 'string' },
-        type: { type: 'string', enum: ['heading', 'paragraph', 'bulleted-list-item', 'numbered-list-item', 'todo', 'quote', 'divider', 'link'] },
+        type: { type: 'string', enum: ['heading', 'paragraph', 'bulleted-list-item', 'numbered-list-item', 'todo', 'quote', 'divider', 'link', 'table'] },
         text: { type: 'string', description: 'Text content — required for heading/paragraph/bulleted-list-item/numbered-list-item/todo/quote.' },
         level: { type: 'number', enum: [1, 2, 3], description: 'Heading level — required when type is "heading".' },
         checked: { type: 'boolean', description: 'Initial checked state for a todo block (default false).' },
@@ -1084,6 +1116,9 @@ export const aiTools: AiTool[] = [
         title: { type: 'string', description: 'Optional link title.' },
         description: { type: 'string', description: 'Optional link description.' },
         layout: { type: 'string', enum: ['stack', 'columns'], description: "For divider blocks only — 'columns' pairs the sections on either side of the divider into a 2-column side-by-side layout; 'stack' (default) keeps them full-width." },
+        columns: { type: 'array', description: 'For table blocks (required) — header labels, one per column; these become the bold header row. Each item is a string, or { text, aggregate } to also set that column’s footer aggregate.', items: { type: 'string' } },
+        rows: { type: 'array', description: 'For table blocks — BODY rows only (the header comes from `columns`). Each item is an array of cell strings aligned to columns; short/long rows are padded/truncated.', items: { type: 'array', items: { type: 'string' } } },
+        aggregates: { type: 'array', description: "For table blocks — optional per-column footer aggregate over that column's numeric body cells: one of sum, avg, median, max, min (null/omit for none), aligned to columns.", items: { type: 'string' } },
         position: { type: 'string', enum: ['start', 'end', 'after'], description: "Where to insert — 'start' (top of doc), 'end' (bottom, default), or 'after' (needs after_block_id)." },
         after_block_id: { type: 'string', description: 'Required when position is "after" — the block to insert immediately after.' },
       },
@@ -1114,7 +1149,7 @@ export const aiTools: AiTool[] = [
         markdown_list_id: { type: 'string' },
         blocks: {
           type: 'array',
-          description: 'Ordered list of blocks to insert. Each: { type, text?, level?, checked?, url?, title?, description?, layout? }.',
+          description: 'Ordered list of blocks to insert. Each: { type, text?, level?, checked?, url?, title?, description?, layout?, columns?, rows?, aggregates? } — see add_markdown_block for what each field means (columns/rows/aggregates are for table blocks).',
           items: { type: 'object' },
         },
         position: { type: 'string', enum: ['start', 'end', 'after'], description: "Where to insert the whole group — 'start', 'end' (default), or 'after' (needs after_block_id)." },
@@ -1145,7 +1180,7 @@ export const aiTools: AiTool[] = [
   },
   {
     name: 'update_markdown_block',
-    description: "Edit an existing block in a Markdown page. Pass only the fields relevant to that block's type (text for heading/paragraph/bulleted-list-item/numbered-list-item/todo/quote; level for heading; checked for todo; url/title/description for link; caption for image; layout for divider). Call get_markdown_list first to find the block_id.",
+    description: "Edit an existing block in a Markdown page. Pass only the fields relevant to that block's type (text for heading/paragraph/bulleted-list-item/numbered-list-item/todo/quote; level for heading; checked for todo; url/title/description for link; caption for image; layout for divider; columns/rows/aggregates for table — a table edit REPLACES the grid, so pass its full columns (and rows/aggregates you want to keep)). Call get_markdown_list first to find the block_id.",
     parameters: {
       type: 'object',
       properties: {
@@ -1159,6 +1194,9 @@ export const aiTools: AiTool[] = [
         description: { type: 'string' },
         caption: { type: 'string', description: 'Caption for an image block.' },
         layout: { type: 'string', enum: ['stack', 'columns'], description: "For divider blocks — 'columns' pairs the sections on either side into a 2-column layout; 'stack' reverts to full-width." },
+        columns: { type: 'array', description: 'For table blocks — header labels (see add_markdown_block). Required to edit a table; the edit rebuilds the grid.', items: { type: 'string' } },
+        rows: { type: 'array', description: 'For table blocks — body rows (arrays of cell strings). Omit to clear body rows.', items: { type: 'array', items: { type: 'string' } } },
+        aggregates: { type: 'array', description: 'For table blocks — per-column footer aggregate (sum/avg/median/max/min or null), aligned to columns.', items: { type: 'string' } },
       },
       required: ['markdown_list_id', 'block_id'],
     },
@@ -1198,6 +1236,15 @@ export const aiTools: AiTool[] = [
               next[idx] = { ...b, layout: layout === 'columns' ? 'columns' : 'stack' };
             }
             break;
+          case 'table': {
+            // A table edit rebuilds the whole grid (its structure is too coupled
+            // for field-by-field patching) — keep the same block id.
+            if (args.columns === undefined && args.rows === undefined && args.aggregates === undefined) break;
+            const built = buildMarkdownBlockFromSpec({ type: 'table', id: blockId, columns: args.columns, rows: args.rows, aggregates: args.aggregates });
+            if ('error' in built) return { error: built.error };
+            next[idx] = built.block;
+            break;
+          }
           default:
             if (args.text !== undefined) next[idx] = { ...b, text: str(args.text) ?? '' };
         }
@@ -1291,7 +1338,7 @@ export const aiTools: AiTool[] = [
   },
   {
     name: 'set_markdown_content',
-    description: "Replace a Markdown page's ENTIRE content with a new ordered list of blocks in one call — the most powerful way to fully restructure a page (reorder, retype, rewrite, regroup all at once). Each block: { type, text?, level?, checked?, url?, title?, description?, layout? }. IMPORTANT: this overwrites everything, so include EVERY block you want to keep. To keep an existing image, include a block { type:'image', image_id:'<its image_id from get_markdown_list>' } (optionally with a caption) — any image not included is permanently removed. To keep a to-do's live checkbox link, include its original block id as `id` (from get_markdown_list); otherwise a new mirror task is created. Passing an empty array clears the page to a single empty paragraph. Prefer the targeted block tools for small edits; use this for wholesale restructuring.",
+    description: "Replace a Markdown page's ENTIRE content with a new ordered list of blocks in one call — the most powerful way to fully restructure a page (reorder, retype, rewrite, regroup all at once). Each block: { type, text?, level?, checked?, url?, title?, description?, layout?, columns?, rows?, aggregates? } (columns/rows/aggregates build a table). IMPORTANT: this overwrites everything, so include EVERY block you want to keep. To keep an existing image, include a block { type:'image', image_id:'<its image_id from get_markdown_list>' } (optionally with a caption) — any image not included is permanently removed. To keep a to-do's live checkbox link, include its original block id as `id` (from get_markdown_list); otherwise a new mirror task is created. Passing an empty array clears the page to a single empty paragraph. Prefer the targeted block tools for small edits; use this for wholesale restructuring.",
     parameters: {
       type: 'object',
       properties: {

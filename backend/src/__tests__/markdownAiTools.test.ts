@@ -203,3 +203,43 @@ describe('update_markdown_list', () => {
     expect(r.ok).toBe(false);
   });
 });
+
+describe('add_markdown_block · table', () => {
+  it('rejects a table without columns', async () => {
+    current = [];
+    const r = await executeAiTool('u1', 'add_markdown_block', { markdown_list_id: 'm1', type: 'table' });
+    expect(r.ok).toBe(false);
+    expect(r.result).toMatch(/columns/i);
+  });
+
+  it('builds a header row, body rows and per-column aggregates', async () => {
+    current = [];
+    const r = await executeAiTool('u1', 'add_markdown_block', {
+      markdown_list_id: 'm1', type: 'table',
+      columns: ['Item', 'Price'],
+      rows: [['Apple', '3'], ['Pear', '4']],
+      aggregates: [null, 'sum'],
+    });
+    expect(r.ok).toBe(true);
+    expect(produced).toHaveLength(1);
+    const t = produced![0] as MarkdownBlockLike & { columns: Array<{ aggregate: string | null }>; rows: Array<{ cells: string[] }> };
+    expect(t.type).toBe('table');
+    expect(t.columns).toHaveLength(2);
+    expect(t.columns.map(c => c.aggregate)).toEqual([null, 'sum']);
+    expect(t.rows).toHaveLength(3); // header + 2 body
+    expect(t.rows[0].cells).toEqual(['Item', 'Price']);
+    expect(t.rows[2].cells).toEqual(['Pear', '4']);
+  });
+
+  it('pads short body rows to the column count', async () => {
+    current = [];
+    const r = await executeAiTool('u1', 'add_markdown_block', {
+      markdown_list_id: 'm1', type: 'table',
+      columns: ['A', 'B', 'C'],
+      rows: [['only-one']],
+    });
+    expect(r.ok).toBe(true);
+    const t = produced![0] as MarkdownBlockLike & { rows: Array<{ cells: string[] }> };
+    expect(t.rows[1].cells).toEqual(['only-one', '', '']);
+  });
+});

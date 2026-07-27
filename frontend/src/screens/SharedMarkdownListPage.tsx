@@ -2,8 +2,10 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import Icon from '../components/Icon';
+import MarkdownTable from '../components/MarkdownTable';
 import { renderInline } from '../components/MarkdownView';
 import { useMobile } from '../hooks/useBreakpoint';
+import type { MarkdownTableBlock } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -34,6 +36,8 @@ interface SharedBlock {
   title?: string;
   description?: string;
   layout?: 'stack' | 'columns';
+  columns?: MarkdownTableBlock['columns'];
+  rows?: MarkdownTableBlock['rows'];
 }
 
 interface MarkdownListContentResponse {
@@ -314,6 +318,9 @@ function SharedBlockView({ block, accent, number, token, password }: { block: Sh
         {block.caption && <div style={{ marginTop: 6, padding: '0 4px 4px', fontFamily: 'var(--font-body)', fontSize: 12.5, fontStyle: 'italic', color: 'var(--color-text-tertiary)' }}>{block.caption}</div>}
       </div>
     );
+  }
+  if (block.type === 'table') {
+    return <div style={cardStyle}><MarkdownTable block={block as unknown as MarkdownTableBlock} /></div>;
   }
   if (block.type === 'link') {
     return (

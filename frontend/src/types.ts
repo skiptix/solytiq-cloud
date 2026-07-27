@@ -524,7 +524,8 @@ export type MarkdownBlockType =
   | 'quote'
   | 'divider'
   | 'image'
-  | 'link';
+  | 'link'
+  | 'table';
 
 interface MarkdownBlockBase {
   id: string;
@@ -590,6 +591,36 @@ export interface MarkdownLinkBlock extends MarkdownBlockBase {
   description?: string;
 }
 
+/** Per-column footer aggregate function over that column's numeric body cells. */
+export type MarkdownTableAggregate = 'sum' | 'avg' | 'median' | 'max' | 'min';
+
+export interface MarkdownTableColumn {
+  id: string;
+  /** Column width in px (individually resizable). */
+  width: number;
+  /** Footer aggregate for this column; null/absent = no aggregate shown. */
+  aggregate?: MarkdownTableAggregate | null;
+}
+
+export interface MarkdownTableRow {
+  id: string;
+  /** Row height in px (individually resizable). */
+  height: number;
+  /** Cell text, aligned to `columns` by index. */
+  cells: string[];
+}
+
+/**
+ * A grid of text cells. `rows[0]` is the (bold) header row and is excluded from
+ * column aggregation; `rows[1..]` are body rows. Each column carries its own
+ * width and optional footer aggregate; each row its own height.
+ */
+export interface MarkdownTableBlock extends MarkdownBlockBase {
+  type: 'table';
+  columns: MarkdownTableColumn[];
+  rows: MarkdownTableRow[];
+}
+
 export type MarkdownBlock =
   | MarkdownHeadingBlock
   | MarkdownParagraphBlock
@@ -599,7 +630,8 @@ export type MarkdownBlock =
   | MarkdownQuoteBlock
   | MarkdownDividerBlock
   | MarkdownImageBlock
-  | MarkdownLinkBlock;
+  | MarkdownLinkBlock
+  | MarkdownTableBlock;
 
 export interface MarkdownListContent {
   version: 1;
