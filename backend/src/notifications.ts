@@ -29,7 +29,9 @@ export type NotificationType =
   | 'item_tagged'
   | 'mention'
   | 'automation_run'
-  | 'deadline_overdue';
+  | 'deadline_overdue'
+  | 'agent_run_complete'
+  | 'agent_proposal';
 
 export interface CreateNotificationInput {
   /** Recipient user id. */

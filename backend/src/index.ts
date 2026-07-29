@@ -46,6 +46,8 @@ import canvasesRouter from './routes/canvases';
 import knowledgeRouter from './routes/knowledge';
 import { sweepEmbeddingQueue } from './knowledge/embeddingWorker';
 import { setPgvectorAvailable } from './knowledge/state';
+import agentRouter from './routes/agent';
+import { sweepExpiredProposals } from './agent/runtime';
 import { backfillHardLinks } from './graph/backfill';
 import { sweepGraphMetrics } from './graph/metrics';
 import { isAppInstalled } from './appsRegistry';
@@ -210,6 +212,18 @@ const knowledgeLimiter = rateLimit({
   message: { error: 'Too many requests, please slow down.' },
 });
 
+// Agent Runtime: starting a run kicks off a multi-turn LLM tool-calling loop —
+// far pricier than any other endpoint in this app. A tight budget on top of
+// apiLimiter, same pattern as links/graph/knowledge above.
+const agentLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKey,
+  message: { error: 'Too many requests, please slow down.' },
+});
+
 app.use('/api/', (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
@@ -260,6 +274,7 @@ app.use('/api/links', linksLimiter, linksRouter);
 app.use('/api/graph', graphLimiter, graphRouter);
 app.use('/api/canvases', canvasesRouter);
 app.use('/api/knowledge', knowledgeLimiter, knowledgeRouter);
+app.use('/api/agent', agentLimiter, agentRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
@@ -2899,6 +2914,72 @@ async function runMigrations() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_embedding_queue_status ON embedding_queue (status, updated_at)`);
 
+  // ── Agent Runtime ─────────────────────────────────────────────────────
+  // Per-workspace autonomy: agent_mode gates whether the agent runs at all
+  // ('off') and how much a run can do without a human ('suggest' always
+  // proposes, 'assisted' auto-runs only policy.autoApproveTools, 'autonomous'
+  // auto-runs everything the policy allows). See agent/policy.ts.
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS agent_mode VARCHAR(20) NOT NULL DEFAULT 'off'`);
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS agent_policy JSONB NOT NULL DEFAULT '{}'`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS agent_runs (
+      id                 VARCHAR(100) PRIMARY KEY,
+      workspace_id       VARCHAR(100) NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      trigger_type       VARCHAR(40) NOT NULL,
+      trigger_context    JSONB NOT NULL DEFAULT '{}',
+      goal               TEXT NOT NULL,
+      mode               VARCHAR(20) NOT NULL,
+      status             VARCHAR(20) NOT NULL DEFAULT 'running',
+      steps              JSONB NOT NULL DEFAULT '[]',
+      tokens_prompt      INTEGER NOT NULL DEFAULT 0,
+      tokens_completion  INTEGER NOT NULL DEFAULT 0,
+      model              VARCHAR(100),
+      error              TEXT,
+      started_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      finished_at        TIMESTAMPTZ
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_runs_workspace ON agent_runs (workspace_id, started_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_runs_user ON agent_runs (user_id, started_at DESC)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS agent_proposals (
+      id            VARCHAR(100) PRIMARY KEY,
+      run_id        VARCHAR(100) NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+      workspace_id  VARCHAR(100) NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      tool_name     VARCHAR(100) NOT NULL,
+      tool_args     JSONB NOT NULL DEFAULT '{}',
+      rationale     TEXT,
+      preview       JSONB,
+      status        VARCHAR(20) NOT NULL DEFAULT 'pending',
+      decided_by    UUID REFERENCES users(id) ON DELETE SET NULL,
+      decided_at    TIMESTAMPTZ,
+      expires_at    TIMESTAMPTZ NOT NULL,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_proposals_ws_status ON agent_proposals (workspace_id, status)`);
+
+  // Curated revert support (agent/inverse.ts) — one row per tracked mutation a
+  // run made. before_state is null for a create (nothing existed before).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS agent_mutations (
+      id            VARCHAR(100) PRIMARY KEY,
+      run_id        VARCHAR(100) NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+      workspace_id  VARCHAR(100) NOT NULL,
+      tool_name     VARCHAR(100) NOT NULL,
+      entity_type   VARCHAR(24),
+      entity_id     VARCHAR(100),
+      before_state  JSONB,
+      reverted      BOOLEAN NOT NULL DEFAULT false,
+      revert_error  TEXT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_mutations_run ON agent_mutations (run_id)`);
+
   console.log('Database migrations applied.');
 }
 
@@ -2964,6 +3045,11 @@ async function start() {
   // once per (task, deadline). Hourly is plenty — deadlines have day precision.
   sweepOverdueDeadlines();
   setInterval(sweepOverdueDeadlines, 60 * 60 * 1000);
+
+  // Agent Runtime: expire stale pending proposals (7-day TTL). Hourly is
+  // plenty — approvals are a human-timescale action, not a hot path.
+  sweepExpiredProposals();
+  setInterval(sweepExpiredProposals, 60 * 60 * 1000);
 
   // Delta-sync: prune the outbox daily, and start the realtime dispatcher that
   // fans committed changes out to every affected user's devices.

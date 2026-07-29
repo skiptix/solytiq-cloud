@@ -216,6 +216,8 @@ export interface Workspace {
   role: 'owner' | 'member';
   createdAt: string;
   memberCount?: number;
+  agentMode?: AgentMode;
+  agentPolicy?: AgentPolicy;
 }
 
 export interface WorkspaceMember {
