@@ -6,6 +6,8 @@ import { werr } from '../workspaceUtil';
 import { parseRecurrenceRule, computeRecurrenceDates } from '../recurrence';
 import { resolveInviteeIds, setMeetingAttendees } from '../meetingAttendees';
 import { createNotifications } from '../notifications';
+import { syncInlineLinksForText } from '../graph/inlineLinks';
+import { enqueueEmbedding } from '../knowledge/queue';
 
 const router = Router();
 router.use(authenticate);
@@ -31,6 +33,7 @@ interface MeetingRow {
   all_day: boolean;
   color: string | null;
   recurrence_id: string | null;
+  workspace_id: string | null;
   created_at: string;
   updated_at: string;
   attendee_ids?: (string | null)[] | null;
@@ -245,6 +248,8 @@ router.put('/:id', async (req: Request, res: Response) => {
       workspaceId: null,
       data: { date: saved.meeting_date, meetingTitle: saved.title },
     });
+    await syncInlineLinksForText({ entityType: 'meeting', entityId: req.params.id }, saved.description, req.userId!);
+    await enqueueEmbedding('meeting', req.params.id, saved.workspace_id);
   } catch (err) {
     werr('meetings PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });

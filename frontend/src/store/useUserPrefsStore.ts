@@ -30,6 +30,12 @@ interface UserPrefsState {
   setCalendarHiddenWorkspaces: (ids: string[]) => void;
   setCalendarHiddenKinds: (kinds: string[]) => void;
   resetCalendarPrefs: () => void;
+
+  // Graph Layer: which of Explore / Canvas the Graph screen last showed, kept
+  // separately per workspace so a document-heavy workspace can default to a
+  // different view than a task-heavy one.
+  graphViewByWorkspace: Record<string, 'explore' | 'canvas'>;
+  setGraphViewForWorkspace: (workspaceId: string, view: 'explore' | 'canvas') => void;
 }
 
 const CALENDAR_DEFAULTS = {
@@ -59,6 +65,11 @@ const useUserPrefsStore = create<UserPrefsState>()(
       setCalendarHiddenWorkspaces: (ids) => set({ calendarHiddenWorkspaces: ids }),
       setCalendarHiddenKinds: (kinds) => set({ calendarHiddenKinds: kinds }),
       resetCalendarPrefs: () => set({ ...CALENDAR_DEFAULTS }),
+
+      graphViewByWorkspace: {},
+      setGraphViewForWorkspace: (workspaceId, view) => set((s) => ({
+        graphViewByWorkspace: { ...s.graphViewByWorkspace, [workspaceId]: view },
+      })),
     }),
     {
       name: 'solytiq_user_prefs',

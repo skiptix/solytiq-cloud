@@ -7,6 +7,7 @@ import CalendarPicker from './CalendarPicker';
 import TaskChangeHistory from './TaskChangeHistory';
 import NotesEditor from './NotesEditor';
 import TaggedUsersRow from './TaggedUsersRow';
+import RelationsPanel from './graph/RelationsPanel';
 import AttachmentPreviewModal from './AttachmentPreview';
 import { isPreviewable } from '../utils/attachmentPreview';
 import { DeleteConfirmModal } from './TaskItem';
@@ -667,15 +668,19 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                 />
               </PropRow>
 
-              <PropRow icon="history" label="Timeline" last={!task._listName}>
+              <PropRow icon="history" label="Timeline">
                 <TaskMiniTimeline createdAt={task.createdAt} completedAt={task.completedAt} checked={task.checked} />
               </PropRow>
 
               {task._listName && (
-                <PropRow icon="format_list_bulleted" label="In list" last>
+                <PropRow icon="format_list_bulleted" label="In list">
                   <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-secondary)' }}>{task._listName}</span>
                 </PropRow>
               )}
+
+              <PropRow icon="hub" label="Relations" last>
+                <RelationsPanel entityType="task" entityId={String(task.id)} workspaceId={taskWorkspaceId ?? undefined} compact />
+              </PropRow>
             </div>
 
             {/* Change history — mobile only; desktop gets the side panel instead. */}

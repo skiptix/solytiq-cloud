@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import useAuthStore from '../store/useAuthStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
-import { apiGlobalSearch, type GlobalSearchResult } from '../api/client';
+import { apiGlobalSearch, apiKnowledgeSearch, type GlobalSearchResult } from '../api/client';
 
 // These two open in-app affordances rather than a route — Profile Settings is
 // the account modal (not the admin /settings screen), and Sign Out ends the
@@ -14,11 +14,11 @@ const SETTINGS_RESULTS = [
   { label: 'Sign Out', sub: 'End your session', icon: 'logout', action: 'sign-out' as const },
 ];
 
-type Result = GlobalSearchResult | { type: 'setting'; label: string; sub: string; icon: string; action: 'account-settings' | 'sign-out' };
+type Result = GlobalSearchResult | { type: 'setting'; label: string; sub: string; icon: string; action: 'account-settings' | 'sign-out' } | { type: 'knowledge'; id: string; label: string; sub: string; path: string };
 
-const GROUP_COLORS: Record<string, string> = { task: 'var(--color-primary)', list: 'var(--color-blue-mid-7)', setting: 'var(--color-success)', timeline: 'var(--color-pink-mid-1)', milestone: 'var(--color-warning-alt)', meeting: 'var(--color-red-mid-2)', workspace: 'var(--color-purple-mid-3)' };
-const GROUP_LABELS: Record<string, string> = { task: 'Tasks', list: 'Boards', setting: 'Settings', timeline: 'Timelines', milestone: 'Milestones', meeting: 'Meetings', workspace: 'Workspaces' };
-const GROUP_ICONS: Record<string, string> = { task: 'check_circle', list: 'format_list_bulleted', timeline: 'timeline', milestone: 'flag', meeting: 'event', workspace: 'workspaces' };
+const GROUP_COLORS: Record<string, string> = { task: 'var(--color-primary)', list: 'var(--color-blue-mid-7)', setting: 'var(--color-success)', timeline: 'var(--color-pink-mid-1)', milestone: 'var(--color-warning-alt)', meeting: 'var(--color-red-mid-2)', workspace: 'var(--color-purple-mid-3)', knowledge: 'var(--color-primary)' };
+const GROUP_LABELS: Record<string, string> = { task: 'Tasks', list: 'Boards', setting: 'Settings', timeline: 'Timelines', milestone: 'Milestones', meeting: 'Meetings', workspace: 'Workspaces', knowledge: 'From your content' };
+const GROUP_ICONS: Record<string, string> = { task: 'check_circle', list: 'format_list_bulleted', timeline: 'timeline', milestone: 'flag', meeting: 'event', workspace: 'workspaces', knowledge: 'auto_awesome' };
 
 function highlight(text: string, query: string): React.ReactNode {
   if (!query) return text;
@@ -52,6 +52,7 @@ export default function CommandPalette({ onClose, onNavigate, onOpenAccountSetti
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const [serverResults, setServerResults] = useState<GlobalSearchResult[]>([]);
+  const [knowledgeResults, setKnowledgeResults] = useState<Extract<Result, { type: 'knowledge' }>[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -79,13 +80,42 @@ export default function CommandPalette({ onClose, onNavigate, onOpenAccountSetti
     return () => { clearTimeout(timer); ac.abort(); };
   }, [q]);
 
+  // Knowledge Layer — semantic/lexical search over note & page CONTENT (not
+  // just titles), kept as a separate lower-priority group appended after the
+  // structural (title-match) results above. Best-effort: any failure (feature
+  // disabled, no provider configured, transient error) just leaves this group
+  // empty rather than surfacing an error in the palette.
+  useEffect(() => {
+    if (!q || q.length < 2) { setKnowledgeResults([]); return; }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      apiKnowledgeSearch({ q, limit: 5 })
+        .then(res => {
+          if (cancelled) return;
+          setKnowledgeResults(res.results.map(hit => ({
+            type: 'knowledge' as const,
+            id: hit.entity.srn,
+            label: hit.entity.title || 'Untitled',
+            sub: hit.chunkContent.slice(0, 100),
+            path: hit.entity.deepLink ?? '/dashboard',
+          })));
+        })
+        .catch(() => { if (!cancelled) setKnowledgeResults([]); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [q]);
+
   const allResults: Result[] = useMemo(() => {
     const settingsResults = q ? SETTINGS_RESULTS.filter(s => s.label.toLowerCase().includes(q)).slice(0, 3) : [];
+    // Drop a knowledge hit whose entity already appears in the structural results — same item, no need to show it twice.
+    const structuralIds = new Set(serverResults.map(r => `${r.type}:${r.id}`));
+    const dedupedKnowledge = knowledgeResults.filter(k => !structuralIds.has(k.id.replace(/^srn:/, '')));
     return [
       ...serverResults,
+      ...dedupedKnowledge,
       ...settingsResults.map(s => ({ type: 'setting' as const, label: s.label, sub: s.sub, icon: s.icon, action: s.action })),
     ];
-  }, [q, serverResults]);
+  }, [q, serverResults, knowledgeResults]);
 
   useEffect(() => { setActiveIdx(0); }, [query, serverResults]);
 

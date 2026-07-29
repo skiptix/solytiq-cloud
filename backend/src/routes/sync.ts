@@ -41,7 +41,7 @@ const DELTA_SCAN_LIMIT = 1000;
 // Entities the app store patches from full payloads.
 const CORE_ENTITIES = new Set(['task', 'list', 'folder', 'timeline']);
 // Entities the client reacts to by refetching (screens/stores own their data).
-const SIGNAL_ENTITIES = new Set(['meeting', 'file', 'workspace', 'trash', 'template', 'automation', 'markdownList', 'notification']);
+const SIGNAL_ENTITIES = new Set(['meeting', 'file', 'workspace', 'trash', 'template', 'automation', 'markdownList', 'notification', 'link']);
 
 interface Change {
   entity: string;

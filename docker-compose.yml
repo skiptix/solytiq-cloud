@@ -2,7 +2,15 @@ version: "3.9"
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector/pgvector:pg16 is a drop-in Postgres 16 image with the `vector`
+    # extension pre-installed — the Knowledge Layer's semantic search needs it
+    # for entity_chunks.embedding + HNSW similarity search. Everything else
+    # about the image (data dir, entrypoint, pg_isready) is identical to
+    # postgres:16-alpine. The backend degrades gracefully (lexical/trigram
+    # search only) if `CREATE EXTENSION vector` fails on startup — see
+    # runMigrations() in backend/src/index.ts — so this is safe even against
+    # an older/unmodified Postgres image during a rolling upgrade.
+    image: pgvector/pgvector:pg16
     container_name: solytiq-postgres
     restart: unless-stopped
     environment:
@@ -38,6 +46,9 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
     volumes:
       - gps_uploads:/app/uploads
     depends_on:

@@ -13,6 +13,8 @@ import type { MutationActor } from '../automationEngine';
 import { recordTaskChanges } from '../taskChangeLog';
 import { notifyNewMentions } from '../mentions';
 import { itemShareExists, isItemSharedWith } from '../itemShares';
+import { syncInlineLinksForText } from '../graph/inlineLinks';
+import { enqueueEmbedding } from '../knowledge/queue';
 
 const router = Router();
 router.use(authenticate);
@@ -1191,6 +1193,8 @@ export async function updateListTaskFields(
       data: { listId, source: 'list' },
       shareItem: { itemType: 'list', itemId: listId },
     });
+    await syncInlineLinksForText({ entityType: 'task', entityId: String(saved.id) }, saved.note, actor.userId, exec);
+    await enqueueEmbedding('task', String(saved.id), wsId, exec);
   }
 
   // Fire triggers only on a false → true checked transition, and only for

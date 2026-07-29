@@ -333,13 +333,20 @@ router.get('/settings', authenticate, requireAdmin, async (_req: Request, res: R
 // PUT /api/admin/settings
 router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { storageQuotaPerUser, aiAssistantEnabled, aiModel, twoFAFeatureEnabled, mcpEnabled, mobileAppEnabled } = req.body as {
+    const {
+      storageQuotaPerUser, aiAssistantEnabled, aiModel, twoFAFeatureEnabled, mcpEnabled, mobileAppEnabled,
+      knowledgeSearchEnabled, embeddingBaseUrl, embeddingModel, embeddingMonthlyTokenBudget,
+    } = req.body as {
       storageQuotaPerUser?: number;
       aiAssistantEnabled?: boolean;
       aiModel?: string;
       twoFAFeatureEnabled?: boolean;
       mcpEnabled?: boolean;
       mobileAppEnabled?: boolean;
+      knowledgeSearchEnabled?: boolean;
+      embeddingBaseUrl?: string;
+      embeddingModel?: string;
+      embeddingMonthlyTokenBudget?: number;
     };
     if (storageQuotaPerUser !== undefined) {
       const bytes = Math.max(0, Math.round(Number(storageQuotaPerUser)));
@@ -391,6 +398,35 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
       if (!mobileAppEnabled) {
         await query('DELETE FROM mobile_connections');
       }
+    }
+    if (knowledgeSearchEnabled !== undefined) {
+      await query(
+        `INSERT INTO app_settings (key, value) VALUES ('knowledge_search_enabled', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [knowledgeSearchEnabled ? 'true' : 'false']
+      );
+    }
+    if (embeddingBaseUrl !== undefined) {
+      await query(
+        `INSERT INTO app_settings (key, value) VALUES ('embedding_base_url', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [embeddingBaseUrl.trim()]
+      );
+    }
+    if (embeddingModel !== undefined && embeddingModel.trim()) {
+      await query(
+        `INSERT INTO app_settings (key, value) VALUES ('embedding_model', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [embeddingModel.trim()]
+      );
+    }
+    if (embeddingMonthlyTokenBudget !== undefined) {
+      const tokens = Math.max(0, Math.round(Number(embeddingMonthlyTokenBudget)));
+      await query(
+        `INSERT INTO app_settings (key, value) VALUES ('embedding_monthly_token_budget', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [String(tokens)]
+      );
     }
     const result = await query<{ key: string; value: string }>('SELECT key, value FROM app_settings');
     const settings: Record<string, string> = {};

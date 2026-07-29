@@ -17,6 +17,8 @@ import { UPLOAD_DIR } from './files';
 import type { MutationActor } from '../automationEngine';
 import { notifyNewMentions } from '../mentions';
 import { itemShareExists, isItemSharedWith, deleteItemShares } from '../itemShares';
+import { syncInlineLinksForBlocks } from '../graph/inlineLinks';
+import { enqueueEmbedding } from '../knowledge/queue';
 
 /** Flatten every text-bearing block into one string for @-mention diffing. */
 function collectBlockText(blocks: MarkdownBlockLike[]): string {
@@ -350,6 +352,8 @@ export async function mutateMarkdownListBlocks(
     data: {},
     shareItem: { itemType: 'markdownList', itemId: markdownListId },
   });
+  await syncInlineLinksForBlocks({ entityType: 'markdownList', entityId: markdownListId }, result.rows[0] ? normalizeContent((result.rows[0] as unknown as MarkdownListRow).content).blocks : [], userId);
+  await enqueueEmbedding('markdownList', markdownListId, existing.rows[0].workspace_id);
   return { ok: true, markdownList: hydrated };
 }
 
@@ -576,6 +580,8 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
         data: {},
         shareItem: { itemType: 'markdownList', itemId: id },
       });
+      await syncInlineLinksForBlocks({ entityType: 'markdownList', entityId: id }, normalizeContent((result.rows[0] as unknown as MarkdownListRow).content).blocks, req.userId!);
+      await enqueueEmbedding('markdownList', id, row.workspace_id);
     }
   } catch (err) {
     werr('markdown-lists PUT error:', err);

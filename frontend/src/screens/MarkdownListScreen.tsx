@@ -21,6 +21,7 @@ import MentionPopover from '../components/MentionPopover';
 import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSettingsModal';
 import MarkdownListAIAssist from '../components/AIAssistant/MarkdownListAIAssist';
 import SaveStatusDot from '../components/SaveStatusDot';
+import BacklinksPanel from '../components/graph/BacklinksPanel';
 
 // Matches TaskItem.tsx's hand-drawn checkmark so a `/todo` block's checkbox
 // looks identical to a task row in the Board screen.
@@ -1120,6 +1121,12 @@ export default function MarkdownListScreen() {
           </div>
           </div>
         </div>
+
+        {mdId && (
+          <div style={{ marginBottom: 20 }}>
+            <BacklinksPanel entityType="markdownList" entityId={mdId} compact />
+          </div>
+        )}
 
         {/* Blocks */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
