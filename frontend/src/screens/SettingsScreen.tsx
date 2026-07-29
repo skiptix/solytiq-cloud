@@ -5,7 +5,7 @@ import { useMobile } from '../hooks/useBreakpoint';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import useAIStore from '../store/useAIStore';
-import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiUpdateAppSettingsMcp, apiUpdateAppSettingsMobile, apiGetAIUsage, apiGetAdminReadApiKeys, apiRevokeAdminReadApiKey, type AdminReadApiKey, type AIUsageDay, type AIUsageModel, type AIUsageTotals } from '../api/client';
+import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiUpdateAppSettingsMcp, apiUpdateAppSettingsMobile, apiGetAIUsage, apiGetAdminReadApiKeys, apiRevokeAdminReadApiKey, apiUpdateAppSettingsKnowledge, apiGetKnowledgeStatus, apiKnowledgeReindex, type AdminReadApiKey, type AIUsageDay, type AIUsageModel, type AIUsageTotals, type KnowledgeStatus } from '../api/client';
 import Icon from '../components/Icon';
 import AdminApiKeyWizard from '../modals/AdminApiKeyWizard';
 import AppsStoreModal from '../modals/AppsStoreModal';
@@ -164,6 +164,17 @@ export default function SettingsScreen() {
   const [usageLoading, setUsageLoading] = useState(false);
   const [hoveredBar, setHoveredBar] = useState<{ x: number; y: number; date: string; total: number; prompt: number; completion: number } | null>(null);
 
+  // Knowledge Layer (semantic search) settings
+  const [knowledgeSearchEnabled, setKnowledgeSearchEnabled] = useState(true);
+  const [embeddingBaseUrl, setEmbeddingBaseUrl] = useState('');
+  const [embeddingModel, setEmbeddingModel] = useState('');
+  const [embeddingBudget, setEmbeddingBudget] = useState('');
+  const [knowledgeSaving, setKnowledgeSaving] = useState(false);
+  const [knowledgeSaved, setKnowledgeSaved] = useState(false);
+  const [knowledgeStatus, setKnowledgeStatus] = useState<KnowledgeStatus | null>(null);
+  const [reindexing, setReindexing] = useState(false);
+  const [reindexResult, setReindexResult] = useState<number | null>(null);
+
   // Security / 2FA feature flag
   const [twoFAFeatureEnabled, setTwoFAFeatureEnabled] = useState(true);
   const [securitySaving, setSecuritySaving] = useState(false);
@@ -210,9 +221,19 @@ export default function SettingsScreen() {
         setTwoFAFeatureEnabled(res.settings['two_fa_feature_enabled'] !== 'false');
         setMcpEnabled(res.settings['mcp_enabled'] !== 'false');
         setMobileEnabled(res.settings['mobile_app_enabled'] !== 'false');
+        setKnowledgeSearchEnabled(res.settings['knowledge_search_enabled'] !== 'false');
+        setEmbeddingBaseUrl(res.settings['embedding_base_url'] ?? '');
+        setEmbeddingModel(res.settings['embedding_model'] ?? '');
+        const budget = parseInt(res.settings['embedding_monthly_token_budget'] ?? '0', 10);
+        setEmbeddingBudget(budget > 0 ? String(budget) : '');
       })
       .catch(() => setQuotaGb('15'));
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (activeTab !== 'ai' || !isAdmin) return;
+    apiGetKnowledgeStatus().then(setKnowledgeStatus).catch(() => setKnowledgeStatus(null));
+  }, [activeTab, isAdmin, knowledgeSaved, reindexResult]);
 
   useEffect(() => {
     if (!isAdmin || aiLoaded) return;
@@ -281,6 +302,38 @@ export default function SettingsScreen() {
       console.error('Failed to save AI settings', e);
     } finally {
       setAiSaving(false);
+    }
+  };
+
+  const handleSaveKnowledge = async () => {
+    setKnowledgeSaving(true);
+    setKnowledgeSaved(false);
+    try {
+      await apiUpdateAppSettingsKnowledge({
+        knowledgeSearchEnabled,
+        embeddingBaseUrl,
+        embeddingModel,
+        embeddingMonthlyTokenBudget: embeddingBudget ? parseInt(embeddingBudget, 10) : 0,
+      });
+      setKnowledgeSaved(true);
+      setTimeout(() => setKnowledgeSaved(false), 2500);
+    } catch (e) {
+      console.error('Failed to save Knowledge Search settings', e);
+    } finally {
+      setKnowledgeSaving(false);
+    }
+  };
+
+  const handleReindex = async () => {
+    setReindexing(true);
+    setReindexResult(null);
+    try {
+      const res = await apiKnowledgeReindex();
+      setReindexResult(res.enqueued);
+    } catch (e) {
+      console.error('Failed to trigger reindex', e);
+    } finally {
+      setReindexing(false);
     }
   };
 
@@ -816,6 +869,104 @@ export default function SettingsScreen() {
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <SaveButton onClick={handleSaveAI} saving={aiSaving} saved={aiSaved} />
+                </div>
+
+                {/* ── Knowledge Search ── */}
+                {sectionLabel('Knowledge Search')}
+                <div style={card}>
+                  <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Enable Knowledge Search</div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>Search over the CONTENT of notes, pages, milestones, and meetings — not just titles. Works lexically (trigram) with zero setup; add an embedding provider below for semantic (meaning-based) results too.</div>
+                      </div>
+                      <button
+                        onClick={() => { setKnowledgeSearchEnabled(v => !v); setKnowledgeSaved(false); }}
+                        style={{ width: 44, height: 24, borderRadius: 12, background: knowledgeSearchEnabled ? 'var(--color-primary)' : 'var(--color-border)', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 200ms' }}
+                      >
+                        <span style={{ position: 'absolute', top: 2, left: knowledgeSearchEnabled ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)', transition: 'left 200ms' }} />
+                      </button>
+                    </div>
+
+                    <div style={{ height: 1, background: 'var(--color-surface-tint-2)' }} />
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 6 }}>Embedding provider base URL</div>
+                        <input
+                          value={embeddingBaseUrl}
+                          onChange={e => { setEmbeddingBaseUrl(e.target.value); setKnowledgeSaved(false); }}
+                          placeholder="https://api.openai.com/v1 (default)"
+                          style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '8px 10px', outline: 'none' }}
+                        />
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 6 }}>Embedding model</div>
+                        <input
+                          value={embeddingModel}
+                          onChange={e => { setEmbeddingModel(e.target.value); setKnowledgeSaved(false); }}
+                          placeholder="text-embedding-3-small (default)"
+                          style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '8px 10px', outline: 'none' }}
+                        />
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 6 }}>Monthly token budget</div>
+                        <input
+                          type="number"
+                          min={0}
+                          value={embeddingBudget}
+                          onChange={e => { setEmbeddingBudget(e.target.value); setKnowledgeSaved(false); }}
+                          placeholder="0 = unlimited"
+                          style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '8px 10px', outline: 'none' }}
+                        />
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)' }}>
+                        Requires <code style={{ background: 'var(--color-surface-tint-2)', padding: '1px 5px', borderRadius: 4 }}>EMBEDDING_API_KEY</code> (falls back to <code style={{ background: 'var(--color-surface-tint-2)', padding: '1px 5px', borderRadius: 4 }}>OPENROUTER_API_KEY</code>) set in your environment.
+                      </div>
+                    </div>
+
+                    {knowledgeStatus && (
+                      <>
+                        <div style={{ height: 1, background: 'var(--color-surface-tint-2)' }} />
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+                          <div>
+                            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 700, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const }}>Semantic search</div>
+                            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: knowledgeStatus.pgvectorAvailable && knowledgeStatus.providerConfigured ? 'var(--color-success)' : 'var(--color-text-tertiary)' }}>
+                              {knowledgeStatus.pgvectorAvailable ? (knowledgeStatus.providerConfigured ? 'Active' : 'pgvector ready, no provider key') : 'Unavailable (needs pgvector/pgvector:pg16)'}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 700, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const }}>Indexed</div>
+                            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-secondary)' }}>{knowledgeStatus.queue.done} done · {knowledgeStatus.queue.pending + knowledgeStatus.queue.processing} pending</div>
+                          </div>
+                          <div>
+                            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 700, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const }}>Tokens this month</div>
+                            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                              {knowledgeStatus.budget.usedThisMonth.toLocaleString()}{knowledgeStatus.budget.monthlyLimit > 0 ? ` / ${knowledgeStatus.budget.monthlyLimit.toLocaleString()}` : ''}
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <button
+                        onClick={handleReindex}
+                        disabled={reindexing}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: reindexing ? 'default' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)', opacity: reindexing ? 0.6 : 1 }}
+                      >
+                        <Icon name={reindexing ? 'progress_activity' : 'refresh'} size={14} color="var(--color-text-tertiary)" />
+                        {reindexing ? 'Re-indexing…' : 'Re-index everything'}
+                      </button>
+                      {reindexResult !== null && (
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-success)' }}>Queued {reindexResult} item(s).</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <SaveButton onClick={handleSaveKnowledge} saving={knowledgeSaving} saved={knowledgeSaved} />
                 </div>
 
                 {/* ── Claude MCP Integration ── */}

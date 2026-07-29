@@ -12,6 +12,7 @@ import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestr
 import { notifyNewMentions } from '../mentions';
 import { itemShareExists, isItemSharedWith, deleteItemShares } from '../itemShares';
 import { syncInlineLinksForText } from '../graph/inlineLinks';
+import { enqueueEmbedding } from '../knowledge/queue';
 
 const router = Router();
 router.use(authenticate);
@@ -813,6 +814,7 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
         shareItem: { itemType: 'timeline', itemId: savedMilestone.timeline_id },
       });
       await syncInlineLinksForText({ entityType: 'milestone', entityId: milestoneId }, savedMilestone.description, req.userId!);
+      await enqueueEmbedding('milestone', milestoneId, ownerCheck.rows[0].workspace_id);
     }
   } catch (err) {
     werr('milestones PUT error:', err);
