@@ -3,10 +3,14 @@ import Icon from './Icon';
 import CopyButton from './CopyButton';
 import MarkdownView from './MarkdownView';
 import MentionPopover from './MentionPopover';
+import LinkPicker from './LinkPicker';
 import { toggleWrap, formatMarkerForKeyDown, type FormatMarker as Marker } from '../utils/textFormatting';
 import { detectMention, applyMention, filterMentionMembers, type MentionMember, type MentionContext } from '../utils/mention';
+import { detectLinkTrigger, applyLinkToken, type LinkTriggerContext } from '../utils/linkTrigger';
+import { useEntitySearch } from '../hooks/useEntitySearch';
 import useAIStore from '../store/useAIStore';
 import { apiGetAISettings, apiAIChat } from '../api/client';
+import type { EntityIndexEntry } from '../types';
 
 // ── Shared Notes editor ─────────────────────────────────────────────────────
 // Used by the item dialog (TaskDialog) and the milestone editor so both get
@@ -171,6 +175,16 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
     ? filterMentionMembers(mentionMembers, mention.query)
     : [];
   const mentionActive = mention !== null && mentionCandidates.length > 0;
+
+  // `[[` inline-link typeahead state — always available (unlike @-mentions it
+  // needs no member list; the LinkPicker does its own async entity_index
+  // search). Mutually exclusive with the mention popover: only one trigger
+  // can be "at" the caret at a time.
+  const [linkTrigger, setLinkTrigger] = useState<LinkTriggerContext | null>(null);
+  const [linkIndex, setLinkIndex] = useState(0);
+  const { results: linkResults, loading: linkLoading } = useEntitySearch(linkTrigger?.query ?? '');
+  const linkTriggerActive = linkTrigger !== null;
+
   // Snapshot of the note right before an AI-generated replacement, so a quick
   // "Undo" is available without forcing the user to Cancel the whole dialog.
   const [undoNote, setUndoNote] = useState<string | null>(null);
@@ -223,6 +237,30 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
     });
   };
 
+  // Recompute the `[[` link-trigger context from the textarea's current value + caret.
+  const refreshLinkTrigger = (el: HTMLTextAreaElement) => {
+    const ctx = detectLinkTrigger(el.value, el.selectionStart ?? 0);
+    setLinkTrigger(ctx);
+    setLinkIndex(0);
+  };
+
+  const pickLink = (entity: EntityIndexEntry) => {
+    const el = taRef.current;
+    if (!el || !linkTrigger) return;
+    const caret = el.selectionStart ?? el.value.length;
+    const { value: nextVal, caret: nextCaret } = applyLinkToken(value, linkTrigger.at, caret, entity);
+    onChange(nextVal);
+    setUndoNote(null);
+    setLinkTrigger(null);
+    requestAnimationFrame(() => {
+      const now = taRef.current;
+      if (!now) return;
+      now.focus();
+      now.setSelectionRange(nextCaret, nextCaret);
+      resize();
+    });
+  };
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (mentionActive) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex(i => (i + 1) % mentionCandidates.length); return; }
@@ -230,6 +268,12 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
       if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mentionCandidates[mentionIndex]); return; }
       if (e.key === 'Escape')    { e.preventDefault(); setMention(null); return; }
     }
+    if (linkTriggerActive && linkResults.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setLinkIndex(i => (i + 1) % linkResults.length); return; }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setLinkIndex(i => (i - 1 + linkResults.length) % linkResults.length); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickLink(linkResults[linkIndex]); return; }
+    }
+    if (linkTriggerActive && e.key === 'Escape') { e.preventDefault(); setLinkTrigger(null); return; }
     const marker = formatMarkerForKeyDown(e);
     if (marker) { e.preventDefault(); applyFormat(marker); }
   };
@@ -301,11 +345,11 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
           <textarea
             ref={taRef}
             value={value}
-            onChange={e => { onChange(e.target.value); setUndoNote(null); resize(); refreshMention(e.target); }}
+            onChange={e => { onChange(e.target.value); setUndoNote(null); resize(); refreshMention(e.target); refreshLinkTrigger(e.target); }}
             onKeyDown={onKeyDown}
-            onClick={e => refreshMention(e.currentTarget)}
-            onBlur={() => { /* let the popover's own mousedown handler pick first */ setTimeout(() => setMention(null), 120); }}
-            placeholder={mentionMembers?.length ? `${placeholder}  •  type @ to tag someone` : placeholder}
+            onClick={e => { refreshMention(e.currentTarget); refreshLinkTrigger(e.currentTarget); }}
+            onBlur={() => { /* let the popover's own mousedown handler pick first */ setTimeout(() => { setMention(null); setLinkTrigger(null); }, 120); }}
+            placeholder={mentionMembers?.length ? `${placeholder}  •  type @ to tag someone, [[ to link` : `${placeholder}  •  type [[ to link`}
             style={{
               width: '100%', fontFamily: 'var(--font-mono)',
               fontSize: 13, color: 'var(--color-text-secondary)',
@@ -326,6 +370,21 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
                 activeIndex={mentionIndex}
                 onPick={pickMention}
                 onHover={setMentionIndex}
+                style={flipUp ? { bottom: 'calc(100% + 4px)', left: 0 } : { top: 'calc(100% + 4px)', left: 0 }}
+              />
+            );
+          })()}
+          {!mentionActive && linkTriggerActive && (() => {
+            const rect = taRef.current?.getBoundingClientRect();
+            const flipUp = !!rect && rect.bottom + 300 > window.innerHeight;
+            return (
+              <LinkPicker
+                query={linkTrigger!.query}
+                results={linkResults}
+                loading={linkLoading}
+                activeIndex={linkIndex}
+                onPick={pickLink}
+                onHover={setLinkIndex}
                 style={flipUp ? { bottom: 'calc(100% + 4px)', left: 0 } : { top: 'calc(100% + 4px)', left: 0 }}
               />
             );

@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent, TaskChangeLogEntry } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent, TaskChangeLogEntry, EntityLink, ResolvedLink, LinkTypeDef, GraphPayload, GraphCanvas, GraphCanvasLayout, AgentRun, AgentProposal, AgentPolicy, AgentMode, EntityIndexEntry } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -1460,3 +1460,113 @@ export const apiRestoreTrashMarkdownList = (trashId: number) =>
   apiFetch<{ success: boolean }>(`/trash/markdown-lists/${trashId}/restore`, { method: 'POST' });
 export const apiDeleteTrashMarkdownList = (trashId: number) =>
   apiFetch<{ success: boolean }>(`/trash/markdown-lists/${trashId}`, { method: 'DELETE' });
+
+// ── Graph Layer: links ────────────────────────────────────────────────────
+
+export const apiGetEntityLinks = (type: string, id: string) =>
+  apiFetch<{ srn: string; linksByType: Record<string, ResolvedLink[]> }>(`/links/entity/${type}/${id}`);
+export const apiGetBacklinks = (type: string, id: string) =>
+  apiFetch<{ backlinks: ResolvedLink[] }>(`/links/entity/${type}/${id}/backlinks`);
+export const apiGetUnlinkedMentions = (type: string, id: string, limit = 20) =>
+  apiFetch<{ candidates: EntityIndexEntry[] }>(`/links/entity/${type}/${id}/unlinked?limit=${limit}`);
+export const apiGetLinksBetween = (src: string, dst: string) =>
+  apiFetch<{ links: EntityLink[] }>(`/links?src=${encodeURIComponent(src)}&dst=${encodeURIComponent(dst)}`);
+export const apiCreateLink = (body: { src: string; dst: string; linkType: string; props?: Record<string, unknown>; sourceBlockId?: string | null }) =>
+  apiFetch<{ link: EntityLink }>('/links', { method: 'POST', body: JSON.stringify(body) });
+export const apiCreateLinksBatch = (links: Array<{ src: string; dst: string; linkType: string; props?: Record<string, unknown>; sourceBlockId?: string | null }>) =>
+  apiFetch<{ links: EntityLink[] }>('/links/batch', { method: 'POST', body: JSON.stringify({ links }) });
+export const apiUpdateLink = (id: string, body: { props?: Record<string, unknown>; weight?: number }) =>
+  apiFetch<{ link: EntityLink | null }>(`/links/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+export const apiDeleteLink = (id: string) =>
+  apiFetch<void>(`/links/${id}`, { method: 'DELETE' });
+export const apiSearchEntities = (q: string, opts: { types?: string[]; workspaceId?: string; limit?: number } = {}) => {
+  const params = new URLSearchParams({ q });
+  if (opts.types?.length) params.set('types', opts.types.join(','));
+  if (opts.workspaceId) params.set('workspaceId', opts.workspaceId);
+  if (opts.limit) params.set('limit', String(opts.limit));
+  return apiFetch<{ results: EntityIndexEntry[] }>(`/links/search?${params.toString()}`);
+};
+export const apiGetLinkTypes = (workspaceId?: string) =>
+  apiFetch<{ types: LinkTypeDef[] }>(`/links/types${workspaceId ? `?workspaceId=${workspaceId}` : ''}`);
+export const apiCreateLinkType = (body: {
+  workspaceId: string; key: string; label: string; inverseKey: string; inverseLabel: string;
+  symmetric?: boolean; color?: string; edgeStyle?: string; allowedSrc?: string[]; allowedDst?: string[];
+}) => apiFetch<{ type: LinkTypeDef }>('/links/types', { method: 'POST', body: JSON.stringify(body) });
+export const apiDeleteLinkType = (id: string) =>
+  apiFetch<void>(`/links/types/${id}`, { method: 'DELETE' });
+
+// ── Graph Layer: graph queries ───────────────────────────────────────────
+
+export const apiGetWorkspaceGraph = (workspaceId: string, opts: { types?: string[]; linkTypes?: string[]; includeTrashed?: boolean; minDegree?: number; limit?: number } = {}) => {
+  const params = new URLSearchParams();
+  if (opts.types?.length) params.set('types', opts.types.join(','));
+  if (opts.linkTypes?.length) params.set('linkTypes', opts.linkTypes.join(','));
+  if (opts.includeTrashed) params.set('includeTrashed', 'true');
+  if (opts.minDegree) params.set('minDegree', String(opts.minDegree));
+  if (opts.limit) params.set('limit', String(opts.limit));
+  const qs = params.toString();
+  return apiFetch<GraphPayload>(`/graph/workspace/${workspaceId}${qs ? `?${qs}` : ''}`);
+};
+export const apiGetLocalGraph = (type: string, id: string, depth = 2, linkTypes?: string[]) => {
+  const params = new URLSearchParams({ depth: String(depth) });
+  if (linkTypes?.length) params.set('linkTypes', linkTypes.join(','));
+  return apiFetch<GraphPayload>(`/graph/local/${type}/${id}?${params.toString()}`);
+};
+export const apiGetGraphPath = (from: string, to: string, maxDepth = 6) =>
+  apiFetch<{ path: string[] | null; found: boolean }>(`/graph/path?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&maxDepth=${maxDepth}`);
+export const apiGetGraphOrphans = (workspaceId: string, limit = 100) =>
+  apiFetch<{ orphans: Array<{ srn: string; type: string; id: string }> }>(`/graph/orphans/${workspaceId}?limit=${limit}`);
+export const apiGetGraphHubs = (workspaceId: string, limit = 20) =>
+  apiFetch<{ hubs: Array<{ srn: string; type: string; id: string; title: string; pagerank: number; degree: number }> }>(`/graph/hubs/${workspaceId}?limit=${limit}`);
+export const apiGetGraphStats = (workspaceId: string) =>
+  apiFetch<{ nodesByType: Record<string, number>; edgesByType: Record<string, number>; nodeTotal: number; edgeTotal: number; density: number; metricsComputedAt: string | null }>(`/graph/stats/${workspaceId}`);
+export const apiRecomputeGraphMetrics = (workspaceId: string) =>
+  apiFetch<{ ok: boolean; computedAt: string }>(`/graph/recompute/${workspaceId}`, { method: 'POST' });
+
+// ── Graph Layer: canvases ────────────────────────────────────────────────
+
+export const apiGetCanvases = (workspaceId: string) =>
+  apiFetch<{ canvases: GraphCanvas[] }>(`/canvases?workspaceId=${workspaceId}`);
+export const apiGetCanvas = (id: string) =>
+  apiFetch<{ canvas: GraphCanvas }>(`/canvases/${id}`);
+export const apiCreateCanvas = (body: { workspaceId: string; name: string; emoji?: string }) =>
+  apiFetch<{ canvas: GraphCanvas }>('/canvases', { method: 'POST', body: JSON.stringify(body) });
+export const apiUpdateCanvas = (id: string, body: { name?: string; emoji?: string; layout?: GraphCanvasLayout; isPublic?: boolean; version: number }) =>
+  apiFetch<{ canvas: GraphCanvas }>(`/canvases/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+export const apiDeleteCanvas = (id: string) =>
+  apiFetch<void>(`/canvases/${id}`, { method: 'DELETE' });
+
+// ── Agent Runtime ────────────────────────────────────────────────────────
+
+export const apiGetAgentRuns = (workspaceId: string, status?: string) =>
+  apiFetch<{ runs: AgentRun[] }>(`/agent/runs?workspaceId=${workspaceId}${status ? `&status=${status}` : ''}`);
+export const apiGetAgentRun = (id: string) =>
+  apiFetch<{ run: AgentRun }>(`/agent/runs/${id}`);
+export const apiStartAgentRun = (body: { workspaceId: string; goal: string; triggerType?: string; context?: Record<string, unknown> }) =>
+  apiFetch<{ run: AgentRun }>('/agent/runs', { method: 'POST', body: JSON.stringify(body) });
+export const apiCancelAgentRun = (id: string) =>
+  apiFetch<{ run: AgentRun }>(`/agent/runs/${id}/cancel`, { method: 'POST' });
+export const apiRevertAgentRun = (id: string) =>
+  apiFetch<{ reverted: number }>(`/agent/runs/${id}/revert`, { method: 'POST' });
+export const apiGetAgentProposals = (workspaceId: string, status = 'pending') =>
+  apiFetch<{ proposals: AgentProposal[] }>(`/agent/proposals?workspaceId=${workspaceId}&status=${status}`);
+export const apiAcceptAgentProposal = (id: string) =>
+  apiFetch<{ proposal: AgentProposal }>(`/agent/proposals/${id}/accept`, { method: 'POST' });
+export const apiRejectAgentProposal = (id: string, reason?: string) =>
+  apiFetch<{ proposal: AgentProposal }>(`/agent/proposals/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
+export const apiSetWorkspaceAgent = (workspaceId: string, body: { agentMode?: AgentMode; agentPolicy?: AgentPolicy }) =>
+  apiFetch<{ agentMode: AgentMode; agentPolicy: AgentPolicy }>(`/workspaces/${workspaceId}/agent`, { method: 'PATCH', body: JSON.stringify(body) });
+export const apiAssignTaskToAgent = (taskId: number | string) =>
+  apiFetch<{ run: AgentRun }>(`/tasks/${taskId}/assign-agent`, { method: 'POST' });
+
+// ── Knowledge Layer ───────────────────────────────────────────────────────
+
+export interface KnowledgeSearchResult {
+  chunkId: string; entityType: string; entityId: string; title: string;
+  headingPath: string | null; snippet: string; deepLink: string | null;
+  blockId: string | null; score: number; path: string[] | null;
+}
+export const apiKnowledgeSearch = (body: { query: string; workspaceId?: string; entityTypes?: string[]; limit?: number; mode?: 'hybrid' | 'fts' | 'vector'; anchor?: string }) =>
+  apiFetch<{ results: KnowledgeSearchResult[] }>('/knowledge/search', { method: 'POST', body: JSON.stringify(body) });
+export const apiGetKnowledgeStatus = () =>
+  apiFetch<{ enabled: boolean; queueDepth: number; embedded: number; total: number; model: string | null; lastError: string | null }>('/knowledge/status');

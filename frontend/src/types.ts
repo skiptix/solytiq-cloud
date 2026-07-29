@@ -964,3 +964,195 @@ export interface NamedPinInput {
   linkedControlPointId?: string | null;
   distanceAlongRouteM?: number;
 }
+
+// ── Graph Layer ──────────────────────────────────────────────────────────────
+
+export type GraphEntityType =
+  | 'task' | 'list' | 'markdownList' | 'timeline' | 'milestone'
+  | 'meeting' | 'folder' | 'file' | 'section' | 'gpsFile';
+
+export interface EntityIndexEntry {
+  srn: string;
+  entityType: GraphEntityType;
+  entityId: string;
+  workspaceId: string | null;
+  ownerId: string;
+  title: string;
+  emoji: string | null;
+  color: string | null;
+  subtitle: string | null;
+  status: string | null;
+  isArchived: boolean;
+  isTrashed: boolean;
+  deepLink: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export type LinkOrigin = 'manual' | 'inline' | 'system' | 'automation' | 'agent';
+
+export interface EntityLink {
+  id: string;
+  src: string;
+  dst: string;
+  linkType: string;
+  origin: LinkOrigin;
+  sourceBlockId: string | null;
+  props: Record<string, unknown>;
+  weight: number;
+  isCrossWorkspace: boolean;
+  workspaceId: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ResolvedLink extends EntityLink {
+  direction: 'out' | 'in';
+  neighbor: EntityIndexEntry | null;
+}
+
+export interface LinkTypeDef {
+  key: string;
+  label: string;
+  inverseKey: string;
+  inverseLabel: string;
+  symmetric: boolean;
+  color: string;
+  edgeStyle: 'solid' | 'dashed' | 'dotted';
+  showInGraph: boolean;
+  deletable: boolean;
+  allowCrossWorkspace: boolean;
+  allowedSrc: GraphEntityType[];
+  allowedDst: GraphEntityType[];
+}
+
+export interface GraphNode {
+  srn: string;
+  type: GraphEntityType;
+  id: string;
+  title: string;
+  emoji: string | null;
+  color: string | null;
+  deepLink: string | null;
+  degree: number;
+  pagerank: number;
+  community: number | null;
+  status: string | null;
+  isArchived: boolean;
+  workspaceId?: string | null;
+  depth?: number;
+}
+
+export interface GraphEdge {
+  id: string;
+  src: string;
+  dst: string;
+  linkType: string;
+  origin: LinkOrigin;
+  weight: number;
+  sourceBlockId: string | null;
+  crossWorkspace: boolean;
+}
+
+export interface GraphPayload {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  hidden: { nodes: number; edges: number };
+  truncated: boolean;
+  computedAt: string;
+  syncSeq?: number;
+}
+
+export interface GraphCanvasLayoutNode {
+  srn: string;
+  x: number;
+  y: number;
+}
+export interface GraphCanvasNote {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  text: string;
+}
+export interface GraphCanvasLayout {
+  version: 1;
+  nodes: GraphCanvasLayoutNode[];
+  groups: Array<{ id: string; x: number; y: number; width: number; height: number; label: string }>;
+  notes: GraphCanvasNote[];
+}
+export interface GraphCanvas {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  name: string;
+  emoji: string | null;
+  layout: GraphCanvasLayout;
+  isPublic: boolean;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Agent Runtime ────────────────────────────────────────────────────────────
+
+export type AgentMode = 'off' | 'suggest' | 'assisted' | 'autonomous';
+
+export interface AgentPolicy {
+  allowedTools?: string[];
+  autoApproveTools?: string[];
+  deniedTools?: string[];
+  maxActionsPerRun?: number;
+  maxToolCallsPerRun?: number;
+  dailyTokenBudget?: number;
+  allowedLinkTypes?: string[];
+  allowCrossWorkspace?: boolean;
+  requireApprovalOver?: { taskCount?: number; deleteAny?: boolean };
+  model?: string | null;
+}
+
+export interface AgentRunStep {
+  nodeType: 'trigger' | 'tool';
+  toolName?: string;
+  args?: Record<string, unknown>;
+  rationale?: string;
+  status: 'ok' | 'error' | 'proposed' | 'denied';
+  output?: unknown;
+  error?: string;
+  durationMs?: number;
+}
+
+export interface AgentRun {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  triggerType: string;
+  triggerContext: Record<string, unknown>;
+  goal: string;
+  mode: AgentMode;
+  status: 'running' | 'success' | 'failed' | 'blocked' | 'cancelled';
+  steps: AgentRunStep[];
+  tokensPrompt: number;
+  tokensCompletion: number;
+  model: string | null;
+  error: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export interface AgentProposal {
+  id: string;
+  runId: string;
+  workspaceId: string;
+  toolName: string;
+  toolArgs: Record<string, unknown>;
+  rationale: string | null;
+  preview: Record<string, unknown> | null;
+  status: 'pending' | 'accepted' | 'rejected' | 'expired' | 'applied' | 'failed';
+  decidedBy: string | null;
+  decidedAt: string | null;
+  expiresAt: string;
+  createdAt: string;
+}
