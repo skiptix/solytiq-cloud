@@ -43,6 +43,9 @@ import itemSharesRouter from './routes/itemShares';
 import linksRouter from './routes/links';
 import graphRouter from './routes/graph';
 import canvasesRouter from './routes/canvases';
+import knowledgeRouter from './routes/knowledge';
+import { sweepEmbeddingQueue } from './knowledge/embeddingWorker';
+import { setPgvectorAvailable } from './knowledge/state';
 import { backfillHardLinks } from './graph/backfill';
 import { sweepGraphMetrics } from './graph/metrics';
 import { isAppInstalled } from './appsRegistry';
@@ -195,6 +198,18 @@ const graphLimiter = rateLimit({
   message: { error: 'Too many requests, please slow down.' },
 });
 
+// Knowledge Layer search can trigger a live query-embedding call to an
+// external provider — meaningfully pricier than a plain trigram lookup, so it
+// gets its own tighter budget on top of apiLimiter, same pattern as links/graph.
+const knowledgeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKey,
+  message: { error: 'Too many requests, please slow down.' },
+});
+
 app.use('/api/', (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
@@ -244,6 +259,7 @@ app.use('/api', itemSharesRouter);
 app.use('/api/links', linksLimiter, linksRouter);
 app.use('/api/graph', graphLimiter, graphRouter);
 app.use('/api/canvases', canvasesRouter);
+app.use('/api/knowledge', knowledgeLimiter, knowledgeRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
@@ -2815,6 +2831,74 @@ async function runMigrations() {
       FOR EACH ROW EXECUTE FUNCTION sync_hardlink_milestone_attachment()
   `);
 
+  // ── Knowledge Layer: entity_chunks + embedding_queue ────────────────────
+  // pgvector is optional: `CREATE EXTENSION vector` only succeeds on a
+  // pgvector/pgvector:pg16 image (see docker-compose.yml); a plain postgres:16
+  // image doesn't ship it. Attempt it, and if it fails, degrade gracefully —
+  // entity_chunks.embedding is only added (and only ever read/written) when
+  // the extension is actually present; every knowledge/ module checks
+  // isPgvectorAvailable() first (see knowledge/state.ts). Search still works
+  // lexical-only (pg_trgm) without pgvector; embeddings just never populate.
+  let pgvectorReady = false;
+  try {
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS "vector"`);
+    pgvectorReady = true;
+  } catch (err) {
+    console.warn('⚠️  pgvector extension unavailable — Knowledge Layer will run lexical-only (trigram) search. Use the pgvector/pgvector:pg16 Postgres image to enable semantic search.', (err as Error).message);
+  }
+  setPgvectorAvailable(pgvectorReady);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS entity_chunks (
+      id            VARCHAR(100) PRIMARY KEY,
+      entity_type   VARCHAR(24)  NOT NULL,
+      entity_id     VARCHAR(100) NOT NULL,
+      workspace_id  VARCHAR(100),
+      chunk_index   INTEGER NOT NULL,
+      content       TEXT NOT NULL,
+      content_hash  VARCHAR(64) NOT NULL,
+      token_count   INTEGER NOT NULL DEFAULT 0,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT fk_chunks_entity FOREIGN KEY (entity_type, entity_id)
+        REFERENCES entity_index (entity_type, entity_id) ON DELETE CASCADE,
+      UNIQUE (entity_type, entity_id, chunk_index)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_entity_chunks_entity ON entity_chunks (entity_type, entity_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_entity_chunks_ws ON entity_chunks (workspace_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_entity_chunks_trgm ON entity_chunks USING gin (content gin_trgm_ops)`);
+  if (pgvectorReady) {
+    // Fixed at 1536 dims (see knowledge/state.ts's EMBEDDING_DIMENSIONS) —
+    // matches OpenAI's text-embedding-3-small and most comparable small
+    // models. Switching embedding dimensionality requires a new column and a
+    // full re-embed, not a live migration.
+    await pool.query(`ALTER TABLE entity_chunks ADD COLUMN IF NOT EXISTS embedding vector(1536)`);
+    // IVFFlat needs training data to be useful and errors on an empty table
+    // for some pgvector versions when lists > row count; HNSW has no such
+    // restriction and builds incrementally, so it's the safer default for a
+    // table that starts empty on every fresh install.
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_entity_chunks_embedding ON entity_chunks USING hnsw (embedding vector_cosine_ops)`).catch((err) => {
+      console.warn('⚠️  Could not create HNSW index on entity_chunks.embedding (non-fatal — vector search will be slower):', (err as Error).message);
+    });
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS embedding_queue (
+      id            VARCHAR(100) PRIMARY KEY,
+      entity_type   VARCHAR(24)  NOT NULL,
+      entity_id     VARCHAR(100) NOT NULL,
+      workspace_id  VARCHAR(100),
+      status        VARCHAR(20) NOT NULL DEFAULT 'pending',
+      attempts      INTEGER NOT NULL DEFAULT 0,
+      last_error    TEXT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (entity_type, entity_id)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_embedding_queue_status ON embedding_queue (status, updated_at)`);
+
   console.log('Database migrations applied.');
 }
 
@@ -2891,6 +2975,13 @@ async function start() {
   // sweep (see graph/metrics.ts) — 5-minute cadence, same pattern as the
   // Automation Hub's schedule sweep.
   setInterval(() => { void sweepGraphMetrics(); }, 5 * 60 * 1000);
+
+  // Knowledge Layer: (re-)chunk and embed anything content-save endpoints
+  // queued (see knowledge/queue.ts's enqueueEmbedding call sites). A 2-minute
+  // cadence keeps freshly-saved content searchable soon without hammering the
+  // embedding provider; every step degrades gracefully when pgvector or a
+  // provider key isn't configured (see knowledge/embeddingWorker.ts).
+  setInterval(() => { void sweepEmbeddingQueue(); }, 2 * 60 * 1000);
 
   app.listen(PORT, () => {
     console.log(`Solytiq Cloud API listening on port ${PORT}`);

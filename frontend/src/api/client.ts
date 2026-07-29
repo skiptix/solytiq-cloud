@@ -908,6 +908,14 @@ export const apiUpdateAppSettingsMobile = (mobileAppEnabled: boolean) =>
     body: JSON.stringify({ mobileAppEnabled }),
   });
 
+export const apiUpdateAppSettingsKnowledge = (data: {
+  knowledgeSearchEnabled?: boolean; embeddingBaseUrl?: string; embeddingModel?: string; embeddingMonthlyTokenBudget?: number;
+}) =>
+  apiFetch<{ settings: Record<string, string> }>('/admin/settings', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+
 // Workspaces
 export const apiGetWorkspaces = () =>
   apiFetch<{ workspaces: Workspace[] }>('/workspaces');
@@ -1562,11 +1570,21 @@ export const apiAssignTaskToAgent = (taskId: number | string) =>
 // ── Knowledge Layer ───────────────────────────────────────────────────────
 
 export interface KnowledgeSearchResult {
-  chunkId: string; entityType: string; entityId: string; title: string;
-  headingPath: string | null; snippet: string; deepLink: string | null;
-  blockId: string | null; score: number; path: string[] | null;
+  entity: EntityIndexEntry;
+  chunkContent: string;
+  chunkIndex: number;
+  score: number;
 }
-export const apiKnowledgeSearch = (body: { query: string; workspaceId?: string; entityTypes?: string[]; limit?: number; mode?: 'hybrid' | 'fts' | 'vector'; anchor?: string }) =>
+export const apiKnowledgeSearch = (body: { q: string; workspaceId?: string; entityTypes?: string[]; limit?: number }) =>
   apiFetch<{ results: KnowledgeSearchResult[] }>('/knowledge/search', { method: 'POST', body: JSON.stringify(body) });
+export interface KnowledgeStatus {
+  pgvectorAvailable: boolean;
+  providerConfigured: boolean;
+  searchEnabled: boolean;
+  queue: { pending: number; processing: number; done: number; failed: number; skippedBudget: number };
+  budget: { monthlyLimit: number; usedThisMonth: number };
+}
 export const apiGetKnowledgeStatus = () =>
-  apiFetch<{ enabled: boolean; queueDepth: number; embedded: number; total: number; model: string | null; lastError: string | null }>('/knowledge/status');
+  apiFetch<KnowledgeStatus>('/knowledge/status');
+export const apiKnowledgeReindex = () =>
+  apiFetch<{ enqueued: number }>('/knowledge/reindex', { method: 'POST' });
