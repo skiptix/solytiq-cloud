@@ -7,7 +7,8 @@ const executeAiToolMock = vi.fn();
 vi.mock('../aiTools', () => ({
   executeAiTool: (...args: unknown[]) => executeAiToolMock(...args),
   getOpenRouterToolDefs: () => [
-    { type: 'function', function: { name: 'create_task', description: '', parameters: { type: 'object', properties: {} } } },
+    { type: 'function', function: { name: 'create_dashboard_task', description: '', parameters: { type: 'object', properties: {} } } },
+    { type: 'function', function: { name: 'update_task', description: '', parameters: { type: 'object', properties: {} } } },
     { type: 'function', function: { name: 'delete_task', description: '', parameters: { type: 'object', properties: {} } } },
   ],
 }));
@@ -91,7 +92,7 @@ describe('startAgentRun', () => {
   });
 
   it('a denied tool (not on the allow-list) is recorded as denied and never reaches executeAiTool', async () => {
-    queryMock.mockResolvedValueOnce(rows([{ agent_mode: 'autonomous', agent_policy: { allowedTools: ['create_task'] } }]));
+    queryMock.mockResolvedValueOnce(rows([{ agent_mode: 'autonomous', agent_policy: { allowedTools: ['create_dashboard_task'] } }]));
     queryMock.mockResolvedValueOnce(rows([])); // INSERT
     queryMock.mockResolvedValueOnce(rows([])); // ai_model setting (none set)
     (global.fetch as ReturnType<typeof vi.fn>)
@@ -108,5 +109,66 @@ describe('startAgentRun', () => {
     const updateCall = queryMock.mock.calls.find(([sql]) => typeof sql === 'string' && sql.includes('UPDATE agent_runs SET status'));
     const steps = JSON.parse(updateCall![1][1]);
     expect(steps.some((s: { status: string }) => s.status === 'denied')).toBe(true);
+  });
+
+  it('a successful update_task mutation notifies the task owner and anyone tagged on it, not just whoever started the run', async () => {
+    queryMock.mockResolvedValueOnce(rows([{ agent_mode: 'autonomous', agent_policy: {} }])); // workspace lookup
+    queryMock.mockResolvedValueOnce(rows([])); // INSERT agent_runs
+    queryMock.mockResolvedValueOnce(rows([{ value: 'openai/gpt-4o-mini' }])); // ai_model setting
+    (global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(mockChatResponse({
+        role: 'assistant', content: null,
+        tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'update_task', arguments: '{"task_id":1,"checked":true}' } }],
+      }))
+      .mockResolvedValueOnce(mockChatResponse({ role: 'assistant', content: 'Done.' }));
+
+    queryMock.mockResolvedValueOnce(rows([{ id: '1', user_id: 'owner-1', title: 'Buy milk' }])); // snapshotBeforeToolCall
+    queryMock.mockResolvedValueOnce(rows([{ user_id: 'tagged-1' }])); // task_tags captured before the mutation
+    executeAiToolMock.mockResolvedValueOnce({ ok: true, result: 'Updated task "Buy milk"' });
+    queryMock.mockResolvedValue(rows([])); // INSERT agent_mutations, final UPDATE agent_runs, everything after
+
+    await startAgentRun({ workspaceId: 'ws_1', userId: 'user-1', goal: 'mark it done', triggerType: 'manual' });
+    await new Promise((r) => setTimeout(r, 20));
+
+    const changeCall = createNotificationsMock.mock.calls.find(
+      (c: unknown[]) => (c[1] as { type: string }).type === 'agent_change'
+    );
+    expect(changeCall).toBeTruthy();
+    const [recipients, input] = changeCall as [Set<string>, Record<string, unknown>];
+    expect([...recipients].sort()).toEqual(['owner-1', 'tagged-1']);
+    expect(input).toEqual(expect.objectContaining({
+      type: 'agent_change', actorId: 'user-1', entityType: 'task', entityId: '1',
+      title: expect.stringContaining('Buy milk'),
+    }));
+  });
+
+  it('a successful delete_task mutation still notifies the (now-gone) task\'s owner and tagged users from the pre-captured state', async () => {
+    // deleteAny defaults to requiring approval — relax it so the delete executes
+    // directly and we can observe the post-mutation notification, not the proposal one.
+    queryMock.mockResolvedValueOnce(rows([{ agent_mode: 'autonomous', agent_policy: { requireApprovalOver: { deleteAny: false } } }]));
+    queryMock.mockResolvedValueOnce(rows([]));
+    queryMock.mockResolvedValueOnce(rows([{ value: 'openai/gpt-4o-mini' }]));
+    (global.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(mockChatResponse({
+        role: 'assistant', content: null,
+        tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'delete_task', arguments: '{"task_id":1}' } }],
+      }))
+      .mockResolvedValueOnce(mockChatResponse({ role: 'assistant', content: 'Done.' }));
+
+    queryMock.mockResolvedValueOnce(rows([{ id: '1', user_id: 'owner-2', title: 'Stale task' }])); // snapshotBeforeToolCall
+    queryMock.mockResolvedValueOnce(rows([{ user_id: 'tagged-2' }])); // task_tags captured before the delete cascades them away
+    executeAiToolMock.mockResolvedValueOnce({ ok: true, result: 'Deleted task "Stale task"' });
+    queryMock.mockResolvedValue(rows([]));
+
+    await startAgentRun({ workspaceId: 'ws_1', userId: 'user-1', goal: 'clean up', triggerType: 'manual' });
+    await new Promise((r) => setTimeout(r, 20));
+
+    const changeCall = createNotificationsMock.mock.calls.find(
+      (c: unknown[]) => (c[1] as { type: string }).type === 'agent_change'
+    );
+    expect(changeCall).toBeTruthy();
+    const [recipients, input] = changeCall as [Set<string>, Record<string, unknown>];
+    expect([...recipients].sort()).toEqual(['owner-2', 'tagged-2']);
+    expect(input.title).toContain('Stale task');
   });
 });

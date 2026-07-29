@@ -107,22 +107,39 @@ export default function AgentInbox({ workspaceId }: { workspaceId: string }) {
   );
 }
 
-function RunRow({ run, expanded, onToggle }: { run: AgentRun; expanded: boolean; onToggle: () => void }) {
+const STATUS_LABEL: Record<AgentRun['status'], string> = {
+  running: 'In progress', success: 'Completed', failed: 'Failed', blocked: 'Blocked', cancelled: 'Cancelled',
+};
+
+function formatRunTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+export function RunRow({ run, expanded, onToggle }: { run: AgentRun; expanded: boolean; onToggle: () => void }) {
   const steps = (run.steps ?? []) as AgentRunStep[];
+  const running = run.status === 'running';
   return (
     <div style={{ background: 'var(--color-white)', borderRadius: 8, border: '1px solid var(--color-border)', overflow: 'hidden' }}>
       <button
         onClick={onToggle}
         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left' }}
       >
-        <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_COLOR[run.status] ?? 'var(--color-text-quaternary)', flexShrink: 0 }} />
+        <span style={{ position: 'relative', width: 7, height: 7, flexShrink: 0 }}>
+          <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: STATUS_COLOR[run.status] ?? 'var(--color-text-quaternary)' }} />
+          {running && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: STATUS_COLOR.running, animation: 'pulse 1.2s ease-in-out infinite' }} />}
+        </span>
         <span style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {run.goal}
         </span>
+        <span style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-quaternary)', flexShrink: 0 }}>{formatRunTime(run.startedAt)}</span>
         <Icon name={expanded ? 'expand_less' : 'expand_more'} size={16} color="var(--color-text-quaternary)" />
       </button>
       {expanded && (
         <div style={{ padding: '4px 9px 8px', display: 'flex', flexDirection: 'column', gap: 5, borderTop: '1px solid var(--color-divider)' }}>
+          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: STATUS_COLOR[run.status] ?? 'var(--color-text-quaternary)' }}>
+            {STATUS_LABEL[run.status] ?? run.status}
+          </div>
           {steps.length === 0 && <div style={{ fontSize: 11.5, color: 'var(--color-text-quaternary)', padding: '4px 0' }}>No steps recorded.</div>}
           {steps.map((s, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontSize: 11.5 }}>

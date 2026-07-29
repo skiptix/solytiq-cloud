@@ -14,7 +14,7 @@ function makeExec(rowsByCall: unknown[][] = []) {
 
 describe('REVERTIBLE_TOOL_NAMES', () => {
   it('covers the curated subset this module actually implements', () => {
-    expect([...REVERTIBLE_TOOL_NAMES].sort()).toEqual(['create_task', 'delete_task', 'update_task']);
+    expect([...REVERTIBLE_TOOL_NAMES].sort()).toEqual(['create_dashboard_task', 'create_task_in_list', 'delete_task', 'update_task']);
   });
 });
 
@@ -26,9 +26,9 @@ describe('snapshotBeforeToolCall', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('returns null for create_task (nothing exists yet to snapshot)', async () => {
+  it('returns null for create_dashboard_task (nothing exists yet to snapshot)', async () => {
     const { exec } = makeExec();
-    expect(await snapshotBeforeToolCall('create_task', { title: 'New' }, 'user-1', exec)).toBeNull();
+    expect(await snapshotBeforeToolCall('create_dashboard_task', { title: 'New' }, 'user-1', exec)).toBeNull();
   });
 
   it('snapshots the full row before an update_task, scoped to the acting user', async () => {
@@ -45,17 +45,24 @@ describe('snapshotBeforeToolCall', () => {
 });
 
 describe('buildMutationRecord', () => {
-  it('resolves create_task by looking up the newest matching row for this user', async () => {
+  it('resolves create_dashboard_task by looking up the newest matching row for this user', async () => {
     const { exec, calls } = makeExec([[{ id: '999' }]]);
-    const mutation = await buildMutationRecord('create_task', { title: 'Buy milk' }, null, 'user-1', exec);
-    expect(mutation).toEqual({ toolName: 'create_task', entityType: 'task', entityId: '999', beforeState: null });
+    const mutation = await buildMutationRecord('create_dashboard_task', { title: 'Buy milk' }, null, 'user-1', exec);
+    expect(mutation).toEqual({ toolName: 'create_dashboard_task', entityType: 'task', entityId: '999', beforeState: null });
     expect(calls[0].text).toContain('ORDER BY id DESC LIMIT 1');
     expect(calls[0].params).toEqual(['user-1', 'Buy milk']);
   });
 
-  it('returns null for create_task when the title arg is missing (nothing to look up)', async () => {
+  it('returns null for create_dashboard_task when the title arg is missing (nothing to look up)', async () => {
     const { exec } = makeExec();
-    expect(await buildMutationRecord('create_task', {}, null, 'user-1', exec)).toBeNull();
+    expect(await buildMutationRecord('create_dashboard_task', {}, null, 'user-1', exec)).toBeNull();
+  });
+
+  it('create_task_in_list shares the same handler as create_dashboard_task', async () => {
+    const { exec, calls } = makeExec([[{ id: '888' }]]);
+    const mutation = await buildMutationRecord('create_task_in_list', { title: 'Ship it' }, null, 'user-1', exec);
+    expect(mutation).toEqual({ toolName: 'create_task_in_list', entityType: 'task', entityId: '888', beforeState: null });
+    expect(calls[0].params).toEqual(['user-1', 'Ship it']);
   });
 
   it('carries the pre-captured before-state through for update_task', async () => {
@@ -74,9 +81,9 @@ describe('buildMutationRecord', () => {
 });
 
 describe('revertMutation', () => {
-  it('create_task reverts by deleting the created row, scoped to the acting user', async () => {
+  it('create_dashboard_task reverts by deleting the created row, scoped to the acting user', async () => {
     const { exec, calls } = makeExec([[]]);
-    await revertMutation({ toolName: 'create_task', entityType: 'task', entityId: '999', beforeState: null }, 'user-1', exec);
+    await revertMutation({ toolName: 'create_dashboard_task', entityType: 'task', entityId: '999', beforeState: null }, 'user-1', exec);
     expect(calls[0].text).toContain('DELETE FROM tasks');
     expect(calls[0].params).toEqual(['999', 'user-1']);
   });

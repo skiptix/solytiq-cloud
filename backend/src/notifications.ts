@@ -31,7 +31,8 @@ export type NotificationType =
   | 'automation_run'
   | 'deadline_overdue'
   | 'agent_run_complete'
-  | 'agent_proposal';
+  | 'agent_proposal'
+  | 'agent_change';
 
 export interface CreateNotificationInput {
   /** Recipient user id. */

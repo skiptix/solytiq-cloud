@@ -71,6 +71,10 @@ export function notificationVisual(n: AppNotification): NotificationVisual {
     }
     case 'deadline_overdue':
       return { icon: 'event_busy', color: 'var(--color-error)', bg: 'var(--color-error-bg)' };
+    case 'agent_run_complete':
+    case 'agent_proposal':
+    case 'agent_change':
+      return { icon: 'smart_toy', color: 'var(--color-primary)', bg: 'var(--color-surface-tint)' };
     default:
       return { icon: 'notifications', color: 'var(--color-primary)', bg: 'var(--color-surface-tint)' };
   }
