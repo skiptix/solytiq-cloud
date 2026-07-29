@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ReactFlow, Background, Controls, type Node as RFNode, type Edge as RFEdge, type Connection } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useMobile } from '../hooks/useBreakpoint';
@@ -7,18 +8,23 @@ import useGraphStore from '../store/useGraphStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
 import Icon from '../components/Icon';
 import RenameDialog from '../components/RenameDialog';
-import FlowGraph from '../components/graph/FlowGraph';
+import LinkPicker from '../components/LinkPicker';
+import FlowGraph, { RF_NODE_TYPES } from '../components/graph/FlowGraph';
 import SigmaGraph from '../components/graph/SigmaGraph';
 import GraphControls from '../components/graph/GraphControls';
 import NodeInspector from '../components/graph/NodeInspector';
 import { shouldUseSigma } from '../utils/graphLayout';
-import { apiGetCanvases, apiCreateCanvas, apiGetCanvas, apiUpdateCanvas, apiCreateLink } from '../api/client';
-import type { GraphNode, GraphCanvas } from '../types';
+import { useEntitySearch } from '../hooks/useEntitySearch';
+import { apiGetCanvases, apiCreateCanvas, apiGetCanvas, apiUpdateCanvas, apiCreateLink, apiGetWorkspaceGraph, apiGetEntityLinks } from '../api/client';
+import type { GraphNode, GraphCanvas, EntityIndexEntry } from '../types';
 
 function ExploreView({ isMobile }: { isMobile: boolean }) {
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const { loadWorkspaceGraph, loadLocalGraph, focusSrn, focusNode, visibleNodes, visibleEdges, loading, allNodes } = useGraphStore();
   const [selected, setSelected] = useState<GraphNode | null>(null);
+  const positionOverrides = useUserPrefsStore((s) => (workspaceId ? s.graphNodePositions[workspaceId] : undefined));
+  const setGraphNodePosition = useUserPrefsStore((s) => s.setGraphNodePosition);
+  const clearGraphNodePositions = useUserPrefsStore((s) => s.clearGraphNodePositions);
 
   useEffect(() => {
     if (workspaceId) void loadWorkspaceGraph(workspaceId);
@@ -33,8 +39,12 @@ function ExploreView({ isMobile }: { isMobile: boolean }) {
     void loadLocalGraph(srn);
     setSelected(null);
   }, [loadLocalGraph]);
+  const handleNodeDragStop = useCallback((srn: string, x: number, y: number) => {
+    if (workspaceId) setGraphNodePosition(workspaceId, srn, x, y);
+  }, [workspaceId, setGraphNodePosition]);
 
   if (!workspaceId) return null;
+  const hasCustomLayout = !!positionOverrides && Object.keys(positionOverrides).length > 0;
 
   return (
     <div style={{ display: 'flex', gap: 14, height: '100%', width: '100%', minWidth: 0, flexDirection: isMobile ? 'column' : 'row' }}>
@@ -48,6 +58,17 @@ function ExploreView({ isMobile }: { isMobile: boolean }) {
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-secondary)'; }}
           >
             <Icon name="arrow_back" size={14} /> Full graph
+          </button>
+        )}
+        {!useSigma && hasCustomLayout && (
+          <button
+            onClick={() => workspaceId && clearGraphNodePositions(workspaceId)}
+            title="Discard your manually-dragged node positions"
+            style={{ position: 'absolute', top: 12, right: 12, zIndex: 5, display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', boxShadow: '0 2px 8px rgba(var(--color-black-rgb), 0.06)', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', cursor: 'pointer', transition: 'all 150ms' }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-secondary)'; }}
+          >
+            <Icon name="restart_alt" size={14} /> Reset layout
           </button>
         )}
         {loading && (
@@ -72,7 +93,10 @@ function ExploreView({ isMobile }: { isMobile: boolean }) {
             </div>
           ) : useSigma
             ? <SigmaGraph nodes={nodes} edges={edges} onNodeClick={handleNodeClick} />
-            : <FlowGraph nodes={nodes} edges={edges} focusSrn={focusSrn} mode={focusSrn ? 'local' : 'explore'} onNodeClick={handleNodeClick} />
+            : <FlowGraph
+                nodes={nodes} edges={edges} focusSrn={focusSrn} mode={focusSrn ? 'local' : 'explore'}
+                onNodeClick={handleNodeClick} positionOverrides={positionOverrides} onNodeDragStop={handleNodeDragStop}
+              />
         )}
       </div>
       {selected && !isMobile && <NodeInspector node={selected} onClose={() => setSelected(null)} onFocus={handleFocus} />}
@@ -81,6 +105,7 @@ function ExploreView({ isMobile }: { isMobile: boolean }) {
 }
 
 function CanvasView({ isMobile }: { isMobile: boolean }) {
+  const navigate = useNavigate();
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const [canvases, setCanvases] = useState<GraphCanvas[]>([]);
   const [active, setActive] = useState<GraphCanvas | null>(null);
@@ -88,22 +113,94 @@ function CanvasView({ isMobile }: { isMobile: boolean }) {
   const [rfEdges, setRfEdges] = useState<RFEdge[]>([]);
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [addQuery, setAddQuery] = useState('');
+  const [addActiveIndex, setAddActiveIndex] = useState(0);
+
+  // Single source of truth for "what should be persisted" — several different
+  // event paths (a drag ending, the Remove button, Add-node) can each end up
+  // asking to save, sometimes from a closure that predates a just-applied
+  // state update (e.g. XYFlow can fire onNodeDragStop for the same gesture
+  // that triggered a node's removal). Reading the ref here instead of a
+  // captured `rfNodes` argument means every save always writes the CURRENT
+  // node list, so a stale caller can never resurrect an already-removed node.
+  const rfNodesRef = useRef<RFNode[]>([]);
+  useEffect(() => { rfNodesRef.current = rfNodes; }, [rfNodes]);
+  const activeRef = useRef<GraphCanvas | null>(null);
+  useEffect(() => { activeRef.current = active; }, [active]);
 
   useEffect(() => {
     if (!workspaceId) return;
     apiGetCanvases(workspaceId).then((r) => setCanvases(r.canvases)).catch(() => setCanvases([]));
   }, [workspaceId]);
 
+  const persistLayout = useCallback(async () => {
+    const current = activeRef.current;
+    if (!current) return;
+    setSaving(true);
+    try {
+      const layout = {
+        version: 1 as const,
+        nodes: rfNodesRef.current.map((n) => ({ srn: n.id, x: n.position.x, y: n.position.y })),
+        groups: current.layout.groups ?? [], notes: current.layout.notes ?? [],
+      };
+      const r = await apiUpdateCanvas(current.id, { layout, version: current.version });
+      setActive(r.canvas);
+    } catch {
+      // conflict or transient failure — the canvas stays open, next save retries with the latest version
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  const openNode = useCallback((node: GraphNode) => {
+    if (node.deepLink) navigate(node.deepLink);
+  }, [navigate]);
+
+  const removeNode = useCallback((srn: string) => {
+    const next = rfNodesRef.current.filter((n) => n.id !== srn);
+    rfNodesRef.current = next; // update the ref synchronously so persistLayout (below) can never race ahead of it
+    setRfNodes(next);
+    setRfEdges((eds) => eds.filter((e) => e.source !== srn && e.target !== srn));
+    void persistLayout();
+  }, [persistLayout]);
+
+  const buildEntityRfNode = useCallback((srn: string, x: number, y: number, node: GraphNode | null): RFNode => {
+    if (node) {
+      return {
+        id: srn, type: 'entity', position: { x, y },
+        data: { node, focused: false, onRemove: () => removeNode(srn), onOpen: () => openNode(node) } as unknown as Record<string, unknown>,
+      };
+    }
+    // The entity is no longer resolvable (deleted, or access revoked) — keep its
+    // saved position as an inert placeholder rather than silently dropping it.
+    return {
+      id: srn, position: { x, y },
+      data: { label: srn.split(':').slice(-1)[0] },
+      style: { padding: 8, borderRadius: 8, border: '1.5px dashed var(--color-border)', fontSize: 12, color: 'var(--color-text-quaternary)', background: 'var(--color-surface-tint-3)' },
+    };
+  }, [removeNode, openNode]);
+
   const openCanvas = useCallback(async (id: string) => {
     const r = await apiGetCanvas(id);
     setActive(r.canvas);
-    setRfNodes(r.canvas.layout.nodes.map((n) => ({
-      id: n.srn, position: { x: n.x, y: n.y },
-      data: { label: n.srn.split(':').slice(-1)[0] },
-      style: { padding: 8, borderRadius: 8, border: '2px solid var(--color-primary)', fontSize: 12, background: '#fff' },
-    })));
-    setRfEdges([]);
-  }, []);
+    const placedSrns = new Set(r.canvas.layout.nodes.map((n) => n.srn));
+    let bySrn = new Map<string, GraphNode>();
+    let liveEdges: RFEdge[] = [];
+    if (workspaceId) {
+      try {
+        const g = await apiGetWorkspaceGraph(workspaceId, { limit: 2000 });
+        bySrn = new Map(g.nodes.map((n) => [n.srn, n]));
+        liveEdges = g.edges
+          .filter((e) => placedSrns.has(e.src) && placedSrns.has(e.dst))
+          .map((e) => ({ id: e.id, source: e.src, target: e.dst, style: { stroke: e.crossWorkspace ? 'var(--color-warning)' : 'var(--color-purple-tint-3, #c4b8f0)', strokeWidth: 1.5 } }));
+      } catch {
+        // real-node enrichment + edges are best-effort — the canvas still opens with bare placeholders
+      }
+    }
+    setRfNodes(r.canvas.layout.nodes.map((n) => buildEntityRfNode(n.srn, n.x, n.y, bySrn.get(n.srn) ?? null)));
+    setRfEdges(liveEdges);
+  }, [workspaceId, buildEntityRfNode]);
 
   const createCanvas = useCallback(async (name: string) => {
     if (!workspaceId || !name.trim()) { setCreating(false); return; }
@@ -113,19 +210,46 @@ function CanvasView({ isMobile }: { isMobile: boolean }) {
     void openCanvas(r.canvas.id);
   }, [workspaceId, openCanvas]);
 
-  const persistLayout = useCallback(async (nodes: RFNode[]) => {
-    if (!active) return;
-    setSaving(true);
-    try {
-      const layout = { version: 1 as const, nodes: nodes.map((n) => ({ srn: n.id, x: n.position.x, y: n.position.y })), groups: active.layout.groups ?? [], notes: active.layout.notes ?? [] };
-      const r = await apiUpdateCanvas(active.id, { layout, version: active.version });
-      setActive(r.canvas);
-    } catch {
-      // conflict or transient failure — the canvas stays open, next drag retries with the latest version
-    } finally {
-      setSaving(false);
+  const { results: addResults, loading: addLoading } = useEntitySearch(adding ? addQuery : '', {
+    workspaceId: workspaceId ?? undefined, excludeSrns: rfNodes.map((n) => n.id),
+  });
+
+  const addEntityToCanvas = useCallback((entity: EntityIndexEntry) => {
+    const nds = rfNodesRef.current;
+    if (!nds.some((n) => n.id === entity.srn)) {
+      const idx = nds.length;
+      const x = 40 + (idx % 5) * 210;
+      const y = 40 + Math.floor(idx / 5) * 140;
+      const node: GraphNode = {
+        srn: entity.srn, type: entity.entityType, id: entity.entityId, title: entity.title,
+        emoji: entity.emoji, color: entity.color, deepLink: entity.deepLink,
+        degree: 0, pagerank: 0, community: null, status: entity.status, isArchived: entity.isArchived,
+      };
+      const next = [...nds, buildEntityRfNode(entity.srn, x, y, node)];
+      rfNodesRef.current = next; // synchronous, same reasoning as removeNode above
+      setRfNodes(next);
+      void persistLayout();
+
+      // Connect it to whatever's already on the canvas, not just future nodes —
+      // openCanvas() only computes edges once at load time, so a freshly-added
+      // node needs its own lookup against the nodes already placed.
+      const placedSrns = new Set(next.map((n) => n.id));
+      apiGetEntityLinks(entity.entityType, entity.entityId)
+        .then((r) => {
+          const newEdges: RFEdge[] = Object.values(r.linksByType).flat()
+            .filter((l) => l.neighbor && placedSrns.has(l.direction === 'out' ? l.dst : l.src))
+            .map((l) => ({
+              id: l.id, source: l.direction === 'out' ? l.src : l.dst, target: l.direction === 'out' ? l.dst : l.src,
+              style: { stroke: l.isCrossWorkspace ? 'var(--color-warning)' : 'var(--color-purple-tint-3, #c4b8f0)', strokeWidth: 1.5 },
+            }));
+          if (newEdges.length) setRfEdges((eds) => [...eds, ...newEdges.filter((e) => !eds.some((existing) => existing.id === e.id))]);
+        })
+        .catch(() => { /* edge enrichment is best-effort — the node is already placed either way */ });
     }
-  }, [active]);
+    setAdding(false);
+    setAddQuery('');
+    setAddActiveIndex(0);
+  }, [buildEntityRfNode, persistLayout]);
 
   const onConnect = useCallback(async (connection: Connection) => {
     if (!connection.source || !connection.target) return;
@@ -196,9 +320,56 @@ function CanvasView({ isMobile }: { isMobile: boolean }) {
         </button>
         <span style={{ padding: '6px 10px', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>{saving ? 'Saving…' : active.name}</span>
       </div>
+
+      <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 5 }}>
+        <button
+          onClick={() => setAdding((a) => !a)}
+          style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 8, border: 'none', background: 'var(--color-primary)', boxShadow: '0 2px 8px rgba(var(--color-black-rgb), 0.06)', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-white)', cursor: 'pointer' }}
+        >
+          <Icon name="add" size={14} color="var(--color-white)" /> Add node
+        </button>
+        {adding && (
+          <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 260, padding: 8, borderRadius: 10, border: '1px solid var(--color-border)', background: 'var(--color-white)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <input
+              autoFocus
+              value={addQuery}
+              onChange={(e) => { setAddQuery(e.target.value); setAddActiveIndex(0); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') { setAdding(false); setAddQuery(''); return; }
+                if (!addResults.length) return;
+                if (e.key === 'ArrowDown') { e.preventDefault(); setAddActiveIndex((i) => (i + 1) % addResults.length); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); setAddActiveIndex((i) => (i - 1 + addResults.length) % addResults.length); }
+                else if (e.key === 'Enter') { e.preventDefault(); addEntityToCanvas(addResults[addActiveIndex]); }
+              }}
+              placeholder="Search a board, task, page…"
+              style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 12.5, border: '1px solid var(--color-border)', borderRadius: 7, padding: '6px 8px', outline: 'none', boxSizing: 'border-box' }}
+            />
+            <LinkPicker
+              query={addQuery}
+              results={addResults}
+              loading={addLoading}
+              activeIndex={addActiveIndex}
+              onHover={setAddActiveIndex}
+              onPick={addEntityToCanvas}
+              emptyHint="Type to find something to place on this canvas"
+              style={{ position: 'static', width: '100%', boxShadow: 'none', border: 'none', padding: 0, marginTop: 6, animation: 'none' }}
+            />
+          </div>
+        )}
+      </div>
+
+      {rfNodes.length === 0 && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', pointerEvents: 'none', zIndex: 1 }}>
+          <Icon name="dashboard_customize" size={40} color="var(--color-purple-tint-3, #c4b8f0)" />
+          <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>This canvas is empty</div>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, maxWidth: 280, textAlign: 'center' }}>Click "Add node" to place a board, task, or page here, then drag to arrange and drag between them to connect.</div>
+        </div>
+      )}
+
       <ReactFlow
         nodes={rfNodes}
         edges={rfEdges}
+        nodeTypes={RF_NODE_TYPES}
         onNodesChange={(changes) => setRfNodes((nds) => {
           const next = [...nds];
           for (const ch of changes) {
@@ -209,7 +380,7 @@ function CanvasView({ isMobile }: { isMobile: boolean }) {
           }
           return next;
         })}
-        onNodeDragStop={(_, __, nodes) => void persistLayout(nodes.length ? rfNodes : rfNodes)}
+        onNodeDragStop={() => void persistLayout()}
         onConnect={(c) => void onConnect(c)}
         nodesConnectable
         nodesDraggable
