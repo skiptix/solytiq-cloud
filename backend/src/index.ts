@@ -48,6 +48,7 @@ import { sweepEmbeddingQueue } from './knowledge/embeddingWorker';
 import { setPgvectorAvailable } from './knowledge/state';
 import agentRouter from './routes/agent';
 import { sweepExpiredProposals } from './agent/runtime';
+import { sweepMigrationVerification } from './graph/verifyMigration';
 import { backfillHardLinks } from './graph/backfill';
 import { sweepGraphMetrics } from './graph/metrics';
 import { isAppInstalled } from './appsRegistry';
@@ -2980,6 +2981,56 @@ async function runMigrations() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_mutations_run ON agent_mutations (run_id)`);
 
+  // ── Graph Layer: rolling-refactor R3/R4 (gated legacy-column drop) ──────
+  // TWO independent flags must both be 'true' before a single column is
+  // touched:
+  //   - graph_migration_verified: written ONLY by graph/verifyMigration.ts's
+  //     nightly sweep, after 7 CONSECUTIVE clean days of zero drift between
+  //     the legacy hard-link columns and their mirrored entity_links edges.
+  //   - graph_links_v2: the READ-SWITCH flag — set only once every
+  //     application read/write path that currently touches these columns
+  //     directly (routes/lists.ts, aiTools.ts, templateUtil.ts, etc.) has
+  //     been migrated to go through entity_links instead. That rollout is
+  //     substantial and is NOT part of this change — see DEPRECATIONS.md.
+  //     This flag is never set anywhere in this codebase (yet), so this
+  //     entire block is provably dead code today, by construction, not by
+  //     convention — exactly the point of a two-key gate for an irreversible
+  //     operation.
+  //
+  // Why both are required, not just the drift streak: the trg_hardlink_*
+  // triggers below read NEW.linked_list_id/NEW.parent_task_id/NEW.todo_list_id
+  // directly — dropping those columns while the triggers still reference them
+  // would break every INSERT/UPDATE on tasks/lists/markdown_lists the moment
+  // it fires. So a real drop must ALSO retire the triggers whose only purpose
+  // was dual-writing FROM these columns — which only makes sense once nothing
+  // in the app writes to the columns anymore (graph_links_v2), not just once
+  // the dual-write has been verified to run correctly so far.
+  //
+  // Scope is deliberately narrower than "5 mechanisms" even then: only the 4
+  // columns that are pure reference redundancy (fully reconstructable from
+  // entity_links) are covered. task_attachments/milestone_attachments are
+  // real DATA tables (file path/size/mime metadata), not reference columns —
+  // dropping a data table is a materially different risk class and gets its
+  // own dedicated, separately-reviewed migration, never bundled into this gate.
+  const [migrationVerifiedRes, linksV2Res] = await Promise.all([
+    pool.query<{ value: string }>(`SELECT value FROM app_settings WHERE key = 'graph_migration_verified'`),
+    pool.query<{ value: string }>(`SELECT value FROM app_settings WHERE key = 'graph_links_v2'`),
+  ]);
+  if (migrationVerifiedRes.rows[0]?.value === 'true' && linksV2Res.rows[0]?.value === 'true') {
+    console.log('🔗 🗑️  graph_migration_verified + graph_links_v2 are both true — retiring the dual-write triggers and dropping the now-redundant legacy hard-link columns...');
+    await pool.query(`DROP TRIGGER IF EXISTS trg_hardlink_task ON tasks`);
+    await pool.query(`DROP FUNCTION IF EXISTS sync_hardlink_task()`);
+    await pool.query(`DROP TRIGGER IF EXISTS trg_hardlink_list ON lists`);
+    await pool.query(`DROP FUNCTION IF EXISTS sync_hardlink_list()`);
+    await pool.query(`DROP TRIGGER IF EXISTS trg_hardlink_markdown ON markdown_lists`);
+    await pool.query(`DROP FUNCTION IF EXISTS sync_hardlink_markdown()`);
+    await pool.query(`ALTER TABLE tasks DROP COLUMN IF EXISTS linked_list_id`);
+    await pool.query(`ALTER TABLE tasks DROP COLUMN IF EXISTS linked_list_type`);
+    await pool.query(`ALTER TABLE lists DROP COLUMN IF EXISTS parent_task_id`);
+    await pool.query(`ALTER TABLE markdown_lists DROP COLUMN IF EXISTS todo_list_id`);
+    console.log('🔗 🗑️  Legacy hard-link columns and their sync triggers are gone. entity_links (origin=\'system\') is now the sole source of truth for these relationships.');
+  }
+
   console.log('Database migrations applied.');
 }
 
@@ -3050,6 +3101,13 @@ async function start() {
   // plenty — approvals are a human-timescale action, not a hot path.
   sweepExpiredProposals();
   setInterval(sweepExpiredProposals, 60 * 60 * 1000);
+
+  // Graph Layer: nightly drift check between the legacy hard-link columns and
+  // their mirrored entity_links edges, feeding the gated column-drop
+  // migration's 7-consecutive-clean-days streak (see graph/verifyMigration.ts
+  // and runMigrations()'s gated drop block).
+  sweepMigrationVerification();
+  setInterval(sweepMigrationVerification, 24 * 60 * 60 * 1000);
 
   // Delta-sync: prune the outbox daily, and start the realtime dispatcher that
   // fans committed changes out to every affected user's devices.
