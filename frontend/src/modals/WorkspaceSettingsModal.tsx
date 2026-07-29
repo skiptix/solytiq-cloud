@@ -6,6 +6,7 @@ import useAuthStore from '../store/useAuthStore';
 import useAppStore from '../store/useAppStore';
 import type { Workspace, WorkspaceMember, SharedFile, AgentMode } from '../types';
 import useAgentStore from '../store/useAgentStore';
+import { RunRow } from '../components/AgentInbox';
 import { EmojiGrid, POPUP_WIDTH } from '../components/EmojiSelector';
 import { apiGetMembers, apiGetFiles, asVisibilityConflict, type VisibilityConflict } from '../api/client';
 import VisibilityConflictModal from '../components/VisibilityConflictModal';
@@ -217,6 +218,11 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const [agentMode, setAgentMode] = useState<AgentMode>(workspace.agentMode ?? 'off');
   const [agentSaving, setAgentSaving] = useState(false);
   const [agentSaved, setAgentSaved] = useState(false);
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const agentRuns = useAgentStore(s => s.runs);
+  const agentRunsLoading = useAgentStore(s => s.loading);
+  const agentRunsLoaded = useAgentStore(s => s.loaded);
+  const loadAgentRuns = useAgentStore(s => s.load);
 
   // Danger
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -248,6 +254,12 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
       apiGetMembers().then(r => setAllUsers(r.members)).catch(() => {});
     }
   }, [activeTab, membersLoaded]);
+
+  useEffect(() => {
+    if (activeTab === 'agent' && isOwner && !agentRunsLoaded) {
+      void loadAgentRuns(workspace.id);
+    }
+  }, [activeTab, isOwner, agentRunsLoaded, loadAgentRuns, workspace.id]);
 
   const memberUserIds = new Set(members.map(m => m.userId));
   const suggestions = inviteUsername.trim().length > 0
@@ -646,6 +658,36 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                   style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '10px 22px', cursor: agentSaving ? 'default' : 'pointer', opacity: agentSaving ? 0.6 : 1 }}>
                   {agentSaving ? 'Saving…' : 'Save changes'}
                 </button>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--color-divider)', paddingTop: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Activity log</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 4 }}>What the agent has worked on in this workspace, most recent first.</div>
+                  </div>
+                  <button
+                    onClick={() => void loadAgentRuns(workspace.id)}
+                    disabled={agentRunsLoading}
+                    title="Refresh"
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: agentRunsLoading ? 'default' : 'pointer', flexShrink: 0 }}
+                  >
+                    <Icon name="refresh" size={14} color={agentRunsLoading ? 'var(--color-text-quaternary)' : 'var(--color-text-secondary)'} />
+                  </button>
+                </div>
+                {agentRunsLoading && !agentRunsLoaded && (
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)', padding: '10px 0' }}>Loading…</div>
+                )}
+                {agentRunsLoaded && agentRuns.length === 0 && (
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)', padding: '10px 0' }}>No agent activity yet in this workspace.</div>
+                )}
+                {agentRuns.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 320, overflowY: 'auto' }}>
+                    {agentRuns.map(r => (
+                      <RunRow key={r.id} run={r} expanded={expandedRunId === r.id} onToggle={() => setExpandedRunId(id => (id === r.id ? null : r.id))} />
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

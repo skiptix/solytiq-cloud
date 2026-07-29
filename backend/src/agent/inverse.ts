@@ -84,9 +84,10 @@ const REVERT_HANDLERS: Record<string, RevertHandler> = {
     },
   },
 
-  create_task: {
+  // No "before" — the task doesn't exist yet. Both dashboard and in-list task
+  // creation share this handler: same shape, only the aiTools.ts tool name differs.
+  create_dashboard_task: {
     entityType: 'task',
-    // No "before" — the task doesn't exist yet.
     afterRun: async (args, userId, _before, exec) => {
       const title = typeof args.title === 'string' ? args.title : null;
       if (!title) return null;
@@ -104,6 +105,7 @@ const REVERT_HANDLERS: Record<string, RevertHandler> = {
     },
   },
 };
+REVERT_HANDLERS.create_task_in_list = REVERT_HANDLERS.create_dashboard_task;
 
 export const REVERTIBLE_TOOL_NAMES = new Set(Object.keys(REVERT_HANDLERS));
 

@@ -128,6 +128,70 @@ async function recordMutation(runId: string, workspaceId: string, m: MutationRec
   );
 }
 
+async function fetchTaskInfo(taskId: string, exec: typeof query): Promise<{ title: string; listId: string | null } | null> {
+  try {
+    const r = await exec<{ title: string; list_id: string | null }>(`SELECT title, list_id FROM tasks WHERE id = $1`, [Number(taskId)]);
+    const row = r.rows[0];
+    return row ? { title: row.title, listId: row.list_id } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Best-effort transparency notification: tell an item's creator — and, for
+ * tasks, everyone tagged on it — that the agent just changed something they
+ * own or care about. This is deliberately separate from `agent_run_complete`
+ * (which only reaches the person who started the run): a task can belong to,
+ * or be tagged with, someone other than whoever is directing the agent, and
+ * an autonomous change to their item is exactly the kind of thing they'd want
+ * surfaced. `createNotification`'s own actor===recipient guard means the
+ * run's own owner is silently skipped when they're also the item's owner —
+ * they already know, via the run itself.
+ */
+async function notifyMutationRecipients(
+  m: MutationRecord, actorId: string, workspaceId: string, taggedUserIds: string[]
+): Promise<void> {
+  try {
+    const recipients = new Set<string>(taggedUserIds);
+    let title: string;
+    let listId: string | null = null;
+
+    if (m.beforeState && typeof m.beforeState.title === 'string') {
+      // update_task / delete_task — the row (or its cascade-deleted task_tags)
+      // may already be gone by now, so everything comes from the pre-capture.
+      title = m.beforeState.title;
+      if (typeof m.beforeState.user_id === 'string') recipients.add(m.beforeState.user_id);
+      if (typeof m.beforeState.list_id === 'string') listId = m.beforeState.list_id;
+    } else if (m.entityType === 'task') {
+      // create_dashboard_task / create_task_in_list — the row still exists.
+      const info = await fetchTaskInfo(m.entityId, query);
+      if (!info) return;
+      title = info.title;
+      listId = info.listId;
+      const ownerRes = await query<{ user_id: string }>(`SELECT user_id FROM tasks WHERE id = $1`, [Number(m.entityId)]);
+      const ownerId = ownerRes.rows[0]?.user_id;
+      if (ownerId) recipients.add(ownerId);
+    } else {
+      return; // only task mutations are tracked today — see REVERT_HANDLERS
+    }
+
+    if (recipients.size === 0) return;
+    const verb = m.toolName.startsWith('create') ? 'created' : m.toolName.startsWith('delete') ? 'deleted' : 'updated';
+    await createNotifications(recipients, {
+      type: 'agent_change',
+      actorId,
+      title: `The agent ${verb} "${title}"`,
+      entityType: m.entityType,
+      entityId: m.entityId,
+      workspaceId,
+      data: { toolName: m.toolName, listId },
+    });
+  } catch (err) {
+    console.error('🤖 ✗ notifyMutationRecipients failed:', err);
+  }
+}
+
 /** Kick off a run. Returns immediately with the run's id — the loop itself runs in the background. */
 export async function startAgentRun(input: StartAgentRunInput): Promise<{ runId: string; mode: AgentMode }> {
   const wsRes = await query<{ agent_mode: AgentMode; agent_policy: unknown }>(
@@ -212,13 +276,27 @@ async function executeRun(runId: string, input: StartAgentRunInput, mode: AgentM
 
         const started = Date.now();
         const before = await snapshotBeforeToolCall(call.function.name, args, input.userId, query);
+        // update_task/delete_task cascade away (or simply move past) task_tags
+        // by the time the tool returns, so anyone tagged has to be captured
+        // now — used below by notifyMutationRecipients, not by revert.
+        let taggedBefore: string[] = [];
+        if (call.function.name === 'update_task' || call.function.name === 'delete_task') {
+          const taskId = Number(args.task_id);
+          if (Number.isFinite(taskId)) {
+            const tagRes = await query<{ user_id: string }>(`SELECT user_id FROM task_tags WHERE task_id = $1`, [taskId]);
+            taggedBefore = tagRes.rows.map((r) => r.user_id);
+          }
+        }
         const result = await executeAiTool(input.userId, call.function.name, args);
         const durationMs = Date.now() - started;
         actions++;
 
         if (result.ok) {
           const mutation = await buildMutationRecord(call.function.name, args, before, input.userId, query);
-          if (mutation) await recordMutation(runId, input.workspaceId, mutation);
+          if (mutation) {
+            await recordMutation(runId, input.workspaceId, mutation);
+            await notifyMutationRecipients(mutation, input.userId, input.workspaceId, taggedBefore);
+          }
         }
 
         steps.push({
