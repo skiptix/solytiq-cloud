@@ -7,6 +7,8 @@ import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
 import { collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
 import { notifyNewMentions } from '../mentions';
 import { itemShareExists } from '../itemShares';
+import { startAgentRun } from '../agent/runtime';
+import { runJson, type AgentRunRow } from './agent';
 
 const router = Router();
 router.use(authenticate);
@@ -452,6 +454,42 @@ router.delete('/:id', async (req: Request, res: Response) => {
     broadcastToUser(req.userId!, 'tasks');
   } catch (err) {
     werr('tasks DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/tasks/:id/assign-agent — hand a task to the workspace's agent as
+// a one-off goal ("complete/help with this task"). The agent always acts AS
+// THE CALLER (aiTools.ts scopes every query to the acting user's own rows —
+// see its file header), so this only makes sense for a task the caller can
+// already act on; workspace membership beyond that grants no extra agent
+// capability, by the same design that keeps aiTools.ts IDOR-safe.
+router.post('/:id/assign-agent', async (req: Request, res: Response) => {
+  try {
+    const taskId = req.params.id;
+    const r = await query<{ id: string; title: string; note: string | null; workspace_id: string | null; user_id: string; list_id: string | null }>(
+      `SELECT t.id, t.title, t.note, t.workspace_id, t.user_id, t.list_id FROM tasks t WHERE t.id = $1`,
+      [taskId]
+    );
+    const task = r.rows[0];
+    if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
+    if (task.user_id !== req.userId) { res.status(403).json({ error: 'You can only assign the agent to your own tasks' }); return; }
+    if (!task.workspace_id) { res.status(400).json({ error: 'This task has no workspace — the agent is configured per workspace' }); return; }
+
+    const { goal } = req.body as { goal?: string };
+    const run = await startAgentRun({
+      workspaceId: task.workspace_id,
+      userId: req.userId!,
+      goal: goal?.trim() || `Complete or make progress on the task "${task.title}"${task.note ? `. Notes: ${task.note}` : ''}. Use task_id ${task.id}.`,
+      triggerType: 'task_assigned',
+      triggerContext: { taskId: task.id, listId: task.list_id },
+    });
+    const runRow = await query<AgentRunRow>(`SELECT * FROM agent_runs WHERE id = $1`, [run.runId]);
+    res.status(201).json({ run: runJson(runRow.rows[0]) });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Internal server error';
+    if (msg.includes('turned off') || msg.includes('not found')) { res.status(400).json({ error: msg }); return; }
+    werr('tasks POST /:id/assign-agent error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

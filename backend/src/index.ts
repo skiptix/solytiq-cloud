@@ -46,6 +46,9 @@ import canvasesRouter from './routes/canvases';
 import knowledgeRouter from './routes/knowledge';
 import { sweepEmbeddingQueue } from './knowledge/embeddingWorker';
 import { setPgvectorAvailable } from './knowledge/state';
+import agentRouter from './routes/agent';
+import { sweepExpiredProposals } from './agent/runtime';
+import { sweepMigrationVerification } from './graph/verifyMigration';
 import { backfillHardLinks } from './graph/backfill';
 import { sweepGraphMetrics } from './graph/metrics';
 import { isAppInstalled } from './appsRegistry';
@@ -210,6 +213,18 @@ const knowledgeLimiter = rateLimit({
   message: { error: 'Too many requests, please slow down.' },
 });
 
+// Agent Runtime: starting a run kicks off a multi-turn LLM tool-calling loop —
+// far pricier than any other endpoint in this app. A tight budget on top of
+// apiLimiter, same pattern as links/graph/knowledge above.
+const agentLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKey,
+  message: { error: 'Too many requests, please slow down.' },
+});
+
 app.use('/api/', (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
@@ -260,6 +275,7 @@ app.use('/api/links', linksLimiter, linksRouter);
 app.use('/api/graph', graphLimiter, graphRouter);
 app.use('/api/canvases', canvasesRouter);
 app.use('/api/knowledge', knowledgeLimiter, knowledgeRouter);
+app.use('/api/agent', agentLimiter, agentRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
@@ -2899,6 +2915,122 @@ async function runMigrations() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_embedding_queue_status ON embedding_queue (status, updated_at)`);
 
+  // ── Agent Runtime ─────────────────────────────────────────────────────
+  // Per-workspace autonomy: agent_mode gates whether the agent runs at all
+  // ('off') and how much a run can do without a human ('suggest' always
+  // proposes, 'assisted' auto-runs only policy.autoApproveTools, 'autonomous'
+  // auto-runs everything the policy allows). See agent/policy.ts.
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS agent_mode VARCHAR(20) NOT NULL DEFAULT 'off'`);
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS agent_policy JSONB NOT NULL DEFAULT '{}'`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS agent_runs (
+      id                 VARCHAR(100) PRIMARY KEY,
+      workspace_id       VARCHAR(100) NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id            UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      trigger_type       VARCHAR(40) NOT NULL,
+      trigger_context    JSONB NOT NULL DEFAULT '{}',
+      goal               TEXT NOT NULL,
+      mode               VARCHAR(20) NOT NULL,
+      status             VARCHAR(20) NOT NULL DEFAULT 'running',
+      steps              JSONB NOT NULL DEFAULT '[]',
+      tokens_prompt      INTEGER NOT NULL DEFAULT 0,
+      tokens_completion  INTEGER NOT NULL DEFAULT 0,
+      model              VARCHAR(100),
+      error              TEXT,
+      started_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      finished_at        TIMESTAMPTZ
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_runs_workspace ON agent_runs (workspace_id, started_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_runs_user ON agent_runs (user_id, started_at DESC)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS agent_proposals (
+      id            VARCHAR(100) PRIMARY KEY,
+      run_id        VARCHAR(100) NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+      workspace_id  VARCHAR(100) NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      tool_name     VARCHAR(100) NOT NULL,
+      tool_args     JSONB NOT NULL DEFAULT '{}',
+      rationale     TEXT,
+      preview       JSONB,
+      status        VARCHAR(20) NOT NULL DEFAULT 'pending',
+      decided_by    UUID REFERENCES users(id) ON DELETE SET NULL,
+      decided_at    TIMESTAMPTZ,
+      expires_at    TIMESTAMPTZ NOT NULL,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_proposals_ws_status ON agent_proposals (workspace_id, status)`);
+
+  // Curated revert support (agent/inverse.ts) — one row per tracked mutation a
+  // run made. before_state is null for a create (nothing existed before).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS agent_mutations (
+      id            VARCHAR(100) PRIMARY KEY,
+      run_id        VARCHAR(100) NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+      workspace_id  VARCHAR(100) NOT NULL,
+      tool_name     VARCHAR(100) NOT NULL,
+      entity_type   VARCHAR(24),
+      entity_id     VARCHAR(100),
+      before_state  JSONB,
+      reverted      BOOLEAN NOT NULL DEFAULT false,
+      revert_error  TEXT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_agent_mutations_run ON agent_mutations (run_id)`);
+
+  // ── Graph Layer: rolling-refactor R3/R4 (gated legacy-column drop) ──────
+  // TWO independent flags must both be 'true' before a single column is
+  // touched:
+  //   - graph_migration_verified: written ONLY by graph/verifyMigration.ts's
+  //     nightly sweep, after 7 CONSECUTIVE clean days of zero drift between
+  //     the legacy hard-link columns and their mirrored entity_links edges.
+  //   - graph_links_v2: the READ-SWITCH flag — set only once every
+  //     application read/write path that currently touches these columns
+  //     directly (routes/lists.ts, aiTools.ts, templateUtil.ts, etc.) has
+  //     been migrated to go through entity_links instead. That rollout is
+  //     substantial and is NOT part of this change — see DEPRECATIONS.md.
+  //     This flag is never set anywhere in this codebase (yet), so this
+  //     entire block is provably dead code today, by construction, not by
+  //     convention — exactly the point of a two-key gate for an irreversible
+  //     operation.
+  //
+  // Why both are required, not just the drift streak: the trg_hardlink_*
+  // triggers below read NEW.linked_list_id/NEW.parent_task_id/NEW.todo_list_id
+  // directly — dropping those columns while the triggers still reference them
+  // would break every INSERT/UPDATE on tasks/lists/markdown_lists the moment
+  // it fires. So a real drop must ALSO retire the triggers whose only purpose
+  // was dual-writing FROM these columns — which only makes sense once nothing
+  // in the app writes to the columns anymore (graph_links_v2), not just once
+  // the dual-write has been verified to run correctly so far.
+  //
+  // Scope is deliberately narrower than "5 mechanisms" even then: only the 4
+  // columns that are pure reference redundancy (fully reconstructable from
+  // entity_links) are covered. task_attachments/milestone_attachments are
+  // real DATA tables (file path/size/mime metadata), not reference columns —
+  // dropping a data table is a materially different risk class and gets its
+  // own dedicated, separately-reviewed migration, never bundled into this gate.
+  const [migrationVerifiedRes, linksV2Res] = await Promise.all([
+    pool.query<{ value: string }>(`SELECT value FROM app_settings WHERE key = 'graph_migration_verified'`),
+    pool.query<{ value: string }>(`SELECT value FROM app_settings WHERE key = 'graph_links_v2'`),
+  ]);
+  if (migrationVerifiedRes.rows[0]?.value === 'true' && linksV2Res.rows[0]?.value === 'true') {
+    console.log('🔗 🗑️  graph_migration_verified + graph_links_v2 are both true — retiring the dual-write triggers and dropping the now-redundant legacy hard-link columns...');
+    await pool.query(`DROP TRIGGER IF EXISTS trg_hardlink_task ON tasks`);
+    await pool.query(`DROP FUNCTION IF EXISTS sync_hardlink_task()`);
+    await pool.query(`DROP TRIGGER IF EXISTS trg_hardlink_list ON lists`);
+    await pool.query(`DROP FUNCTION IF EXISTS sync_hardlink_list()`);
+    await pool.query(`DROP TRIGGER IF EXISTS trg_hardlink_markdown ON markdown_lists`);
+    await pool.query(`DROP FUNCTION IF EXISTS sync_hardlink_markdown()`);
+    await pool.query(`ALTER TABLE tasks DROP COLUMN IF EXISTS linked_list_id`);
+    await pool.query(`ALTER TABLE tasks DROP COLUMN IF EXISTS linked_list_type`);
+    await pool.query(`ALTER TABLE lists DROP COLUMN IF EXISTS parent_task_id`);
+    await pool.query(`ALTER TABLE markdown_lists DROP COLUMN IF EXISTS todo_list_id`);
+    console.log('🔗 🗑️  Legacy hard-link columns and their sync triggers are gone. entity_links (origin=\'system\') is now the sole source of truth for these relationships.');
+  }
+
   console.log('Database migrations applied.');
 }
 
@@ -2964,6 +3096,18 @@ async function start() {
   // once per (task, deadline). Hourly is plenty — deadlines have day precision.
   sweepOverdueDeadlines();
   setInterval(sweepOverdueDeadlines, 60 * 60 * 1000);
+
+  // Agent Runtime: expire stale pending proposals (7-day TTL). Hourly is
+  // plenty — approvals are a human-timescale action, not a hot path.
+  sweepExpiredProposals();
+  setInterval(sweepExpiredProposals, 60 * 60 * 1000);
+
+  // Graph Layer: nightly drift check between the legacy hard-link columns and
+  // their mirrored entity_links edges, feeding the gated column-drop
+  // migration's 7-consecutive-clean-days streak (see graph/verifyMigration.ts
+  // and runMigrations()'s gated drop block).
+  sweepMigrationVerification();
+  setInterval(sweepMigrationVerification, 24 * 60 * 60 * 1000);
 
   // Delta-sync: prune the outbox daily, and start the realtime dispatcher that
   // fans committed changes out to every affected user's devices.

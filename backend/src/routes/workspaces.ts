@@ -21,6 +21,8 @@ interface WorkspaceRow {
   created_at: string;
   role?: string;
   member_count?: string;
+  agent_mode?: string;
+  agent_policy?: unknown;
 }
 
 function sanitizeWorkspace(w: WorkspaceRow) {
@@ -35,6 +37,8 @@ function sanitizeWorkspace(w: WorkspaceRow) {
     role:        (w.role ?? 'member') as 'owner' | 'member',
     createdAt:   w.created_at,
     memberCount: w.member_count !== undefined ? parseInt(w.member_count, 10) : undefined,
+    agentMode:   (w.agent_mode ?? 'off') as 'off' | 'suggest' | 'assisted' | 'autonomous',
+    agentPolicy: w.agent_policy ?? {},
   };
 }
 
@@ -193,6 +197,36 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
   } catch (err) {
     console.error('workspaces PUT error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PATCH /api/workspaces/:id/agent — Agent Runtime autonomy settings. Owner/admin
+// only, same bar as PUT /:id: this hands an AI agent write access to the
+// workspace's own data, so it isn't a plain-member setting.
+router.patch('/:id/agent', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { agentMode, agentPolicy } = req.body as { agentMode?: string; agentPolicy?: Record<string, unknown> };
+    const existing = await query<WorkspaceRow>('SELECT owner_id FROM workspaces WHERE id = $1', [id]);
+    if (existing.rows.length === 0) { res.status(404).json({ error: 'Workspace not found' }); return; }
+    if (existing.rows[0].owner_id !== req.userId && !req.user?.isAdmin) {
+      res.status(403).json({ error: 'Only the owner can change agent settings' }); return;
+    }
+    if (agentMode !== undefined && !['off', 'suggest', 'assisted', 'autonomous'].includes(agentMode)) {
+      res.status(400).json({ error: 'agentMode must be off, suggest, assisted, or autonomous' }); return;
+    }
+    const r = await query<{ agent_mode: string; agent_policy: unknown }>(
+      `UPDATE workspaces
+       SET agent_mode = COALESCE($1, agent_mode),
+           agent_policy = CASE WHEN $2::boolean THEN $3::jsonb ELSE agent_policy END
+       WHERE id = $4
+       RETURNING agent_mode, agent_policy`,
+      [agentMode ?? null, agentPolicy !== undefined, JSON.stringify(agentPolicy ?? {}), id]
+    );
+    res.json({ agentMode: r.rows[0].agent_mode, agentPolicy: r.rows[0].agent_policy });
+  } catch (err) {
+    console.error('workspaces PATCH /:id/agent error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

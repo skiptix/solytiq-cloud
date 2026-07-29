@@ -4,7 +4,8 @@ import Icon from '../components/Icon';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useAuthStore from '../store/useAuthStore';
 import useAppStore from '../store/useAppStore';
-import type { Workspace, WorkspaceMember, SharedFile } from '../types';
+import type { Workspace, WorkspaceMember, SharedFile, AgentMode } from '../types';
+import useAgentStore from '../store/useAgentStore';
 import { EmojiGrid, POPUP_WIDTH } from '../components/EmojiSelector';
 import { apiGetMembers, apiGetFiles, asVisibilityConflict, type VisibilityConflict } from '../api/client';
 import VisibilityConflictModal from '../components/VisibilityConflictModal';
@@ -146,7 +147,7 @@ function WorkspaceImagePicker({ onSelect, onClose }: { onSelect: (dataUrl: strin
 
 interface Props { workspace: Workspace; onClose: () => void; }
 
-type Tab = 'general' | 'members' | 'admin' | 'danger';
+type Tab = 'general' | 'members' | 'agent' | 'admin' | 'danger';
 
 export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const [closing, setClosing] = useState(false);
@@ -212,6 +213,11 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const inviteInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
+  // Agent
+  const [agentMode, setAgentMode] = useState<AgentMode>(workspace.agentMode ?? 'off');
+  const [agentSaving, setAgentSaving] = useState(false);
+  const [agentSaved, setAgentSaved] = useState(false);
+
   // Danger
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -220,6 +226,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const [showImagePicker, setShowImagePicker] = useState(false);
 
   const { updateWorkspace, deleteWorkspace, getMembers, addMember, removeMember, setDeletingWorkspaceId } = useWorkspaceStore();
+  const setWorkspaceAgent = useAgentStore(s => s.setWorkspaceAgent);
   const { userId, isAdmin } = useAuthStore();
   const { lists, timelines } = useAppStore();
   const isOwner = workspace.ownerId === userId || workspace.role === 'owner';
@@ -301,6 +308,19 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
     }
   };
 
+  const handleSaveAgent = async () => {
+    setAgentSaving(true);
+    try {
+      await setWorkspaceAgent(workspace.id, agentMode);
+      setAgentSaved(true);
+      setTimeout(() => setAgentSaved(false), 2000);
+    } catch {
+      // silent — matches handleSave's own quiet-failure convention for non-conflict errors
+    } finally {
+      setAgentSaving(false);
+    }
+  };
+
   const handleInvite = async () => {
     const uname = inviteUsername.trim();
     if (!uname) return;
@@ -336,6 +356,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const TABS: { id: Tab; label: string; icon: string }[] = [
     { id: 'general', label: 'General',  icon: 'settings'     },
     { id: 'members', label: 'Members',  icon: 'group'        },
+    ...(isOwner ? [{ id: 'agent' as const, label: 'Agent', icon: 'smart_toy' }] : []),
     ...(isAdmin ? [{ id: 'admin' as const, label: 'Admin', icon: 'admin_panel_settings' }] : []),
     { id: 'danger',  label: 'Danger',   icon: 'warning'      },
   ];
@@ -581,6 +602,53 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
             </div>
           )}
 
+
+          {/* ── Agent ── */}
+          {activeTab === 'agent' && isOwner && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
+              <div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Autonomy</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-tertiary)', marginBottom: 12 }}>
+                  Controls how much the AI agent can do on its own in this workspace — from proposing every action for you to approve, to acting fully autonomously within its policy limits. Reachable from an automation's "AI Agent" action, or by assigning a task to it directly.
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {([
+                    { id: 'off', label: 'Off', desc: 'The agent never runs in this workspace.' },
+                    { id: 'suggest', label: 'Suggest', desc: 'Every action is queued as a proposal for a human to accept or reject — nothing runs automatically.' },
+                    { id: 'assisted', label: 'Assisted', desc: 'Pre-approved tools run automatically; anything else is proposed for approval.' },
+                    { id: 'autonomous', label: 'Autonomous', desc: 'Runs everything its policy allows on its own (deletions still require approval by default).' },
+                  ] as { id: AgentMode; label: string; desc: string }[]).map(m => (
+                    <button
+                      key={m.id}
+                      onClick={() => { setAgentMode(m.id); setAgentSaved(false); }}
+                      style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                        border: agentMode === m.id ? '1.5px solid var(--color-primary)' : '1.5px solid var(--color-border)',
+                        background: agentMode === m.id ? 'var(--color-purple-pale-14, var(--color-surface-tint))' : 'var(--color-surface-neutral)',
+                      }}
+                    >
+                      <span style={{
+                        width: 14, height: 14, borderRadius: '50%', flexShrink: 0, marginTop: 2,
+                        border: agentMode === m.id ? '4px solid var(--color-primary)' : '2px solid var(--color-purple-tint-8)',
+                        background: agentMode === m.id ? 'var(--color-white)' : 'transparent',
+                      }} />
+                      <span>
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', display: 'block' }}>{m.label}</span>
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>{m.desc}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10 }}>
+                {agentSaved && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-green-deep-3)', animation: 'savedPop 300ms ease both', display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="check_circle" size={14} color="var(--color-green-deep-3)" /> Saved</div>}
+                <button onClick={handleSaveAgent} disabled={agentSaving}
+                  style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '10px 22px', cursor: agentSaving ? 'default' : 'pointer', opacity: agentSaving ? 0.6 : 1 }}>
+                  {agentSaving ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* ── Admin ── */}
           {activeTab === 'admin' && isAdmin && (

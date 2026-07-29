@@ -1555,11 +1555,11 @@ export const apiStartAgentRun = (body: { workspaceId: string; goal: string; trig
 export const apiCancelAgentRun = (id: string) =>
   apiFetch<{ run: AgentRun }>(`/agent/runs/${id}/cancel`, { method: 'POST' });
 export const apiRevertAgentRun = (id: string) =>
-  apiFetch<{ reverted: number }>(`/agent/runs/${id}/revert`, { method: 'POST' });
+  apiFetch<{ reverted: number; failed: number; skipped: number }>(`/agent/runs/${id}/revert`, { method: 'POST' });
 export const apiGetAgentProposals = (workspaceId: string, status = 'pending') =>
   apiFetch<{ proposals: AgentProposal[] }>(`/agent/proposals?workspaceId=${workspaceId}&status=${status}`);
 export const apiAcceptAgentProposal = (id: string) =>
-  apiFetch<{ proposal: AgentProposal }>(`/agent/proposals/${id}/accept`, { method: 'POST' });
+  apiFetch<{ proposal: AgentProposal; result: string }>(`/agent/proposals/${id}/accept`, { method: 'POST' });
 export const apiRejectAgentProposal = (id: string, reason?: string) =>
   apiFetch<{ proposal: AgentProposal }>(`/agent/proposals/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
 export const apiSetWorkspaceAgent = (workspaceId: string, body: { agentMode?: AgentMode; agentPolicy?: AgentPolicy }) =>

@@ -39,6 +39,7 @@ import { recordTaskChanges } from './taskChangeLog';
 import type { ExpressionScope } from './automationExpressions';
 import { performHttpRequest, clampTimeoutMs } from './httpNode';
 import { runSandboxedCode } from './codeNode';
+import { startAgentRun } from './agent/runtime';
 
 export interface AutomationParamProperty {
   type: 'string' | 'number' | 'boolean';
@@ -968,6 +969,40 @@ export const ACTION_REGISTRY: ActionDef[] = [
       const result = await runSandboxedCode(code, ctx.scope);
       if (!result.ok) return fail(result.error);
       return ok('Ran code', result.output);
+    },
+  },
+  {
+    id: 'ai_agent',
+    label: 'AI Agent',
+    description: 'Hands a goal to this workspace\'s AI agent (see Settings → Workspace → Agent) to carry out — subject to the workspace\'s own agent mode and policy (a "suggest"-mode workspace queues a proposal for a human instead of acting immediately).',
+    icon: 'smart_toy',
+    paramsSchema: {
+      type: 'object',
+      properties: {
+        goal: { type: 'string', label: 'Goal', description: 'What should the agent do? Supports {{...}} references, e.g. "Draft a project plan for {{trigger.task.title}}".', isLongText: true },
+      },
+    },
+    validate: (params) => {
+      if (!str(params.goal)) return 'goal is required';
+      return null;
+    },
+    // Compatible with every trigger, including `schedule` — it needs no
+    // trigger-provided task/list, matching http_request/code's own scope.
+    execute: async (ctx, params) => {
+      const goal = str(params.goal);
+      if (!goal) return fail('goal is required');
+      try {
+        const { runId } = await startAgentRun({
+          workspaceId: ctx.workspaceId,
+          userId: ctx.automationOwnerId,
+          goal,
+          triggerType: 'automation',
+          triggerContext: { automationId: ctx.automationId, automationRunId: ctx.runId },
+        });
+        return ok('Started an agent run', { runId });
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : 'Failed to start the agent run');
+      }
     },
   },
 ];
