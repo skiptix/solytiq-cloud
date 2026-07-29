@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import type { List, Timeline } from './types';
 import useAuthStore from './store/useAuthStore';
@@ -46,6 +46,10 @@ import SettingsScreen from './screens/SettingsScreen';
 import FolderDashboardScreen from './screens/FolderDashboardScreen';
 import TemplatesScreen from './screens/TemplatesScreen';
 import AutomationsScreen from './screens/AutomationsScreen';
+// The Graph screen pulls in sigma/graphology (~180kB gzip) — lazy-loaded so
+// the primary dashboard bundle is unaffected (a hard requirement, not an
+// optimization; see CLAUDE.md's Graph Layer section).
+const GraphScreen = lazy(() => import('./screens/GraphScreen'));
 import AutomationEditorScreen from './screens/AutomationEditorScreen';
 import MarkdownListScreen from './screens/MarkdownListScreen';
 import ArchivedModal from './modals/ArchivedModal';
@@ -315,7 +319,7 @@ function AppLayout() {
     arr.filter(l => l.folderId === folderId).forEach((l, i) => updateList(l.id, { position: i }));
   }, [lists, setLists, updateList]);
 
-  const getActive = (): 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' => {
+  const getActive = (): 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph' => {
     if (location.pathname.startsWith('/folder/')) return 'folder';
     if (location.pathname.startsWith('/list/')) return 'list';
     if (location.pathname.startsWith('/timeline/')) return 'timeline';
@@ -325,6 +329,7 @@ function AppLayout() {
     if (location.pathname.startsWith('/gps')) return 'gps';
     if (location.pathname.startsWith('/templates')) return 'templates';
     if (location.pathname.startsWith('/automations')) return 'automations';
+    if (location.pathname.startsWith('/graph')) return 'graph';
     if (location.pathname.startsWith('/markdown-list/')) return 'markdownList';
     return 'dashboard';
   };
@@ -391,6 +396,7 @@ function AppLayout() {
               <Route path="/settings" element={<SettingsScreen />} />
               <Route path="/templates" element={<TemplatesScreen />} />
               <Route path="/automations" element={!appsLoaded ? null : automationsInstalled ? <AutomationsScreen /> : <Navigate to="/dashboard" replace />} />
+              <Route path="/graph" element={<Suspense fallback={null}><GraphScreen /></Suspense>} />
               <Route path="/automations/:id" element={!appsLoaded ? null : automationsInstalled ? <AutomationEditorScreen /> : <Navigate to="/dashboard" replace />} />
               <Route path="/gps" element={!appsLoaded ? null : gpsInstalled ? <GPSScreen /> : <Navigate to="/dashboard" replace />} />
               <Route path="/markdown-list/:id" element={<MarkdownListScreen />} />

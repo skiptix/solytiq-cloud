@@ -21,6 +21,7 @@ import DonutChart from '../components/DonutChart';
 import TaskDialog from '../components/TaskDialog';
 import CreatorBubble from '../components/CreatorBubble';
 import NotificationItem from '../components/NotificationItem';
+import GraphMiniMap from '../components/graph/GraphMiniMap';
 import useNotificationsStore from '../store/useNotificationsStore';
 import useSyncStore from '../store/useSyncStore';
 import { notificationTarget } from '../utils/notifications';
@@ -504,6 +505,7 @@ export default function DashboardScreen() {
   const isMobile = useMobile();
   const timezone = useUserPrefsStore(s => s.timezone);
   const workspaces = useWorkspaceStore(s => s.workspaces);
+  const activeWorkspaceId = useWorkspaceStore(s => s.currentWorkspaceId);
   const currentUserId = useAuthStore(s => s.userId);
   const todayIso = todayInTz(timezone);
 
@@ -690,7 +692,10 @@ export default function DashboardScreen() {
           </div>
 
           {/* Right — notifications + meetings; "See all" deep-links to a meetings-only Calendar */}
-          <RightColumn meetings={meetings} currentUserId={currentUserId} onSeeCalendar={() => navigate('/calendar?show=meetings')} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+            <RightColumn meetings={meetings} currentUserId={currentUserId} onSeeCalendar={() => navigate('/calendar?show=meetings')} />
+            {activeWorkspaceId && <GraphMiniMap workspaceId={activeWorkspaceId} />}
+          </div>
         </div>
       </div>
 

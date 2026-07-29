@@ -41,7 +41,10 @@ import notificationsRouter from './routes/notifications';
 import taskTagsRouter from './routes/taskTags';
 import itemSharesRouter from './routes/itemShares';
 import linksRouter from './routes/links';
+import graphRouter from './routes/graph';
+import canvasesRouter from './routes/canvases';
 import { backfillHardLinks } from './graph/backfill';
+import { sweepGraphMetrics } from './graph/metrics';
 import { isAppInstalled } from './appsRegistry';
 import { startSyncDispatcher, SYNC_CHANNEL } from './syncLog';
 import { sweepScheduledAutomations } from './automationEngine';
@@ -180,6 +183,18 @@ const linksLimiter = rateLimit({
   message: { error: 'Too many requests, please slow down.' },
 });
 
+// /api/graph/* queries are the most expensive Graph Layer reads (recursive
+// CTEs, batch metrics) — stricter than linksLimiter, NOT exempted like
+// /api/sync/* (unlike delta-sync polls, a graph fetch is genuinely costly).
+const graphLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKey,
+  message: { error: 'Too many requests, please slow down.' },
+});
+
 app.use('/api/', (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
@@ -227,6 +242,8 @@ app.use('/api/markdown-lists', markdownListsRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api', itemSharesRouter);
 app.use('/api/links', linksLimiter, linksRouter);
+app.use('/api/graph', graphLimiter, graphRouter);
+app.use('/api/canvases', canvasesRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
 // Mounted outside /api so the per-IP apiLimiter does not throttle agent tool
@@ -2519,6 +2536,285 @@ async function runMigrations() {
   // need an entity_index row already, or the composite FK rejects the insert).
   await backfillHardLinks(dbQuery);
 
+  // ── Graph Layer: entity_graph_metrics (degree/pagerank/community) ──────────
+  // degree_in/degree_out are maintained incrementally by a trigger on every
+  // entity_links write (cheap, exact). pagerank is a debounced batch job — see
+  // graph/metrics.ts — so it starts at 0 until the first sweep.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS entity_graph_metrics (
+      entity_type   VARCHAR(24)  NOT NULL,
+      entity_id     VARCHAR(100) NOT NULL,
+      workspace_id  VARCHAR(100),
+      degree_in     INTEGER NOT NULL DEFAULT 0,
+      degree_out    INTEGER NOT NULL DEFAULT 0,
+      pagerank      REAL    NOT NULL DEFAULT 0,
+      community_id  INTEGER,
+      computed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (entity_type, entity_id),
+      CONSTRAINT fk_metrics_entity FOREIGN KEY (entity_type, entity_id)
+        REFERENCES entity_index (entity_type, entity_id) ON DELETE CASCADE
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_metrics_ws_rank ON entity_graph_metrics (workspace_id, pagerank DESC)`);
+
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION update_link_degree() RETURNS TRIGGER AS $$
+    BEGIN
+      IF (TG_OP = 'INSERT') THEN
+        INSERT INTO entity_graph_metrics (entity_type, entity_id, workspace_id, degree_out)
+        VALUES (NEW.src_type, NEW.src_id, NEW.workspace_id, 1)
+        ON CONFLICT (entity_type, entity_id) DO UPDATE SET degree_out = entity_graph_metrics.degree_out + 1;
+        INSERT INTO entity_graph_metrics (entity_type, entity_id, workspace_id, degree_in)
+        VALUES (NEW.dst_type, NEW.dst_id, NEW.workspace_id, 1)
+        ON CONFLICT (entity_type, entity_id) DO UPDATE SET degree_in = entity_graph_metrics.degree_in + 1;
+        RETURN NEW;
+      ELSIF (TG_OP = 'DELETE') THEN
+        UPDATE entity_graph_metrics SET degree_out = GREATEST(degree_out - 1, 0) WHERE entity_type = OLD.src_type AND entity_id = OLD.src_id;
+        UPDATE entity_graph_metrics SET degree_in = GREATEST(degree_in - 1, 0) WHERE entity_type = OLD.dst_type AND entity_id = OLD.dst_id;
+        RETURN OLD;
+      END IF;
+      RETURN NULL;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`DROP TRIGGER IF EXISTS trg_link_degree ON entity_links`);
+  await pool.query(`
+    CREATE TRIGGER trg_link_degree AFTER INSERT OR DELETE ON entity_links
+      FOR EACH ROW EXECUTE FUNCTION update_link_degree()
+  `);
+
+  // ── Graph Layer: canvases (curated, editable graph layouts) ────────────────
+  // `layout` stores ONLY positions/groups/free-text notes — the edges are
+  // always real entity_links rows created via POST /api/links when the user
+  // drags a connection, never a drawn-only line. See CLAUDE.md's Graph Layer
+  // section and routes/canvases.ts.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS graph_canvases (
+      id           VARCHAR(100) PRIMARY KEY,
+      workspace_id VARCHAR(100) NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name         VARCHAR(255) NOT NULL,
+      emoji        VARCHAR(10),
+      layout       JSONB NOT NULL DEFAULT '{"version":1,"nodes":[],"groups":[],"notes":[]}'::jsonb,
+      is_public    BOOLEAN NOT NULL DEFAULT false,
+      version      INTEGER NOT NULL DEFAULT 1,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_graph_canvases_ws ON graph_canvases(workspace_id)`);
+  await pool.query(`DROP TRIGGER IF EXISTS bump_version_graph_canvases ON graph_canvases`);
+  await pool.query(`
+    CREATE TRIGGER bump_version_graph_canvases BEFORE UPDATE ON graph_canvases
+      FOR EACH ROW EXECUTE FUNCTION bump_version()
+  `);
+
+  // ── Graph Layer Phase R2: ongoing dual-write for the 5 legacy hard-links ───
+  // WP-2's backfill only covers rows that existed at migration time. From here
+  // on, every hard-link column write must ALSO keep entity_links current. The
+  // design doc puts this in ~13 scattered app-code call sites (routes/lists.ts,
+  // routes/tasks.ts, templateUtil.ts, automationEngine.ts, …) — deliberately
+  // NOT followed here. A DB trigger on the underlying table catches every
+  // writer at once (routes, templateUtil.ts, automationEngine.ts all write the
+  // same columns), which structurally eliminates the "missed call site"
+  // divergence risk the doc itself flags as the top risk of this phase (R2 in
+  // its risk table) rather than merely mitigating it with more tests.
+  // Trigger names are prefixed `trg_hardlink_` so they always sort AFTER the
+  // `entity_index_*` triggers on the same table (Postgres fires same-event
+  // triggers in name order) — the entity's own entity_index row must exist
+  // before these triggers reference it.
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION sync_hardlink_task() RETURNS TRIGGER AS $$
+    DECLARE v_task_id text := NEW.id::text;
+    BEGIN
+      DELETE FROM entity_links
+       WHERE origin = 'system' AND link_type IN ('child_of','links_to')
+         AND ((dst_type='task' AND dst_id=v_task_id) OR (src_type='task' AND src_id=v_task_id))
+         AND NOT (
+           NEW.linked_list_id IS NOT NULL AND (
+             (NEW.linked_list_type='sublist' AND link_type='child_of' AND src_type='list' AND src_id=NEW.linked_list_id AND dst_type='task' AND dst_id=v_task_id)
+             OR (NEW.linked_list_type='link' AND link_type='links_to' AND src_type='task' AND src_id=v_task_id AND dst_type='list' AND dst_id=NEW.linked_list_id)
+           )
+         );
+
+      IF NEW.linked_list_id IS NOT NULL AND EXISTS (SELECT 1 FROM entity_index e WHERE e.entity_type='list' AND e.entity_id=NEW.linked_list_id) THEN
+        IF NEW.linked_list_type = 'sublist' THEN
+          INSERT INTO entity_links (id, workspace_id, src_type, src_id, dst_type, dst_id, link_type, origin, created_by, created_at)
+          VALUES ('lnk_' || gen_random_uuid(), NEW.workspace_id, 'list', NEW.linked_list_id, 'task', v_task_id, 'child_of', 'system', NEW.user_id, NOW())
+          ON CONFLICT (src_type, src_id, dst_type, dst_id, link_type, COALESCE(source_block_id, '')) DO NOTHING;
+        ELSIF NEW.linked_list_type = 'link' THEN
+          INSERT INTO entity_links (id, workspace_id, src_type, src_id, dst_type, dst_id, link_type, origin, created_by, created_at)
+          VALUES ('lnk_' || gen_random_uuid(), NEW.workspace_id, 'task', v_task_id, 'list', NEW.linked_list_id, 'links_to', 'system', NEW.user_id, NOW())
+          ON CONFLICT (src_type, src_id, dst_type, dst_id, link_type, COALESCE(source_block_id, '')) DO NOTHING;
+        END IF;
+      END IF;
+
+      -- Structural part_of: a list-task belongs to its containing list.
+      DELETE FROM entity_links
+       WHERE origin='system' AND link_type='part_of' AND src_type='task' AND src_id=v_task_id
+         AND NOT (NEW.source='list' AND NEW.list_id IS NOT NULL AND dst_type='list' AND dst_id=NEW.list_id);
+      IF NEW.source = 'list' AND NEW.list_id IS NOT NULL AND EXISTS (SELECT 1 FROM entity_index e WHERE e.entity_type='list' AND e.entity_id=NEW.list_id) THEN
+        INSERT INTO entity_links (id, workspace_id, src_type, src_id, dst_type, dst_id, link_type, origin, created_at)
+        VALUES ('lnk_' || gen_random_uuid(), NEW.workspace_id, 'task', v_task_id, 'list', NEW.list_id, 'part_of', 'system', NOW())
+        ON CONFLICT (src_type, src_id, dst_type, dst_id, link_type, COALESCE(source_block_id, '')) DO NOTHING;
+      END IF;
+      RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`DROP TRIGGER IF EXISTS trg_hardlink_task ON tasks`);
+  await pool.query(`
+    CREATE TRIGGER trg_hardlink_task AFTER INSERT OR UPDATE ON tasks
+      FOR EACH ROW EXECUTE FUNCTION sync_hardlink_task()
+  `);
+
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION sync_hardlink_list() RETURNS TRIGGER AS $$
+    DECLARE v_list_id text := NEW.id;
+    BEGIN
+      DELETE FROM entity_links
+       WHERE origin='system' AND link_type='child_of' AND src_type='list' AND src_id=v_list_id
+         AND NOT (NEW.parent_task_id IS NOT NULL AND dst_type='task' AND dst_id = NEW.parent_task_id::text);
+      IF NEW.parent_task_id IS NOT NULL AND EXISTS (SELECT 1 FROM entity_index e WHERE e.entity_type='task' AND e.entity_id=NEW.parent_task_id::text) THEN
+        INSERT INTO entity_links (id, workspace_id, src_type, src_id, dst_type, dst_id, link_type, origin, created_by, created_at)
+        VALUES ('lnk_' || gen_random_uuid(), NEW.workspace_id, 'list', v_list_id, 'task', NEW.parent_task_id::text, 'child_of', 'system', NEW.user_id, NOW())
+        ON CONFLICT (src_type, src_id, dst_type, dst_id, link_type, COALESCE(source_block_id, '')) DO NOTHING;
+      END IF;
+      RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`DROP TRIGGER IF EXISTS trg_hardlink_list ON lists`);
+  await pool.query(`
+    CREATE TRIGGER trg_hardlink_list AFTER INSERT OR UPDATE ON lists
+      FOR EACH ROW EXECUTE FUNCTION sync_hardlink_list()
+  `);
+
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION sync_hardlink_markdown() RETURNS TRIGGER AS $$
+    DECLARE v_id text := NEW.id;
+    BEGIN
+      DELETE FROM entity_links
+       WHERE origin='system' AND link_type='tracks' AND src_type='markdownList' AND src_id=v_id
+         AND NOT (NEW.todo_list_id IS NOT NULL AND dst_type='list' AND dst_id=NEW.todo_list_id);
+      IF NEW.todo_list_id IS NOT NULL AND EXISTS (SELECT 1 FROM entity_index e WHERE e.entity_type='list' AND e.entity_id=NEW.todo_list_id) THEN
+        INSERT INTO entity_links (id, workspace_id, src_type, src_id, dst_type, dst_id, link_type, origin, created_by, created_at)
+        VALUES ('lnk_' || gen_random_uuid(), NEW.workspace_id, 'markdownList', v_id, 'list', NEW.todo_list_id, 'tracks', 'system', NEW.user_id, NOW())
+        ON CONFLICT (src_type, src_id, dst_type, dst_id, link_type, COALESCE(source_block_id, '')) DO NOTHING;
+      END IF;
+      RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`DROP TRIGGER IF EXISTS trg_hardlink_markdown ON markdown_lists`);
+  await pool.query(`
+    CREATE TRIGGER trg_hardlink_markdown AFTER INSERT OR UPDATE ON markdown_lists
+      FOR EACH ROW EXECUTE FUNCTION sync_hardlink_markdown()
+  `);
+
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION sync_hardlink_milestone() RETURNS TRIGGER AS $$
+    BEGIN
+      INSERT INTO entity_links (id, workspace_id, src_type, src_id, dst_type, dst_id, link_type, origin, created_at)
+      SELECT 'lnk_' || gen_random_uuid(), tl.workspace_id, 'milestone', NEW.id, 'timeline', NEW.timeline_id, 'part_of', 'system', NOW()
+        FROM timelines tl WHERE tl.id = NEW.timeline_id
+      ON CONFLICT (src_type, src_id, dst_type, dst_id, link_type, COALESCE(source_block_id, '')) DO NOTHING;
+      RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`DROP TRIGGER IF EXISTS trg_hardlink_milestone ON milestones`);
+  await pool.query(`
+    CREATE TRIGGER trg_hardlink_milestone AFTER INSERT ON milestones
+      FOR EACH ROW EXECUTE FUNCTION sync_hardlink_milestone()
+  `);
+
+  // ── R2b: entity_attachments merge ───────────────────────────────────────
+  // Both attachment tables keep their existing columns/routes unchanged (they
+  // remain the source of truth — see CLAUDE.md); entity_attachments is an
+  // ADDITIONAL trigger-synced union that lets a future UI/AI-tool query
+  // attachments on any entity type in one place, not just tasks/milestones.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS entity_attachments (
+      id              VARCHAR(100) PRIMARY KEY,
+      entity_type     VARCHAR(24)  NOT NULL,
+      entity_id       VARCHAR(100) NOT NULL,
+      user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      attachment_type VARCHAR(20) NOT NULL DEFAULT 'upload' CHECK (attachment_type IN ('upload','linked')),
+      original_name   VARCHAR(500),
+      mime_type       VARCHAR(100) NOT NULL DEFAULT 'application/octet-stream',
+      file_size       BIGINT NOT NULL DEFAULT 0,
+      file_path       VARCHAR(500),
+      shared_file_id  VARCHAR(100) REFERENCES shared_files(id) ON DELETE CASCADE,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT fk_att_entity FOREIGN KEY (entity_type, entity_id)
+        REFERENCES entity_index (entity_type, entity_id) ON DELETE CASCADE
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_entity_attachments_entity ON entity_attachments (entity_type, entity_id)`);
+
+  await pool.query(`
+    INSERT INTO entity_attachments (id, entity_type, entity_id, user_id, attachment_type, original_name, mime_type, file_size, file_path, shared_file_id, created_at)
+    SELECT id, 'task', task_id::text, user_id, attachment_type, original_name, mime_type, file_size, file_path, shared_file_id, created_at
+      FROM task_attachments
+      WHERE EXISTS (SELECT 1 FROM entity_index e WHERE e.entity_type='task' AND e.entity_id = task_attachments.task_id::text)
+    ON CONFLICT (id) DO NOTHING
+  `);
+  await pool.query(`
+    INSERT INTO entity_attachments (id, entity_type, entity_id, user_id, attachment_type, original_name, mime_type, file_size, file_path, shared_file_id, created_at)
+    SELECT id, 'milestone', milestone_id, user_id, attachment_type, original_name, mime_type, file_size, file_path, shared_file_id, created_at
+      FROM milestone_attachments
+      WHERE EXISTS (SELECT 1 FROM entity_index e WHERE e.entity_type='milestone' AND e.entity_id = milestone_attachments.milestone_id)
+    ON CONFLICT (id) DO NOTHING
+  `);
+
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION sync_hardlink_task_attachment() RETURNS TRIGGER AS $$
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN
+        DELETE FROM entity_links WHERE origin='system' AND link_type='attached_to' AND src_type='file' AND src_id=OLD.shared_file_id AND dst_type='task' AND dst_id=OLD.task_id::text;
+        DELETE FROM entity_attachments WHERE id = OLD.id;
+        RETURN OLD;
+      END IF;
+      IF NEW.shared_file_id IS NOT NULL AND EXISTS (SELECT 1 FROM entity_index e WHERE e.entity_type='file' AND e.entity_id=NEW.shared_file_id) THEN
+        INSERT INTO entity_links (id, workspace_id, src_type, src_id, dst_type, dst_id, link_type, origin, created_by, created_at)
+        SELECT 'lnk_' || gen_random_uuid(), t.workspace_id, 'file', NEW.shared_file_id, 'task', NEW.task_id::text, 'attached_to', 'system', NEW.user_id, NOW()
+          FROM tasks t WHERE t.id = NEW.task_id
+        ON CONFLICT (src_type, src_id, dst_type, dst_id, link_type, COALESCE(source_block_id, '')) DO NOTHING;
+      END IF;
+      INSERT INTO entity_attachments (id, entity_type, entity_id, user_id, attachment_type, original_name, mime_type, file_size, file_path, shared_file_id, created_at)
+      VALUES (NEW.id, 'task', NEW.task_id::text, NEW.user_id, NEW.attachment_type, NEW.original_name, NEW.mime_type, NEW.file_size, NEW.file_path, NEW.shared_file_id, NEW.created_at)
+      ON CONFLICT (id) DO NOTHING;
+      RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`DROP TRIGGER IF EXISTS trg_hardlink_task_attachment ON task_attachments`);
+  await pool.query(`
+    CREATE TRIGGER trg_hardlink_task_attachment AFTER INSERT OR DELETE ON task_attachments
+      FOR EACH ROW EXECUTE FUNCTION sync_hardlink_task_attachment()
+  `);
+
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION sync_hardlink_milestone_attachment() RETURNS TRIGGER AS $$
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN
+        DELETE FROM entity_links WHERE origin='system' AND link_type='attached_to' AND src_type='file' AND src_id=OLD.shared_file_id AND dst_type='milestone' AND dst_id=OLD.milestone_id;
+        DELETE FROM entity_attachments WHERE id = OLD.id;
+        RETURN OLD;
+      END IF;
+      IF NEW.shared_file_id IS NOT NULL AND EXISTS (SELECT 1 FROM entity_index e WHERE e.entity_type='file' AND e.entity_id=NEW.shared_file_id) THEN
+        INSERT INTO entity_links (id, workspace_id, src_type, src_id, dst_type, dst_id, link_type, origin, created_by, created_at)
+        SELECT 'lnk_' || gen_random_uuid(), tl.workspace_id, 'file', NEW.shared_file_id, 'milestone', NEW.milestone_id, 'attached_to', 'system', NEW.user_id, NOW()
+          FROM milestones ms JOIN timelines tl ON tl.id = ms.timeline_id WHERE ms.id = NEW.milestone_id
+        ON CONFLICT (src_type, src_id, dst_type, dst_id, link_type, COALESCE(source_block_id, '')) DO NOTHING;
+      END IF;
+      INSERT INTO entity_attachments (id, entity_type, entity_id, user_id, attachment_type, original_name, mime_type, file_size, file_path, shared_file_id, created_at)
+      VALUES (NEW.id, 'milestone', NEW.milestone_id, NEW.user_id, NEW.attachment_type, NEW.original_name, NEW.mime_type, NEW.file_size, NEW.file_path, NEW.shared_file_id, NEW.created_at)
+      ON CONFLICT (id) DO NOTHING;
+      RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`DROP TRIGGER IF EXISTS trg_hardlink_milestone_attachment ON milestone_attachments`);
+  await pool.query(`
+    CREATE TRIGGER trg_hardlink_milestone_attachment AFTER INSERT OR DELETE ON milestone_attachments
+      FOR EACH ROW EXECUTE FUNCTION sync_hardlink_milestone_attachment()
+  `);
+
   console.log('Database migrations applied.');
 }
 
@@ -2590,6 +2886,11 @@ async function start() {
   pruneSyncLog();
   setInterval(pruneSyncLog, 24 * 60 * 60 * 1000);
   await startSyncDispatcher();
+
+  // Graph Layer: recompute pagerank for any workspace touched since the last
+  // sweep (see graph/metrics.ts) — 5-minute cadence, same pattern as the
+  // Automation Hub's schedule sweep.
+  setInterval(() => { void sweepGraphMetrics(); }, 5 * 60 * 1000);
 
   app.listen(PORT, () => {
     console.log(`Solytiq Cloud API listening on port ${PORT}`);

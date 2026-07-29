@@ -6,6 +6,7 @@ import { werr } from '../workspaceUtil';
 import { parseRecurrenceRule, computeRecurrenceDates } from '../recurrence';
 import { resolveInviteeIds, setMeetingAttendees } from '../meetingAttendees';
 import { createNotifications } from '../notifications';
+import { syncInlineLinksForText } from '../graph/inlineLinks';
 
 const router = Router();
 router.use(authenticate);
@@ -245,6 +246,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       workspaceId: null,
       data: { date: saved.meeting_date, meetingTitle: saved.title },
     });
+    await syncInlineLinksForText({ entityType: 'meeting', entityId: req.params.id }, saved.description, req.userId!);
   } catch (err) {
     werr('meetings PUT error:', err);
     res.status(500).json({ error: 'Internal server error' });

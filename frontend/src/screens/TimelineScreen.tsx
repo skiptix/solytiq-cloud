@@ -26,6 +26,7 @@ import CalendarPicker from '../components/CalendarPicker';
 import TimePicker from '../components/TimePicker';
 import CreatorBubble from '../components/CreatorBubble';
 import NotesEditor from '../components/NotesEditor';
+import RelationsPanel from '../components/graph/RelationsPanel';
 import MarkdownView from '../components/MarkdownView';
 import { FilePicker, AttachBadge, useAttachmentDrop, AttachDropOverlay } from '../components/TaskDialog';
 import AttachmentPreviewModal from '../components/AttachmentPreview';
@@ -103,8 +104,9 @@ interface MilestoneEditorProps {
   ownerId?: string;
   /** Workspace members that can be @-mentioned in the milestone note. */
   mentionMembers?: MentionMember[];
+  workspaceId?: string;
 }
-function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, mentionMembers }: MilestoneEditorProps) {
+function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, mentionMembers, workspaceId }: MilestoneEditorProps) {
   const isMobile = useMobile();
   const owner = useMembersStore(s => (ownerId ? s.members[ownerId] : undefined));
   const [title, setTitle] = useState(initial?.title ?? '');
@@ -342,13 +344,19 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
             </PropRow>
 
             {ownerId && (
-              <PropRow icon="account_circle" label="Owner" last isMobile={isMobile}>
+              <PropRow icon="account_circle" label="Owner" isMobile={isMobile}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <CreatorBubble creatorId={ownerId} taskHovered />
                   <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-secondary)' }}>
                     {owner ? (owner.fullName || owner.username) : 'Unknown'}
                   </span>
                 </div>
+              </PropRow>
+            )}
+
+            {milestoneId && (
+              <PropRow icon="hub" label="Relations" last isMobile={isMobile}>
+                <RelationsPanel entityType="milestone" entityId={milestoneId} workspaceId={workspaceId} compact />
               </PropRow>
             )}
           </div>
@@ -854,7 +862,7 @@ export default function TimelineScreen() {
       </div>
 
       {adding && <MilestoneEditor accent={accent} onSave={handleAdd} onClose={() => setAdding(false)} ownerId={timeline.isPublic ? timeline.userId : undefined} mentionMembers={mentionMembers} />}
-      {editing && <MilestoneEditor accent={accent} initial={editing} onSave={data => handleSave(editing.id, data)} onDelete={() => { handleDelete(editing.id); setEditing(null); }} onClose={() => setEditing(null)} ownerId={timeline.isPublic ? timeline.userId : undefined} mentionMembers={mentionMembers} />}
+      {editing && <MilestoneEditor accent={accent} initial={editing} onSave={data => handleSave(editing.id, data)} onDelete={() => { handleDelete(editing.id); setEditing(null); }} onClose={() => setEditing(null)} ownerId={timeline.isPublic ? timeline.userId : undefined} mentionMembers={mentionMembers} workspaceId={timeline.workspaceId} />}
       {deleting && (
         <DeleteConfirmModal
           name={deleting.title}

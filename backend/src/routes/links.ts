@@ -23,6 +23,7 @@ import {
 import {
   listLinkTypes, isSystemLinkType, CUSTOM_LINK_TYPE_PREFIX,
 } from '../graph/linkTypes';
+import { searchEntityIndex } from '../graph/entityIndex';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
@@ -100,6 +101,26 @@ router.get('/', async (req: Request, res: Response) => {
     res.json({ links: resolved.map(resolvedLinkJson) });
   } catch (err) {
     werr('links GET / error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/links/search?q=&types=task,list&workspaceId= — quick-switcher style entity search for
+// the LinkPicker (and any future "link to..." UI). Scoped through the same visibility boundary as
+// every other Graph Layer read.
+router.get('/search', async (req: Request, res: Response) => {
+  try {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (q.length < 2) { res.json({ results: [] }); return; }
+    const typesRaw = typeof req.query.types === 'string' ? req.query.types.split(',').filter(Boolean) : undefined;
+    if (typesRaw && !typesRaw.every(isValidEntityType)) { res.status(400).json({ error: 'Invalid entity type in "types"' }); return; }
+    const workspaceId = typeof req.query.workspaceId === 'string' ? req.query.workspaceId : undefined;
+    const limitRaw = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
+
+    const results = await searchEntityIndex(req.userId!, q, { entityTypes: typesRaw, workspaceId, limit: limitRaw });
+    res.json({ results });
+  } catch (err) {
+    werr('links GET /search error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

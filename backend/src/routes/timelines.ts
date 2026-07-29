@@ -11,6 +11,7 @@ import { snapshotTimelineToTrash } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestrictConflict } from '../visibility';
 import { notifyNewMentions } from '../mentions';
 import { itemShareExists, isItemSharedWith, deleteItemShares } from '../itemShares';
+import { syncInlineLinksForText } from '../graph/inlineLinks';
 
 const router = Router();
 router.use(authenticate);
@@ -811,6 +812,7 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
         data: { timelineId: savedMilestone.timeline_id },
         shareItem: { itemType: 'timeline', itemId: savedMilestone.timeline_id },
       });
+      await syncInlineLinksForText({ entityType: 'milestone', entityId: milestoneId }, savedMilestone.description, req.userId!);
     }
   } catch (err) {
     werr('milestones PUT error:', err);

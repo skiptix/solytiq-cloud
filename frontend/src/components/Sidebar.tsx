@@ -468,7 +468,7 @@ interface FolderRowProps {
   timelines: Timeline[];
   markdownLists: MarkdownList[];
   markdownTodoLists: List[];
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph';
   activeListId?: string;
   activeTimelineId?: string;
   activeFolderId?: string;
@@ -924,7 +924,7 @@ function FolderRow({ folder, lists, timelines, markdownLists, markdownTodoLists,
 interface StandaloneListWithSublistsProps {
   list: List;
   sublists: List[];
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph';
   activeListId?: string;
   collapsed: boolean;
   dragOverId: string | null;
@@ -1173,7 +1173,7 @@ function MarkdownListRow({ markdownList, isActive, collapsed, indented, folders,
 interface MarkdownListWithTodoProps {
   markdownList: MarkdownList;
   todoList: List | undefined;
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph';
   activeListId?: string;
   activeMarkdownListId?: string;
   collapsed: boolean;
@@ -1384,7 +1384,7 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph';
   activeListId?: string;
   activeTimelineId?: string;
   activeFolderId?: string;
@@ -1427,6 +1427,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   const [templatesHov, setTemplatesHov] = useState(false);
   const [automationsHov, setAutomationsHov] = useState(false);
   const automationsInstalled = useInstalledAppsStore((s) => s.installedApps.includes('automations'));
+  const [graphHov, setGraphHov] = useState(false);
   const [calendarHov, setCalendarHov] = useState(false);
   const [handleHov, setHandleHov] = useState(false);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -1916,6 +1917,25 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
             {!collapsed && <span>Automations</span>}
           </button>
         )}
+
+        {/* Graph Layer — per-workspace Explore/Canvas view of every linked entity */}
+        <button
+          onClick={() => onNavigate('/graph')}
+          title={collapsed ? 'Net' : undefined}
+          onMouseEnter={() => setGraphHov(true)}
+          onMouseLeave={() => setGraphHov(false)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8,
+            padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start',
+            borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5,
+            fontWeight: active === 'graph' ? 700 : 500,
+            color: active === 'graph' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+            background: active === 'graph' ? 'var(--color-surface-tint)' : (graphHov ? 'var(--color-surface-tint-3)' : 'transparent'),
+            border: 'none', transition: 'background 150ms', width: '100%',
+          }}>
+          <Icon name="hub" size={17} color={active === 'graph' ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
+          {!collapsed && <span>Net</span>}
+        </button>
 
         <div style={{ height: 1, background: 'var(--color-border)', margin: '6px 8px' }} />
 

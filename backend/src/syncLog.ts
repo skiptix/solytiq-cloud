@@ -21,6 +21,7 @@
 import { Client } from 'pg';
 import { query } from './db';
 import { broadcastToUsers } from './sse';
+import { markWorkspaceGraphDirty } from './graph/metrics';
 
 export type SyncEntity =
   | 'task' | 'list' | 'folder' | 'timeline' | 'milestone'
@@ -113,6 +114,7 @@ const pending = new Map<string, Pending>();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function enqueue(p: NotifyPayload): void {
+  if (p.entity === 'link') markWorkspaceGraphDirty(p.workspaceId);
   const key = p.workspaceId ?? `owner:${p.ownerId}`;
   let bucket = pending.get(key);
   if (!bucket) {
