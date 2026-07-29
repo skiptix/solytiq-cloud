@@ -42,6 +42,16 @@ import {
   type TemplateListNode,
   type TemplateTimelineNode,
 } from './templateUtil';
+import { isValidEntityType, parseSrn, formatSrn } from './graph/srn';
+import { isEntityVisible, canWriteEntity } from './graph/visibility';
+import { searchEntityIndex } from './graph/entityIndex';
+import { upsertLink, deleteLink, getLinkById, getEntityLinks, getBacklinks, findUnlinkedMentions, LinkError } from './graph/links';
+import { hybridSearch } from './knowledge/search';
+import { getQueueStats } from './knowledge/queue';
+import { isPgvectorAvailable } from './knowledge/state';
+import { getEmbeddingConfig } from './knowledge/embedProvider';
+import { userCanAccessWorkspace } from './workspaceUtil';
+import { startAgentRun } from './agent/runtime';
 
 // A minimal JSON Schema object for a tool's parameters.
 export interface JsonSchema {
@@ -63,6 +73,18 @@ export interface AiTool {
   description: string;
   parameters: JsonSchema;
   handler: (userId: string, args: Record<string, unknown>) => Promise<ToolResult>;
+  /**
+   * Excluded from getOpenRouterToolDefs() (the internal "Sol" assistant AND
+   * the Agent Runtime's own tool-calling loop — see agent/runtime.ts, which
+   * builds its tool list from the same function) — still exposed via
+   * getMcpToolDefs() to external MCP clients. Used for the Agent Runtime
+   * meta-tools (start/list/accept/reject a run or proposal): those let an
+   * EXTERNAL orchestrator control our agent, but must never be callable BY
+   * the agent itself, which would let a run recursively spawn more runs with
+   * no bound beyond each new run's own separate budget — an unbounded-fork
+   * risk, not just a bad idea.
+   */
+  mcpOnly?: boolean;
 }
 
 // ── small helpers ────────────────────────────────────────────────────────
@@ -2043,6 +2065,322 @@ export const aiTools: AiTool[] = [
       return ok(lines.join('\n'));
     },
   },
+
+  // ───────────────────────────── Graph Layer (WP-8) ───────────────────────────
+  {
+    name: 'search_graph',
+    description: 'Search across every linkable item (tasks, boards, pages, timelines, milestones, meetings, folders, files) by title. Returns each match\'s SRN (a stable "srn:type:id" reference) for use with the other graph tools.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Title search text' },
+        entity_types: { type: 'string', description: 'Comma-separated entity types to restrict to, e.g. "task,list"' },
+        limit: { type: 'number', description: 'Max results (default 20, capped at 50)' },
+      },
+      required: ['query'],
+    },
+    handler: async (userId, args) => {
+      const q = str(args.query);
+      if (!q) return fail('query is required');
+      const typesRaw = str(args.entity_types);
+      const entityTypes = typesRaw ? typesRaw.split(',').map((t) => t.trim()).filter(Boolean) : undefined;
+      if (entityTypes && !entityTypes.every(isValidEntityType)) return fail('entity_types contains an unknown entity type');
+      const results = await searchEntityIndex(userId, q, { entityTypes, limit: typeof args.limit === 'number' ? args.limit : undefined });
+      if (!results.length) return ok('No matches.');
+      return ok(results.map((e) => `- ${formatSrn(e.entityType, e.entityId)} — "${e.title}"${e.subtitle ? ` (${e.subtitle})` : ''}`).join('\n'));
+    },
+  },
+  {
+    name: 'get_entity_links',
+    description: 'Get every graph relation touching an item (both directions), grouped by relation type — e.g. "this task blocks that milestone". Use search_graph first if you only have a title.',
+    parameters: {
+      type: 'object',
+      properties: { entity_srn: { type: 'string', description: 'e.g. srn:task:1751293847221' } },
+      required: ['entity_srn'],
+    },
+    handler: async (userId, args) => {
+      const srn = str(args.entity_srn);
+      if (!srn) return fail('entity_srn is required');
+      const ref = parseSrn(srn);
+      if (!ref) return fail('entity_srn is not a valid SRN');
+      if (!(await isEntityVisible(query, userId, ref.entityType, ref.entityId))) return fail('entity not found');
+      const links = await getEntityLinks(userId, ref);
+      if (!links.length) return ok('No relations.');
+      const byType = new Map<string, typeof links>();
+      for (const l of links) (byType.get(l.link.linkType) ?? byType.set(l.link.linkType, []).get(l.link.linkType)!).push(l);
+      const lines: string[] = [];
+      for (const [type, group] of byType) {
+        lines.push(`${type}:`);
+        for (const l of group) {
+          const other = l.direction === 'out' ? `${l.link.dstType}:${l.link.dstId}` : `${l.link.srcType}:${l.link.srcId}`;
+          lines.push(`  - [${l.direction}] srn:${other}${l.neighbor ? ` — "${l.neighbor.title}"` : ' (restricted)'} (link_id: ${l.link.id}${l.link.origin === 'system' ? ', system-managed' : ''})`);
+        }
+      }
+      return ok(lines.join('\n'));
+    },
+  },
+  {
+    name: 'get_backlinks',
+    description: 'Get only the INCOMING relations to an item — everything that references it.',
+    parameters: {
+      type: 'object',
+      properties: { entity_srn: { type: 'string', description: 'e.g. srn:list:list_7f3a9c21' } },
+      required: ['entity_srn'],
+    },
+    handler: async (userId, args) => {
+      const srn = str(args.entity_srn);
+      if (!srn) return fail('entity_srn is required');
+      const ref = parseSrn(srn);
+      if (!ref) return fail('entity_srn is not a valid SRN');
+      if (!(await isEntityVisible(query, userId, ref.entityType, ref.entityId))) return fail('entity not found');
+      const backlinks = await getBacklinks(userId, ref);
+      if (!backlinks.length) return ok('Nothing links to this item.');
+      return ok(backlinks.map((l) => `- srn:${l.link.srcType}:${l.link.srcId}${l.neighbor ? ` — "${l.neighbor.title}"` : ' (restricted)'} [${l.link.linkType}]`).join('\n'));
+    },
+  },
+  {
+    name: 'create_link',
+    description: 'Create a typed relation between two items, e.g. "this task blocks that milestone". Requires edit access to the source item; the destination only needs to be visible to you.',
+    parameters: {
+      type: 'object',
+      properties: {
+        src_srn: { type: 'string', description: 'The relation points FROM this item' },
+        dst_srn: { type: 'string', description: 'The relation points TO this item' },
+        link_type: { type: 'string', description: 'e.g. blocks, relates_to, references, tracks, child_of, duplicates' },
+      },
+      required: ['src_srn', 'dst_srn', 'link_type'],
+    },
+    handler: async (userId, args) => {
+      const srcSrn = str(args.src_srn), dstSrn = str(args.dst_srn), linkType = str(args.link_type);
+      if (!srcSrn || !dstSrn || !linkType) return fail('src_srn, dst_srn, and link_type are required');
+      const src = parseSrn(srcSrn), dst = parseSrn(dstSrn);
+      if (!src || !dst) return fail('src_srn or dst_srn is not a valid SRN');
+      if (!(await isEntityVisible(query, userId, src.entityType, src.entityId))) return fail('source entity not found');
+      if (!(await isEntityVisible(query, userId, dst.entityType, dst.entityId))) return fail('destination entity not found');
+      if (!(await canWriteEntity(userId, false, src.entityType, src.entityId))) return fail('no permission to link from this item');
+      try {
+        const link = await upsertLink(query, { srcType: src.entityType, srcId: src.entityId, dstType: dst.entityType, dstId: dst.entityId, linkType, origin: 'manual', createdBy: userId });
+        return ok(`Linked ${srcSrn} --[${linkType}]--> ${dstSrn} (link_id: ${link.id})`, `Created a "${linkType}" link`);
+      } catch (err) {
+        return fail(err instanceof LinkError ? err.message : 'could not create the link');
+      }
+    },
+  },
+  {
+    name: 'delete_link',
+    description: 'Remove a relation by its link_id (from get_entity_links/create_link). System-managed relations (mirrored from e.g. sublists or attachments) cannot be deleted this way — edit them from where they were created instead.',
+    parameters: {
+      type: 'object',
+      properties: { link_id: { type: 'string' } },
+      required: ['link_id'],
+    },
+    handler: async (userId, args) => {
+      const linkId = str(args.link_id);
+      if (!linkId) return fail('link_id is required');
+      const link = await getLinkById(query, linkId);
+      if (!link) return fail('link not found');
+      if (link.origin === 'system') return fail('this relation is system-managed and cannot be deleted directly');
+      const canManage = (await canWriteEntity(userId, false, link.srcType, link.srcId)) || (await canWriteEntity(userId, false, link.dstType, link.dstId));
+      if (!canManage) return fail('no permission to remove this relation');
+      await deleteLink(query, linkId);
+      return ok('Relation removed.');
+    },
+  },
+  {
+    name: 'find_unlinked_mentions',
+    description: 'Find other items whose title mentions this one but aren\'t linked to it yet — candidates for create_link. A title-substring heuristic, not full content parsing.',
+    parameters: {
+      type: 'object',
+      properties: { entity_srn: { type: 'string' }, limit: { type: 'number' } },
+      required: ['entity_srn'],
+    },
+    handler: async (userId, args) => {
+      const srn = str(args.entity_srn);
+      if (!srn) return fail('entity_srn is required');
+      const ref = parseSrn(srn);
+      if (!ref) return fail('entity_srn is not a valid SRN');
+      const candidates = await findUnlinkedMentions(userId, ref, { limit: typeof args.limit === 'number' ? args.limit : undefined });
+      if (!candidates.length) return ok('No unlinked mentions found.');
+      return ok(candidates.map((c) => `- ${formatSrn(c.entityType, c.entityId)} — "${c.title}"`).join('\n'));
+    },
+  },
+
+  // ─────────────────────────── Knowledge Layer (WP-8) ─────────────────────────
+  {
+    name: 'knowledge_search',
+    description: 'Semantic + lexical search over the CONTENT of notes, pages, milestones, and meetings (not just titles) — finds things by what they say, not just what they\'re called.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        entity_types: { type: 'string', description: 'Comma-separated, e.g. "task,markdownList"' },
+        limit: { type: 'number' },
+      },
+      required: ['query'],
+    },
+    handler: async (userId, args) => {
+      const q = str(args.query);
+      if (!q) return fail('query is required');
+      const typesRaw = str(args.entity_types);
+      const entityTypes = typesRaw ? typesRaw.split(',').map((t) => t.trim()).filter(Boolean) : undefined;
+      if (entityTypes && !entityTypes.every(isValidEntityType)) return fail('entity_types contains an unknown entity type');
+      const settingsRes = await query<{ key: string; value: string }>(`SELECT key, value FROM app_settings`);
+      const settings: Record<string, string> = {};
+      for (const row of settingsRes.rows) settings[row.key] = row.value;
+      const hits = await hybridSearch(userId, q, settings, { entityTypes, limit: typeof args.limit === 'number' ? args.limit : undefined });
+      if (!hits.length) return ok('No matches.');
+      return ok(hits.map((h) => `- ${h.entity.srn} — "${h.entity.title}": ${h.chunkContent.slice(0, 200)}${h.chunkContent.length > 200 ? '…' : ''}`).join('\n\n'));
+    },
+  },
+  {
+    name: 'get_knowledge_status',
+    description: 'Check whether semantic search is available (pgvector installed, an embedding provider configured) and the current indexing queue depth.',
+    parameters: { type: 'object', properties: {} },
+    handler: async () => {
+      const settingsRes = await query<{ key: string; value: string }>(`SELECT key, value FROM app_settings`);
+      const settings: Record<string, string> = {};
+      for (const row of settingsRes.rows) settings[row.key] = row.value;
+      const stats = await getQueueStats();
+      return ok(
+        `Semantic search: ${isPgvectorAvailable() ? (getEmbeddingConfig(settings) ? 'active' : 'pgvector ready, no provider configured') : 'unavailable (lexical/trigram search only)'}. ` +
+        `Queue: ${stats.pending} pending, ${stats.processing} processing, ${stats.done} indexed, ${stats.failed} failed.`
+      );
+    },
+  },
+
+  // ───────────────────────────── Agent Runtime (WP-8, MCP-only) ───────────────
+  // These let an EXTERNAL orchestrator (e.g. Claude via the MCP connector)
+  // drive OUR agent — never callable BY the agent itself (mcpOnly excludes
+  // them from getOpenRouterToolDefs(), which both Sol and agent/runtime.ts's
+  // own tool-calling loop draw from). Without that exclusion, an agent could
+  // call start_agent_run on itself with no bound but each new run's own
+  // budget — an unbounded-fork risk, not just a bad idea.
+  {
+    name: 'start_agent_run',
+    description: 'Hand a goal to a workspace\'s AI agent to carry out — subject to that workspace\'s own agent mode and policy (Settings → Workspace → Agent). A "suggest"-mode workspace queues proposals for a human instead of acting immediately.',
+    mcpOnly: true,
+    parameters: {
+      type: 'object',
+      properties: {
+        workspace_id: { type: 'string' },
+        goal: { type: 'string' },
+      },
+      required: ['workspace_id', 'goal'],
+    },
+    handler: async (userId, args) => {
+      const workspaceId = str(args.workspace_id), goal = str(args.goal);
+      if (!workspaceId || !goal) return fail('workspace_id and goal are required');
+      if (!(await userCanAccessWorkspace(userId, workspaceId))) return fail('workspace not found');
+      try {
+        const { runId, mode } = await startAgentRun({ workspaceId, userId, goal, triggerType: 'mcp' });
+        return ok(`Started agent run ${runId} (mode: ${mode}).`, 'Started an agent run');
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : 'could not start the agent run');
+      }
+    },
+  },
+  {
+    name: 'list_agent_runs',
+    description: 'List recent agent runs for a workspace.',
+    mcpOnly: true,
+    parameters: {
+      type: 'object',
+      properties: { workspace_id: { type: 'string' }, status: { type: 'string', enum: ['running', 'success', 'failed', 'blocked', 'cancelled'] } },
+      required: ['workspace_id'],
+    },
+    handler: async (userId, args) => {
+      const workspaceId = str(args.workspace_id);
+      if (!workspaceId) return fail('workspace_id is required');
+      if (!(await userCanAccessWorkspace(userId, workspaceId))) return fail('workspace not found');
+      const status = str(args.status);
+      const params: unknown[] = [workspaceId];
+      let filter = '';
+      if (status) { params.push(status); filter = ` AND status = $${params.length}`; }
+      const r = await query<{ id: string; goal: string; status: string; started_at: string }>(
+        `SELECT id, goal, status, started_at FROM agent_runs WHERE workspace_id = $1 ${filter} ORDER BY started_at DESC LIMIT 20`, params
+      );
+      if (!r.rows.length) return ok('No agent runs yet.');
+      return ok(r.rows.map((row) => `- ${row.id} [${row.status}] "${row.goal}" (started ${row.started_at})`).join('\n'));
+    },
+  },
+  {
+    name: 'get_agent_run',
+    description: 'Get the full step-by-step trace of one agent run.',
+    mcpOnly: true,
+    parameters: { type: 'object', properties: { run_id: { type: 'string' } }, required: ['run_id'] },
+    handler: async (userId, args) => {
+      const runId = str(args.run_id);
+      if (!runId) return fail('run_id is required');
+      const r = await query<{ workspace_id: string; goal: string; status: string; steps: unknown; error: string | null }>(
+        `SELECT workspace_id, goal, status, steps, error FROM agent_runs WHERE id = $1`, [runId]
+      );
+      const row = r.rows[0];
+      if (!row || !(await userCanAccessWorkspace(userId, row.workspace_id))) return fail('run not found');
+      const steps = (row.steps as Array<{ nodeType: string; toolName?: string; status: string; error?: string }>) ?? [];
+      const lines = [`Goal: ${row.goal}`, `Status: ${row.status}`, row.error ? `Error: ${row.error}` : null, 'Steps:',
+        ...steps.map((s) => `  - [${s.status}] ${s.nodeType === 'trigger' ? 'started' : s.toolName}${s.error ? ` — ${s.error}` : ''}`)];
+      return ok(lines.filter((l): l is string => l !== null).join('\n'));
+    },
+  },
+  {
+    name: 'list_agent_proposals',
+    description: 'List an agent\'s pending (or other-status) proposals awaiting human approval in a workspace.',
+    mcpOnly: true,
+    parameters: {
+      type: 'object',
+      properties: { workspace_id: { type: 'string' }, status: { type: 'string', enum: ['pending', 'accepted', 'rejected', 'expired', 'applied', 'failed'] } },
+      required: ['workspace_id'],
+    },
+    handler: async (userId, args) => {
+      const workspaceId = str(args.workspace_id);
+      if (!workspaceId) return fail('workspace_id is required');
+      if (!(await userCanAccessWorkspace(userId, workspaceId))) return fail('workspace not found');
+      const status = str(args.status) ?? 'pending';
+      const r = await query<{ id: string; tool_name: string; tool_args: unknown; created_at: string }>(
+        `SELECT id, tool_name, tool_args, created_at FROM agent_proposals WHERE workspace_id = $1 AND status = $2 ORDER BY created_at DESC LIMIT 20`,
+        [workspaceId, status]
+      );
+      if (!r.rows.length) return ok(`No ${status} proposals.`);
+      return ok(r.rows.map((row) => `- ${row.id}: ${row.tool_name}(${JSON.stringify(row.tool_args)}) — queued ${row.created_at}`).join('\n'));
+    },
+  },
+  {
+    name: 'accept_agent_proposal',
+    description: 'Approve a pending agent proposal, running it now as the original run\'s owner.',
+    mcpOnly: true,
+    parameters: { type: 'object', properties: { proposal_id: { type: 'string' } }, required: ['proposal_id'] },
+    handler: async (userId, args) => {
+      const proposalId = str(args.proposal_id);
+      if (!proposalId) return fail('proposal_id is required');
+      const r = await query<{ workspace_id: string; run_id: string; tool_name: string; tool_args: unknown; status: string }>(
+        `SELECT workspace_id, run_id, tool_name, tool_args, status FROM agent_proposals WHERE id = $1`, [proposalId]
+      );
+      const row = r.rows[0];
+      if (!row || !(await userCanAccessWorkspace(userId, row.workspace_id))) return fail('proposal not found');
+      if (row.status !== 'pending') return fail(`proposal already ${row.status}`);
+      const runRes = await query<{ user_id: string }>(`SELECT user_id FROM agent_runs WHERE id = $1`, [row.run_id]);
+      const actingUserId = runRes.rows[0]?.user_id ?? userId;
+      const result = await executeAiTool(actingUserId, row.tool_name, (row.tool_args as Record<string, unknown>) ?? {});
+      await query(`UPDATE agent_proposals SET status = $1, decided_by = $2, decided_at = NOW() WHERE id = $3`, [result.ok ? 'applied' : 'failed', userId, proposalId]);
+      return result.ok ? ok(`Applied: ${result.result}`) : fail(result.result);
+    },
+  },
+  {
+    name: 'reject_agent_proposal',
+    description: 'Reject a pending agent proposal — it will never run.',
+    mcpOnly: true,
+    parameters: { type: 'object', properties: { proposal_id: { type: 'string' }, reason: { type: 'string' } }, required: ['proposal_id'] },
+    handler: async (userId, args) => {
+      const proposalId = str(args.proposal_id);
+      if (!proposalId) return fail('proposal_id is required');
+      const r = await query<{ workspace_id: string; status: string }>(`SELECT workspace_id, status FROM agent_proposals WHERE id = $1`, [proposalId]);
+      const row = r.rows[0];
+      if (!row || !(await userCanAccessWorkspace(userId, row.workspace_id))) return fail('proposal not found');
+      if (row.status !== 'pending') return fail(`proposal already ${row.status}`);
+      await query(`UPDATE agent_proposals SET status = 'rejected', decided_by = $1, decided_at = NOW() WHERE id = $2`, [userId, proposalId]);
+      return ok('Proposal rejected.');
+    },
+  },
 ];
 
 // ── lookup & execution ───────────────────────────────────────────────────────
@@ -2075,9 +2413,9 @@ export async function executeAiTool(
 
 // ── format adapters ───────────────────────────────────────────────────────
 
-/** OpenRouter / OpenAI "tools" array shape (used by the internal Sol assistant). */
+/** OpenRouter / OpenAI "tools" array shape — used by the internal Sol assistant AND the Agent Runtime (agent/runtime.ts). Excludes mcpOnly tools (see AiTool.mcpOnly). */
 export function getOpenRouterToolDefs(): Array<{ type: 'function'; function: { name: string; description: string; parameters: JsonSchema } }> {
-  return aiTools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }));
+  return aiTools.filter((t) => !t.mcpOnly).map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }));
 }
 
 /** MCP tools/list shape (name, description, inputSchema as JSON Schema). */
