@@ -21,6 +21,7 @@ import { nodeColor, nodeIcon, nodeSize } from '../../utils/graphLayout';
 import useForceSimulation from '../../hooks/useForceSimulation';
 import type { SimLink, SimNodeSpec } from '../../utils/forceSimulation';
 import Icon from '../Icon';
+import NodeInspector from './NodeInspector';
 
 const MIN_K = 0.2;
 const MAX_K = 3;
@@ -41,6 +42,7 @@ interface NeuralGraphProps {
   hierarchy: GraphHierarchy;
   relationEdges: GraphEdge[];
   workspaceRootSrn: string;
+  workspaceId: string;
   selectedSrn?: string | null;
   onNodeClick: (node: NetRenderNode) => void;
   onNodeOpen: (node: NetRenderNode) => void;
@@ -57,7 +59,7 @@ function screenToWorld(cam: Camera, w: number, h: number, sx: number, sy: number
 }
 
 const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function NeuralGraph(
-  { nodes, hierarchy, relationEdges, workspaceRootSrn, selectedSrn, onNodeClick, onNodeOpen, onBackgroundClick, pinnedPositions, onNodePin },
+  { nodes, hierarchy, relationEdges, workspaceRootSrn, workspaceId, selectedSrn, onNodeClick, onNodeOpen, onBackgroundClick, pinnedPositions, onNodePin },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -70,8 +72,28 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
   const cameraRef = useRef<Camera>({ x: 0, y: 0, k: 1 });
   const [hoveredSrn, setHoveredSrn] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ srn: string; x: number; y: number } | null>(null);
+  const [selectedAnchor, setSelectedAnchor] = useState<{ x: number; y: number } | null>(null);
 
   const nodeBySrn = useMemo(() => new Map(nodes.map((n) => [n.srn, n])), [nodes]);
+  const selectedNode = selectedSrn ? nodeBySrn.get(selectedSrn) : null;
+
+  /** Root -> ... -> node, inclusive. Feeds the details popup's breadcrumb. */
+  const breadcrumbFor = useCallback((srn: string): NetRenderNode[] => {
+    const chain: NetRenderNode[] = [];
+    let cur: string | undefined = srn;
+    const seen = new Set<string>();
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      const n = nodeBySrn.get(cur);
+      if (!n) break;
+      chain.unshift(n);
+      if (cur === workspaceRootSrn) break;
+      cur = hierarchy.parentOf.get(cur);
+    }
+    return chain;
+  }, [nodeBySrn, hierarchy, workspaceRootSrn]);
+
+  useEffect(() => { if (!selectedSrn) setSelectedAnchor(null); }, [selectedSrn]);
 
   // ── container sizing ──────────────────────────────────────────────
   useEffect(() => {
@@ -150,6 +172,13 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
   }, [focusSrn, links]);
 
   // ── RAF-driven imperative position updates ──────────────────────────
+  // moved() only re-renders React when a screen position shifts by more than
+  // a fraction of a pixel — now that the simulation settles (see
+  // utils/forceSimulation.ts's alpha cooling), a stationary node shouldn't
+  // still be forcing 60 renders/sec on whatever's anchored to it.
+  const moved = (a: { x: number; y: number } | null, b: { x: number; y: number }) =>
+    !a || Math.abs(a.x - b.x) > 0.2 || Math.abs(a.y - b.y) > 0.2;
+
   const onTick = useCallback((positions: Map<string, { x: number; y: number }>) => {
     for (const [srn, el] of nodeElRefs.current) {
       const p = positions.get(srn);
@@ -167,11 +196,18 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
       const p = positions.get(tooltip.srn);
       if (p) {
         const screen = worldToScreen(cameraRef.current, size.w, size.h, p.x, p.y);
-        setTooltip((t) => (t && t.srn === tooltip.srn ? { ...t, x: screen.x, y: screen.y } : t));
+        setTooltip((t) => (t && t.srn === tooltip.srn && moved(t, screen) ? { ...t, x: screen.x, y: screen.y } : t));
+      }
+    }
+    if (selectedSrn) {
+      const p = positions.get(selectedSrn);
+      if (p) {
+        const screen = worldToScreen(cameraRef.current, size.w, size.h, p.x, p.y);
+        setSelectedAnchor((a) => (moved(a, screen) ? screen : a));
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tooltip?.srn, size.w, size.h]);
+  }, [tooltip?.srn, selectedSrn, size.w, size.h]);
 
   const simRef = useForceSimulation(nodeSpecs, links, onTick, true);
 
@@ -187,7 +223,14 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
   }), [animateCameraTo, simRef]);
 
   // ── pan / zoom / drag interaction ───────────────────────────────────
-  const dragState = useRef<{ mode: 'pan' | 'node'; srn?: string; startX: number; startY: number; moved: boolean } | null>(null);
+  // Pointer Events + setPointerCapture, not raw mouse events on `window` —
+  // capture guarantees this element keeps receiving move/up for the given
+  // pointer no matter what ends up under the cursor (including a fast
+  // release outside the dragged node, or a re-render swapping listeners
+  // mid-gesture), which is what a plain window-level mousemove/mouseup pair
+  // can't promise. That gap was the cause of a node getting stuck to the
+  // cursor after release instead of dropping where the user let go.
+  const dragState = useRef<{ mode: 'pan' | 'node'; srn?: string; startX: number; startY: number; moved: boolean; pointerId: number } | null>(null);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -200,52 +243,58 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
     applyCamera();
   }, [applyCamera, size.w, size.h]);
 
-  const handleBackgroundDown = useCallback((e: React.MouseEvent) => {
-    dragState.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, moved: false };
-  }, []);
-
-  const handleNodeDown = useCallback((e: React.MouseEvent, srn: string) => {
-    e.stopPropagation();
-    if (srn === workspaceRootSrn) return; // the hub never moves
-    dragState.current = { mode: 'node', srn, startX: e.clientX, startY: e.clientY, moved: false };
+  const handlePointerDown = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    if (e.button !== undefined && e.button !== 0) return; // left button / primary touch only
+    const targetEl = (e.target as Element).closest('[data-srn]');
+    const srn = targetEl?.getAttribute('data-srn') ?? undefined;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    if (srn && srn !== workspaceRootSrn) {
+      dragState.current = { mode: 'node', srn, startX: e.clientX, startY: e.clientY, moved: false, pointerId: e.pointerId };
+    } else {
+      dragState.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, moved: false, pointerId: e.pointerId };
+    }
   }, [workspaceRootSrn]);
 
-  useEffect(() => {
-    const handleMove = (e: MouseEvent) => {
-      const drag = dragState.current;
-      if (!drag) return;
-      const dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
-      if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
-      if (!drag.moved) return;
-      if (drag.mode === 'pan') {
-        cameraRef.current = { ...cameraRef.current, x: cameraRef.current.x + e.movementX, y: cameraRef.current.y + e.movementY };
-        applyCamera();
-      } else if (drag.mode === 'node' && drag.srn) {
-        const rect = containerRef.current!.getBoundingClientRect();
-        const world = screenToWorld(cameraRef.current, size.w, size.h, e.clientX - rect.left, e.clientY - rect.top);
-        simRef.current.pin(drag.srn, world.x, world.y);
-      }
-    };
-    const handleUp = () => {
-      const drag = dragState.current;
-      if (drag?.mode === 'node' && drag.srn && drag.moved) {
-        const pos = simRef.current.nodes.get(drag.srn);
-        if (pos) onNodePin?.(drag.srn, pos.x, pos.y);
-      } else if (drag && !drag.moved && drag.mode === 'pan') {
-        onBackgroundClick?.();
-      }
-      dragState.current = null;
-    };
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-    return () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applyCamera, size.w, size.h, onNodePin, onBackgroundClick]);
+  const lastPointer = useRef({ x: 0, y: 0 });
+  const handlePointerMove = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    const drag = dragState.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    const dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
+    if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+    if (!drag.moved) { lastPointer.current = { x: e.clientX, y: e.clientY }; return; }
 
-  const handleNodeUp = useCallback((e: React.MouseEvent, node: NetRenderNode) => {
+    if (drag.mode === 'pan') {
+      const mdx = e.clientX - lastPointer.current.x, mdy = e.clientY - lastPointer.current.y;
+      cameraRef.current = { ...cameraRef.current, x: cameraRef.current.x + mdx, y: cameraRef.current.y + mdy };
+      applyCamera();
+    } else if (drag.mode === 'node' && drag.srn) {
+      const rect = containerRef.current!.getBoundingClientRect();
+      const world = screenToWorld(cameraRef.current, size.w, size.h, e.clientX - rect.left, e.clientY - rect.top);
+      simRef.current.pin(drag.srn, world.x, world.y);
+    }
+    lastPointer.current = { x: e.clientX, y: e.clientY };
+  }, [applyCamera, size.w, size.h, simRef]);
+
+  const endDrag = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    const drag = dragState.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    if (drag.mode === 'node' && drag.srn && drag.moved) {
+      const pos = simRef.current.nodes.get(drag.srn);
+      if (pos) onNodePin?.(drag.srn, pos.x, pos.y);
+    } else if (drag.mode === 'pan' && !drag.moved) {
+      onBackgroundClick?.();
+    } else if (drag.mode === 'node' && drag.srn && !drag.moved) {
+      const node = nodeBySrn.get(drag.srn);
+      if (node) onNodeClick(node);
+    }
+    dragState.current = null;
+  }, [simRef, onNodePin, onBackgroundClick, onNodeClick, nodeBySrn]);
+
+  const handleNodeDoubleClick = useCallback((e: React.MouseEvent, node: NetRenderNode) => {
     e.stopPropagation();
-    if (!dragState.current?.moved) onNodeClick(node);
-  }, [onNodeClick]);
+    onNodeOpen(node);
+  }, [onNodeOpen]);
 
   const zoomBy = useCallback((factor: number) => {
     const k = Math.min(Math.max(cameraRef.current.k * factor, MIN_K), MAX_K);
@@ -261,10 +310,20 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
       <svg
         width={size.w} height={size.h}
         onWheel={handleWheel}
-        onMouseDown={handleBackgroundDown}
-        style={{ display: 'block', background: 'radial-gradient(circle at 50% 45%, var(--color-purple-pale-11, #f7f4fc) 0%, var(--color-white) 72%)' }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        style={{ display: 'block', background: 'var(--color-white)', touchAction: 'none' }}
       >
+        <defs>
+          <pattern id="netDotGrid" width="24" height="24" patternUnits="userSpaceOnUse">
+            <circle cx="1.3" cy="1.3" r="1.3" fill="var(--color-border, #e8e4f0)" />
+          </pattern>
+        </defs>
         <g ref={viewportRef}>
+          {/* World-space dotted grid — pans/zooms with the content, same convention as the Canvas tab's React Flow <Background>. */}
+          <rect x={-6000} y={-6000} width={12000} height={12000} fill="url(#netDotGrid)" />
           <g>
             {hierarchyEdgeList.map((e) => (
               <line
@@ -304,9 +363,7 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
                 hovered={n.srn === hoveredSrn}
                 dimmed={!!highlightNeighbors && !highlightNeighbors.has(n.srn)}
                 registerRef={(el) => { if (el) nodeElRefs.current.set(n.srn, el); else nodeElRefs.current.delete(n.srn); }}
-                onMouseDown={(e) => handleNodeDown(e, n.srn)}
-                onMouseUp={(e) => handleNodeUp(e, n)}
-                onDoubleClick={(e) => { e.stopPropagation(); onNodeOpen(n); }}
+                onDoubleClick={(e) => handleNodeDoubleClick(e, n)}
                 onEnter={() => { setHoveredSrn(n.srn); setTooltip({ srn: n.srn, x: 0, y: 0 }); }}
                 onLeave={() => { setHoveredSrn(null); setTooltip(null); }}
               />
@@ -315,7 +372,7 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
         </g>
       </svg>
 
-      {tooltip && hoveredNode && (
+      {tooltip && hoveredNode && hoveredSrn !== selectedSrn && (
         <div
           style={{
             position: 'absolute', left: tooltip.x, top: tooltip.y - 14, transform: 'translate(-50%, -100%)',
@@ -329,6 +386,19 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
             <span style={{ opacity: 0.7, fontWeight: 500, marginLeft: 6, textTransform: 'capitalize' }}>{hoveredNode.type}</span>
           )}
         </div>
+      )}
+
+      {selectedNode && selectedAnchor && (
+        <NodeInspector
+          node={selectedNode}
+          breadcrumb={breadcrumbFor(selectedNode.srn)}
+          anchor={selectedAnchor}
+          containerSize={size}
+          workspaceId={workspaceId}
+          onClose={() => onBackgroundClick?.()}
+          onCenter={() => { const pos = simRef.current.nodes.get(selectedNode.srn); if (pos) { const k = Math.max(cameraRef.current.k, 1.1); animateCameraTo({ x: -pos.x * k, y: -pos.y * k, k }); } }}
+          onBreadcrumbClick={(crumb) => onNodeClick(crumb)}
+        />
       )}
 
       <ZoomControls onZoomIn={() => zoomBy(1.35)} onZoomOut={() => zoomBy(1 / 1.35)} onCenter={() => animateCameraTo({ x: 0, y: 0, k: 1 })} />
@@ -349,21 +419,19 @@ interface NetNodeProps {
   hovered: boolean;
   dimmed: boolean;
   registerRef: (el: SVGGElement | null) => void;
-  onMouseDown: (e: React.MouseEvent) => void;
-  onMouseUp: (e: React.MouseEvent) => void;
   onDoubleClick: (e: React.MouseEvent) => void;
   onEnter: () => void;
   onLeave: () => void;
 }
 
-const NetNode = memo(function NetNode({ node, radius, isRoot, isPinned, selected, hovered, dimmed, registerRef, onMouseDown, onMouseUp, onDoubleClick, onEnter, onLeave }: NetNodeProps) {
+const NetNode = memo(function NetNode({ node, radius, isRoot, isPinned, selected, hovered, dimmed, registerRef, onDoubleClick, onEnter, onLeave }: NetNodeProps) {
   const color = nodeColor(node.type, node.status);
   const icon = nodeIcon(node.type);
   const scale = hovered ? 1.22 : selected ? 1.1 : 1;
   const iconSize = Math.max(Math.round(radius * 0.95), 10);
 
   return (
-    <g ref={registerRef} style={{ cursor: isRoot ? 'default' : 'grab' }} onMouseDown={onMouseDown} onMouseUp={onMouseUp} onDoubleClick={onDoubleClick} onMouseEnter={onEnter} onMouseLeave={onLeave}>
+    <g ref={registerRef} data-srn={node.srn} style={{ cursor: isRoot ? 'default' : 'grab' }} onDoubleClick={onDoubleClick} onMouseEnter={onEnter} onMouseLeave={onLeave}>
       <g style={{ transform: `scale(${scale})`, transformOrigin: 'center', transformBox: 'fill-box', transition: 'transform 180ms cubic-bezier(0.34,1.56,0.64,1), opacity 200ms', opacity: dimmed ? 0.18 : 1 }}>
         {isRoot && (
           <circle r={radius + 10} fill={color} opacity={0.16} className="net-root-glow" style={{ animation: 'netRootGlow 3.2s ease-in-out infinite', transformOrigin: 'center', transformBox: 'fill-box' }} />

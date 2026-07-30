@@ -14,7 +14,6 @@ import { RF_NODE_TYPES } from '../components/graph/FlowGraph';
 import SigmaGraph from '../components/graph/SigmaGraph';
 import NeuralGraph, { type NeuralGraphHandle } from '../components/graph/NeuralGraph';
 import GraphToolbar from '../components/graph/GraphToolbar';
-import NodeInspector from '../components/graph/NodeInspector';
 import { shouldUseSigma } from '../utils/graphLayout';
 import useGraphHierarchy from '../hooks/useGraphHierarchy';
 import { buildWorkspaceRootNode, type NetRenderNode } from '../utils/graphHierarchy';
@@ -64,9 +63,7 @@ function ExploreView({ isMobile }: { isMobile: boolean }) {
   const handleNodeOpen = useCallback((n: NetRenderNode) => {
     if (n.type !== 'workspace' && n.deepLink) navigate(n.deepLink);
   }, [navigate]);
-  const handleFocus = useCallback((srn: string) => {
-    graphRef.current?.centerOn(srn);
-  }, []);
+  const handleDeselect = useCallback(() => setSelected(null), []);
   const handleNodePin = useCallback((srn: string, x: number, y: number) => {
     if (workspaceId) setGraphNodePosition(workspaceId, srn, x, y);
   }, [workspaceId, setGraphNodePosition]);
@@ -132,10 +129,11 @@ function ExploreView({ isMobile }: { isMobile: boolean }) {
               hierarchy={hierarchy}
               relationEdges={relationEdges}
               workspaceRootSrn={rootNode.srn}
+              workspaceId={workspaceId}
               selectedSrn={selected?.srn}
               onNodeClick={handleNodeClick}
               onNodeOpen={handleNodeOpen}
-              onBackgroundClick={() => setSelected(null)}
+              onBackgroundClick={handleDeselect}
               pinnedPositions={positionOverrides}
               onNodePin={handleNodePin}
             />
@@ -148,15 +146,6 @@ function ExploreView({ isMobile }: { isMobile: boolean }) {
         onPickResult={handlePickSearchResult}
         isMobile={isMobile}
       />
-
-      {selected && (
-        <div style={isMobile
-          ? { position: 'absolute', left: 12, right: 12, bottom: 12, maxHeight: '48%', zIndex: 6 }
-          : { position: 'absolute', top: 62, right: 14, bottom: 14, width: 300, zIndex: 6 }}
-        >
-          <NodeInspector node={selected} onClose={() => setSelected(null)} onFocus={handleFocus} />
-        </div>
-      )}
     </div>
   );
 }
