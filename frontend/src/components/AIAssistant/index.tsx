@@ -15,6 +15,9 @@ import useAppStore, {
 } from '../../store/useAppStore';
 import useAuthStore from '../../store/useAuthStore';
 import useWorkspaceStore from '../../store/useWorkspaceStore';
+import useGraphStore from '../../store/useGraphStore';
+import useUserPrefsStore from '../../store/useUserPrefsStore';
+import type { GraphEntityType } from '../../types';
 import {
   apiGetAISettings,
   apiAIChat,
@@ -871,14 +874,36 @@ export default function AIAssistant() {
           return { id: call.id, name, result: `Reordered ${milestoneIds.length} milestones`, summary: `Reordered milestones` };
         }
 
+        // ── Net (Graph Layer) view ─────────────────────────────────
+        if (name === 'focus_graph_node') {
+          const srn = args.srn as string;
+          useGraphStore.getState().focusNode(srn);
+          if (location.pathname !== '/graph') navigate('/graph');
+          return { id: call.id, name, result: `Focused ${srn} in the Net view`, summary: `Focused the Net on ${srn}` };
+        }
+
+        if (name === 'set_graph_filters') {
+          const gs = useGraphStore.getState();
+          if (Array.isArray(args.entity_types)) gs.setFilter('entityTypes', args.entity_types as GraphEntityType[]);
+          if (typeof args.show_completed === 'boolean') gs.setFilter('showCompleted', args.show_completed);
+          if (typeof args.show_orphans === 'boolean') gs.setFilter('showOrphans', args.show_orphans);
+          return { id: call.id, name, result: 'Updated Net view filters', summary: 'Updated Net filters' };
+        }
+
+        if (name === 'reset_graph_view') {
+          useGraphStore.getState().resetFilters();
+          const wsId = workspaceStore.currentWorkspaceId;
+          if (wsId) useUserPrefsStore.getState().clearGraphNodePositions(wsId);
+          return { id: call.id, name, result: 'Reset Net view filters and released any manually-pinned nodes', summary: 'Reset the Net view' };
+        }
+
         return { id: call.id, name, result: `Unknown tool: ${name}` };
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
         return { id: call.id, name, result: `Error: ${msg}` };
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [appStore, workspaceStore, navigate]
+    [appStore, workspaceStore, navigate, location.pathname]
   );
 
   // ── Send message ─────────────────────────────────────────────

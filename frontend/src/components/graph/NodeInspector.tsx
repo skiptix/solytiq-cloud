@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { GraphNode, ResolvedLink } from '../../types';
+import type { ResolvedLink } from '../../types';
+import type { NetRenderNode } from '../../utils/graphHierarchy';
 import Icon from '../Icon';
 import { apiGetEntityLinks } from '../../api/client';
 import { nodeColor } from '../../utils/graphLayout';
 
-export default function NodeInspector({ node, onClose, onFocus }: { node: GraphNode; onClose: () => void; onFocus: (srn: string) => void }) {
+export default function NodeInspector({ node, onClose, onFocus }: { node: NetRenderNode; onClose: () => void; onFocus: (srn: string) => void }) {
   const navigate = useNavigate();
   const [linksByType, setLinksByType] = useState<Record<string, ResolvedLink[]> | null>(null);
   const [loading, setLoading] = useState(false);

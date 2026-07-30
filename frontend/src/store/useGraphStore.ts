@@ -10,13 +10,20 @@ export interface GraphFilters {
   depth: number;
 }
 
-// Restrictive-by-default filters (CLAUDE.md's "not the Hairball" rule): structural
-// part_of edges are hidden, orphans are hidden (reachable via a separate chip).
+// The Net view always renders every entity in the workspace, connected
+// hierarchically up to the workspace root (see hooks/useGraphHierarchy.ts) —
+// there's no such thing as a structurally disconnected node anymore, so
+// `showOrphans` defaults to true. It still narrows out entities that have no
+// EXPLICIT entity_links relation (real cross-links, not the structural
+// containment tree) for someone who wants to see just the "interesting"
+// connections. Structural `part_of` edges stay hidden from the relation
+// rendering by default (CLAUDE.md's "not the Hairball" rule) — the
+// hierarchy tree supersedes them visually.
 const DEFAULT_FILTERS: GraphFilters = {
   entityTypes: [],
   linkTypes: [],
   showCompleted: true,
-  showOrphans: false,
+  showOrphans: true,
   depth: 2,
 };
 
@@ -106,8 +113,12 @@ const useGraphStore = create<GraphState>()((set, get) => ({
       void cutoff; // completed-age filtering needs updatedAt on the node — reserved for a follow-up refinement
     }
     if (!filters.showOrphans) {
+      // Only real relations count here — a node touched only by a hidden,
+      // structural part_of edge is still an "orphan" for this filter's
+      // purpose (it has no explicit relation), even though the Net view
+      // will still draw it into the hierarchy tree regardless.
       const connected = new Set<string>();
-      for (const e of allEdges) { connected.add(e.src); connected.add(e.dst); }
+      for (const e of allEdges) { if (e.linkType === PART_OF) continue; connected.add(e.src); connected.add(e.dst); }
       nodes = nodes.filter((n) => connected.has(n.srn));
     }
     return nodes;

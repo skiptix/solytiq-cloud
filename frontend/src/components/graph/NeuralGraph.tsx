@@ -1,0 +1,434 @@
+// ---------------------------------------------------------------------------
+// NeuralGraph — the Net view's primary renderer. A hand-rolled SVG force
+// simulation (see utils/forceSimulation.ts) instead of a static layout, so
+// the graph continuously drifts like a living network rather than sitting
+// frozen. The workspace root is always pinned at the world origin and every
+// other node is connected to it through the structural hierarchy
+// (hooks/useGraphHierarchy.ts) — items -> sections -> lists -> folders ->
+// workspace — with real entity_links relations layered on top as a second,
+// more prominent edge class.
+//
+// Positions are pushed to the DOM imperatively every animation frame
+// (SVG `transform` attributes, not React state) so 60fps motion never
+// triggers a React re-render; React only re-renders on hover/selection
+// changes, which are rare.
+// ---------------------------------------------------------------------------
+
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import type { GraphEdge } from '../../types';
+import type { GraphHierarchy, NetRenderNode } from '../../utils/graphHierarchy';
+import { nodeColor, nodeIcon, nodeSize } from '../../utils/graphLayout';
+import useForceSimulation from '../../hooks/useForceSimulation';
+import type { SimLink, SimNodeSpec } from '../../utils/forceSimulation';
+import Icon from '../Icon';
+
+const MIN_K = 0.2;
+const MAX_K = 3;
+const ROOT_RADIUS = 32;
+
+export interface NeuralGraphHandle {
+  centerOn: (srn: string) => void;
+  resetCamera: () => void;
+  /** Whether the simulation has (yet) seeded a position for this node — lets a caller poll until a just-requested centerOn can actually take effect. */
+  hasNode: (srn: string) => boolean;
+}
+
+interface Camera { x: number; y: number; k: number }
+
+interface NeuralGraphProps {
+  /** Includes the synthetic workspace-root node (type 'workspace'). */
+  nodes: NetRenderNode[];
+  hierarchy: GraphHierarchy;
+  relationEdges: GraphEdge[];
+  workspaceRootSrn: string;
+  selectedSrn?: string | null;
+  onNodeClick: (node: NetRenderNode) => void;
+  onNodeOpen: (node: NetRenderNode) => void;
+  onBackgroundClick?: () => void;
+  pinnedPositions?: Record<string, { x: number; y: number }>;
+  onNodePin?: (srn: string, x: number, y: number) => void;
+}
+
+function worldToScreen(cam: Camera, w: number, h: number, x: number, y: number) {
+  return { x: w / 2 + cam.x + x * cam.k, y: h / 2 + cam.y + y * cam.k };
+}
+function screenToWorld(cam: Camera, w: number, h: number, sx: number, sy: number) {
+  return { x: (sx - w / 2 - cam.x) / cam.k, y: (sy - h / 2 - cam.y) / cam.k };
+}
+
+const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function NeuralGraph(
+  { nodes, hierarchy, relationEdges, workspaceRootSrn, selectedSrn, onNodeClick, onNodeOpen, onBackgroundClick, pinnedPositions, onNodePin },
+  ref
+) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<SVGGElement>(null);
+  const nodeElRefs = useRef(new Map<string, SVGGElement>());
+  /** Keyed by the edge's own unique id (not src__dst — two edges, e.g. a
+   *  hierarchy edge and a relation edge, can share the same endpoints). */
+  const edgeElRefs = useRef(new Map<string, { el: SVGLineElement; src: string; dst: string }>());
+  const [size, setSize] = useState({ w: 800, h: 600 });
+  const cameraRef = useRef<Camera>({ x: 0, y: 0, k: 1 });
+  const [hoveredSrn, setHoveredSrn] = useState<string | null>(null);
+  const [tooltip, setTooltip] = useState<{ srn: string; x: number; y: number } | null>(null);
+
+  const nodeBySrn = useMemo(() => new Map(nodes.map((n) => [n.srn, n])), [nodes]);
+
+  // ── container sizing ──────────────────────────────────────────────
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const box = entries[0]?.contentRect;
+      if (box) setSize({ w: Math.max(box.width, 100), h: Math.max(box.height, 100) });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // ── camera application + smooth tween helper ───────────────────────
+  const applyCamera = useCallback(() => {
+    if (viewportRef.current) {
+      const c = cameraRef.current;
+      viewportRef.current.setAttribute('transform', `translate(${size.w / 2 + c.x} ${size.h / 2 + c.y}) scale(${c.k})`);
+    }
+  }, [size.w, size.h]);
+  useEffect(() => { applyCamera(); }, [applyCamera]);
+
+  const tweenRef = useRef<number | null>(null);
+  const animateCameraTo = useCallback((target: Camera, ms = 420) => {
+    if (tweenRef.current) cancelAnimationFrame(tweenRef.current);
+    const start = { ...cameraRef.current };
+    const t0 = performance.now();
+    const ease = (p: number) => 1 - Math.pow(1 - p, 3);
+    const step = (now: number) => {
+      const p = Math.min((now - t0) / ms, 1);
+      const e = ease(p);
+      cameraRef.current = { x: start.x + (target.x - start.x) * e, y: start.y + (target.y - start.y) * e, k: start.k + (target.k - start.k) * e };
+      applyCamera();
+      if (p < 1) tweenRef.current = requestAnimationFrame(step);
+    };
+    tweenRef.current = requestAnimationFrame(step);
+  }, [applyCamera]);
+
+  // ── simulation data ──────────────────────────────────────────────
+  const visualDegree = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const n of nodes) m.set(n.srn, (hierarchy.childCount.get(n.srn) ?? 0) + n.degree + (hierarchy.parentOf.has(n.srn) ? 1 : 0));
+    return m;
+  }, [nodes, hierarchy]);
+
+  const nodeSpecs: SimNodeSpec[] = useMemo(() => nodes.map((n) => {
+    const isRoot = n.srn === workspaceRootSrn;
+    const radius = isRoot ? ROOT_RADIUS : Math.max(nodeSize(visualDegree.get(n.srn) ?? 0), 8);
+    const depth = hierarchy.depthOf.get(n.srn) ?? 0;
+    const pin = isRoot ? { x: 0, y: 0 } : pinnedPositions?.[n.srn];
+    return { id: n.srn, radius, depth, pinned: pin };
+  }), [nodes, hierarchy, visualDegree, workspaceRootSrn, pinnedPositions]);
+
+  const radiusBySrn = useMemo(() => new Map(nodeSpecs.map((s) => [s.id, s.radius])), [nodeSpecs]);
+
+  const links: SimLink[] = useMemo(() => {
+    const out: SimLink[] = hierarchy.edges.map((e) => ({
+      source: e.src, target: e.dst, distance: 60 + Math.min(e.depth, 4) * 14, strength: 0.14,
+    }));
+    for (const e of relationEdges) {
+      if (nodeBySrn.has(e.src) && nodeBySrn.has(e.dst)) out.push({ source: e.src, target: e.dst, distance: 130, strength: 0.045 });
+    }
+    return out;
+  }, [hierarchy, relationEdges, nodeBySrn]);
+
+  // ── highlight set (hover, falling back to selection) ────────────────
+  const focusSrn = hoveredSrn ?? selectedSrn ?? null;
+  const highlightNeighbors = useMemo(() => {
+    if (!focusSrn) return null;
+    const set = new Set<string>([focusSrn]);
+    for (const l of links) {
+      if (l.source === focusSrn) set.add(l.target);
+      if (l.target === focusSrn) set.add(l.source);
+    }
+    return set;
+  }, [focusSrn, links]);
+
+  // ── RAF-driven imperative position updates ──────────────────────────
+  const onTick = useCallback((positions: Map<string, { x: number; y: number }>) => {
+    for (const [srn, el] of nodeElRefs.current) {
+      const p = positions.get(srn);
+      if (p) el.setAttribute('transform', `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`);
+    }
+    for (const { el, src, dst } of edgeElRefs.current.values()) {
+      const a = positions.get(src);
+      const b = positions.get(dst);
+      if (a && b) {
+        el.setAttribute('x1', a.x.toFixed(1)); el.setAttribute('y1', a.y.toFixed(1));
+        el.setAttribute('x2', b.x.toFixed(1)); el.setAttribute('y2', b.y.toFixed(1));
+      }
+    }
+    if (tooltip) {
+      const p = positions.get(tooltip.srn);
+      if (p) {
+        const screen = worldToScreen(cameraRef.current, size.w, size.h, p.x, p.y);
+        setTooltip((t) => (t && t.srn === tooltip.srn ? { ...t, x: screen.x, y: screen.y } : t));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tooltip?.srn, size.w, size.h]);
+
+  const simRef = useForceSimulation(nodeSpecs, links, onTick, true);
+
+  useImperativeHandle(ref, () => ({
+    centerOn: (srn: string) => {
+      const pos = simRef.current.nodes.get(srn);
+      if (!pos) return;
+      const k = Math.max(cameraRef.current.k, 1.1);
+      animateCameraTo({ x: -pos.x * k, y: -pos.y * k, k });
+    },
+    resetCamera: () => animateCameraTo({ x: 0, y: 0, k: 1 }),
+    hasNode: (srn: string) => simRef.current.nodes.has(srn),
+  }), [animateCameraTo, simRef]);
+
+  // ── pan / zoom / drag interaction ───────────────────────────────────
+  const dragState = useRef<{ mode: 'pan' | 'node'; srn?: string; startX: number; startY: number; moved: boolean } | null>(null);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const rect = containerRef.current!.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const before = screenToWorld(cameraRef.current, size.w, size.h, mx, my);
+    const factor = Math.exp(-e.deltaY * 0.0016);
+    const k = Math.min(Math.max(cameraRef.current.k * factor, MIN_K), MAX_K);
+    cameraRef.current = { x: mx - size.w / 2 - before.x * k, y: my - size.h / 2 - before.y * k, k };
+    applyCamera();
+  }, [applyCamera, size.w, size.h]);
+
+  const handleBackgroundDown = useCallback((e: React.MouseEvent) => {
+    dragState.current = { mode: 'pan', startX: e.clientX, startY: e.clientY, moved: false };
+  }, []);
+
+  const handleNodeDown = useCallback((e: React.MouseEvent, srn: string) => {
+    e.stopPropagation();
+    if (srn === workspaceRootSrn) return; // the hub never moves
+    dragState.current = { mode: 'node', srn, startX: e.clientX, startY: e.clientY, moved: false };
+  }, [workspaceRootSrn]);
+
+  useEffect(() => {
+    const handleMove = (e: MouseEvent) => {
+      const drag = dragState.current;
+      if (!drag) return;
+      const dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
+      if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+      if (!drag.moved) return;
+      if (drag.mode === 'pan') {
+        cameraRef.current = { ...cameraRef.current, x: cameraRef.current.x + e.movementX, y: cameraRef.current.y + e.movementY };
+        applyCamera();
+      } else if (drag.mode === 'node' && drag.srn) {
+        const rect = containerRef.current!.getBoundingClientRect();
+        const world = screenToWorld(cameraRef.current, size.w, size.h, e.clientX - rect.left, e.clientY - rect.top);
+        simRef.current.pin(drag.srn, world.x, world.y);
+      }
+    };
+    const handleUp = () => {
+      const drag = dragState.current;
+      if (drag?.mode === 'node' && drag.srn && drag.moved) {
+        const pos = simRef.current.nodes.get(drag.srn);
+        if (pos) onNodePin?.(drag.srn, pos.x, pos.y);
+      } else if (drag && !drag.moved && drag.mode === 'pan') {
+        onBackgroundClick?.();
+      }
+      dragState.current = null;
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => { window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyCamera, size.w, size.h, onNodePin, onBackgroundClick]);
+
+  const handleNodeUp = useCallback((e: React.MouseEvent, node: NetRenderNode) => {
+    e.stopPropagation();
+    if (!dragState.current?.moved) onNodeClick(node);
+  }, [onNodeClick]);
+
+  const zoomBy = useCallback((factor: number) => {
+    const k = Math.min(Math.max(cameraRef.current.k * factor, MIN_K), MAX_K);
+    animateCameraTo({ ...cameraRef.current, k }, 180);
+  }, [animateCameraTo]);
+
+  // ── render ───────────────────────────────────────────────────────
+  const hierarchyEdgeList = hierarchy.edges;
+  const hoveredNode = hoveredSrn ? nodeBySrn.get(hoveredSrn) : null;
+
+  return (
+    <div ref={containerRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden', cursor: 'grab', touchAction: 'none' }}>
+      <svg
+        width={size.w} height={size.h}
+        onWheel={handleWheel}
+        onMouseDown={handleBackgroundDown}
+        style={{ display: 'block', background: 'radial-gradient(circle at 50% 45%, var(--color-purple-pale-11, #f7f4fc) 0%, var(--color-white) 72%)' }}
+      >
+        <g ref={viewportRef}>
+          <g>
+            {hierarchyEdgeList.map((e) => (
+              <line
+                key={e.id}
+                ref={(el) => { if (el) edgeElRefs.current.set(e.id, { el, src: e.src, dst: e.dst }); else edgeElRefs.current.delete(e.id); }}
+                stroke="var(--color-purple-pale-34, #ece8f4)"
+                strokeWidth={highlightNeighbors && highlightNeighbors.has(e.src) && highlightNeighbors.has(e.dst) ? 1.75 : 1}
+                opacity={!highlightNeighbors ? 0.85 : (highlightNeighbors.has(e.src) && highlightNeighbors.has(e.dst) ? 0.9 : 0.15)}
+              />
+            ))}
+            {relationEdges.map((e) => {
+              if (!nodeBySrn.has(e.src) || !nodeBySrn.has(e.dst)) return null;
+              const active = !!highlightNeighbors && highlightNeighbors.has(e.src) && highlightNeighbors.has(e.dst);
+              return (
+                <line
+                  key={`r:${e.id}`}
+                  ref={(el) => { const key = `r:${e.id}`; if (el) edgeElRefs.current.set(key, { el, src: e.src, dst: e.dst }); else edgeElRefs.current.delete(key); }}
+                  stroke={e.crossWorkspace ? 'var(--color-warning)' : 'var(--color-primary)'}
+                  strokeWidth={active ? 2.5 : 1.5}
+                  strokeDasharray={active ? '5 4' : undefined}
+                  className={active ? 'net-edge-flow' : undefined}
+                  style={active ? { animation: 'netEdgeFlow 900ms linear infinite' } : undefined}
+                  opacity={!highlightNeighbors ? 0.5 : (active ? 0.95 : 0.08)}
+                />
+              );
+            })}
+          </g>
+          <g>
+            {nodes.map((n) => (
+              <NetNode
+                key={n.srn}
+                node={n}
+                radius={radiusBySrn.get(n.srn) ?? 10}
+                isRoot={n.srn === workspaceRootSrn}
+                isPinned={!!pinnedPositions?.[n.srn]}
+                selected={n.srn === selectedSrn}
+                hovered={n.srn === hoveredSrn}
+                dimmed={!!highlightNeighbors && !highlightNeighbors.has(n.srn)}
+                registerRef={(el) => { if (el) nodeElRefs.current.set(n.srn, el); else nodeElRefs.current.delete(n.srn); }}
+                onMouseDown={(e) => handleNodeDown(e, n.srn)}
+                onMouseUp={(e) => handleNodeUp(e, n)}
+                onDoubleClick={(e) => { e.stopPropagation(); onNodeOpen(n); }}
+                onEnter={() => { setHoveredSrn(n.srn); setTooltip({ srn: n.srn, x: 0, y: 0 }); }}
+                onLeave={() => { setHoveredSrn(null); setTooltip(null); }}
+              />
+            ))}
+          </g>
+        </g>
+      </svg>
+
+      {tooltip && hoveredNode && (
+        <div
+          style={{
+            position: 'absolute', left: tooltip.x, top: tooltip.y - 14, transform: 'translate(-50%, -100%)',
+            pointerEvents: 'none', zIndex: 6, padding: '6px 10px', borderRadius: 9,
+            background: 'rgba(28, 27, 34, 0.92)', color: '#fff', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600,
+            whiteSpace: 'nowrap', boxShadow: '0 6px 20px rgba(0,0,0,0.22)', animation: 'menuIn 120ms cubic-bezier(0.34,1.56,0.64,1) both',
+          }}
+        >
+          {hoveredNode.title || (hoveredNode.type === 'workspace' ? 'Workspace' : 'Untitled')}
+          {hoveredNode.type !== 'workspace' && (
+            <span style={{ opacity: 0.7, fontWeight: 500, marginLeft: 6, textTransform: 'capitalize' }}>{hoveredNode.type}</span>
+          )}
+        </div>
+      )}
+
+      <ZoomControls onZoomIn={() => zoomBy(1.35)} onZoomOut={() => zoomBy(1 / 1.35)} onCenter={() => animateCameraTo({ x: 0, y: 0, k: 1 })} />
+    </div>
+  );
+});
+
+export default NeuralGraph;
+
+// ── NetNode ────────────────────────────────────────────────────────────
+
+interface NetNodeProps {
+  node: NetRenderNode;
+  radius: number;
+  isRoot: boolean;
+  isPinned: boolean;
+  selected: boolean;
+  hovered: boolean;
+  dimmed: boolean;
+  registerRef: (el: SVGGElement | null) => void;
+  onMouseDown: (e: React.MouseEvent) => void;
+  onMouseUp: (e: React.MouseEvent) => void;
+  onDoubleClick: (e: React.MouseEvent) => void;
+  onEnter: () => void;
+  onLeave: () => void;
+}
+
+const NetNode = memo(function NetNode({ node, radius, isRoot, isPinned, selected, hovered, dimmed, registerRef, onMouseDown, onMouseUp, onDoubleClick, onEnter, onLeave }: NetNodeProps) {
+  const color = nodeColor(node.type, node.status);
+  const icon = nodeIcon(node.type);
+  const scale = hovered ? 1.22 : selected ? 1.1 : 1;
+  const iconSize = Math.max(Math.round(radius * 0.95), 10);
+
+  return (
+    <g ref={registerRef} style={{ cursor: isRoot ? 'default' : 'grab' }} onMouseDown={onMouseDown} onMouseUp={onMouseUp} onDoubleClick={onDoubleClick} onMouseEnter={onEnter} onMouseLeave={onLeave}>
+      <g style={{ transform: `scale(${scale})`, transformOrigin: 'center', transformBox: 'fill-box', transition: 'transform 180ms cubic-bezier(0.34,1.56,0.64,1), opacity 200ms', opacity: dimmed ? 0.18 : 1 }}>
+        {isRoot && (
+          <circle r={radius + 10} fill={color} opacity={0.16} className="net-root-glow" style={{ animation: 'netRootGlow 3.2s ease-in-out infinite', transformOrigin: 'center', transformBox: 'fill-box' }} />
+        )}
+        {(hovered || selected) && !isRoot && (
+          <circle r={radius + 6} fill="none" stroke={color} strokeWidth={1.5} opacity={0.4} />
+        )}
+        <circle
+          r={radius}
+          fill={color}
+          opacity={node.isArchived ? 0.45 : 1}
+          stroke={selected ? 'var(--color-text-primary)' : 'rgba(255,255,255,0.55)'}
+          strokeWidth={selected ? 2 : 1.5}
+          style={{ filter: hovered ? `drop-shadow(0 4px 14px ${color}99)` : `drop-shadow(0 1px 4px rgba(0,0,0,0.14))` }}
+        />
+        {radius >= 7 && (
+          <foreignObject x={-iconSize / 2} y={-iconSize / 2} width={iconSize} height={iconSize} style={{ pointerEvents: 'none', overflow: 'visible' }}>
+            <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name={icon} size={Math.round(iconSize * 0.62)} color="#fff" />
+            </div>
+          </foreignObject>
+        )}
+        {isPinned && !isRoot && (
+          <circle cx={radius * 0.72} cy={-radius * 0.72} r={4} fill="var(--color-white)" stroke={color} strokeWidth={1.5} />
+        )}
+      </g>
+      <text
+        y={radius + 16}
+        textAnchor="middle"
+        style={{
+          fontFamily: 'var(--font-heading)', fontWeight: hovered || selected ? 700 : 600,
+          fontSize: hovered || selected ? 11.5 : 10.5, fill: hovered || selected ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
+          opacity: dimmed ? 0.15 : 1, pointerEvents: 'none', transition: 'opacity 200ms, fill 150ms',
+          paintOrder: 'stroke', stroke: 'var(--color-white)', strokeWidth: 3, strokeLinejoin: 'round',
+        }}
+      >
+        {(node.title || (isRoot ? 'Workspace' : 'Untitled')).slice(0, 28)}
+      </text>
+    </g>
+  );
+});
+
+// ── Zoom / center controls — matches the app's floating-button convention (see GraphScreen's existing "Reset layout" pill). ──
+
+function ZoomControls({ onZoomIn, onZoomOut, onCenter }: { onZoomIn: () => void; onZoomOut: () => void; onCenter: () => void }) {
+  const btnStyle: React.CSSProperties = {
+    width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-text-secondary)', transition: 'background 120ms, color 120ms',
+  };
+  const onEnter = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.color = 'var(--color-primary)'; };
+  const onLeave = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-secondary)'; };
+  return (
+    // Bottom-left, not bottom-right — the global AI Assistant bubble is
+    // fixed at bottom:30/right:30 of the viewport (AIAssistant/index.tsx)
+    // and would otherwise sit on top of these controls.
+    <div style={{
+      position: 'absolute', bottom: 16, left: 16, zIndex: 5, display: 'flex', flexDirection: 'column',
+      borderRadius: 10, border: '1px solid var(--color-border)', background: 'var(--color-white)',
+      boxShadow: '0 2px 10px rgba(var(--color-black-rgb), 0.08)', overflow: 'hidden',
+    }}>
+      <button title="Zoom in" onClick={onZoomIn} onMouseEnter={onEnter} onMouseLeave={onLeave} style={btnStyle}><Icon name="add" size={17} /></button>
+      <div style={{ height: 1, background: 'var(--color-divider)' }} />
+      <button title="Zoom out" onClick={onZoomOut} onMouseEnter={onEnter} onMouseLeave={onLeave} style={btnStyle}><Icon name="remove" size={17} /></button>
+      <div style={{ height: 1, background: 'var(--color-divider)' }} />
+      <button title="Center on workspace" onClick={onCenter} onMouseEnter={onEnter} onMouseLeave={onLeave} style={btnStyle}><Icon name="filter_center_focus" size={16} /></button>
+    </div>
+  );
+}

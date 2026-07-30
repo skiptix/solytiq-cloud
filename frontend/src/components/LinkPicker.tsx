@@ -19,9 +19,12 @@ interface LinkPickerProps {
   onHover: (index: number) => void;
   style?: React.CSSProperties;
   emptyHint?: string;
+  /** Header icon + label — defaults to the `[[...]]` inline-linking copy; override for reuse in a plain "jump to" search (e.g. the Net view's toolbar). */
+  headerIcon?: string;
+  headerLabel?: string;
 }
 
-export default function LinkPicker({ results, loading, query, activeIndex, onPick, onHover, style, emptyHint }: LinkPickerProps) {
+export default function LinkPicker({ results, loading, query, activeIndex, onPick, onHover, style, emptyHint, headerIcon = 'link', headerLabel = 'Link to…' }: LinkPickerProps) {
   if (query.trim().length === 0 && results.length === 0 && !loading) return null;
 
   const width = Math.min(300, (typeof window !== 'undefined' ? window.innerWidth : 400) - 32);
@@ -37,9 +40,9 @@ export default function LinkPicker({ results, loading, query, activeIndex, onPic
       onMouseDown={(e) => e.preventDefault()}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 6px 6px' }}>
-        <Icon name="link" size={12} color="var(--color-primary)" />
+        <Icon name={headerIcon} size={12} color="var(--color-primary)" />
         <span style={{ fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 700, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Link to…
+          {headerLabel}
         </span>
       </div>
 

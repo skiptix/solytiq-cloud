@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import type { AppState, AIFile, Task } from '../types';
+import useGraphStore from './useGraphStore';
+import useWorkspaceStore from './useWorkspaceStore';
 
 export interface AIChatMessage {
   id: string;
@@ -224,6 +226,35 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
     };
   }
 
+  if (pathname.startsWith('/graph')) {
+    const gs = useGraphStore.getState();
+    const ws = useWorkspaceStore.getState();
+    const workspaceName = ws.workspaces.find((w) => w.id === ws.currentWorkspaceId)?.name ?? null;
+    const nodes = gs.allNodes;
+    // part_of is a hidden structural mirror superseded by the hierarchy tree itself — not a meaningful "relation" to report.
+    const relations = gs.allEdges.filter((e) => e.linkType !== 'part_of');
+    const nodesByType: Record<string, number> = {};
+    for (const n of nodes) nodesByType[n.type] = (nodesByType[n.type] ?? 0) + 1;
+    const topConnected = [...nodes]
+      .sort((a, b) => b.pagerank - a.pagerank)
+      .slice(0, 10)
+      .map((n) => ({ srn: n.srn, title: n.title, type: n.type, relations: n.degree }));
+    return {
+      view: 'graph',
+      data: {
+        workspace_name: workspaceName,
+        total_items: nodes.length,
+        total_relations: relations.length,
+        items_by_type: nodesByType,
+        most_connected_items: topConnected,
+        active_filters: gs.filters,
+        available_timelines: timelinesSnapshot,
+        available_lists: listsSnapshot,
+        available_folders: foldersSnapshot,
+      },
+    };
+  }
+
   // Dashboard (default)
   const overdue = appStore.dashTasks
     .filter((t) => !t.checked && t.deadline && t.deadline < today)
@@ -259,6 +290,7 @@ export function buildSystemPrompt(ctx: AIContext, username: string, workspaces?:
     calendar: 'Calendar — calendar view showing tasks with and without deadlines',
     gps: 'GPS Routes — route/workout file manager for .GPX and .FIT files',
     timeline: `Timeline — "${(ctx.data.timeline_name as string) ?? 'unknown'}"${tlProgress}`,
+    graph: `Net — the Graph Layer's visual map of "${(ctx.data.workspace_name as string) ?? 'this workspace'}": every board, page, task, timeline, milestone, and folder rendered as a connected node, always rooted at a central workspace hub. Every item is linked hierarchically up to that hub (task -> section -> board -> folder -> workspace), and items can additionally carry explicit relations (e.g. "blocks", "tracks", "relates_to") drawn as a second, more prominent connection`,
   };
 
   const contextJson = JSON.stringify(ctx.data, null, 2);
@@ -266,6 +298,10 @@ export function buildSystemPrompt(ctx: AIContext, username: string, workspaces?:
   const sublistNote = ctx.view === 'list'
     ? '\n- SUBLISTS: You can create sublists (nested lists) or link existing lists as task items using create_sublist and link_list_as_task tools.'
     : '\n- SUBLISTS: You can add sub-items to any dashboard task using add_subitem_to_dash_task (creates a linked sublist automatically if needed), or create a sublist first with add_sublist_to_dash_task. Check linked_list_id in the context — tasks that already have a sublist will show it. You can also link an existing list to a dash task with link_list_to_dash_task.';
+
+  const graphNote = ctx.view === 'graph'
+    ? '\n- NET VIEW: You are looking at the Graph Layer\'s visual map. `items_by_type`/`total_items` describe everything currently loaded; `most_connected_items` are the highest-pagerank hub nodes; `active_filters` shows the entity-type/completed/relations filters currently applied. Two different kinds of connection exist: the ALWAYS-PRESENT structural hierarchy (task -> section -> board -> folder -> workspace, drawn as thin lines, not a user-editable relation) versus EXPLICIT relations (e.g. blocks/tracks/relates_to, drawn as bold lines) which you manage with search_graph (find an entity by title to get its srn), get_entity_links/get_backlinks (see what\'s connected to something), create_link (add a typed relation between two srns — requires write access to the source), and delete_link (remove one; system-mirrored relations can\'t be deleted this way). Use focus_graph_node(srn) to pan the Net\'s camera onto and select a specific item (opens the Net view if the user isn\'t already there), set_graph_filters to narrow what\'s shown (e.g. only boards and tasks, or hide items with no explicit relation), and reset_graph_view to clear filters and release any nodes the user manually dragged.'
+    : '';
 
   const workspaceInfo = workspaces?.length
     ? `\nWorkspaces you can manage: ${workspaces.map((w) => `"${w.name}" (id: ${w.id}, role: ${w.role})`).join(', ')}. Current workspace: ${workspaces.find((w) => w.id === currentWorkspaceId)?.name ?? 'unknown'}.`
@@ -304,7 +340,7 @@ Guidelines:
 - TIMELINES: You can create timelines (create_timeline), update/rename them (update_timeline), delete them (delete_timeline — ALWAYS confirm first). Navigate to a specific timeline with navigate_to_timeline using its ID from available_timelines. When on a timeline page you can add milestones (add_milestone), edit them (update_milestone), delete them (delete_milestone — confirm first), and reorder them (reorder_milestones).
 - MILESTONE STATUS: valid values are 'upcoming', 'in-progress', 'done'. Milestone dates use YYYY-MM-DD format. Color can be a hex string (e.g. "var(--color-success)") or null for auto.
 - TIMELINE IDs: Always use exact timeline_id strings from available_timelines. Milestone IDs come from the milestones array in the current context.
-- If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}`;
+- If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}${graphNote}`;
 }
 
 // ── Tool definitions ────────────────────────────────────────────────
@@ -1139,6 +1175,50 @@ export function buildTools(ctx: AIContext, workspaceId?: string | null, workspac
           },
           required: ['milestone_ids'],
         },
+      },
+    });
+  }
+
+  if (ctx.view === 'graph') {
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'focus_graph_node',
+        description: 'Pan and zoom the Net view\'s camera onto a specific item and select it. Opens the Net view first if the user is elsewhere. Get the srn from most_connected_items in the context, or from search_graph.',
+        parameters: {
+          type: 'object',
+          properties: {
+            srn: { type: 'string', description: 'The item\'s SRN, e.g. "srn:list:list_abc123"' },
+          },
+          required: ['srn'],
+        },
+      },
+    });
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'set_graph_filters',
+        description: 'Narrow what the Net view currently displays.',
+        parameters: {
+          type: 'object',
+          properties: {
+            entity_types: {
+              type: 'array',
+              items: { type: 'string', enum: ['task', 'list', 'markdownList', 'timeline', 'milestone', 'meeting', 'folder', 'file', 'section', 'gpsFile'] },
+              description: 'Only show these entity types. Omit or pass an empty array to show every type.',
+            },
+            show_completed: { type: 'boolean', description: 'Whether to include completed (checked) tasks.' },
+            show_orphans: { type: 'boolean', description: 'Whether to include items that have no explicit relation — only the structural hierarchy connects them.' },
+          },
+        },
+      },
+    });
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'reset_graph_view',
+        description: 'Reset the Net view\'s filters to their defaults and release every node the user manually dragged, letting the layout settle back into its automatic hierarchy.',
+        parameters: { type: 'object', properties: {} },
       },
     });
   }
