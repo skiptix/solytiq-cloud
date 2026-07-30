@@ -1,7 +1,7 @@
 // Pure layout/color helpers for the Graph Layer's Explore + Canvas views.
 // Kept dependency-free and side-effect-free so they're trivially unit-testable.
 
-import type { GraphEntityType } from '../types';
+import type { GraphEntityType, GraphNode, GraphEdge } from '../types';
 
 // Node colors strictly from the existing design tokens (CLAUDE.md's "Graph must
 // use these tokens" rule) — no bespoke graph palette.
@@ -76,3 +76,51 @@ export const EDGE_STYLE_DASH: Record<'solid' | 'dashed' | 'dotted', string | und
   dashed: '6 4',
   dotted: '2 3',
 };
+
+export type LayoutPositions = Map<string, { x: number; y: number }>;
+
+/** Deterministic 3-column layout for a local/focused graph: backlinks left, focus center, outgoing right — one extra column per depth level. */
+export function localLayout(nodes: GraphNode[], edges: GraphEdge[], focusSrn: string | null): LayoutPositions {
+  const positions: LayoutPositions = new Map();
+  if (!focusSrn) return positions;
+  const incoming = new Set(edges.filter((e) => e.dst === focusSrn).map((e) => e.src));
+  const outgoing = new Set(edges.filter((e) => e.src === focusSrn).map((e) => e.dst));
+
+  positions.set(focusSrn, { x: 0, y: 0 });
+  const columnGapX = 260;
+  const rowGapY = 70;
+
+  const byDepth = new Map<number, GraphNode[]>();
+  for (const n of nodes) {
+    if (n.srn === focusSrn) continue;
+    const depth = n.depth ?? 1;
+    (byDepth.get(depth) ?? byDepth.set(depth, []).get(depth)!).push(n);
+  }
+
+  for (const [depth, group] of byDepth) {
+    // depth-1 nodes split left (incoming/backlinks) vs right (outgoing); deeper
+    // levels keep whichever side their depth-1 ancestor was on by simple
+    // left/right split based on which set they first touched.
+    const left = group.filter((n) => incoming.has(n.srn) && !outgoing.has(n.srn));
+    const right = group.filter((n) => !left.includes(n));
+    left.forEach((n, i) => positions.set(n.srn, { x: -columnGapX * depth, y: (i - (left.length - 1) / 2) * rowGapY }));
+    right.forEach((n, i) => positions.set(n.srn, { x: columnGapX * depth, y: (i - (right.length - 1) / 2) * rowGapY }));
+  }
+  return positions;
+}
+
+/** Simple deterministic radial layout for the unfocused Explore graph (no force simulation dependency) — also the shared basis for the Dashboard's live mini-map preview. */
+export function radialLayout(nodes: GraphNode[]): LayoutPositions {
+  const positions: LayoutPositions = new Map();
+  const sorted = [...nodes].sort((a, b) => b.pagerank - a.pagerank);
+  const ringSize = 12;
+  sorted.forEach((n, i) => {
+    const ring = Math.floor(i / ringSize);
+    const idxInRing = i % ringSize;
+    const countInRing = Math.min(ringSize, sorted.length - ring * ringSize);
+    const angle = (idxInRing / Math.max(countInRing, 1)) * Math.PI * 2;
+    const radius = 90 + ring * 180;
+    positions.set(n.srn, { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
+  });
+  return positions;
+}

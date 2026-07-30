@@ -36,6 +36,15 @@ interface UserPrefsState {
   // different view than a task-heavy one.
   graphViewByWorkspace: Record<string, 'explore' | 'canvas'>;
   setGraphViewForWorkspace: (workspaceId: string, view: 'explore' | 'canvas') => void;
+
+  // Graph Layer: manual node repositions in the Explore view, layered on top
+  // of the auto-computed layout so a node someone dragged out of an overlap
+  // stays put on reload — keyed per workspace, per this signed-in browser
+  // profile (this store is entirely localStorage-backed, the same as every
+  // other pref here; there is no cross-device sync).
+  graphNodePositions: Record<string, Record<string, { x: number; y: number }>>;
+  setGraphNodePosition: (workspaceId: string, srn: string, x: number, y: number) => void;
+  clearGraphNodePositions: (workspaceId: string) => void;
 }
 
 const CALENDAR_DEFAULTS = {
@@ -70,6 +79,19 @@ const useUserPrefsStore = create<UserPrefsState>()(
       setGraphViewForWorkspace: (workspaceId, view) => set((s) => ({
         graphViewByWorkspace: { ...s.graphViewByWorkspace, [workspaceId]: view },
       })),
+
+      graphNodePositions: {},
+      setGraphNodePosition: (workspaceId, srn, x, y) => set((s) => ({
+        graphNodePositions: {
+          ...s.graphNodePositions,
+          [workspaceId]: { ...s.graphNodePositions[workspaceId], [srn]: { x, y } },
+        },
+      })),
+      clearGraphNodePositions: (workspaceId) => set((s) => {
+        const next = { ...s.graphNodePositions };
+        delete next[workspaceId];
+        return { graphNodePositions: next };
+      }),
     }),
     {
       name: 'solytiq_user_prefs',
