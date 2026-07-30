@@ -74,7 +74,7 @@ export default function GraphMiniMap({ workspaceId }: { workspaceId: string }) {
   return (
     <div style={{
       background: 'var(--color-surface-gray, #f9fafb)', borderRadius: 16, border: '1px solid var(--color-border)',
-      padding: 14, display: 'flex', flexDirection: 'column', gap: 10, flex: '1 1 0%', minHeight: 0,
+      padding: 14, display: 'flex', flexDirection: 'column', gap: 10, flex: '1 1 0%', minHeight: 200, flexShrink: 0,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 13, color: 'var(--color-text-primary)' }}>Net</span>
