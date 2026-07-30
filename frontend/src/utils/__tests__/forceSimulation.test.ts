@@ -69,4 +69,35 @@ describe('ForceSimulation', () => {
     expect(() => sim.tick(1)).not.toThrow();
     expect(sim.positions().size).toBe(0);
   });
+
+  it('cools down to a slow, calm drift instead of moving rapidly forever', () => {
+    const sim = new ForceSimulation(6);
+    sim.setData(
+      [
+        { id: 'root', radius: 20, depth: 0, pinned: { x: 0, y: 0 } },
+        { id: 'a', radius: 10, depth: 1 }, { id: 'b', radius: 10, depth: 1 },
+        { id: 'c', radius: 8, depth: 2 }, { id: 'd', radius: 8, depth: 2 },
+      ],
+      [
+        { source: 'root', target: 'a', distance: 80, strength: 0.14 },
+        { source: 'root', target: 'b', distance: 80, strength: 0.14 },
+        { source: 'a', target: 'c', distance: 60, strength: 0.14 },
+        { source: 'b', target: 'd', distance: 60, strength: 0.14 },
+      ]
+    );
+    // Let the initial "hot" settling burst finish.
+    for (let i = 0; i < 250; i++) sim.tick(1);
+    // Measure per-tick displacement once settled — should be small.
+    const before = new Map([...sim.nodes].map(([id, n]) => [id, { x: n.x, y: n.y }]));
+    let maxStep = 0;
+    for (let i = 0; i < 60; i++) {
+      sim.tick(1);
+      for (const [id, n] of sim.nodes) {
+        const p = before.get(id)!;
+        maxStep = Math.max(maxStep, Math.hypot(n.x - p.x, n.y - p.y));
+        before.set(id, { x: n.x, y: n.y });
+      }
+    }
+    expect(maxStep).toBeLessThan(1.5);
+  });
 });

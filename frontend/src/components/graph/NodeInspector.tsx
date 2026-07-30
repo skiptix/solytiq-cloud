@@ -1,98 +1,220 @@
+// ---------------------------------------------------------------------------
+// The Net view's node-details popup — floats anchored to the clicked node
+// (see NeuralGraph.tsx's `selectedAnchor`, live-tracked each frame) rather
+// than a fixed side panel, so it reads as "details about the thing you just
+// clicked" instead of a separate, disconnected pane.
+//
+// Relations are shown with their human label (from the link-type registry's
+// `label`/`inverseLabel`, matching the direction) and structural types
+// (`showInGraph: false` — currently just `part_of`) are hidden entirely:
+// that containment is already drawn as the hierarchy tree itself, so
+// surfacing the raw internal type name again here would just be jargon.
+// ---------------------------------------------------------------------------
+
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { ResolvedLink } from '../../types';
+import type { ResolvedLink, LinkTypeDef } from '../../types';
 import type { NetRenderNode } from '../../utils/graphHierarchy';
 import Icon from '../Icon';
-import { apiGetEntityLinks } from '../../api/client';
-import { nodeColor } from '../../utils/graphLayout';
+import { apiGetEntityLinks, apiGetLinkTypes } from '../../api/client';
+import { nodeColor, nodeIcon, ENTITY_TYPE_LABEL } from '../../utils/graphLayout';
 
-export default function NodeInspector({ node, onClose, onFocus }: { node: NetRenderNode; onClose: () => void; onFocus: (srn: string) => void }) {
+const POPUP_W = 292;
+const MAX_H = 400;
+
+function prettifyLinkType(key: string): string {
+  return key.replace(/^x_/, '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function StatusPill({ label, color }: { label: string; color: string }) {
+  return (
+    <span style={{
+      fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 700, color, background: `${color}18`,
+      borderRadius: 9999, padding: '2px 7px', textTransform: 'uppercase', letterSpacing: '0.03em',
+    }}>
+      {label}
+    </span>
+  );
+}
+
+interface NodeInspectorProps {
+  node: NetRenderNode;
+  /** Root -> ... -> node, inclusive (the node itself is the last entry). */
+  breadcrumb: NetRenderNode[];
+  anchor: { x: number; y: number };
+  containerSize: { w: number; h: number };
+  workspaceId: string;
+  onClose: () => void;
+  onCenter: () => void;
+  onBreadcrumbClick: (node: NetRenderNode) => void;
+}
+
+export default function NodeInspector({ node, breadcrumb, anchor, containerSize, workspaceId, onClose, onCenter, onBreadcrumbClick }: NodeInspectorProps) {
   const navigate = useNavigate();
   const [linksByType, setLinksByType] = useState<Record<string, ResolvedLink[]> | null>(null);
+  const [linkTypeDefs, setLinkTypeDefs] = useState<Record<string, LinkTypeDef>>({});
   const [loading, setLoading] = useState(false);
+  const isWorkspace = node.type === 'workspace';
 
   useEffect(() => {
+    if (isWorkspace) { setLinksByType(null); return; }
     let cancelled = false;
     setLoading(true);
-    setLinksByType(null);
     apiGetEntityLinks(node.type, node.id)
       .then((r) => { if (!cancelled) setLinksByType(r.linksByType); })
       .catch(() => { if (!cancelled) setLinksByType({}); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [node.type, node.id]);
+  }, [node.type, node.id, isWorkspace]);
+
+  useEffect(() => {
+    apiGetLinkTypes(workspaceId)
+      .then((r) => setLinkTypeDefs(Object.fromEntries(r.types.map((t) => [t.key, t]))))
+      .catch(() => {});
+  }, [workspaceId]);
+
+  const relationGroups = Object.entries(linksByType ?? {})
+    .filter(([key]) => linkTypeDefs[key]?.showInGraph !== false)
+    .map(([key, links]) => {
+      const def = linkTypeDefs[key];
+      return { key, links, outLabel: def?.label ?? prettifyLinkType(key), inLabel: def?.inverseLabel ?? prettifyLinkType(key) };
+    });
+  const totalRelations = relationGroups.reduce((s, r) => s + r.links.length, 0);
+
+  let left = anchor.x + 24;
+  if (left + POPUP_W + 12 > containerSize.w) left = anchor.x - 24 - POPUP_W;
+  left = Math.max(10, Math.min(left, containerSize.w - POPUP_W - 10));
+  let top = anchor.y - 96;
+  top = Math.max(56, Math.min(top, containerSize.h - MAX_H - 10));
+
+  const color = nodeColor(node.type, node.status);
+  const muted: React.CSSProperties = { fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' };
 
   return (
-    <div style={{
-      width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12,
-      padding: 16, background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)',
-      boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.04)', maxHeight: '100%', overflowY: 'auto',
-      animation: 'cardIn 240ms cubic-bezier(0.34,1.56,0.64,1) both',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 6, background: nodeColor(node.type, node.status), flexShrink: 0 }} />
-          <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 14.5, color: 'var(--color-text-primary)' }}>{node.title || 'Untitled'}</span>
+    <div
+      style={{
+        position: 'absolute', left, top, width: POPUP_W, maxHeight: MAX_H, overflowY: 'auto', zIndex: 8,
+        display: 'flex', flexDirection: 'column', gap: 10, padding: 14,
+        background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)',
+        boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.2)',
+        animation: 'cardIn 200ms cubic-bezier(0.34,1.56,0.64,1) both',
+      }}
+    >
+      {breadcrumb.length > 1 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2, fontFamily: 'var(--font-body)', fontSize: 11 }}>
+          {breadcrumb.slice(0, -1).map((crumb) => (
+            <span key={crumb.srn} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <button
+                onClick={() => onBreadcrumbClick(crumb)}
+                style={{
+                  background: 'none', border: 'none', padding: '2px 2px', cursor: 'pointer', color: 'var(--color-text-tertiary)',
+                  font: 'inherit', maxWidth: 92, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-primary)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-tertiary)'; }}
+              >
+                {crumb.emoji ? `${crumb.emoji} ` : ''}{crumb.title || (crumb.type === 'workspace' ? 'Workspace' : 'Untitled')}
+              </button>
+              <Icon name="chevron_right" size={11} color="var(--color-text-quaternary)" />
+            </span>
+          ))}
         </div>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-tertiary)', display: 'flex', padding: 2, transition: 'color 150ms' }}
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{ width: 30, height: 30, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Icon name={nodeIcon(node.type)} size={16} color="#fff" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 14.5, color: 'var(--color-text-primary)', wordBreak: 'break-word' }}>
+            {node.title || (isWorkspace ? 'Workspace' : 'Untitled')}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 3 }}>
+            <span style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>
+              {node.type === 'workspace' ? 'Workspace' : ENTITY_TYPE_LABEL[node.type]}
+            </span>
+            {node.type === 'task' && node.status === 'done' && <StatusPill label="Done" color="var(--color-success)" />}
+            {node.isArchived && <StatusPill label="Archived" color="var(--color-text-quaternary)" />}
+          </div>
+        </div>
+        <button
+          onClick={onClose}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-tertiary)', display: 'flex', padding: 2, transition: 'color 150ms' }}
           onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-text-primary)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-tertiary)'; }}>
-          <Icon name="close" size={18} />
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-tertiary)'; }}
+        >
+          <Icon name="close" size={17} />
         </button>
       </div>
-
-      <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>{node.type} · degree {node.degree}</div>
 
       <div style={{ display: 'flex', gap: 8 }}>
         {node.deepLink && (
           <button
             onClick={() => navigate(node.deepLink!)}
-            style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--color-primary)', background: 'var(--color-surface-tint)', color: 'var(--color-primary)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'background 150ms' }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-purple-pale-13, #ece7fa)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 10px', borderRadius: 8, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'transform 150ms' }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
           >
-            Open
+            <Icon name="open_in_new" size={14} color="var(--color-white)" /> Open
           </button>
         )}
         <button
-          onClick={() => onFocus(node.srn)}
-          style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'all 150ms' }}
+          onClick={onCenter}
+          title="Re-center the view on this item"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'all 150ms' }}
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-secondary)'; }}
         >
-          Focus in graph
+          <Icon name="filter_center_focus" size={14} />
         </button>
       </div>
 
-      <div style={{ borderTop: '1px solid var(--color-divider)', paddingTop: 10 }}>
-        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, marginBottom: 8, color: 'var(--color-text-primary)' }}>Relations</div>
-        {loading && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>Loading…</div>}
-        {!loading && linksByType && Object.keys(linksByType).length === 0 && (
-          <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>No connections yet.</div>
-        )}
-        {!loading && linksByType && Object.entries(linksByType).map(([type, links]) => (
-          <div key={type} style={{ marginBottom: 8 }}>
-            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{type} ({links.length})</div>
-            {links.map((l) => (
-              <button
-                key={l.id}
-                onClick={() => l.neighbor && onFocus(l.neighbor.srn)}
-                disabled={!l.neighbor}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left',
-                  padding: '4px 6px', borderRadius: 6, border: 'none', background: 'transparent', cursor: l.neighbor ? 'pointer' : 'default',
-                  fontFamily: 'var(--font-body)', fontSize: 12.5, color: l.neighbor ? 'var(--color-text-primary)' : 'var(--color-text-quaternary)', transition: 'background 120ms',
-                }}
-                onMouseEnter={(e) => { if (l.neighbor) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              >
-                <Icon name={l.direction === 'out' ? 'arrow_forward' : 'arrow_back'} size={13} color="var(--color-text-quaternary)" />
-                {l.neighbor?.title ?? '(restricted)'}
-              </button>
-            ))}
+      {!isWorkspace && (
+        <div style={{ borderTop: '1px solid var(--color-divider)', paddingTop: 10 }}>
+          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, marginBottom: 6, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Connections{totalRelations > 0 ? ` (${totalRelations})` : ''}
           </div>
-        ))}
-      </div>
+          {loading && <div style={muted}>Loading…</div>}
+          {!loading && totalRelations === 0 && (
+            <div style={muted}>Not connected to anything else yet.</div>
+          )}
+          {!loading && relationGroups.map(({ key, links, outLabel, inLabel }) => (
+            <div key={key}>
+              {links.map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => l.neighbor?.deepLink && navigate(l.neighbor.deepLink)}
+                  disabled={!l.neighbor?.deepLink}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                    padding: '5px 6px', borderRadius: 8, border: 'none', background: 'transparent',
+                    cursor: l.neighbor?.deepLink ? 'pointer' : 'default', marginBottom: 2,
+                  }}
+                  onMouseEnter={(e) => { if (l.neighbor?.deepLink) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <span style={{
+                    width: 20, height: 20, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: l.neighbor ? nodeColor(l.neighbor.entityType) : 'var(--color-purple-tint-3, #c4b8f0)',
+                  }}>
+                    <Icon name={l.neighbor ? nodeIcon(l.neighbor.entityType) : 'lock'} size={11} color="#fff" />
+                  </span>
+                  <span style={{
+                    flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    fontFamily: 'var(--font-body)', fontSize: 12.5, fontWeight: 500,
+                    color: l.neighbor ? 'var(--color-text-primary)' : 'var(--color-text-quaternary)',
+                  }}>
+                    {l.neighbor?.title ?? 'Restricted item'}
+                  </span>
+                  <span style={{ flexShrink: 0, fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-quaternary)' }}>
+                    {l.direction === 'out' ? outLabel : inLabel}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
