@@ -427,7 +427,7 @@ function RightColumn({ meetings, currentUserId, onSeeCalendar }: { meetings: Mee
     return ka - kb;
   });
   return (
-    <section style={{ ...CARD, ...enterAnim(120), display: 'flex', flexDirection: 'column' }}>
+    <section style={{ ...CARD, ...enterAnim(120), display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {/* Notifications feed (Top) */}
       <div style={{ padding: '18px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -482,7 +482,7 @@ function RightColumn({ meetings, currentUserId, onSeeCalendar }: { meetings: Mee
           <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', borderRadius: 9999, padding: '2px 9px' }}>{sorted.length}</span>
         </div>
         <SectionLabel>Today</SectionLabel>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {sorted.length === 0 ? (
             <div style={{ padding: '20px 12px', textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>No meetings today.</div>
           ) : sorted.map(m => <MeetingRow key={m.id} meeting={m} currentUserId={currentUserId} onOpen={onSeeCalendar} />)}
@@ -648,13 +648,13 @@ export default function DashboardScreen() {
   // reads as full-height even with little content. Mobile: a simple stack.
   const gridStyle: React.CSSProperties = isMobile
     ? { display: 'flex', flexDirection: 'column', gap: 16 }
-    : { display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1.3fr) minmax(0, 0.95fr)', gap: 16, alignItems: 'stretch', flex: 1, minHeight: 0 };
+    : { display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1.3fr) minmax(0, 0.95fr)', gridTemplateRows: 'minmax(0, 1fr)', gap: 16, alignItems: 'stretch', flex: 1, minHeight: 0 };
 
   const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
-      <div style={{ maxWidth: 1440, margin: '0 auto', padding: isMobile ? '20px 16px 90px' : '28px 28px 48px', display: 'flex', flexDirection: 'column', gap: 20, width: '100%', minHeight: '100%', boxSizing: 'border-box' }}>
+      <div style={{ maxWidth: 1440, margin: '0 auto', padding: isMobile ? '20px 16px 90px' : '28px 28px 48px', display: 'flex', flexDirection: 'column', gap: 20, width: '100%', minHeight: '100%', height: isMobile ? undefined : '100%', boxSizing: 'border-box' }}>
 
         <header style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div>
@@ -693,7 +693,7 @@ export default function DashboardScreen() {
           </div>
 
           {/* Right — notifications + meetings; "See all" deep-links to a meetings-only Calendar */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, minHeight: 0, overflowY: 'auto' }}>
             <RightColumn meetings={meetings} currentUserId={currentUserId} onSeeCalendar={() => navigate('/calendar?show=meetings')} />
             {activeWorkspaceId && <AgentInbox workspaceId={activeWorkspaceId} />}
             {activeWorkspaceId && <GraphMiniMap workspaceId={activeWorkspaceId} />}

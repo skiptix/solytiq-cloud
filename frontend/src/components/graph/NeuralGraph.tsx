@@ -306,7 +306,16 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
   const hoveredNode = hoveredSrn ? nodeBySrn.get(hoveredSrn) : null;
 
   return (
-    <div ref={containerRef} style={{ position: 'absolute', inset: 0, overflow: 'hidden', cursor: 'grab', touchAction: 'none' }}>
+    <div
+      ref={containerRef}
+      style={{
+        position: 'absolute', inset: 0, overflow: 'hidden', cursor: 'grab', touchAction: 'none',
+        // Panning/dragging on a canvas full of <text> labels otherwise
+        // triggers the browser's native text-selection highlight on every
+        // click-drag, which has nothing to do with selecting a node.
+        userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none',
+      }}
+    >
       <svg
         width={size.w} height={size.h}
         onWheel={handleWheel}
@@ -314,7 +323,7 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        style={{ display: 'block', background: 'var(--color-white)', touchAction: 'none' }}
+        style={{ display: 'block', background: 'var(--color-white)', touchAction: 'none', userSelect: 'none' }}
       >
         <defs>
           <pattern id="netDotGrid" width="24" height="24" patternUnits="userSpaceOnUse">

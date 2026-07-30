@@ -98,6 +98,9 @@ export default function NodeInspector({ node, breadcrumb, anchor, containerSize,
         background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)',
         boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.2)',
         animation: 'cardIn 200ms cubic-bezier(0.34,1.56,0.64,1) both',
+        // The canvas disables text selection so drags don't highlight node
+        // labels — undo that inherited rule here, this is a normal panel.
+        userSelect: 'text', WebkitUserSelect: 'text',
       }}
     >
       {breadcrumb.length > 1 && (
