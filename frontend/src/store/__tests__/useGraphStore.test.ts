@@ -84,7 +84,17 @@ describe('useGraphStore filters (client-side, no network)', () => {
   it('resetFilters restores the defaults', () => {
     useGraphStore.getState().setFilter('entityTypes', ['task']);
     useGraphStore.getState().setFilter('depth', 4);
+    useGraphStore.getState().setFilter('showOrphans', false);
     useGraphStore.getState().resetFilters();
-    expect(useGraphStore.getState().filters).toEqual({ entityTypes: [], linkTypes: [], showCompleted: true, showOrphans: false, depth: 2 });
+    expect(useGraphStore.getState().filters).toEqual({ entityTypes: [], linkTypes: [], showCompleted: true, showOrphans: true, depth: 2 });
+  });
+
+  it('the orphan filter only counts real relations, not the hidden structural part_of mirror', () => {
+    seed(
+      [NODE({ srn: 'srn:task:1' }), NODE({ srn: 'srn:list:1', type: 'list' })],
+      [EDGE({ linkType: 'part_of' })]
+    );
+    useGraphStore.getState().setFilter('showOrphans', false);
+    expect(useGraphStore.getState().visibleNodes()).toHaveLength(0);
   });
 });

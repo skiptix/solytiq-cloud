@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { nodeColor, nodeSize, shouldUseSigma, NODE_TYPE_COLOR, SIGMA_THRESHOLD_NODES, localLayout, radialLayout } from '../graphLayout';
-import type { GraphNode, GraphEdge } from '../../types';
+import { nodeColor, nodeSize, shouldUseSigma, NODE_TYPE_COLOR, SIGMA_THRESHOLD_NODES, radialLayout } from '../graphLayout';
+import type { GraphNode } from '../../types';
 
 function makeNode(srn: string, overrides: Partial<GraphNode> = {}): GraphNode {
   return {
@@ -8,9 +8,6 @@ function makeNode(srn: string, overrides: Partial<GraphNode> = {}): GraphNode {
     degree: 0, pagerank: 0, community: null, status: null, isArchived: false,
     ...overrides,
   };
-}
-function makeEdge(id: string, src: string, dst: string): GraphEdge {
-  return { id, src, dst, linkType: 'relates_to', origin: 'manual', weight: 1, sourceBlockId: null, crossWorkspace: false };
 }
 
 describe('nodeColor', () => {
@@ -74,26 +71,5 @@ describe('radialLayout', () => {
     const dist = (srn: string) => { const p = positions.get(srn)!; return Math.hypot(p.x, p.y); };
     // Ring size is 12 — the 13th-ranked node (index 12) must be pushed to the second ring, farther out than the top node.
     expect(dist('srn:task:12')).toBeGreaterThan(dist('srn:task:0'));
-  });
-});
-
-describe('localLayout', () => {
-  it('returns an empty map when there is no focus', () => {
-    expect(localLayout([makeNode('srn:task:1')], [], null).size).toBe(0);
-  });
-
-  it('anchors the focused node at the origin', () => {
-    const positions = localLayout([makeNode('srn:task:1')], [], 'srn:task:1');
-    expect(positions.get('srn:task:1')).toEqual({ x: 0, y: 0 });
-  });
-
-  it('splits backlinks left and outgoing links right of the focus', () => {
-    const focus = 'srn:task:1';
-    const incoming = makeNode('srn:task:2', { depth: 1 });
-    const outgoing = makeNode('srn:task:3', { depth: 1 });
-    const edges = [makeEdge('e1', 'srn:task:2', focus), makeEdge('e2', focus, 'srn:task:3')];
-    const positions = localLayout([makeNode(focus), incoming, outgoing], edges, focus);
-    expect(positions.get('srn:task:2')!.x).toBeLessThan(0);
-    expect(positions.get('srn:task:3')!.x).toBeGreaterThan(0);
   });
 });

@@ -19,7 +19,7 @@ function CheckRow({ checked, label, onToggle }: { checked: boolean; label: strin
   );
 }
 
-export default function GraphControls({ isMobile }: { isMobile: boolean }) {
+export default function GraphControls({ isMobile, onClose }: { isMobile: boolean; onClose?: () => void }) {
   const filters = useGraphStore((s) => s.filters);
   const setFilter = useGraphStore((s) => s.setFilter);
   const resetFilters = useGraphStore((s) => s.resetFilters);
@@ -35,13 +35,21 @@ export default function GraphControls({ isMobile }: { isMobile: boolean }) {
 
   return (
     <div style={{
-      width: isMobile ? '100%' : 240, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14,
-      padding: 14, background: 'var(--color-surface-gray, #f9fafb)', borderRadius: 14, border: '1px solid var(--color-border)',
-      maxHeight: isMobile ? undefined : '100%', overflowY: 'auto', animation: 'sectionFadeUp 320ms cubic-bezier(0.22,1,0.36,1) both',
+      width: isMobile ? 'min(300px, calc(100vw - 28px))' : 260, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14,
+      padding: 14, background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)',
+      boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)',
+      maxHeight: 'min(70vh, 480px)', overflowY: 'auto',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 13, color: 'var(--color-text-primary)' }}>Filters</span>
-        <button onClick={resetFilters} style={{ background: 'none', border: 'none', fontFamily: 'var(--font-heading)', color: 'var(--color-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Reset</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button onClick={resetFilters} style={{ background: 'none', border: 'none', fontFamily: 'var(--font-heading)', color: 'var(--color-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Reset</button>
+          {onClose && (
+            <button onClick={onClose} style={{ display: 'flex', border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: 'var(--color-text-tertiary)' }}>
+              <Icon name="close" size={16} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>
@@ -80,7 +88,7 @@ export default function GraphControls({ isMobile }: { isMobile: boolean }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <CheckRow checked={filters.showCompleted} label="Show completed tasks" onToggle={() => setFilter('showCompleted', !filters.showCompleted)} />
-        <CheckRow checked={filters.showOrphans} label="Show unconnected nodes" onToggle={() => setFilter('showOrphans', !filters.showOrphans)} />
+        <CheckRow checked={filters.showOrphans} label="Show items without relations" onToggle={() => setFilter('showOrphans', !filters.showOrphans)} />
       </div>
 
       <div>

@@ -6,100 +6,157 @@ import { useMobile } from '../hooks/useBreakpoint';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useGraphStore from '../store/useGraphStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
+import useMarkdownListsStore from '../store/useMarkdownListsStore';
 import Icon from '../components/Icon';
 import RenameDialog from '../components/RenameDialog';
 import LinkPicker from '../components/LinkPicker';
-import FlowGraph, { RF_NODE_TYPES } from '../components/graph/FlowGraph';
+import { RF_NODE_TYPES } from '../components/graph/FlowGraph';
 import SigmaGraph from '../components/graph/SigmaGraph';
-import GraphControls from '../components/graph/GraphControls';
+import NeuralGraph, { type NeuralGraphHandle } from '../components/graph/NeuralGraph';
+import GraphToolbar from '../components/graph/GraphToolbar';
 import NodeInspector from '../components/graph/NodeInspector';
 import { shouldUseSigma } from '../utils/graphLayout';
+import useGraphHierarchy from '../hooks/useGraphHierarchy';
+import { buildWorkspaceRootNode, type NetRenderNode } from '../utils/graphHierarchy';
 import { useEntitySearch } from '../hooks/useEntitySearch';
 import { apiGetCanvases, apiCreateCanvas, apiGetCanvas, apiUpdateCanvas, apiCreateLink, apiGetWorkspaceGraph, apiGetEntityLinks } from '../api/client';
 import type { GraphNode, GraphCanvas, EntityIndexEntry } from '../types';
 
 function ExploreView({ isMobile }: { isMobile: boolean }) {
+  const navigate = useNavigate();
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
-  const { loadWorkspaceGraph, loadLocalGraph, focusSrn, focusNode, visibleNodes, visibleEdges, loading, allNodes } = useGraphStore();
-  const [selected, setSelected] = useState<GraphNode | null>(null);
+  const workspace = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === s.currentWorkspaceId));
+  const { loadWorkspaceGraph, focusSrn, focusNode, visibleNodes, visibleEdges, loading, allNodes } = useGraphStore();
+  const [selected, setSelected] = useState<NetRenderNode | null>(null);
   const positionOverrides = useUserPrefsStore((s) => (workspaceId ? s.graphNodePositions[workspaceId] : undefined));
   const setGraphNodePosition = useUserPrefsStore((s) => s.setGraphNodePosition);
   const clearGraphNodePositions = useUserPrefsStore((s) => s.clearGraphNodePositions);
+  const markdownWorkspaceId = useMarkdownListsStore((s) => s.workspaceId);
+  const loadMarkdownLists = useMarkdownListsStore((s) => s.load);
+  const graphRef = useRef<NeuralGraphHandle>(null);
 
   useEffect(() => {
     if (workspaceId) void loadWorkspaceGraph(workspaceId);
   }, [workspaceId, loadWorkspaceGraph]);
 
-  const nodes = visibleNodes();
-  const edges = visibleEdges();
-  const useSigma = shouldUseSigma(nodes.length) && !focusSrn;
+  // The hierarchy needs each markdown page's folder — loaded separately from
+  // the workspace-scoped app store (useMarkdownListsStore.load), same as
+  // MarkdownListsScreen does.
+  useEffect(() => {
+    if (workspaceId && markdownWorkspaceId !== workspaceId) void loadMarkdownLists(workspaceId);
+  }, [workspaceId, markdownWorkspaceId, loadMarkdownLists]);
 
-  const handleNodeClick = useCallback((n: GraphNode) => setSelected(n), []);
+  const nodes = visibleNodes();
+  const relationEdges = visibleEdges();
+  const useSigma = shouldUseSigma(nodes.length);
+  const hierarchy = useGraphHierarchy(nodes, workspaceId);
+
+  const rootNode = useMemo(
+    () => (workspaceId ? buildWorkspaceRootNode(workspaceId, workspace?.name ?? 'Workspace', workspace?.emoji) : null),
+    [workspaceId, workspace?.name, workspace?.emoji]
+  );
+  const renderNodes: NetRenderNode[] = useMemo(() => (rootNode ? [rootNode, ...nodes] : nodes), [rootNode, nodes]);
+
+  const handleNodeClick = useCallback((n: NetRenderNode) => {
+    if (n.type === 'workspace') { graphRef.current?.resetCamera(); return; }
+    setSelected(n);
+  }, []);
+  const handleNodeOpen = useCallback((n: NetRenderNode) => {
+    if (n.type !== 'workspace' && n.deepLink) navigate(n.deepLink);
+  }, [navigate]);
   const handleFocus = useCallback((srn: string) => {
-    void loadLocalGraph(srn);
-    setSelected(null);
-  }, [loadLocalGraph]);
-  const handleNodeDragStop = useCallback((srn: string, x: number, y: number) => {
+    graphRef.current?.centerOn(srn);
+  }, []);
+  const handleNodePin = useCallback((srn: string, x: number, y: number) => {
     if (workspaceId) setGraphNodePosition(workspaceId, srn, x, y);
   }, [workspaceId, setGraphNodePosition]);
+  const handlePickSearchResult = useCallback((entity: EntityIndexEntry) => {
+    graphRef.current?.centerOn(entity.srn);
+    focusNode(null);
+    const found = nodes.find((n) => n.srn === entity.srn);
+    setSelected(found ?? null);
+  }, [nodes, focusNode]);
 
-  if (!workspaceId) return null;
+  // A deep-link into a specific node (e.g. the Dashboard mini-map's "Open" ->
+  // focusNode(srn) -> navigate('/graph')) — select it and pan the camera over
+  // once the simulation has actually seeded a position for it. A short poll
+  // rather than a single rAF: the force-sim's own data-sync effect commits
+  // asynchronously after this component's first paint.
+  useEffect(() => {
+    if (!focusSrn) return;
+    const found = nodes.find((n) => n.srn === focusSrn);
+    if (!found) return;
+    setSelected(found);
+    let attempts = 0;
+    const tryCenter = () => {
+      attempts += 1;
+      if (graphRef.current?.hasNode(focusSrn)) { graphRef.current.centerOn(focusSrn); return; }
+      if (attempts < 15) setTimeout(tryCenter, 60);
+    };
+    tryCenter();
+    focusNode(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusSrn, nodes]);
+
+  if (!workspaceId || !rootNode || !hierarchy) return null;
   const hasCustomLayout = !!positionOverrides && Object.keys(positionOverrides).length > 0;
+  const isEmpty = !loading && allNodes.length === 0;
 
   return (
-    <div style={{ display: 'flex', gap: 14, height: '100%', width: '100%', minWidth: 0, flexDirection: isMobile ? 'column' : 'row' }}>
-      {!isMobile && <GraphControls isMobile={isMobile} />}
-      <div style={{ flex: '1 1 0%', minWidth: 0, minHeight: 400, position: 'relative', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.04)', overflow: 'hidden', animation: 'cardIn 320ms cubic-bezier(0.22,1,0.36,1) both' }}>
-        {focusSrn && (
-          <button
-            onClick={() => { focusNode(null); if (workspaceId) void loadWorkspaceGraph(workspaceId); }}
-            style={{ position: 'absolute', top: 12, left: 12, zIndex: 5, display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', boxShadow: '0 2px 8px rgba(var(--color-black-rgb), 0.06)', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', cursor: 'pointer', transition: 'all 150ms' }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-secondary)'; }}
-          >
-            <Icon name="arrow_back" size={14} /> Full graph
-          </button>
-        )}
-        {!useSigma && hasCustomLayout && (
-          <button
-            onClick={() => workspaceId && clearGraphNodePositions(workspaceId)}
-            title="Discard your manually-dragged node positions"
-            style={{ position: 'absolute', top: 12, right: 12, zIndex: 5, display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', boxShadow: '0 2px 8px rgba(var(--color-black-rgb), 0.06)', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', cursor: 'pointer', transition: 'all 150ms' }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-secondary)'; }}
-          >
-            <Icon name="restart_alt" size={14} /> Reset layout
-          </button>
-        )}
-        {loading && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', fontFamily: 'var(--font-heading)', fontSize: 13 }}>
-            <div style={{ width: 16, height: 16, border: '2px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
-            Loading…
+    <div style={{ position: 'relative', height: '100%', width: '100%', minWidth: 0, borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.04)', overflow: 'hidden', animation: 'cardIn 320ms cubic-bezier(0.22,1,0.36,1) both' }}>
+      {loading && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', fontFamily: 'var(--font-heading)', fontSize: 13, zIndex: 4, background: 'var(--color-white)' }}>
+          <div style={{ width: 16, height: 16, border: '2px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+          Loading…
+        </div>
+      )}
+      {isEmpty && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', animation: 'sectionFadeUp 320ms ease both', zIndex: 4, background: 'var(--color-white)' }}>
+          <Icon name="hub" size={40} color="var(--color-purple-tint-3, #c4b8f0)" />
+          <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>Nothing here yet</div>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, maxWidth: 280, textAlign: 'center' }}>Create a board, page, or timeline in this workspace to see it take shape here.</div>
+        </div>
+      )}
+      {!loading && !isEmpty && (
+        nodes.length === 0 ? (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', animation: 'sectionFadeUp 320ms ease both', zIndex: 4, background: 'var(--color-white)' }}>
+            <Icon name="visibility_off" size={40} color="var(--color-purple-tint-3, #c4b8f0)" />
+            <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>Nothing matches your filters</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, maxWidth: 280, textAlign: 'center' }}>Try widening the entity-type filter.</div>
           </div>
-        )}
-        {!loading && allNodes.length === 0 && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', animation: 'sectionFadeUp 320ms ease both' }}>
-            <Icon name="hub" size={40} color="var(--color-purple-tint-3, #c4b8f0)" />
-            <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>No connections yet</div>
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, maxWidth: 280, textAlign: 'center' }}>Link boards, pages, and tasks together to see them appear here.</div>
-          </div>
-        )}
-        {!loading && allNodes.length > 0 && (
-          nodes.length === 0 ? (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', animation: 'sectionFadeUp 320ms ease both' }}>
-              <Icon name="visibility_off" size={40} color="var(--color-purple-tint-3, #c4b8f0)" />
-              <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>Nothing matches your filters</div>
-              <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, maxWidth: 280, textAlign: 'center' }}>Try showing unconnected nodes or widening the entity-type filter.</div>
-            </div>
-          ) : useSigma
-            ? <SigmaGraph nodes={nodes} edges={edges} onNodeClick={handleNodeClick} />
-            : <FlowGraph
-                nodes={nodes} edges={edges} focusSrn={focusSrn} mode={focusSrn ? 'local' : 'explore'}
-                onNodeClick={handleNodeClick} positionOverrides={positionOverrides} onNodeDragStop={handleNodeDragStop}
-              />
-        )}
-      </div>
-      {selected && !isMobile && <NodeInspector node={selected} onClose={() => setSelected(null)} onFocus={handleFocus} />}
+        ) : useSigma
+          ? <SigmaGraph nodes={nodes} edges={relationEdges} onNodeClick={handleNodeClick} />
+          : <NeuralGraph
+              ref={graphRef}
+              nodes={renderNodes}
+              hierarchy={hierarchy}
+              relationEdges={relationEdges}
+              workspaceRootSrn={rootNode.srn}
+              selectedSrn={selected?.srn}
+              onNodeClick={handleNodeClick}
+              onNodeOpen={handleNodeOpen}
+              onBackgroundClick={() => setSelected(null)}
+              pinnedPositions={positionOverrides}
+              onNodePin={handleNodePin}
+            />
+      )}
+
+      <GraphToolbar
+        workspaceId={workspaceId}
+        hasCustomLayout={hasCustomLayout && !useSigma}
+        onResetLayout={() => clearGraphNodePositions(workspaceId)}
+        onPickResult={handlePickSearchResult}
+        isMobile={isMobile}
+      />
+
+      {selected && (
+        <div style={isMobile
+          ? { position: 'absolute', left: 12, right: 12, bottom: 12, maxHeight: '48%', zIndex: 6 }
+          : { position: 'absolute', top: 62, right: 14, bottom: 14, width: 300, zIndex: 6 }}
+        >
+          <NodeInspector node={selected} onClose={() => setSelected(null)} onFocus={handleFocus} />
+        </div>
+      )}
     </div>
   );
 }
