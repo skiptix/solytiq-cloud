@@ -63,8 +63,8 @@ const useSyncStore = create<SyncState>((set, get) => ({
       if (myId !== bootstrapId) return; // a newer bootstrap superseded this one
       useAppStore.getState().hydrateFromSnapshot(snap);
       set({ cursor: snap.cursor, status: 'live' });
-      // Trash isn't in the bootstrap payload (only needed for the Trash modal) —
-      // load it via the existing, tested loader.
+      // Trash isn't in the bootstrap payload (only needed for the Trash tab in
+      // Workspace Settings) — load it via the existing, tested loader.
       void useAppStore.getState().loadFromApi(wsId, { only: ['trash'] });
     } catch {
       // Bootstrap failed — fall back to the classic loader so data still shows.
@@ -105,7 +105,7 @@ const useSyncStore = create<SyncState>((set, get) => ({
         // Membership/visibility changed → the workspace list and its scoped
         // content may both differ; reload the workspace list (which re-bootstraps).
         if (signals.has('workspace')) reloadWorkspacesThrottled();
-        // Trash changed → refresh the trash buckets (cheap; only visible in the modal).
+        // Trash changed → refresh the trash buckets (cheap; only visible in the Trash tab).
         if (signals.has('trash')) void useAppStore.getState().loadFromApi(wsId, { only: ['trash'] });
       }
       if (res.cursor > get().cursor) set({ cursor: res.cursor });

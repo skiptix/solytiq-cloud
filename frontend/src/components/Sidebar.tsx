@@ -14,38 +14,10 @@ import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSetti
 import MoveToWorkspaceModal from '../modals/MoveToWorkspaceModal';
 import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
 import RenameDialog from './RenameDialog';
+import ProfileCard from './ProfileCard';
 import { apiGetGpsFiles, apiReorderTimelines, type ShareInfo } from '../api/client';
 
 const MINI = 60;
-
-// ── NavItem ──────────────────────────────────────────────────────────────────
-interface NavItemProps {
-  icon: string;
-  label: string;
-  active?: boolean;
-  onClick: () => void;
-  collapsed: boolean;
-}
-function NavItem({ icon, label, active, onClick, collapsed }: NavItemProps) {
-  const [hov, setHov] = useState(false);
-  const col = active ? 'var(--color-primary)' : 'var(--color-text-tertiary)';
-  const bg = active ? 'var(--color-surface-tint)' : hov ? 'var(--color-surface-tint-2)' : 'transparent';
-  return (
-    <div style={{ position: 'relative' }}>
-      <button title={collapsed ? label : undefined} onClick={onClick}
-        onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-        style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: active ? 600 : 450, color: col, border: 'none', background: bg, width: '100%', transition: 'all 200ms' }}>
-        <Icon name={icon} size={19} color={col} />
-        {!collapsed && <span>{label}</span>}
-      </button>
-      {collapsed && hov && (
-        <div style={{ position: 'fixed', left: MINI + 8, zIndex: 200, background: 'var(--color-text-primary)', color: 'var(--color-white)', borderRadius: 6, padding: '4px 10px', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 500, pointerEvents: 'none', whiteSpace: 'nowrap' }}>
-          {label}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── ListItemRow ───────────────────────────────────────────────────────────────
 interface ListItemRowProps {
@@ -1393,7 +1365,7 @@ interface SidebarProps {
   lists: List[];
   width: number;
   onNavigate: (path: string) => void;
-  onOpenModal: (modal: 'add' | 'completed' | 'trash' | 'archived') => void;
+  onOpenModal: (modal: 'add') => void;
   onReorderLists: (fromId: string, toId: string) => void;
   onResizeStart: (startX: number) => void;
   onTaskDropToList: (taskId: number, listId: string) => void;
@@ -1428,7 +1400,6 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   const [automationsHov, setAutomationsHov] = useState(false);
   const automationsInstalled = useInstalledAppsStore((s) => s.installedApps.includes('automations'));
   const [graphHov, setGraphHov] = useState(false);
-  const [calendarHov, setCalendarHov] = useState(false);
   const [handleHov, setHandleHov] = useState(false);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dragOverTimelineId, setDragOverTimelineId] = useState<string | null>(null);
@@ -1788,11 +1759,12 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           })}
         </div>
 
-        {/* Bottom: version */}
-        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: 8 }}>
+        {/* Bottom: profile + version */}
+        <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <ProfileCard collapsed={collapsed} />
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.70.2
+              v1.71.0
             </div>
           )}
         </div>
@@ -1857,25 +1829,6 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
         <WorkspaceSwitcher collapsed={collapsed} />
-
-        {/* Calendar — global (all-workspace) view */}
-        <button
-          onClick={() => onNavigate('/calendar')}
-          title={collapsed ? 'Calendar' : undefined}
-          onMouseEnter={() => setCalendarHov(true)}
-          onMouseLeave={() => setCalendarHov(false)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8,
-            padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start',
-            borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5,
-            fontWeight: active === 'calendar' ? 700 : 500,
-            color: active === 'calendar' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-            background: active === 'calendar' ? 'var(--color-surface-tint)' : (calendarHov ? 'var(--color-surface-tint-3)' : 'transparent'),
-            border: 'none', transition: 'background 150ms', width: '100%',
-          }}>
-          <Icon name="calendar_month" size={17} color={active === 'calendar' ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
-          {!collapsed && <span>Calendar</span>}
-        </button>
 
         {/* Templates — global gallery, not scoped to the current workspace */}
         <button
@@ -2171,13 +2124,11 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         })()}
       </div>
 
-      <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <NavItem icon="check_circle" label="Completed" active={false} onClick={() => onOpenModal('completed')} collapsed={collapsed} />
-        <NavItem icon="delete" label="Trash" active={false} onClick={() => onOpenModal('trash')} collapsed={collapsed} />
-        <NavItem icon="archive" label="Archived" active={false} onClick={() => onOpenModal('archived')} collapsed={collapsed} />
+      <div style={{ marginTop: 'auto', borderTop: '1px solid var(--color-border)', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <ProfileCard collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.70.2
+            v1.71.0
           </div>
         )}
       </div>

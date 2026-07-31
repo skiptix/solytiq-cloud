@@ -20,8 +20,6 @@ import { useMobile } from './hooks/useBreakpoint';
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import AddWizard from './modals/AddWizard';
-import CompletedModal from './modals/CompletedModal';
-import TrashModal from './modals/TrashModal';
 import WorkspaceWizard from './modals/WorkspaceWizard';
 import AIAssistant from './components/AIAssistant';
 import KeyboardShortcuts from './components/KeyboardShortcuts';
@@ -52,7 +50,6 @@ import AutomationsScreen from './screens/AutomationsScreen';
 const GraphScreen = lazy(() => import('./screens/GraphScreen'));
 import AutomationEditorScreen from './screens/AutomationEditorScreen';
 import MarkdownListScreen from './screens/MarkdownListScreen';
-import ArchivedModal from './modals/ArchivedModal';
 import AdminPasswordResetScreen from './screens/AdminPasswordResetScreen';
 
 // Sign out on any 401 (expired / revoked JWT) so the user is redirected to
@@ -62,7 +59,8 @@ setUnauthorizedHandler(() => useAuthStore.getState().signOut());
 // Which data slices a given route actually renders. Focus/online revalidation
 // only refetches these — never a full 9-request reload — so alt-tabbing between
 // windows can't fan out into a request storm that trips the rate limiter. Trash
-// is deliberately excluded: it's only needed when the Trash modal opens.
+// is deliberately excluded: it's only needed when the Trash tab (in Workspace
+// Settings) opens.
 function slicesForRoute(pathname: string): Array<'tasks' | 'lists' | 'folders' | 'timelines'> {
   if (pathname.startsWith('/list/')) return ['lists', 'tasks'];
   if (pathname.startsWith('/timeline/')) return ['timelines'];
@@ -85,7 +83,7 @@ function AppLayout() {
   const location = useLocation();
   const { lists, loadError, sidebarWidth, setSidebarWidth, loadFromApi, setLists, updateList, moveTaskToList } = useAppStore();
   const prevWorkspaceRef = useRef<string | null | undefined>(undefined);
-  const [modal, setModal] = useState<'add' | 'completed' | 'trash' | 'archived' | null>(null);
+  const [modal, setModal] = useState<'add' | null>(null);
   const [addWizardMode, setAddWizardMode] = useState<'list' | 'timeline' | undefined>(undefined);
   const isMobile = useMobile();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -415,9 +413,6 @@ function AppLayout() {
           onCreatedMarkdownList={(_md) => { setModal(null); navigate(`/markdown-list/${_md.id}`); }}
         />
       )}
-      {modal === 'completed' && <CompletedModal onClose={() => setModal(null)} />}
-      {modal === 'trash' && <TrashModal onClose={() => setModal(null)} />}
-      {modal === 'archived' && <ArchivedModal onClose={() => setModal(null)} />}
       <AIAssistant />
       <KeyboardShortcuts />
 
