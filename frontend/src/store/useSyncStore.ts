@@ -157,4 +157,15 @@ setMutationSettledHandler(() => {
   }, 300);
 });
 
+/** Reset the delta cursor and revision counters when the signed-in user changes
+ *  (sign-out or an account switch). The cursor is per-user state: carrying one
+ *  user's cursor into another's session would make the first delta pull ask for
+ *  "changes since" a sequence number that means nothing for them. Also bumps
+ *  `bootstrapId` so an in-flight bootstrap started by the previous user can't
+ *  land afterwards and repopulate their data. */
+export const clearSyncStore = () => {
+  bootstrapId++;
+  useSyncStore.setState({ cursor: 0, status: 'idle', entityRevisions: {} });
+};
+
 export default useSyncStore;

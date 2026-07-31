@@ -705,6 +705,10 @@ export interface AuthState {
   setProfile: (data: { username?: string; email?: string; fullName?: string; profileImage?: string | null }) => void;
   setAuthFromToken: (token: string, user: AuthUser) => void;
   setTotpEnabled: (enabled: boolean) => void;
+  /** Activate another already-signed-in account from the switcher vault. The
+   *  stored token is re-verified server-side first; `expired` means that
+   *  account needs a fresh login and the current session was left untouched. */
+  switchToAccount: (userId: string) => Promise<{ ok: boolean; reason?: 'missing' | 'expired' }>;
 }
 
 // ─── GPS / Workout file types ─────────────────────────────────────────────────

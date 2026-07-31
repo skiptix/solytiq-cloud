@@ -111,4 +111,10 @@ const useMarkdownListsStore = create<MarkdownListsStore>()((set, get) => ({
   },
 }));
 
+/** Drop every loaded page. Used when the signed-in user changes (sign-out or an
+ *  account switch) so one user's pages can never be shown to the next. */
+export const clearMarkdownListsStore = () => {
+  useMarkdownListsStore.setState({ markdownLists: [], loading: false, loaded: false, workspaceId: null });
+};
+
 export default useMarkdownListsStore;
