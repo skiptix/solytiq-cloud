@@ -9,12 +9,24 @@ if (process.env.NODE_ENV === 'production') {
 }
 const JWT_SECRET = JWT_SECRET_ENV || 'changeme-secret';
 
+/**
+ * How long an issued session token stays valid.
+ *
+ * 30 days rather than the original 7 so the frontend's multi-account switcher
+ * (see CLAUDE.md's "Account Switching") can keep a second signed-in account
+ * usable for that long without re-entering credentials. Length alone is not the
+ * security boundary: `users.token_version` still invalidates every outstanding
+ * token for a user the moment their password changes or they force a logout,
+ * and `middleware.ts` re-checks that on every single request.
+ */
+export const SESSION_TTL = '30d';
+
 export function generateToken(userId: string, tokenVersion: number = 0, connectionId?: string): string {
   const payload: Record<string, unknown> = { userId, tokenVersion };
   // Mobile-app sessions carry the id of their `mobile_connections` row so the
   // connection can be listed and individually revoked (see middleware.ts).
   if (connectionId) payload.connectionId = connectionId;
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: SESSION_TTL });
 }
 
 export function verifyToken(token: string): { userId: string; tokenVersion: number; connectionId?: string } {

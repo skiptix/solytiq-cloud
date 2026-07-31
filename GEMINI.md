@@ -239,12 +239,23 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 
 ### Authentication
 
-- JWT tokens are generated in `auth.ts` (`generateToken`) and verified via the `verifyToken` middleware in `middleware.ts`, which sets `req.userId`.
+- JWT tokens are generated in `auth.ts` (`generateToken`) and verified via the `verifyToken` middleware in `middleware.ts`, which sets `req.userId`. Sessions last **30 days** (`SESSION_TTL` in `auth.ts`) so the frontend's account switcher can keep a second account usable that long — length is not the security boundary, `token_version` below is.
 - Tokens embed a `token_version`; bumping `users.token_version` invalidates all of a user's existing tokens (used on password change / forced logout).
 - **TOTP 2FA** (`otplib` + `qrcode`): when enabled, login returns a pending token and the client must call `/api/auth/2fa/verify`. Gated by the `two_fa_feature_enabled` app setting.
 - Passwords are hashed with `bcryptjs`. Never store or log plaintext passwords.
 - All routes except `/api/auth/login`, `/api/auth/register`, `/api/auth/request-setup-token`, the public `/api/share/*` endpoints, and `/health` require auth. The SSE endpoint `/api/events` authenticates via `?token=` query param or `Authorization` header.
 - **Mobile app connections** — the iOS client sends `client: 'mobile'` + a `device` descriptor on `/api/auth/login` (and `/2fa/verify`); the server records a `mobile_connections` row and embeds its id in the JWT as `connectionId`. `middleware.ts` validates that connection on every request, so a user revoking a device (`DELETE /api/auth/mobile-connections/:id`, surfaced in Account Settings → Mobile) or an admin disabling the `mobile_app_enabled` setting (Settings → Mobile) signs the device out on its next call. `GET /api/auth/feature-flags` exposes `mobileEnabled`.
+
+### Account Switching (multiple signed-in accounts)
+
+The **ProfileCard** (Sidebar, bottom-left) can hold several signed-in accounts and switch between them without re-entering credentials for 30 days — "Switch account" expands to the list of other accounts plus **Add account** (`modals/AddAccountModal.tsx`).
+
+- **`useAccountsStore.ts`** is the persisted session vault (`solytiq_accounts`): one `StoredAccount` per signed-in account (`userId`/`username`/`fullName`/`email`/`profileImage`/`isAdmin`/`token`/`addedAt`). Its pure helpers (`isSessionFresh`/`pruneAccounts`/`upsertAccount`/`removeAccount`) are unit-tested directly; `SESSION_MAX_AGE_MS` mirrors the backend's `SESSION_TTL` so an entry past its window is pruned locally instead of being offered as a switch target that is guaranteed to 401.
+- **There is NO server endpoint that mints a token for another user.** Adding an account is an ordinary `/api/auth/login` (password, plus the TOTP step when that account has 2FA on) — being signed in as someone else grants no shortcut whatsoever. Switching only re-activates a token the server already issued to that account; it never creates authority. This is the architectural reason an unregistered / never-logged-in user can't be switched to: no code path can produce a token for them.
+- **The server is the identity authority on every switch.** `switchToAccount()` (`useAuthStore.ts`) calls `apiVerifySessionToken()` (`GET /auth/me` with the stored token) FIRST and applies the identity from **that response**, never the locally cached label — so editing `solytiq_accounts` in localStorage cannot impersonate or self-promote (a relabelled entry resolves to whoever the token really belongs to; a fabricated one is rejected and dropped). Revocation still flows through `users.token_version`, re-checked on every request.
+- **A failed switch never strands the user.** A rejected token forgets just that entry, leaves the current session active, and re-prompts login for it. Likewise a wrong password while adding an account must not sign the active account out — `apiLoginAdditional`/`api2FAVerifyAdditional`/`apiVerifySessionToken` pass `silent401` so they bypass the global 401 → `signOut()` path, and `authToken` so they don't send the ambient credential. They also bypass `apiFetch`'s GET coalescing, which is keyed on path alone and would otherwise hand an explicit-token `/auth/me` probe another user's cached response.
+- **Switching hard-reloads the page** (`window.location.assign('/dashboard')`) after clearing the persisted per-user stores (`resetPerUserState()`). Clearing the persisted ones is mandatory — `solytiq_app`/`solytiq_workspace` survive a load, so the next user would otherwise rehydrate the previous one's tasks. The reload then covers every *in-memory* store too (members, templates, automations, graph, agent, AI, GPS…) rather than depending on each present and future store being remembered here, and re-runs `App.tsx`'s mount loader, which keys on `currentWorkspaceId` and so wouldn't refire on its own.
+- Signing out drops only the active account from the vault (this is also what the global 401 handler does, where the token is already dead); other stored accounts are left alone.
 
 ### Rate Limiting
 
@@ -486,6 +497,7 @@ All shared state lives in **Zustand stores** under `src/store/`. Do not use Reac
 | `useInstalledAppsStore` | App Directory install state (`gps`, `files`, `mcp`, `automations`) — gates nav items and routes |
 | `useGraphStore` | Graph UI (`/graph`): loaded workspace graph payload, active depth/link-type/entity-type filters, selection, canvas layouts |
 | `useAgentStore` | Agent Runtime: pending proposals + recent runs for the Dashboard's Agent Inbox, accept/reject/revert actions |
+| `useAccountsStore` | Account switcher session vault — every account signed in on this browser (persisted, 30-day window); see "Account Switching" |
 
 `useAppStore.loadFromApi()` is called on mount in `App.tsx`. It fetches tasks, lists, folders, and timelines (scoped to the active workspace) in parallel.
 

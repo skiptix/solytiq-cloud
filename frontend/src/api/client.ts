@@ -46,10 +46,25 @@ export class ApiError extends Error {
 // backend once. Keyed on `path` (no cache-buster is appended, so the key is stable).
 const inflight = new Map<string, Promise<unknown>>();
 
+/**
+ * Options for calls that must NOT disturb the ambient session.
+ *
+ * A 401 normally means "our own token died" and tears the session down. That is
+ * exactly wrong for the two multi-account flows, where a 401 is an expected,
+ * local outcome about *some other* credential:
+ *  - signing a SECOND account in while already signed in (a wrong password
+ *    would otherwise sign the first account out), and
+ *  - probing a stored account's token before switching to it (a stale stored
+ *    token would otherwise kill the session you're currently using).
+ * `authToken` overrides which credential is sent; `silent401` suppresses the
+ * global unauthorized handler + signOut so the caller handles the failure.
+ */
+interface AmbientAuthOpts { authToken?: string | null; silent401?: boolean }
+
 /** The raw request. Handles auth headers, a single 429 backoff+retry, and error
  *  normalisation. `apiFetch` wraps this to coalesce duplicate GETs. */
-async function rawFetch<T>(path: string, options: RequestInit = {}, retried = false): Promise<T> {
-  const token = getToken();
+async function rawFetch<T>(path: string, options: RequestInit = {}, retried = false, auth: AmbientAuthOpts = {}): Promise<T> {
+  const token = auth.authToken !== undefined ? auth.authToken : getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Cache-Control': 'no-cache',
@@ -73,11 +88,11 @@ async function rawFetch<T>(path: string, options: RequestInit = {}, retried = fa
     const baseMs = Number.isFinite(ra) && ra > 0 ? ra * 1000 : 1000;
     const waitMs = Math.min(baseMs * (0.5 + Math.random() * 0.5), 8000);
     await new Promise(r => setTimeout(r, waitMs));
-    return rawFetch<T>(path, options, true);
+    return rawFetch<T>(path, options, true, auth);
   }
 
   if (!res.ok) {
-    if (res.status === 401) _onUnauthorized?.();
+    if (res.status === 401 && !auth.silent401) _onUnauthorized?.();
     const text = await res.text().catch(() => res.statusText);
     let body: unknown = text;
     try { body = text ? JSON.parse(text) : text; } catch { /* keep raw text */ }
@@ -86,7 +101,7 @@ async function rawFetch<T>(path: string, options: RequestInit = {}, retried = fa
         ? String((body as { error: unknown }).error)
         : (text || `HTTP ${res.status}`);
 
-    if (res.status === 401) {
+    if (res.status === 401 && !auth.silent401) {
       import('../store/useAuthStore').then(m => m.default.getState().signOut());
     }
     throw new ApiError(res.status, body, message);
@@ -181,6 +196,45 @@ export const api2FAVerify = (pendingToken: string, code: string) =>
 
 export const apiGetMe = () =>
   apiFetch<{ user: { id: string; username: string; email: string; fullName: string } }>('/auth/me');
+
+// ── Multi-account (see CLAUDE.md "Account Switching") ───────────────────────
+// These three deliberately bypass `apiFetch`: they must not fire the global
+// 401 → signOut path (a 401 here is about a *different* credential, not the
+// active session), and the verify probe must not be coalesced with an ambient
+// `/auth/me` GET, which is keyed by path alone and would return the wrong
+// user's row.
+
+type SessionUserPayload = {
+  id: string; username: string; email: string; fullName: string;
+  isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean;
+  keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>;
+};
+
+/** Sign in an ADDITIONAL account while one is already active. Same endpoint and
+ *  same credential requirements as the normal login — there is no privileged
+ *  "switch to user X" path anywhere in the API. */
+export const apiLoginAdditional = (username: string, password: string) =>
+  rawFetch<{
+    token?: string;
+    user?: SessionUserPayload;
+    requires2FA?: boolean;
+    pendingToken?: string;
+  }>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }, false,
+    { authToken: null, silent401: true });
+
+/** Complete 2FA for an additional account without touching the active session. */
+export const api2FAVerifyAdditional = (pendingToken: string, code: string) =>
+  rawFetch<{ token: string; user: SessionUserPayload }>(
+    '/auth/2fa/verify', { method: 'POST', body: JSON.stringify({ pendingToken, code }) }, false,
+    { authToken: null, silent401: true }
+  );
+
+/** Re-validate a stored account token server-side and return who it actually
+ *  belongs to. The switcher trusts THIS response for identity — never the
+ *  locally cached label — so tampering with the stored vault cannot
+ *  impersonate anyone. Throws ApiError(401) for an expired/revoked token. */
+export const apiVerifySessionToken = (token: string) =>
+  rawFetch<{ user: SessionUserPayload }>('/auth/me', {}, false, { authToken: token, silent401: true });
 
 export const apiGetMembers = () =>
   apiFetch<{ members: Array<{ id: string; username: string; email: string; fullName: string | null; profileImage: string | null; isAdmin: boolean }> }>('/auth/members');

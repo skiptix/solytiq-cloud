@@ -3,8 +3,10 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import useAuthStore from '../store/useAuthStore';
+import useAccountsStore from '../store/useAccountsStore';
 import { apiUpdateProfile, apiUploadProfileImage } from '../api/client';
 import UserSettingsModal from '../modals/UserSettingsModal';
+import AddAccountModal from '../modals/AddAccountModal';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -24,7 +26,14 @@ interface ProfileCardProps {
  */
 export default function ProfileCard({ collapsed }: ProfileCardProps) {
   const navigate = useNavigate();
-  const { username, email, fullName, profileImage, isAdmin, setProfile, signOut } = useAuthStore();
+  const { userId, username, email, fullName, profileImage, isAdmin, setProfile, signOut } = useAuthStore();
+  const switchToAccount = useAuthStore((s) => s.switchToAccount);
+  const storedAccounts = useAccountsStore((s) => s.accounts);
+
+  // Account switcher
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [addAccountFor, setAddAccountFor] = useState<{ username?: string } | null>(null);
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ left: number; bottom: number; width: number } | null>(null);
@@ -172,6 +181,28 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
     navigate('/login');
   };
 
+  /** Activate a stored account. The store re-verifies its token against the
+   *  server first; if that account's session has lapsed we keep the current one
+   *  active and open the login modal pre-filled for it instead. */
+  const handleSwitch = async (accountUserId: string, accountUsername: string) => {
+    if (accountUserId === userId || switchingId) return;
+    setSwitchingId(accountUserId);
+    try {
+      const res = await switchToAccount(accountUserId);
+      setMenuOpen(false);
+      setSwitcherOpen(false);
+      // On success the store reloads the page, so there's nothing to do here.
+      // On failure that account needs fresh credentials — the current session
+      // stays active and we offer a login pre-filled for it.
+      if (!res.ok) setAddAccountFor({ username: accountUsername });
+    } finally {
+      setSwitchingId(null);
+    }
+  };
+
+  // Every stored account except the one currently active.
+  const otherAccounts = storedAccounts.filter((a) => a.userId !== userId);
+
   const iconBtn = {
     width: 26, height: 26, borderRadius: 6,
     background: 'transparent', border: 'none', cursor: 'pointer',
@@ -308,6 +339,76 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
             {renderField('Email Address', 'email', email, 'email')}
           </div>
 
+          {/* Switch account — expands to the list of other signed-in accounts */}
+          <div style={{ padding: '10px 16px 0' }}>
+            <button
+              onClick={() => setSwitcherOpen(v => !v)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)', background: 'transparent', border: 'none', borderRadius: 8, padding: '8px 8px', cursor: 'pointer', textAlign: 'left', transition: 'background 150ms' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              <Icon name="swap_horiz" size={16} color="var(--color-text-tertiary)" />
+              <span style={{ flex: 1 }}>Switch account</span>
+              {otherAccounts.length > 0 && (
+                <span style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', borderRadius: 9999, padding: '1px 7px' }}>{otherAccounts.length}</span>
+              )}
+              <Icon name={switcherOpen ? 'expand_less' : 'expand_more'} size={16} color="var(--color-text-quaternary)" />
+            </button>
+
+            {switcherOpen && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4, animation: 'menuIn 140ms ease both' }}>
+                {otherAccounts.map(acct => {
+                  const busy = switchingId === acct.userId;
+                  return (
+                    <button
+                      key={acct.userId}
+                      onClick={() => handleSwitch(acct.userId, acct.username)}
+                      disabled={!!switchingId}
+                      style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: switchingId ? 'default' : 'pointer', textAlign: 'left', transition: 'background 150ms' }}
+                      onMouseEnter={e => { if (!switchingId) e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                    >
+                      {acct.profileImage
+                        ? <img src={acct.profileImage} alt="" style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                        : <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-accent-purple-light) 0%, var(--color-primary) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-white)' }}>
+                              {(acct.fullName || acct.username || 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)}
+                            </span>
+                          </div>
+                      }
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{acct.fullName || acct.username}</div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{acct.username}</div>
+                      </div>
+                      {busy
+                        ? <div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', animation: 'spin 600ms linear infinite', flexShrink: 0 }} />
+                        : <Icon name="login" size={14} color="var(--color-text-quaternary)" />
+                      }
+                    </button>
+                  );
+                })}
+
+                {otherAccounts.length === 0 && (
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', padding: '4px 8px 6px' }}>
+                    No other accounts yet. Add one to switch between them.
+                  </div>
+                )}
+
+                <button
+                  onClick={() => { setMenuOpen(false); setSwitcherOpen(false); setAddAccountFor({}); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 150ms' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', border: '1.5px dashed var(--color-purple-pale-38)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icon name="add" size={15} color="var(--color-primary)" />
+                  </div>
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)' }}>Add account</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Account Settings + Sign Out */}
           <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <button
@@ -334,6 +435,15 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
 
       {/* User Settings Modal */}
       {settingsOpen && <UserSettingsModal onClose={() => setSettingsOpen(false)} />}
+
+      {/* Add / re-authenticate an account for the switcher */}
+      {addAccountFor && (
+        <AddAccountModal
+          presetUsername={addAccountFor.username}
+          onClose={() => setAddAccountFor(null)}
+          onAdded={() => setAddAccountFor(null)}
+        />
+      )}
 
       {/* Profile Image Upload Wizard */}
       {uploadOpen && (
