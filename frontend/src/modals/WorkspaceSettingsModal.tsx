@@ -11,6 +11,8 @@ import { EmojiGrid, POPUP_WIDTH } from '../components/EmojiSelector';
 import { apiGetMembers, apiGetFiles, asVisibilityConflict, type VisibilityConflict } from '../api/client';
 import VisibilityConflictModal from '../components/VisibilityConflictModal';
 import CreatorBubble from '../components/CreatorBubble';
+import TrashPanel from '../components/TrashPanel';
+import ArchivedPanel from '../components/ArchivedPanel';
 
 interface UserSuggestion { id: string; username: string; fullName: string | null; profileImage: string | null; }
 
@@ -148,7 +150,7 @@ function WorkspaceImagePicker({ onSelect, onClose }: { onSelect: (dataUrl: strin
 
 interface Props { workspace: Workspace; onClose: () => void; }
 
-type Tab = 'general' | 'members' | 'agent' | 'admin' | 'danger';
+type Tab = 'general' | 'members' | 'agent' | 'admin' | 'trash' | 'danger';
 
 export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const [closing, setClosing] = useState(false);
@@ -223,6 +225,9 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const agentRunsLoading = useAgentStore(s => s.loading);
   const agentRunsLoaded = useAgentStore(s => s.loaded);
   const loadAgentRuns = useAgentStore(s => s.load);
+
+  // Trash & Archived
+  const [trashSubTab, setTrashSubTab] = useState<'trash' | 'archived'>('trash');
 
   // Danger
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -370,6 +375,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
     { id: 'members', label: 'Members',  icon: 'group'        },
     ...(isOwner ? [{ id: 'agent' as const, label: 'Agent', icon: 'smart_toy' }] : []),
     ...(isAdmin ? [{ id: 'admin' as const, label: 'Admin', icon: 'admin_panel_settings' }] : []),
+    { id: 'trash',   label: 'Trash',    icon: 'delete'       },
     { id: 'danger',  label: 'Danger',   icon: 'warning'      },
   ];
 
@@ -722,6 +728,25 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                   ))}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ── Trash & Archived ── */}
+          {activeTab === 'trash' && (
+            <div style={{ animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
+              <div style={{ display: 'flex', gap: 4, background: 'var(--color-surface-tint)', borderRadius: 10, padding: 4, marginBottom: 16 }}>
+                {([
+                  { id: 'trash' as const, label: 'Trash', icon: 'delete' },
+                  { id: 'archived' as const, label: 'Archived', icon: 'archive' },
+                ]).map(t => (
+                  <button key={t.id} onClick={() => setTrashSubTab(t.id)}
+                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: trashSubTab === t.id ? 700 : 500, background: trashSubTab === t.id ? 'var(--color-white)' : 'transparent', color: trashSubTab === t.id ? 'var(--color-primary)' : 'var(--color-text-tertiary)', boxShadow: trashSubTab === t.id ? '0 1px 4px rgba(var(--color-black-rgb), 0.08)' : 'none', transition: 'all 150ms' }}>
+                    <Icon name={t.icon} size={14} color={trashSubTab === t.id ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              {trashSubTab === 'trash' ? <TrashPanel /> : <ArchivedPanel workspaceId={workspace.id} />}
             </div>
           )}
 

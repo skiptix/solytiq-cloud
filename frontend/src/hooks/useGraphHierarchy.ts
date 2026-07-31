@@ -25,13 +25,16 @@ export default function useGraphHierarchy(nodes: GraphNode[], workspaceId: strin
       lists: lists.filter((l) => l.workspaceId === workspaceId).map((l) => ({
         id: l.id,
         folderId: l.folderId ?? null,
+        parentTaskId: l.parentTaskId ?? null,
         sections: l.sections.map((s) => ({ id: s.id, tasks: s.tasks.map((t) => ({ id: t.id })) })),
       })),
       folders: folders.filter((f) => f.workspaceId === workspaceId).map((f) => ({ id: f.id })),
       timelines: timelines.filter((t) => t.workspaceId === workspaceId).map((t) => ({
         id: t.id, folderId: t.folderId ?? null, milestones: t.milestones.map((m) => ({ id: m.id })),
       })),
-      markdownLists: markdownLists.filter((m) => m.workspaceId === workspaceId).map((m) => ({ id: m.id, folderId: m.folderId ?? null })),
+      markdownLists: markdownLists.filter((m) => m.workspaceId === workspaceId).map((m) => ({
+        id: m.id, folderId: m.folderId ?? null, todoListId: m.todoListId ?? null,
+      })),
       dashTaskIds: dashTasks.filter((t) => t.workspaceId === workspaceId).map((t) => t.id),
     });
   }, [workspaceId, lists, folders, timelines, dashTasks, markdownLists]);

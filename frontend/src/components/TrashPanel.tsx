@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import useAppStore, { apiEmptyTrash } from '../store/useAppStore';
-import Icon from '../components/Icon';
+import Icon from './Icon';
 import type { TrashedTask, TrashedList, TrashedFolder, TrashedTimeline, TrashedMilestone } from '../types';
 
 function friendlyTime(iso: string) {
@@ -23,11 +23,13 @@ function taskCount(list: TrashedList['list']) {
 
 type TrashTab = 'all' | 'tasks' | 'lists' | 'timelines' | 'milestones' | 'folders';
 
-interface TrashModalProps {
-  onClose: () => void;
-}
-
-export default function TrashModal({ onClose }: TrashModalProps) {
+/**
+ * Content-only Trash view — no backdrop/header/close button of its own —
+ * embedded as a tab inside WorkspaceSettingsModal (see the "Trash & Archived"
+ * tab). Previously a standalone modal (modals/TrashModal.tsx); moved inline
+ * per the sidebar clean-up that folded Trash into workspace settings.
+ */
+export default function TrashPanel() {
   const {
     trashTasks, restoreFromTrash, deleteFromTrash,
     trashLists, restoreListFromTrash, deleteListFromTrash,
@@ -105,154 +107,128 @@ export default function TrashModal({ onClose }: TrashModalProps) {
   ];
 
   return (
-    <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div
-        style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 580, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden', position: 'relative' }}
-        onClick={e => e.stopPropagation()}>
-
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 20px', borderBottom: '1px solid var(--color-surface-tint-2)', flexShrink: 0 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="delete" size={18} color="var(--color-error)" />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)' }}>Trash</div>
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-              {totalCount} deleted item{totalCount !== 1 ? 's' : ''}
-            </div>
-          </div>
-          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="close" size={18} color="var(--color-text-tertiary)" />
+    <div style={{ position: 'relative' }}>
+      {/* Toolbar — search + filter pills */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--color-purple-pale-11)', borderRadius: 10, padding: '8px 14px', marginBottom: 10 }}>
+        <Icon name="search" size={16} color="var(--color-text-tertiary)" />
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search trash…"
+          style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-primary)' }} />
+        {search && (
+          <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}>
+            <Icon name="close" size={14} color="var(--color-text-tertiary)" />
           </button>
-        </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+        {TABS.filter(t => t.id === 'all' || t.count > 0).map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 9999, padding: '5px 12px', cursor: 'pointer', background: tab === t.id ? 'var(--color-primary)' : 'var(--color-surface-tint-2)', color: tab === t.id ? 'var(--color-white)' : 'var(--color-text-tertiary)', transition: 'all 150ms' }}>
+            {t.label}
+          </button>
+        ))}
+        {totalCount > 0 && (
+          <button
+            onClick={() => setConfirmEmpty(true)}
+            style={{ marginLeft: 'auto', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: '1px solid var(--color-error-bg)', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
+            Empty Trash
+          </button>
+        )}
+      </div>
 
-        {/* Toolbar — search + filter pills, always visible */}
-        <div style={{ padding: '12px 20px 8px', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--color-purple-pale-11)', borderRadius: 10, padding: '8px 14px', marginBottom: 10 }}>
-            <Icon name="search" size={16} color="var(--color-text-tertiary)" />
-            <input
-              autoFocus
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search trash…"
-              style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-primary)' }} />
-            {search && (
-              <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}>
-                <Icon name="close" size={14} color="var(--color-text-tertiary)" />
-              </button>
-            )}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {TABS.filter(t => t.id === 'all' || t.count > 0).map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 9999, padding: '5px 12px', cursor: 'pointer', background: tab === t.id ? 'var(--color-primary)' : 'var(--color-surface-tint-2)', color: tab === t.id ? 'var(--color-white)' : 'var(--color-text-tertiary)', transition: 'all 150ms' }}>
-                {t.label}
-              </button>
-            ))}
-            {totalCount > 0 && (
-              <button
-                onClick={() => setConfirmEmpty(true)}
-                style={{ marginLeft: 'auto', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: '1px solid var(--color-error-bg)', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
-                Empty Trash
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Items */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 14px 16px' }}>
-          {totalCount === 0 ? (
-            <div style={{ padding: '48px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--color-purple-pale-11)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name="delete" size={28} color="var(--color-border-strong)" />
-              </div>
-              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', textAlign: 'center' }}>Trash is empty.</div>
+      {/* Items */}
+      <div style={{ maxHeight: 420, overflowY: 'auto', padding: '2px 2px 4px' }}>
+        {totalCount === 0 ? (
+          <div style={{ padding: '40px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--color-purple-pale-11)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="delete" size={28} color="var(--color-border-strong)" />
             </div>
-          ) : visibleItems.length === 0 ? (
-            <div style={{ padding: '32px 12px', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', textAlign: 'center' }}>No matching items.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 4 }}>
-              {visibleItems.map(entry => {
-                if (entry.kind === 'task') {
-                  const item = entry.item as TrashedTask;
-                  return (
-                    <TaskTrashRow
-                      key={`task-${item.id}`}
-                      item={item}
-                      onRestore={() => restoreFromTrash(item.id)}
-                      onDelete={() => deleteFromTrash(item.id)} />
-                  );
-                }
-                if (entry.kind === 'list') {
-                  const item = entry.item as TrashedList;
-                  return (
-                    <ListTrashRow
-                      key={`list-${item.id}`}
-                      item={item}
-                      onRestore={() => restoreListFromTrash(item.id)}
-                      onDelete={() => deleteListFromTrash(item.id)} />
-                  );
-                }
-                if (entry.kind === 'timeline') {
-                  const item = entry.item as TrashedTimeline;
-                  return (
-                    <TimelineTrashRow
-                      key={`timeline-${item.id}`}
-                      item={item}
-                      onRestore={() => restoreTimelineFromTrash(item.id)}
-                      onDelete={() => deleteTimelineFromTrash(item.id)} />
-                  );
-                }
-                if (entry.kind === 'milestone') {
-                  const item = entry.item as TrashedMilestone;
-                  return (
-                    <MilestoneTrashRow
-                      key={`milestone-${item.id}`}
-                      item={item}
-                      onRestore={() => restoreMilestoneFromTrash(item.id)}
-                      onDelete={() => deleteMilestoneFromTrash(item.id)} />
-                  );
-                }
-                const item = entry.item as TrashedFolder;
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', textAlign: 'center' }}>Trash is empty.</div>
+          </div>
+        ) : visibleItems.length === 0 ? (
+          <div style={{ padding: '32px 12px', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', textAlign: 'center' }}>No matching items.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 4 }}>
+            {visibleItems.map(entry => {
+              if (entry.kind === 'task') {
+                const item = entry.item as TrashedTask;
                 return (
-                  <FolderTrashRow
-                    key={`folder-${item.id}`}
+                  <TaskTrashRow
+                    key={`task-${item.id}`}
                     item={item}
-                    onRestore={() => restoreFolderFromTrash(item.id)}
-                    onDelete={() => deleteFolderFromTrash(item.id)} />
+                    onRestore={() => restoreFromTrash(item.id)}
+                    onDelete={() => deleteFromTrash(item.id)} />
                 );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Empty confirm overlay */}
-        {confirmEmpty && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-white-rgb), 0.96)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32, zIndex: 10 }}>
-            <div style={{ textAlign: 'center', maxWidth: 320 }}>
-              <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                <Icon name="warning" size={26} color="var(--color-error)" />
-              </div>
-              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Empty the trash?</div>
-              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.6, marginBottom: 24 }}>
-                This will permanently delete all {totalCount} item{totalCount !== 1 ? 's' : ''} in the trash. This cannot be undone.
-              </div>
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-                <button onClick={() => setConfirmEmpty(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer' }}>
-                  Cancel
-                </button>
-                <button onClick={handleEmptyTrash} disabled={emptyLoading} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: emptyLoading ? 'wait' : 'pointer' }}>
-                  {emptyLoading ? 'Deleting…' : 'Empty Trash'}
-                </button>
-              </div>
-            </div>
+              }
+              if (entry.kind === 'list') {
+                const item = entry.item as TrashedList;
+                return (
+                  <ListTrashRow
+                    key={`list-${item.id}`}
+                    item={item}
+                    onRestore={() => restoreListFromTrash(item.id)}
+                    onDelete={() => deleteListFromTrash(item.id)} />
+                );
+              }
+              if (entry.kind === 'timeline') {
+                const item = entry.item as TrashedTimeline;
+                return (
+                  <TimelineTrashRow
+                    key={`timeline-${item.id}`}
+                    item={item}
+                    onRestore={() => restoreTimelineFromTrash(item.id)}
+                    onDelete={() => deleteTimelineFromTrash(item.id)} />
+                );
+              }
+              if (entry.kind === 'milestone') {
+                const item = entry.item as TrashedMilestone;
+                return (
+                  <MilestoneTrashRow
+                    key={`milestone-${item.id}`}
+                    item={item}
+                    onRestore={() => restoreMilestoneFromTrash(item.id)}
+                    onDelete={() => deleteMilestoneFromTrash(item.id)} />
+                );
+              }
+              const item = entry.item as TrashedFolder;
+              return (
+                <FolderTrashRow
+                  key={`folder-${item.id}`}
+                  item={item}
+                  onRestore={() => restoreFolderFromTrash(item.id)}
+                  onDelete={() => deleteFolderFromTrash(item.id)} />
+              );
+            })}
           </div>
         )}
       </div>
+
+      {/* Empty confirm overlay — covers just this panel, not the whole settings modal */}
+      {confirmEmpty && (
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-white-rgb), 0.97)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 10, borderRadius: 12 }}>
+          <div style={{ textAlign: 'center', maxWidth: 300 }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+              <Icon name="warning" size={24} color="var(--color-error)" />
+            </div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Empty the trash?</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.6, marginBottom: 20 }}>
+              This will permanently delete all {totalCount} item{totalCount !== 1 ? 's' : ''} in the trash. This cannot be undone.
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button onClick={() => setConfirmEmpty(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={handleEmptyTrash} disabled={emptyLoading} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: emptyLoading ? 'wait' : 'pointer' }}>
+                {emptyLoading ? 'Deleting…' : 'Empty Trash'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
