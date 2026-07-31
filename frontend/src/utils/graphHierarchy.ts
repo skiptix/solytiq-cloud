@@ -42,6 +42,10 @@ export function buildWorkspaceRootNode(workspaceId: string, name: string, emoji?
 export interface HierarchySourceList {
   id: string;
   folderId?: string | null;
+  /** Set when this list is a sublist owned by a task (`lists.parent_task_id`) —
+   *  takes priority over `folderId`: a sublist nests under its owning task,
+   *  not the workspace/folder its task's own list happens to live in. */
+  parentTaskId?: number | string | null;
   sections: Array<{ id: string; tasks: Array<{ id: number | string }> }>;
 }
 export interface HierarchySourceFolder { id: string }
@@ -50,7 +54,13 @@ export interface HierarchySourceTimeline {
   folderId?: string | null;
   milestones: Array<{ id: string }>;
 }
-export interface HierarchySourceMarkdownList { id: string; folderId?: string | null }
+export interface HierarchySourceMarkdownList {
+  id: string;
+  folderId?: string | null;
+  /** The auto-managed Todo list mirroring this page's `/todo` blocks
+   *  (`markdown_lists.todo_list_id`), if one has been created yet. */
+  todoListId?: string | null;
+}
 
 export interface HierarchySource {
   workspaceId: string;
@@ -76,7 +86,11 @@ export function buildParentIndex(src: HierarchySource): Map<string, string> {
 
   for (const l of src.lists) {
     const listSrn = `srn:list:${l.id}`;
-    parent.set(listSrn, l.folderId ? `srn:folder:${l.folderId}` : root);
+    // A sublist nests under the task that owns it, not the folder/root its
+    // own row happens to carry (`lists.folder_id` is typically unset for a
+    // sublist anyway, but a task-owned parent always wins when present).
+    const ownerTaskSrn = l.parentTaskId != null ? `srn:task:${l.parentTaskId}` : null;
+    parent.set(listSrn, ownerTaskSrn ?? (l.folderId ? `srn:folder:${l.folderId}` : root));
     for (const s of l.sections) {
       const sectionSrn = `srn:section:${s.id}`;
       parent.set(sectionSrn, listSrn);
@@ -92,6 +106,10 @@ export function buildParentIndex(src: HierarchySource): Map<string, string> {
 
   for (const md of src.markdownLists) {
     parent.set(`srn:markdownList:${md.id}`, md.folderId ? `srn:folder:${md.folderId}` : root);
+    // The auto-managed Todo list mirroring this page's `/todo` blocks nests
+    // under the page itself, overriding whatever folder/root the list loop
+    // above assigned it — it's the page's content, not a sibling of it.
+    if (md.todoListId) parent.set(`srn:list:${md.todoListId}`, `srn:markdownList:${md.id}`);
   }
 
   for (const id of src.dashTaskIds) parent.set(`srn:task:${id}`, root);

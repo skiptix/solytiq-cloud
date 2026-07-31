@@ -51,6 +51,37 @@ describe('buildParentIndex', () => {
   });
 });
 
+describe('buildParentIndex — sublists and markdown-tracked lists', () => {
+  // A markdown page's auto-managed Todo list (`list1`) contains a task that
+  // itself owns a nested sublist (`list2`) — neither should attach straight
+  // to the workspace root; they should chain through their real owner.
+  const NESTED_SOURCE: HierarchySource = {
+    workspaceId: 'ws1',
+    folders: [],
+    lists: [
+      { id: 'list1', folderId: null, sections: [{ id: 'sec1', tasks: [{ id: 1 }] }] },
+      { id: 'list2', folderId: null, parentTaskId: 1, sections: [{ id: 'sec2', tasks: [{ id: 2 }] }] },
+    ],
+    timelines: [],
+    markdownLists: [{ id: 'md1', folderId: null, todoListId: 'list1' }],
+    dashTaskIds: [],
+  };
+
+  const parents = buildParentIndex(NESTED_SOURCE);
+  const root = workspaceRootSrn('ws1');
+
+  it('a markdown page\'s auto-managed Todo list nests under the page, not the root', () => {
+    expect(parents.get('srn:list:list1')).toBe('srn:markdownList:md1');
+    expect(parents.get('srn:markdownList:md1')).toBe(root);
+  });
+
+  it('a sublist nests under its owning task, not the root', () => {
+    expect(parents.get('srn:list:list2')).toBe('srn:task:1');
+    expect(parents.get('srn:task:1')).toBe('srn:section:sec1');
+    expect(parents.get('srn:section:sec1')).toBe('srn:list:list1');
+  });
+});
+
 describe('buildRenderedHierarchy', () => {
   const fullIndex = buildParentIndex(SOURCE);
   const root = workspaceRootSrn('ws1');
