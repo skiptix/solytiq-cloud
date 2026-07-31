@@ -389,7 +389,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
       style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: backdropAnim }}>
       <div
         onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 520, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', animation: panelAnim, overflow: 'hidden' }}>
+        style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 780, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', animation: panelAnim, overflow: 'hidden' }}>
 
         {/* Header */}
         <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
