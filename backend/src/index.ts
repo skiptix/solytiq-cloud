@@ -1735,14 +1735,24 @@ async function runMigrations() {
       name        VARCHAR(255) NOT NULL,
       description TEXT,
       emoji       VARCHAR(20),
-      color       VARCHAR(20),
-      color_bg    VARCHAR(20),
+      color       VARCHAR(50),
+      color_bg    VARCHAR(50),
       is_shared   BOOLEAN NOT NULL DEFAULT FALSE,
       structure   JSONB NOT NULL,
       created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  // Widen the color columns on instances that created this table with the old
+  // VARCHAR(20) size. Those were sized for hex codes (`#5e4dbb`); colors are
+  // now stored as CSS custom-property references (`var(--color-primary)`, and
+  // up to `var(--color-accent-purple-light)` at 32 chars), so an insert of
+  // anything but the shortest token failed with "value too long for type
+  // character varying(20)" — i.e. creating/saving a template was broken.
+  // Every other color column in the schema is already VARCHAR(50); these two
+  // were missed when hex codes were replaced by tokens.
+  await pool.query(`ALTER TABLE templates ALTER COLUMN color TYPE VARCHAR(50)`);
+  await pool.query(`ALTER TABLE templates ALTER COLUMN color_bg TYPE VARCHAR(50)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS templates_user_idx ON templates(user_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS templates_shared_idx ON templates(is_shared) WHERE is_shared = true`);
 
