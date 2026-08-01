@@ -29,6 +29,8 @@ export const ENTITY_TYPES = [
   'file',
   'section',
   'gpsFile',
+  'knowledgeBase',
+  'knowledgeEntry',
 ] as const;
 
 export type EntityType = (typeof ENTITY_TYPES)[number];

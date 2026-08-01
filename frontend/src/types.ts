@@ -975,7 +975,8 @@ export interface NamedPinInput {
 
 export type GraphEntityType =
   | 'task' | 'list' | 'markdownList' | 'timeline' | 'milestone'
-  | 'meeting' | 'folder' | 'file' | 'section' | 'gpsFile';
+  | 'meeting' | 'folder' | 'file' | 'section' | 'gpsFile'
+  | 'knowledgeBase' | 'knowledgeEntry';
 
 export interface EntityIndexEntry {
   srn: string;
