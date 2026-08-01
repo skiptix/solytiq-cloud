@@ -44,6 +44,7 @@ import linksRouter from './routes/links';
 import graphRouter from './routes/graph';
 import canvasesRouter from './routes/canvases';
 import knowledgeRouter from './routes/knowledge';
+import knowledgeBaseRouter from './routes/knowledgeBase';
 import { sweepEmbeddingQueue } from './knowledge/embeddingWorker';
 import { setPgvectorAvailable } from './knowledge/state';
 import agentRouter from './routes/agent';
@@ -275,6 +276,12 @@ app.use('/api/links', linksLimiter, linksRouter);
 app.use('/api/graph', graphLimiter, graphRouter);
 app.use('/api/canvases', canvasesRouter);
 app.use('/api/knowledge', knowledgeLimiter, knowledgeRouter);
+// Distinct from /api/knowledge above (the RAG layer). Express only matches an
+// app.use prefix at a path-segment boundary, so `-base` never collides with it.
+// Plain CRUD behind the global apiLimiter only, like /api/canvases — the pricier
+// tiers exist for endpoints that fan out to an external provider or a recursive
+// CTE, and neither applies here.
+app.use('/api/knowledge-base', knowledgeBaseRouter);
 app.use('/api/agent', agentLimiter, agentRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).

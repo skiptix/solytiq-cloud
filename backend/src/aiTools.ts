@@ -145,13 +145,13 @@ function describeMarkdownBlock(b: MarkdownBlockLike): string {
  * AI cannot perform. Todos may carry over their mirror task by referencing an
  * existing todo block's id (`ctx.todoTaskIdByBlockId`).
  */
-interface BlockBuildContext {
+export interface BlockBuildContext {
   allowImagePreserve?: boolean;
   existingImageIds?: Set<string>;
   todoTaskIdByBlockId?: Map<string, string | null>;
 }
 
-function buildMarkdownBlockFromSpec(
+export function buildMarkdownBlockFromSpec(
   spec: Record<string, unknown>,
   ctx?: BlockBuildContext
 ): { block: MarkdownBlockLike } | { error: string } {

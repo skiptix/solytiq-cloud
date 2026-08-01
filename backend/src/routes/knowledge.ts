@@ -75,7 +75,7 @@ router.post('/reindex', requireAdmin, async (_req: Request, res: Response) => {
   try {
     const r = await query<{ entity_type: string; entity_id: string; workspace_id: string | null }>(
       `SELECT entity_type, entity_id, workspace_id FROM entity_index
-        WHERE entity_type IN ('task', 'markdownList', 'milestone', 'meeting') AND is_trashed = false`
+        WHERE entity_type IN ('task', 'markdownList', 'milestone', 'meeting', 'knowledgeEntry') AND is_trashed = false`
     );
     for (const row of r.rows) {
       await enqueueEmbedding(row.entity_type, row.entity_id, row.workspace_id);
