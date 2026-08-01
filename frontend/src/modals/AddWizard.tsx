@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { List, Timeline, MarkdownList } from '../types';
 import Icon from '../components/Icon';
+import useKnowledgeBaseStore from '../store/useKnowledgeBaseStore';
+import useWorkspaceStore from '../store/useWorkspaceStore';
 import AddListWizard from './AddListWizard';
 import AddTimelineWizard from './AddTimelineWizard';
 import AddMarkdownListWizard from './AddMarkdownListWizard';
@@ -11,6 +13,9 @@ interface AddWizardProps {
   onCreatedList: (list: List) => void;
   onCreatedTimeline: (timeline: Timeline) => void;
   onCreatedMarkdownList: (markdownList: MarkdownList) => void;
+  /** The Knowledge Base has no creation wizard — it is created in place and the
+   *  caller navigates to it. */
+  onCreatedKnowledgeBase: () => void;
   /** Skip the chooser and open a specific creation wizard directly (e.g. the "New list" shortcut). */
   initialMode?: 'list' | 'timeline';
 }
@@ -40,14 +45,42 @@ const OPTIONS = [
     color: 'var(--color-teal-deep-4)',
     bg: 'var(--color-green-pale-2)',
   },
+  {
+    key: 'knowledge' as const,
+    icon: 'neurology',
+    title: 'Knowledge',
+    desc: "This workspace's dictionary, as a net — the terms your assistant and MCP clients look up instead of guessing.",
+    color: 'var(--color-primary)',
+    bg: 'var(--color-purple-pale-21)',
+  },
 ];
 
 type Mode = 'choose' | 'list-templates' | 'timeline-templates' | 'list' | 'timeline' | 'markdownList';
 
-export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, onCreatedMarkdownList, initialMode }: AddWizardProps) {
+export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, onCreatedMarkdownList, onCreatedKnowledgeBase, initialMode }: AddWizardProps) {
   const [mode, setMode] = useState<Mode>(
     initialMode === 'list' ? 'list-templates' : initialMode === 'timeline' ? 'timeline-templates' : 'choose'
   );
+  // A workspace has exactly one Knowledge Base, so the tile disappears once it
+  // exists rather than offering a create that would just resolve to the
+  // existing one.
+  const workspaceId = useWorkspaceStore(s => s.currentWorkspaceId);
+  const existingBase = useKnowledgeBaseStore(s => s.base);
+  const createKnowledgeBase = useKnowledgeBaseStore(s => s.create);
+  const [creatingKb, setCreatingKb] = useState(false);
+
+  const options = OPTIONS.filter(o => o.key !== 'knowledge' || (!existingBase && workspaceId));
+
+  const handleKnowledge = async () => {
+    if (!workspaceId || creatingKb) return;
+    setCreatingKb(true);
+    try {
+      await createKnowledgeBase(workspaceId);
+      onCreatedKnowledgeBase();
+    } finally {
+      setCreatingKb(false);
+    }
+  };
 
   // The template-select step comes first for both types: "Start blank" drops
   // into the classic step-by-step wizard below, or pick a template to skip
@@ -91,9 +124,12 @@ export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, o
 
         {/* Options */}
         <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {OPTIONS.map(opt => (
+          {options.map(opt => (
             <button key={opt.key}
-              onClick={() => setMode(opt.key === 'markdownList' ? 'markdownList' : `${opt.key}-templates`)}
+              onClick={() => {
+                if (opt.key === 'knowledge') { void handleKnowledge(); return; }
+                setMode(opt.key === 'markdownList' ? 'markdownList' : `${opt.key}-templates`);
+              }}
               style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 18px', borderRadius: 14, border: '1.5px solid var(--color-purple-pale-34)', background: 'var(--color-white)', cursor: 'pointer', textAlign: 'left', transition: 'all 160ms', width: '100%' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = opt.color; e.currentTarget.style.background = opt.bg; e.currentTarget.style.transform = 'translateY(-1px)'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-purple-pale-34)'; e.currentTarget.style.background = 'var(--color-white)'; e.currentTarget.style.transform = 'translateY(0)'; }}>

@@ -1163,3 +1163,65 @@ export interface AgentProposal {
   expiresAt: string;
   createdAt: string;
 }
+
+// ── Knowledge Base ───────────────────────────────────────────────────────────
+// The per-workspace curated dictionary (exactly one per workspace). Distinct
+// from the Knowledge LAYER (hybrid search over everything) — see CLAUDE.md.
+
+export type KnowledgeEntryType =
+  | 'concept' | 'person' | 'project' | 'system' | 'acronym' | 'policy' | 'process' | 'other';
+
+/** How an entry came to exist — surfaced in the UI so AI/extracted entries are reviewable. */
+export type KnowledgeEntryOrigin = 'manual' | 'ai' | 'extracted';
+
+export interface KnowledgeBase {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  name: string;
+  emoji: string | null;
+  color: string | null;
+  description: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface KnowledgeEntry {
+  id: string;
+  kbId: string;
+  userId: string;
+  term: string;
+  aliases: string[];
+  entryType: KnowledgeEntryType | string;
+  summary: string | null;
+  content: MarkdownListContent;
+  properties: Record<string, unknown>;
+  emoji: string | null;
+  color: string | null;
+  position: number;
+  origin: KnowledgeEntryOrigin | string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Where a suggested term was seen — an SRN plus the line it appeared in. */
+export interface KnowledgeEvidence {
+  srn: string;
+  snippet: string;
+}
+
+export interface KnowledgeSuggestion {
+  id: string;
+  term: string;
+  summary: string | null;
+  entryType: string;
+  evidence: KnowledgeEvidence[];
+  createdAt: string;
+}
+
+/** Result of a deterministic term lookup — a definition, or an explicit miss. */
+export type KnowledgeLookupResult =
+  | { found: true; entry: KnowledgeEntry; matchedOn: 'term' | 'alias'; matchedAlias?: string; body: string }
+  | { found: false; suggestions: Array<{ id: string; term: string; summary: string | null }> };

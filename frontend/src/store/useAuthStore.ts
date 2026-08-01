@@ -9,6 +9,7 @@ import useAccountsStore from './useAccountsStore';
 import { clearAppStore } from './useAppStore';
 import { clearWorkspaceStore } from './useWorkspaceStore';
 import { clearMarkdownListsStore } from './useMarkdownListsStore';
+import { clearKnowledgeBaseStore } from './useKnowledgeBaseStore';
 import { clearSyncStore } from './useSyncStore';
 import type { AuthState, AuthUser } from '../types';
 
@@ -29,6 +30,7 @@ function resetPerUserState(): void {
   clearAppStore();
   clearWorkspaceStore();
   clearMarkdownListsStore();
+  clearKnowledgeBaseStore();
   clearSyncStore();
 }
 
