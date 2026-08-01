@@ -19,6 +19,7 @@ import { isValidEntityType } from './graph/srn';
 import { getQueueStats } from './knowledge/queue';
 import { isPgvectorAvailable } from './knowledge/state';
 import { getEmbeddingConfig } from './knowledge/embedProvider';
+import { listGlossary, lookupTerm } from './knowledgeBase/lookup';
 
 export interface McpResourceDef {
   uri: string;
@@ -43,6 +44,12 @@ export const MCP_RESOURCE_TEMPLATES: McpResourceTemplateDef[] = [
   { uriTemplate: 'solytiq://entity/{type}/{id}', name: 'Entity', description: 'Full entity_index detail for one linkable item (task, list, markdownList, timeline, milestone, meeting, folder, file, section, gpsFile)', mimeType: 'application/json' },
   { uriTemplate: 'solytiq://graph/{workspaceId}', name: 'Workspace graph', description: 'Nodes + edges for one workspace, capped at 200 nodes for a resource read (use the graph tools/API for the full explorer)', mimeType: 'application/json' },
   { uriTemplate: 'solytiq://agent/{workspaceId}/runs', name: 'Agent runs', description: 'The 20 most recent AI agent runs for one workspace', mimeType: 'application/json' },
+  // The dictionary, as a RESOURCE rather than only a tool: a client can pull
+  // the whole glossary into context once instead of tool-calling per term,
+  // which is what makes an agent aware of a workspace's vocabulary before it
+  // starts guessing at it.
+  { uriTemplate: 'solytiq://knowledge/{workspaceId}/glossary', name: 'Knowledge Base glossary', description: "Every term defined in one workspace's Knowledge Base, with aliases and one-line summaries (no bodies — small enough to carry as context)", mimeType: 'application/json' },
+  { uriTemplate: 'solytiq://knowledge/{workspaceId}/term/{term}', name: 'Knowledge Base term', description: 'The full definition of one term (or an explicit not-defined result with near-miss suggestions)', mimeType: 'application/json' },
 ];
 
 const GRAPH_RESOURCE_NODE_CAP = 200;
@@ -113,6 +120,24 @@ export async function readMcpResource(userId: string, uri: string): Promise<McpR
         truncated: nodesRes.rows.length >= GRAPH_RESOURCE_NODE_CAP,
       }, null, 2),
     };
+  }
+
+  m = uri.match(/^solytiq:\/\/knowledge\/([^/]+)\/glossary$/);
+  if (m) {
+    const [, workspaceId] = m;
+    if (!(await userCanAccessWorkspace(userId, workspaceId))) return null;
+    return { mimeType: 'application/json', text: JSON.stringify({ terms: await listGlossary(workspaceId) }, null, 2) };
+  }
+
+  m = uri.match(/^solytiq:\/\/knowledge\/([^/]+)\/term\/(.+)$/);
+  if (m) {
+    const [, workspaceId, rawTerm] = m;
+    if (!(await userCanAccessWorkspace(userId, workspaceId))) return null;
+    // A not-defined term is a legitimate READ RESULT, not a missing resource:
+    // "this workspace has no definition for X" is exactly what the caller needs
+    // to know, and 404ing it would look identical to a permission failure.
+    const result = await lookupTerm(workspaceId, decodeURIComponent(rawTerm));
+    return { mimeType: 'application/json', text: JSON.stringify(result, null, 2) };
   }
 
   m = uri.match(/^solytiq:\/\/agent\/([^/]+)\/runs$/);

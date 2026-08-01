@@ -123,10 +123,11 @@ export function extractCandidateTerms(
 
       for (let i = 0; i < words.length; i++) {
         const word = words[i];
-        if (isAcronym(word)) { record(word, srn, snippet); continue; }
-        if (!isProperish(word)) continue;
-        // A capitalized word in position 0 is probably just sentence case, so
-        // it only counts as part of a MULTI-word phrase, never on its own.
+        // Phrase-building comes FIRST, before any single-word classification:
+        // an acronym-shaped word is very often the head of a real phrase
+        // ("Q3 Rollout"), and consuming it as a standalone acronym would split
+        // the phrase into two useless halves.
+        if (!isProperish(word) && !isAcronym(word)) continue;
         const phrase: string[] = [word];
         for (let j = i + 1; j < words.length && phrase.length < 3; j++) {
           const next = words[j];
@@ -136,9 +137,11 @@ export function extractCandidateTerms(
         if (phrase.length > 1) {
           record(phrase.join(' '), srn, snippet);
           i += phrase.length - 1;
-        } else if (i > 0) {
-          record(word, srn, snippet);
+          continue;
         }
+        // Standalone. An acronym always counts; a plain capitalized word only
+        // counts away from position 0, where it is probably just sentence case.
+        if (isAcronym(word) || i > 0) record(word, srn, snippet);
       }
     }
   }

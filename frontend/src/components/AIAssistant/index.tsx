@@ -15,6 +15,7 @@ import useAppStore, {
 } from '../../store/useAppStore';
 import useAuthStore from '../../store/useAuthStore';
 import useWorkspaceStore from '../../store/useWorkspaceStore';
+import useKnowledgeBaseStore from '../../store/useKnowledgeBaseStore';
 import useGraphStore from '../../store/useGraphStore';
 import useUserPrefsStore from '../../store/useUserPrefsStore';
 import type { GraphEntityType } from '../../types';
@@ -950,7 +951,8 @@ export default function AIAssistant() {
         ];
 
         let tools = composeTools(buildTools(ctx, wsId, wsInfo));
-        const systemPrompt = buildSystemPrompt(ctx, username || 'User', wsInfo, wsId);
+        const glossary = useKnowledgeBaseStore.getState().entries.map(e => ({ term: e.term, aliases: e.aliases, summary: e.summary }));
+        const systemPrompt = buildSystemPrompt(ctx, username || 'User', wsInfo, wsId, glossary);
 
         // Build API messages from history (last 20 + current)
         const history = useAIStore
