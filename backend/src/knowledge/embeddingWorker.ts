@@ -50,6 +50,20 @@ async function fetchDocumentText(entityType: string, entityId: string, exec: Que
       if (!row) return null;
       return [row.title, row.description].filter(Boolean).join('\n\n');
     }
+    // A Knowledge Base entry is indexed like any other document, so a semantic
+    // search surfaces curated definitions alongside ordinary content. The term
+    // and its aliases lead the text on purpose: they are the highest-signal
+    // part of the entry, and a chunk that opens with them embeds closer to the
+    // queries people actually ask about that term.
+    case 'knowledgeEntry': {
+      const r = await exec(`SELECT term, aliases, summary, content FROM knowledge_entries WHERE id = $1`, [entityId]);
+      const row = r.rows[0] as { term: string; aliases: string[] | null; summary: string | null; content: unknown } | undefined;
+      if (!row) return null;
+      const content = row.content as { blocks?: unknown } | null;
+      const blocks = Array.isArray(content?.blocks) ? (content!.blocks as never[]) : [];
+      const aliases = (row.aliases ?? []).length > 0 ? `Also known as: ${(row.aliases ?? []).join(', ')}` : null;
+      return [row.term, aliases, row.summary, flattenMarkdownBlocks(blocks)].filter(Boolean).join('\n\n');
+    }
     default:
       return null;
   }

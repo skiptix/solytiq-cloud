@@ -51,6 +51,12 @@ import { getQueueStats } from './knowledge/queue';
 import { isPgvectorAvailable } from './knowledge/state';
 import { getEmbeddingConfig } from './knowledge/embedProvider';
 import { userCanAccessWorkspace } from './workspaceUtil';
+import { lookupTerm, listGlossary } from './knowledgeBase/lookup';
+import { enqueueEmbedding } from './knowledge/queue';
+import {
+  getBaseForWorkspace, createEntry, updateEntry, deleteEntry, getEntry, getBaseById,
+  ENTRY_TYPES, type KnowledgeBaseRow, type KnowledgeEntryRow,
+} from './knowledgeBase/entries';
 import { startAgentRun } from './agent/runtime';
 
 // A minimal JSON Schema object for a tool's parameters.
@@ -96,6 +102,49 @@ const LAYOUTS = new Set(['vertical', 'compact', 'detailed']);
 
 function genTaskId(): number {
   return Date.now() * 1000 + crypto.randomInt(1000);
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge Base access helpers.
+//
+// Reads need workspace ACCESS; writes need workspace MEMBERSHIP — the same
+// asymmetry routes/knowledgeBase.ts enforces, restated here because tools are a
+// second entry point into the same data and must not be the looser one. Both
+// return a plain `{ error }` so a tool can surface it verbatim rather than
+// throwing through the tool loop.
+// ---------------------------------------------------------------------------
+
+async function isWorkspaceMemberForTools(userId: string, workspaceId: string): Promise<boolean> {
+  const r = await query(
+    `SELECT 1 FROM workspace_members WHERE workspace_id = $1 AND user_id = $2
+     UNION
+     SELECT 1 FROM workspaces WHERE id = $1 AND owner_id = $2`,
+    [workspaceId, userId]
+  );
+  return r.rows.length > 0;
+}
+
+async function requireWritableBase(
+  userId: string,
+  workspaceId: string
+): Promise<{ base: KnowledgeBaseRow } | { error: string }> {
+  if (!(await isWorkspaceMemberForTools(userId, workspaceId))) return { error: 'workspace not found' };
+  const base = await getBaseForWorkspace(workspaceId);
+  if (!base) return { error: 'this workspace has no Knowledge Base yet — add one from the sidebar first' };
+  return { base };
+}
+
+async function requireWritableEntry(
+  userId: string,
+  entryId: string
+): Promise<{ entry: KnowledgeEntryRow; base: KnowledgeBaseRow } | { error: string }> {
+  const entry = await getEntry(entryId);
+  if (!entry) return { error: 'entry not found' };
+  const base = await getBaseById(entry.kb_id);
+  // Existence-safe: an entry in a workspace the caller can't reach reports as
+  // absent, never as forbidden.
+  if (!base || !(await isWorkspaceMemberForTools(userId, base.workspace_id))) return { error: 'entry not found' };
+  return { entry, base };
 }
 
 function ok(result: string, summary?: string): ToolResult {
@@ -145,13 +194,13 @@ function describeMarkdownBlock(b: MarkdownBlockLike): string {
  * AI cannot perform. Todos may carry over their mirror task by referencing an
  * existing todo block's id (`ctx.todoTaskIdByBlockId`).
  */
-interface BlockBuildContext {
+export interface BlockBuildContext {
   allowImagePreserve?: boolean;
   existingImageIds?: Set<string>;
   todoTaskIdByBlockId?: Map<string, string | null>;
 }
 
-function buildMarkdownBlockFromSpec(
+export function buildMarkdownBlockFromSpec(
   spec: Record<string, unknown>,
   ctx?: BlockBuildContext
 ): { block: MarkdownBlockLike } | { error: string } {
@@ -2245,6 +2294,192 @@ export const aiTools: AiTool[] = [
         `Semantic search: ${isPgvectorAvailable() ? (getEmbeddingConfig(settings) ? 'active' : 'pgvector ready, no provider configured') : 'unavailable (lexical/trigram search only)'}. ` +
         `Queue: ${stats.pending} pending, ${stats.processing} processing, ${stats.done} indexed, ${stats.failed} failed.`
       );
+    },
+  },
+
+  // ───────────────────────────── Knowledge Base ───────────────────────────────
+  // The workspace's curated dictionary. Distinct from knowledge_search above:
+  // that ranks CONTENT by relevance, this resolves a TERM to a definition or
+  // to nothing. When a model is about to state a fact about the user's own
+  // vocabulary, a clean miss beats a 60%-right guess — so lookup never falls
+  // back to fuzzy matching, it returns near-misses labelled as such.
+  {
+    name: 'lookup_knowledge',
+    description: "Look up what a workspace means by a specific term, in its Knowledge Base. Use this BEFORE guessing at any project/system/acronym name you don't recognise. Returns the definition, or an explicit \"not defined\" plus near-miss terms — never an invented answer.",
+    parameters: {
+      type: 'object',
+      properties: {
+        workspace_id: { type: 'string' },
+        term: { type: 'string', description: 'The exact term or one of its aliases.' },
+      },
+      required: ['workspace_id', 'term'],
+    },
+    handler: async (userId, args) => {
+      const workspaceId = str(args.workspace_id);
+      const term = str(args.term);
+      if (!workspaceId || !term) return fail('workspace_id and term are required');
+      if (!(await userCanAccessWorkspace(userId, workspaceId))) return fail('workspace not found');
+      const res = await lookupTerm(workspaceId, term);
+      if (!res.found) {
+        const near = res.suggestions.length
+          ? ` Closest defined terms: ${res.suggestions.map((s) => `"${s.term}"`).join(', ')}.`
+          : '';
+        return ok(`"${term}" is not defined in this workspace's Knowledge Base.${near}`);
+      }
+      const e = res.entry;
+      const lines = [
+        `${e.term}${res.matchedOn === 'alias' ? ` (matched alias "${res.matchedAlias}")` : ''} — ${e.entryType}`,
+        e.summary ? `Summary: ${e.summary}` : null,
+        e.aliases.length ? `Also known as: ${e.aliases.join(', ')}` : null,
+        Object.keys(e.properties).length ? `Properties: ${JSON.stringify(e.properties)}` : null,
+        res.body ? `\n${res.body}` : null,
+      ].filter(Boolean);
+      return ok(lines.join('\n'), `Defined: ${e.term}`);
+    },
+  },
+  {
+    name: 'list_knowledge_terms',
+    description: "List every term defined in a workspace's Knowledge Base, with one-line summaries. Use this to orient yourself in an unfamiliar workspace before answering questions about it.",
+    parameters: {
+      type: 'object',
+      properties: { workspace_id: { type: 'string' } },
+      required: ['workspace_id'],
+    },
+    handler: async (userId, args) => {
+      const workspaceId = str(args.workspace_id);
+      if (!workspaceId) return fail('workspace_id is required');
+      if (!(await userCanAccessWorkspace(userId, workspaceId))) return fail('workspace not found');
+      const terms = await listGlossary(workspaceId);
+      if (!terms.length) return ok('This workspace has no Knowledge Base terms defined yet.');
+      return ok(terms.map((t) =>
+        `- ${t.term}${t.aliases.length ? ` (aka ${t.aliases.join(', ')})` : ''} [${t.entryType}]${t.summary ? `: ${t.summary}` : ''}`
+      ).join('\n'));
+    },
+  },
+  {
+    name: 'create_knowledge_entry',
+    description: "Define a new term in a workspace's Knowledge Base. Only record things that are actually established in that workspace — this is an authoritative source other people and agents will rely on, not a scratchpad for guesses.",
+    parameters: {
+      type: 'object',
+      properties: {
+        workspace_id: { type: 'string' },
+        term: { type: 'string' },
+        summary: { type: 'string', description: 'One line. This is what gets carried into future context.' },
+        entry_type: { type: 'string', description: `One of: ${ENTRY_TYPES.join(', ')}` },
+        aliases: { type: 'string', description: 'Comma-separated alternative names.' },
+        body: { type: 'string', description: 'Optional longer definition. Blank-line-separated paragraphs.' },
+      },
+      required: ['workspace_id', 'term'],
+    },
+    handler: async (userId, args) => {
+      const workspaceId = str(args.workspace_id);
+      const term = str(args.term);
+      if (!workspaceId || !term) return fail('workspace_id and term are required');
+      const base = await requireWritableBase(userId, workspaceId);
+      if ('error' in base) return fail(base.error);
+
+      const aliasRaw = str(args.aliases);
+      const bodyRaw = str(args.body);
+      const blocks = bodyRaw
+        ? bodyRaw.split(/\n{2,}/).map((para) => para.trim()).filter(Boolean)
+            .map((text) => ({ id: genBlockId(), type: 'paragraph', text }))
+        : [];
+
+      const created = await createEntry(userId, base.base.id, {
+        term,
+        summary: str(args.summary) ?? null,
+        entryType: str(args.entry_type) ?? 'concept',
+        aliases: aliasRaw ? aliasRaw.split(',').map((a) => a.trim()).filter(Boolean) : [],
+        content: { version: 1, blocks },
+        // Flagged so the UI can show a human that this definition came from an
+        // assistant rather than a person — reviewable, not silently trusted.
+        origin: 'ai',
+      });
+      if (!created.ok) return fail(created.error);
+      await enqueueEmbedding('knowledgeEntry', created.entry.id, workspaceId);
+      return ok(`Defined "${created.entry.term}" in the Knowledge Base.`, `Defined ${created.entry.term}`);
+    },
+  },
+  {
+    name: 'update_knowledge_entry',
+    description: "Revise an existing Knowledge Base term — its summary, aliases, type, or the term itself. Only the fields you pass change.",
+    parameters: {
+      type: 'object',
+      properties: {
+        entry_id: { type: 'string' },
+        term: { type: 'string' },
+        summary: { type: 'string' },
+        entry_type: { type: 'string' },
+        aliases: { type: 'string', description: 'Comma-separated. Replaces the existing aliases.' },
+      },
+      required: ['entry_id'],
+    },
+    handler: async (userId, args) => {
+      const entryId = str(args.entry_id);
+      if (!entryId) return fail('entry_id is required');
+      const found = await requireWritableEntry(userId, entryId);
+      if ('error' in found) return fail(found.error);
+
+      const aliasRaw = str(args.aliases);
+      const updated = await updateEntry(entryId, {
+        term: str(args.term),
+        summary: args.summary !== undefined ? (str(args.summary) ?? null) : undefined,
+        entryType: str(args.entry_type),
+        aliases: aliasRaw !== undefined ? aliasRaw.split(',').map((a) => a.trim()).filter(Boolean) : undefined,
+      });
+      if (!updated.ok) return fail(updated.error);
+      await enqueueEmbedding('knowledgeEntry', entryId, found.base.workspace_id);
+      return ok(`Updated "${updated.entry.term}".`, `Updated ${updated.entry.term}`);
+    },
+  },
+  {
+    name: 'delete_knowledge_entry',
+    description: "Remove a term from a workspace's Knowledge Base. Prefer updating a definition over deleting it — other people and agents may be relying on it.",
+    parameters: {
+      type: 'object',
+      properties: { entry_id: { type: 'string' } },
+      required: ['entry_id'],
+    },
+    handler: async (userId, args) => {
+      const entryId = str(args.entry_id);
+      if (!entryId) return fail('entry_id is required');
+      const found = await requireWritableEntry(userId, entryId);
+      if ('error' in found) return fail(found.error);
+      await deleteEntry(entryId);
+      return ok(`Removed "${found.entry.term}" from the Knowledge Base.`, `Removed ${found.entry.term}`);
+    },
+  },
+  {
+    name: 'link_knowledge_entry',
+    description: 'Relate a Knowledge Base term to another term or to any item (board, page, task, timeline). Use synonym_of for equivalent terms, broader_than for a parent concept, documents/references to point at the thing the term is about.',
+    parameters: {
+      type: 'object',
+      properties: {
+        entry_id: { type: 'string' },
+        target_srn: { type: 'string', description: 'e.g. srn:list:list_7f3a — get one from search_graph.' },
+        link_type: { type: 'string', description: 'synonym_of | broader_than | references | documents | relates_to (default)' },
+      },
+      required: ['entry_id', 'target_srn'],
+    },
+    handler: async (userId, args) => {
+      const entryId = str(args.entry_id);
+      const targetSrn = str(args.target_srn);
+      if (!entryId || !targetSrn) return fail('entry_id and target_srn are required');
+      const found = await requireWritableEntry(userId, entryId);
+      if ('error' in found) return fail(found.error);
+      const ref = parseSrn(targetSrn);
+      if (!ref) return fail('target_srn is not a valid SRN');
+      try {
+        await upsertLink(query, {
+          srcType: 'knowledgeEntry', srcId: entryId,
+          dstType: ref.entityType, dstId: ref.entityId,
+          linkType: str(args.link_type) ?? 'relates_to',
+          origin: 'agent', createdBy: userId,
+        });
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : 'Could not create that relation');
+      }
+      return ok(`Linked "${found.entry.term}" to ${targetSrn}.`);
     },
   },
 

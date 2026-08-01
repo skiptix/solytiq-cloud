@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent, TaskChangeLogEntry, EntityLink, ResolvedLink, LinkTypeDef, GraphPayload, GraphCanvas, GraphCanvasLayout, AgentRun, AgentProposal, AgentPolicy, AgentMode, EntityIndexEntry } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent, TaskChangeLogEntry, EntityLink, ResolvedLink, LinkTypeDef, GraphPayload, GraphCanvas, GraphCanvasLayout, AgentRun, AgentProposal, AgentPolicy, AgentMode, EntityIndexEntry, KnowledgeBase, KnowledgeEntry, KnowledgeSuggestion, KnowledgeLookupResult } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -1642,3 +1642,92 @@ export const apiGetKnowledgeStatus = () =>
   apiFetch<KnowledgeStatus>('/knowledge/status');
 export const apiKnowledgeReindex = () =>
   apiFetch<{ enqueued: number }>('/knowledge/reindex', { method: 'POST' });
+
+// ── Knowledge Base ────────────────────────────────────────────────────────
+// The per-workspace curated dictionary. Distinct from the Knowledge Layer
+// above (hybrid search) — see CLAUDE.md's "Knowledge Base" section.
+
+export const apiGetKnowledgeBase = (workspaceId: string) =>
+  apiFetch<{ knowledgeBase: KnowledgeBase | null; entries: KnowledgeEntry[]; canWrite?: boolean }>(
+    `/knowledge-base?workspaceId=${encodeURIComponent(workspaceId)}`
+  );
+
+export const apiCreateKnowledgeBase = (body: { workspaceId: string; name?: string; emoji?: string | null; color?: string | null; description?: string | null }) =>
+  apiFetch<{ knowledgeBase: KnowledgeBase; created: boolean }>('/knowledge-base', { method: 'POST', body: JSON.stringify(body) });
+
+export const apiUpdateKnowledgeBase = (id: string, body: { name?: string; emoji?: string | null; color?: string | null; description?: string | null }) =>
+  apiFetch<{ knowledgeBase: KnowledgeBase }>(`/knowledge-base/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+
+export const apiDeleteKnowledgeBase = (id: string) =>
+  apiFetch<{ success: boolean }>(`/knowledge-base/${id}`, { method: 'DELETE' });
+
+export const apiCreateKnowledgeEntry = (kbId: string, body: Partial<Pick<KnowledgeEntry, 'term' | 'aliases' | 'entryType' | 'summary' | 'properties' | 'emoji' | 'color'>> & { blocks?: unknown[] }) =>
+  apiFetch<{ entry: KnowledgeEntry }>(`/knowledge-base/${kbId}/entries`, { method: 'POST', body: JSON.stringify(body) });
+
+export const apiUpdateKnowledgeEntry = (id: string, body: Partial<Pick<KnowledgeEntry, 'term' | 'aliases' | 'entryType' | 'summary' | 'properties' | 'emoji' | 'color' | 'position'>>) =>
+  apiFetch<{ entry: KnowledgeEntry }>(`/knowledge-base/entries/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+
+export const apiUpdateKnowledgeEntryContent = (id: string, blocks: unknown[]) =>
+  apiFetch<{ entry: KnowledgeEntry }>(`/knowledge-base/entries/${id}/content`, { method: 'PUT', body: JSON.stringify({ blocks }) });
+
+export const apiDeleteKnowledgeEntry = (id: string) =>
+  apiFetch<{ success: boolean }>(`/knowledge-base/entries/${id}`, { method: 'DELETE' });
+
+export const apiCreateKnowledgeRelation = (entryId: string, body: { targetType: string; targetId: string; linkType?: string }) =>
+  apiFetch<{ success: boolean }>(`/knowledge-base/entries/${entryId}/relations`, { method: 'POST', body: JSON.stringify(body) });
+
+export const apiDeleteKnowledgeRelation = (entryId: string, params: { targetType: string; targetId: string; linkType?: string }) => {
+  const q = new URLSearchParams({ targetType: params.targetType, targetId: params.targetId, ...(params.linkType ? { linkType: params.linkType } : {}) });
+  return apiFetch<{ success: boolean }>(`/knowledge-base/entries/${entryId}/relations?${q}`, { method: 'DELETE' });
+};
+
+export const apiKnowledgeLookup = (workspaceId: string, term: string) =>
+  apiFetch<KnowledgeLookupResult>(`/knowledge-base/lookup?workspaceId=${encodeURIComponent(workspaceId)}&term=${encodeURIComponent(term)}`);
+
+export const apiGetKnowledgeGlossary = (workspaceId: string) =>
+  apiFetch<{ terms: Array<{ id: string; term: string; aliases: string[]; entryType: string; summary: string | null }> }>(
+    `/knowledge-base/glossary?workspaceId=${encodeURIComponent(workspaceId)}`
+  );
+
+export const apiScanKnowledgeConcepts = (kbId: string) =>
+  apiFetch<{ scanned: number; proposed: number; alreadyDefined: number }>(`/knowledge-base/${kbId}/scan`, { method: 'POST' });
+
+export const apiGetKnowledgeSuggestions = (kbId: string) =>
+  apiFetch<{ suggestions: KnowledgeSuggestion[] }>(`/knowledge-base/${kbId}/suggestions`);
+
+export const apiDecideKnowledgeSuggestion = (suggestionId: string, accept: boolean) =>
+  apiFetch<{ entry: KnowledgeEntry | null }>(`/knowledge-base/suggestions/${suggestionId}`, { method: 'POST', body: JSON.stringify({ accept }) });
+
+/** Resolves a Knowledge Base entry image to a fetchable URL — `<img>` can't set
+ *  an Authorization header, so the token rides as a query param (same
+ *  accommodation markdownImageUrl makes). */
+export const knowledgeEntryImageUrl = (entryId: string, imageId: string): string => {
+  const token = getToken();
+  const base = `${BASE_URL}/knowledge-base/entries/${entryId}/images/${imageId}`;
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+};
+
+export function apiUploadKnowledgeEntryImage(
+  entryId: string,
+  file: File,
+  onProgress?: (pct: number) => void,
+): Promise<{ id: string; name: string; mimeType: string; size: number }> {
+  return new Promise((resolve, reject) => {
+    const token = getToken();
+    const form = new FormData();
+    form.append('image', file);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${BASE_URL}/knowledge-base/entries/${entryId}/images`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100)); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve((JSON.parse(xhr.responseText) as { image: { id: string; name: string; mimeType: string; size: number } }).image);
+      } else {
+        reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(form);
+  });
+}

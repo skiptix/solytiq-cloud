@@ -113,6 +113,39 @@ export const SYSTEM_LINK_TYPES: Record<string, LinkTypeDef> = {
     color: '#5e4dbb',
     allowedSrc: ['markdownList'],
   }),
+
+  // ── Knowledge Base relations ───────────────────────────────────────────────
+  // A glossary needs the three classic thesaurus relations (equivalence,
+  // hierarchy, definition). They live in the SYSTEM catalog rather than as
+  // per-workspace `x_` custom types deliberately: a lookup that walks
+  // "broader/narrower" has to mean the same thing in every workspace, or the
+  // AI-facing dictionary stops being portable across them.
+  defines: t('defines', 'Defines', 'defined_by', 'Defined by', {
+    color: '#5e4dbb',
+    allowedSrc: ['knowledgeEntry'],
+  }),
+  synonym_of: t('synonym_of', 'Synonym of', 'synonym_of', 'Synonym of', {
+    symmetric: true,
+    color: '#10b981',
+    edgeStyle: 'dashed',
+    allowedSrc: ['knowledgeEntry'],
+    allowedDst: ['knowledgeEntry'],
+  }),
+  broader_than: t('broader_than', 'Broader than', 'narrower_than', 'Narrower than', {
+    color: '#9d8dff',
+    allowedSrc: ['knowledgeEntry'],
+    allowedDst: ['knowledgeEntry'],
+  }),
+  // Structural containment for the KB's own hierarchy — mirrors `part_of`'s
+  // role for milestones/sections: real edges so traversal works, hidden from
+  // the Net's relation layer so they don't drown out authored relations.
+  entry_of: t('entry_of', 'Entry of', 'has_entry', 'Has entry', {
+    color: '#e8e4f0',
+    allowedSrc: ['knowledgeEntry'],
+    allowedDst: ['knowledgeBase'],
+    showInGraph: false,
+    deletable: false,
+  }),
 };
 
 export const CUSTOM_LINK_TYPE_PREFIX = 'x_';

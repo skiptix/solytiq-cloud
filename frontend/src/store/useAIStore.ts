@@ -279,7 +279,20 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
 
 // ── System prompt ──────────────────────────────────────────────────
 
-export function buildSystemPrompt(ctx: AIContext, username: string, workspaces?: Array<{ id: string; name: string; role: string }>, currentWorkspaceId?: string | null): string {
+/** One term as carried into Sol's prompt — no body, just enough to know it exists. */
+export interface GlossaryHint {
+  term: string;
+  aliases: string[];
+  summary: string | null;
+}
+
+export function buildSystemPrompt(
+  ctx: AIContext,
+  username: string,
+  workspaces?: Array<{ id: string; name: string; role: string }>,
+  currentWorkspaceId?: string | null,
+  glossary?: GlossaryHint[]
+): string {
   const today = toIso(new Date());
   const tlProgress = ctx.view === 'timeline'
     ? ` — ${(ctx.data.progress as { done: number; total: number } | undefined)?.done ?? 0}/${(ctx.data.progress as { done: number; total: number } | undefined)?.total ?? 0} milestones done`
@@ -301,6 +314,16 @@ export function buildSystemPrompt(ctx: AIContext, username: string, workspaces?:
 
   const graphNote = ctx.view === 'graph'
     ? '\n- NET VIEW: You are looking at the Graph Layer\'s visual map. `items_by_type`/`total_items` describe everything currently loaded; `most_connected_items` are the highest-pagerank hub nodes; `active_filters` shows the entity-type/completed/relations filters currently applied. Two different kinds of connection exist: the ALWAYS-PRESENT structural hierarchy (task -> section -> board -> folder -> workspace, drawn as thin lines, not a user-editable relation) versus EXPLICIT relations (e.g. blocks/tracks/relates_to, drawn as bold lines) which you manage with search_graph (find an entity by title to get its srn), get_entity_links/get_backlinks (see what\'s connected to something), create_link (add a typed relation between two srns — requires write access to the source), and delete_link (remove one; system-mirrored relations can\'t be deleted this way). Use focus_graph_node(srn) to pan the Net\'s camera onto and select a specific item (opens the Net view if the user isn\'t already there), set_graph_filters to narrow what\'s shown (e.g. only boards and tasks, or hide items with no explicit relation), and reset_graph_view to clear filters and release any nodes the user manually dragged.'
+    : '';
+
+  // The workspace's own vocabulary, terms only. This is the single highest-value
+  // thing to spend context on: without it the model doesn't know a definition
+  // EXISTS, so it guesses instead of calling lookup_knowledge. Bodies stay out —
+  // they're what the lookup is for, and carrying them would blow the budget.
+  const glossaryNote = glossary?.length
+    ? `\n\nThis workspace's Knowledge Base defines these terms. When the user mentions one — or you are about to state anything about it — call lookup_knowledge(workspace_id, term) FIRST and use that definition rather than inferring one. If a term you need is NOT on this list, say you don't have a definition for it instead of guessing; you may offer to define it with create_knowledge_entry.\n${
+        glossary.map((g) => `- ${g.term}${g.aliases.length ? ` (aka ${g.aliases.join(', ')})` : ''}${g.summary ? `: ${g.summary}` : ''}`).join('\n')
+      }`
     : '';
 
   const workspaceInfo = workspaces?.length
@@ -340,7 +363,7 @@ Guidelines:
 - TIMELINES: You can create timelines (create_timeline), update/rename them (update_timeline), delete them (delete_timeline — ALWAYS confirm first). Navigate to a specific timeline with navigate_to_timeline using its ID from available_timelines. When on a timeline page you can add milestones (add_milestone), edit them (update_milestone), delete them (delete_milestone — confirm first), and reorder them (reorder_milestones).
 - MILESTONE STATUS: valid values are 'upcoming', 'in-progress', 'done'. Milestone dates use YYYY-MM-DD format. Color can be a hex string (e.g. "var(--color-success)") or null for auto.
 - TIMELINE IDs: Always use exact timeline_id strings from available_timelines. Milestone IDs come from the milestones array in the current context.
-- If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}${graphNote}`;
+- If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}${graphNote}${glossaryNote}`;
 }
 
 // ── Tool definitions ────────────────────────────────────────────────

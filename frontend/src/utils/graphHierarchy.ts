@@ -39,6 +39,22 @@ export function buildWorkspaceRootNode(workspaceId: string, name: string, emoji?
   };
 }
 
+/**
+ * Root node for the Knowledge screen's own net. That screen shows ONE base and
+ * its entries, so the base itself is the pinned centre — the same role the
+ * synthetic workspace node plays in the full Net. Unlike that one this IS a
+ * real backend entity, so it keeps its true SRN and deep link.
+ */
+export function buildKnowledgeRootNode(
+  kbId: string, name: string, emoji: string | null | undefined, workspaceId: string
+): NetRenderNode {
+  return {
+    srn: `srn:knowledgeBase:${kbId}`, type: 'knowledgeBase', id: kbId, title: name,
+    emoji: emoji ?? '🧠', color: null, deepLink: '/knowledge', degree: 0, pagerank: 1,
+    community: null, status: null, isArchived: false, workspaceId,
+  };
+}
+
 export interface HierarchySourceList {
   id: string;
   folderId?: string | null;
@@ -62,6 +78,12 @@ export interface HierarchySourceMarkdownList {
   todoListId?: string | null;
 }
 
+/** The workspace's single Knowledge Base, plus the entries hanging off it. */
+export interface HierarchySourceKnowledgeBase {
+  id: string;
+  entryIds: string[];
+}
+
 export interface HierarchySource {
   workspaceId: string;
   lists: HierarchySourceList[];
@@ -70,6 +92,8 @@ export interface HierarchySource {
   markdownLists: HierarchySourceMarkdownList[];
   /** Dashboard tasks (source='dash') — no list/section, hang directly off the workspace root. */
   dashTaskIds: Array<number | string>;
+  /** The workspace's Knowledge Base, when one has been added. */
+  knowledgeBase?: HierarchySourceKnowledgeBase | null;
 }
 
 /**
@@ -114,6 +138,15 @@ export function buildParentIndex(src: HierarchySource): Map<string, string> {
 
   for (const id of src.dashTaskIds) parent.set(`srn:task:${id}`, root);
 
+  // The Knowledge Base hangs off the workspace root as a second hub, with every
+  // entry beneath it. Structurally this mirrors folder -> workspace: the base is
+  // a container, not a leaf, and an entry never belongs to a folder.
+  if (src.knowledgeBase) {
+    const kbSrn = `srn:knowledgeBase:${src.knowledgeBase.id}`;
+    parent.set(kbSrn, root);
+    for (const entryId of src.knowledgeBase.entryIds) parent.set(`srn:knowledgeEntry:${entryId}`, kbSrn);
+  }
+
   return parent;
 }
 
@@ -140,9 +173,12 @@ export interface GraphHierarchy {
 export function buildRenderedHierarchy(
   nodes: GraphNode[],
   fullParentIndex: Map<string, string>,
-  workspaceId: string
+  /** SRN of the node every chain terminates at. The full Net passes
+   *  workspaceRootSrn(workspaceId); the Knowledge screen passes its base's own
+   *  SRN, since there the base IS the centre. */
+  rootSrn: string
 ): GraphHierarchy {
-  const root = workspaceRootSrn(workspaceId);
+  const root = rootSrn;
   const present = new Set(nodes.map((n) => n.srn));
   present.add(root);
 

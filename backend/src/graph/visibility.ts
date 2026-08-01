@@ -52,6 +52,13 @@ export async function isEntityVisible(
  * matching the "Shared with me" content-write model in CLAUDE.md. Other entity
  * types (task/milestone/section/meeting/file/gpsFile) are single-owner in this
  * version — no per-item collaborator model exists for them yet.
+ *
+ * The two Knowledge Base types are the deliberate exception: a workspace has
+ * exactly ONE Knowledge Base and it is a shared artifact of that workspace, not
+ * of whoever happened to click "add". `entity_index.owner_id` for a KB entry is
+ * the base's creator, so restricting writes to the owner would leave every
+ * other member unable to author the very thing the feature exists for — so any
+ * member of the KB's workspace may write it.
  */
 export async function canWriteEntity(
   userId: string,
@@ -62,12 +69,20 @@ export async function canWriteEntity(
 ): Promise<boolean> {
   if (isAdmin) return true;
   const r = await exec(
-    `SELECT owner_id FROM entity_index WHERE entity_type = $1 AND entity_id = $2 AND is_trashed = false`,
+    `SELECT owner_id, workspace_id FROM entity_index WHERE entity_type = $1 AND entity_id = $2 AND is_trashed = false`,
     [entityType, entityId]
   );
-  const row = r.rows[0] as { owner_id: string } | undefined;
+  const row = r.rows[0] as { owner_id: string; workspace_id: string | null } | undefined;
   if (!row) return false;
   if (row.owner_id === userId) return true;
+  if (entityType === 'knowledgeBase' || entityType === 'knowledgeEntry') {
+    if (!row.workspace_id) return false;
+    const member = await exec(
+      `SELECT 1 FROM workspace_members WHERE workspace_id = $1 AND user_id = $2`,
+      [row.workspace_id, userId]
+    );
+    return member.rows.length > 0;
+  }
   if (entityType === 'list' || entityType === 'timeline' || entityType === 'markdownList') {
     const shared = await exec(
       `SELECT 1 FROM item_shares WHERE item_type = $1 AND item_id = $2 AND user_id = $3`,

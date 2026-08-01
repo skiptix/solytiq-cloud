@@ -16,6 +16,11 @@ export const NODE_TYPE_COLOR: Record<GraphEntityType, string> = {
   gpsFile: '#b0acbe',
   folder: '#c9c4d5',
   section: '#e8e4f0',
+  // The Knowledge Base is the workspace's semantic hub — primary purple, the
+  // same weight the synthetic workspace root carries, so it reads as a second
+  // centre of gravity rather than as one more leaf.
+  knowledgeBase: '#5e4dbb',
+  knowledgeEntry: '#7c6ae0',
 };
 
 export const NODE_TYPE_SHAPE: Record<GraphEntityType, 'circle' | 'roundedSquare' | 'diamond' | 'hexagon' | 'square' | 'folder'> = {
@@ -29,6 +34,8 @@ export const NODE_TYPE_SHAPE: Record<GraphEntityType, 'circle' | 'roundedSquare'
   gpsFile: 'square',
   folder: 'folder',
   section: 'square',
+  knowledgeBase: 'hexagon',
+  knowledgeEntry: 'circle',
 };
 
 export function nodeColor(type: GraphEntityType | 'workspace', status?: string | null): string {
@@ -41,18 +48,21 @@ export const ENTITY_TYPE_LABEL: Record<GraphEntityType, string> = {
   task: 'Task', list: 'Board', markdownList: 'Page', timeline: 'Timeline',
   milestone: 'Milestone', meeting: 'Meeting', folder: 'Folder', file: 'File',
   section: 'Section', gpsFile: 'GPS Route',
+  knowledgeBase: 'Knowledge', knowledgeEntry: 'Entry',
 };
 
 export const ENTITY_TYPE_LABEL_PLURAL: Record<GraphEntityType, string> = {
   task: 'Tasks', list: 'Boards', markdownList: 'Pages', timeline: 'Timelines',
   milestone: 'Milestones', meeting: 'Meetings', folder: 'Folders', file: 'Files',
   section: 'Sections', gpsFile: 'GPS Routes',
+  knowledgeBase: 'Knowledge', knowledgeEntry: 'Entries',
 };
 
 export const ENTITY_TYPE_ICON: Record<GraphEntityType, string> = {
   task: 'check_box', list: 'view_kanban', markdownList: 'description', timeline: 'timeline',
   milestone: 'flag', meeting: 'event', folder: 'folder', file: 'draft',
   section: 'view_agenda', gpsFile: 'route',
+  knowledgeBase: 'neurology', knowledgeEntry: 'menu_book',
 };
 
 /** Small subtle glyph shown inside a Net dot — extends ENTITY_TYPE_ICON with

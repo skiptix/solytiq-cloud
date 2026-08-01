@@ -6,6 +6,7 @@ import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import useMarkdownListsStore from '../store/useMarkdownListsStore';
+import useKnowledgeBaseStore from '../store/useKnowledgeBaseStore';
 import useSharedItemsStore from '../store/useSharedItemsStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
 import WorkspaceWizard from '../modals/WorkspaceWizard';
@@ -440,7 +441,7 @@ interface FolderRowProps {
   timelines: Timeline[];
   markdownLists: MarkdownList[];
   markdownTodoLists: List[];
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph' | 'knowledge';
   activeListId?: string;
   activeTimelineId?: string;
   activeFolderId?: string;
@@ -896,7 +897,7 @@ function FolderRow({ folder, lists, timelines, markdownLists, markdownTodoLists,
 interface StandaloneListWithSublistsProps {
   list: List;
   sublists: List[];
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph' | 'knowledge';
   activeListId?: string;
   collapsed: boolean;
   dragOverId: string | null;
@@ -1145,7 +1146,7 @@ function MarkdownListRow({ markdownList, isActive, collapsed, indented, folders,
 interface MarkdownListWithTodoProps {
   markdownList: MarkdownList;
   todoList: List | undefined;
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph' | 'knowledge';
   activeListId?: string;
   activeMarkdownListId?: string;
   collapsed: boolean;
@@ -1356,7 +1357,7 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
-  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph';
+  active: 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph' | 'knowledge';
   activeListId?: string;
   activeTimelineId?: string;
   activeFolderId?: string;
@@ -1385,6 +1386,9 @@ function fmtDistShort(m?: number | null) {
 
 export default function Sidebar({ active, activeListId, activeTimelineId, activeFolderId, activeGpsFileId, activeMarkdownListId, lists, width, onNavigate, onOpenModal, onReorderLists, onResizeStart, onTaskDropToList, isMobile, drawerOpen, resizing }: SidebarProps) {
   const markdownLists = useMarkdownListsStore(s => s.markdownLists);
+  const knowledgeBase = useKnowledgeBaseStore(s => s.base);
+  const knowledgeEntryCount = useKnowledgeBaseStore(s => s.entries.length);
+  const [knowledgeHov, setKnowledgeHov] = useState(false);
   const reorderMarkdown = useMarkdownListsStore(s => s.reorder);
   const updateMarkdown = useMarkdownListsStore(s => s.update);
   const mdTodoListIds = new Set(markdownLists.map(m => m.todoListId).filter((x): x is string => !!x));
@@ -1764,7 +1768,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           <ProfileCard collapsed={collapsed} />
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.72.0
+              v1.73.0
             </div>
           )}
         </div>
@@ -1928,6 +1932,44 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
               style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, border: 'none', outline: 'none', background: 'transparent', color: 'var(--color-text-primary)' }}
             />
           </div>
+        )}
+
+        {/* The workspace's Knowledge Base — PINNED above every folder, board,
+            page and timeline, and deliberately outside the drag/reorder logic
+            below. There is exactly one per workspace and it is the dictionary
+            everything else is described in terms of, so it has no position to
+            sort by and can never be dragged into a folder. */}
+        {knowledgeBase && (
+          <button
+            title={collapsed ? knowledgeBase.name : undefined}
+            onClick={() => onNavigate('/knowledge')}
+            onMouseEnter={() => setKnowledgeHov(true)}
+            onMouseLeave={() => setKnowledgeHov(false)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10,
+              padding: collapsed ? '8px 0' : '8px 10px',
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              width: '100%', marginBottom: 2, borderRadius: 8, cursor: 'pointer', border: 'none',
+              background: active === 'knowledge'
+                ? 'var(--color-surface-tint)'
+                : knowledgeHov ? 'var(--color-surface-tint-2)' : 'transparent',
+              color: active === 'knowledge' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+              fontWeight: active === 'knowledge' ? 600 : 450,
+              fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left',
+              transition: 'all 150ms',
+            }}>
+            {knowledgeBase.emoji
+              ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{knowledgeBase.emoji}</span>
+              : <Icon name="neurology" size={19} color={active === 'knowledge' ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />}
+            {!collapsed && (
+              <>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>{knowledgeBase.name}</span>
+                {knowledgeEntryCount > 0 && (
+                  <span style={{ flexShrink: 0, fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)' }}>{knowledgeEntryCount}</span>
+                )}
+              </>
+            )}
+          </button>
         )}
 
         {/* Folders */}
@@ -2128,7 +2170,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <ProfileCard collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.72.0
+            v1.73.0
           </div>
         )}
       </div>

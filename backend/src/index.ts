@@ -44,6 +44,7 @@ import linksRouter from './routes/links';
 import graphRouter from './routes/graph';
 import canvasesRouter from './routes/canvases';
 import knowledgeRouter from './routes/knowledge';
+import knowledgeBaseRouter from './routes/knowledgeBase';
 import { sweepEmbeddingQueue } from './knowledge/embeddingWorker';
 import { setPgvectorAvailable } from './knowledge/state';
 import agentRouter from './routes/agent';
@@ -275,6 +276,12 @@ app.use('/api/links', linksLimiter, linksRouter);
 app.use('/api/graph', graphLimiter, graphRouter);
 app.use('/api/canvases', canvasesRouter);
 app.use('/api/knowledge', knowledgeLimiter, knowledgeRouter);
+// Distinct from /api/knowledge above (the RAG layer). Express only matches an
+// app.use prefix at a path-segment boundary, so `-base` never collides with it.
+// Plain CRUD behind the global apiLimiter only, like /api/canvases — the pricier
+// tiers exist for endpoints that fan out to an external provider or a recursive
+// CTE, and neither applies here.
+app.use('/api/knowledge-base', knowledgeBaseRouter);
 app.use('/api/agent', agentLimiter, agentRouter);
 
 // Model Context Protocol endpoint for external AI agents (PAT-authenticated).
@@ -1902,6 +1909,97 @@ async function runMigrations() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS markdown_list_images_list_idx ON markdown_list_images(markdown_list_id)`);
 
+  // Generalize the image store's owner so the SAME block editor can be embedded
+  // by something other than a Markdown Page (Knowledge Base entries, below).
+  // Purely additive: `markdown_list_id` keeps its FK for every pre-existing row
+  // and for Markdown Pages going forward — it just stops being mandatory, and
+  // (owner_type, owner_id) becomes the polymorphic key the shared code reads.
+  await pool.query(`ALTER TABLE markdown_list_images ADD COLUMN IF NOT EXISTS owner_type VARCHAR(24) NOT NULL DEFAULT 'markdownList'`);
+  await pool.query(`ALTER TABLE markdown_list_images ADD COLUMN IF NOT EXISTS owner_id   VARCHAR(100)`);
+  await pool.query(`UPDATE markdown_list_images SET owner_id = markdown_list_id WHERE owner_id IS NULL AND markdown_list_id IS NOT NULL`);
+  await pool.query(`ALTER TABLE markdown_list_images ALTER COLUMN markdown_list_id DROP NOT NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS markdown_list_images_owner_idx ON markdown_list_images(owner_type, owner_id)`);
+
+  // ── Knowledge Base ───────────────────────────────────────────────────────────
+  // A per-workspace, human-curated dictionary of the terms/concepts/people/
+  // systems that workspace actually talks about — the authoritative counterpart
+  // to the Knowledge LAYER (backend/src/knowledge/), which is fuzzy retrieval
+  // over content written for other reasons. Rendered as a net (see
+  // frontend/src/screens/KnowledgeScreen.tsx) and served to Sol/the Agent
+  // Runtime/MCP as a deterministic term lookup rather than a ranked guess.
+  //
+  // `workspace_id UNIQUE` is what enforces "exactly one Knowledge Base per
+  // workspace" — a DB constraint, not an application check that a second code
+  // path could forget.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS knowledge_bases (
+      id           VARCHAR(100) PRIMARY KEY,
+      workspace_id VARCHAR(100) NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name         VARCHAR(200) NOT NULL DEFAULT 'Knowledge',
+      emoji        VARCHAR(10),
+      color        VARCHAR(50),
+      description  TEXT,
+      version      INTEGER NOT NULL DEFAULT 1,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // An entry's body is the SAME block shape a Markdown Page uses
+  // ({version:1, blocks:[]}), so the extracted BlockEditor and the existing
+  // buildMarkdownBlockFromSpec validator serve both — todo-block reconciliation
+  // is the one deliberate exception (a definition is not a task list).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS knowledge_entries (
+      id           VARCHAR(100) PRIMARY KEY,
+      kb_id        VARCHAR(100) NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      term         VARCHAR(200) NOT NULL,
+      aliases      TEXT[] NOT NULL DEFAULT '{}',
+      entry_type   VARCHAR(24) NOT NULL DEFAULT 'concept',
+      summary      VARCHAR(1000),
+      content      JSONB NOT NULL DEFAULT '{"version":1,"blocks":[]}'::jsonb,
+      properties   JSONB NOT NULL DEFAULT '{}'::jsonb,
+      emoji        VARCHAR(10),
+      color        VARCHAR(50),
+      position     INTEGER NOT NULL DEFAULT 0,
+      origin       VARCHAR(16) NOT NULL DEFAULT 'manual',
+      version      INTEGER NOT NULL DEFAULT 1,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  // Case-insensitive term uniqueness per KB — "Q3 Rollout" and "q3 rollout"
+  // must resolve to one entry, or the dictionary stops being deterministic.
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS knowledge_entries_term_uniq ON knowledge_entries (kb_id, lower(term))`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS knowledge_entries_kb_idx      ON knowledge_entries (kb_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS knowledge_entries_aliases_idx ON knowledge_entries USING gin (aliases)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS knowledge_entries_term_trgm   ON knowledge_entries USING gin (term gin_trgm_ops)`);
+
+  // Suggest-only extraction: a scan proposes candidate terms, a human accepts
+  // them. Nothing here is ever visible to the AI as knowledge until accepted —
+  // an unreviewed suggestion is not a definition.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS knowledge_suggestions (
+      id           VARCHAR(100) PRIMARY KEY,
+      kb_id        VARCHAR(100) NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+      term         VARCHAR(200) NOT NULL,
+      summary      VARCHAR(1000),
+      entry_type   VARCHAR(24) NOT NULL DEFAULT 'concept',
+      evidence     JSONB NOT NULL DEFAULT '[]'::jsonb,
+      status       VARCHAR(16) NOT NULL DEFAULT 'pending',
+      decided_by   UUID REFERENCES users(id) ON DELETE SET NULL,
+      decided_at   TIMESTAMPTZ,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  // One live suggestion per term per KB — re-running a scan converges instead
+  // of stacking duplicates (same ON CONFLICT DO NOTHING convergence the graph
+  // backfill relies on).
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS knowledge_suggestions_term_uniq ON knowledge_suggestions (kb_id, lower(term))`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS knowledge_suggestions_status_idx ON knowledge_suggestions (kb_id, status)`);
+
   // ── User Notification System ─────────────────────────────────────────────────
   // A single general-purpose per-recipient notification feed (bell in the
   // TopBar + Dashboard feed). Written only through backend/src/notifications.ts
@@ -2158,6 +2256,30 @@ async function runMigrations() {
     END; $$ LANGUAGE plpgsql
   `);
 
+  // The Knowledge Base emits ONE signal entity for both the base and its
+  // entries — a KB is small (tens-to-hundreds of entries) and the screen loads
+  // it as a single graph payload anyway, so splitting into two signals would
+  // buy a second refetch path for no benefit. Entries have no workspace of
+  // their own, so the trigger resolves it through the parent base, exactly like
+  // trg_synclog_sections resolves through its parent list.
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_knowledge_bases() RETURNS trigger AS $$
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN PERFORM sync_emit('knowledgeBase', OLD.id, 'delete', OLD.workspace_id, OLD.user_id); RETURN OLD; END IF;
+      PERFORM sync_emit('knowledgeBase', NEW.id, 'upsert', NEW.workspace_id, NEW.user_id); RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION trg_synclog_knowledge_entries() RETURNS trigger AS $$
+    DECLARE v_kb text; v_ws text; v_owner uuid;
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN v_kb := OLD.kb_id; ELSE v_kb := NEW.kb_id; END IF;
+      SELECT workspace_id, user_id INTO v_ws, v_owner FROM knowledge_bases WHERE id = v_kb;
+      IF v_owner IS NOT NULL THEN PERFORM sync_emit('knowledgeBase', v_kb, 'upsert', v_ws, v_owner); END IF;
+      IF (TG_OP = 'DELETE') THEN RETURN OLD; ELSE RETURN NEW; END IF;
+    END; $$ LANGUAGE plpgsql
+  `);
+
   // Attach every trigger idempotently (DROP + CREATE so re-runs are safe).
   const syncTriggers: Array<[string, string]> = [
     ['lists', 'lists'], ['folders', 'folders'], ['timelines', 'timelines'],
@@ -2168,6 +2290,7 @@ async function runMigrations() {
     ['trash_timelines', 'trash'], ['trash_milestones', 'trash'], ['trash_markdown_lists', 'trash'],
     ['templates', 'templates'], ['automations', 'automations'], ['markdown_lists', 'markdown_lists'],
     ['notifications', 'notifications'],
+    ['knowledge_bases', 'knowledge_bases'], ['knowledge_entries', 'knowledge_entries'],
   ];
   for (const [table, fn] of syncTriggers) {
     await pool.query(`DROP TRIGGER IF EXISTS synclog_${table} ON ${table}`);
@@ -2319,6 +2442,9 @@ async function runMigrations() {
         WHEN 'gpsFile' THEN
           v_title := NEW.original_name; v_ws := NEW.workspace_id; v_owner := NEW.user_id;
           v_deep_link := '/gps/' || v_id || '/edit';
+        WHEN 'knowledgeBase' THEN
+          v_title := NEW.name; v_ws := NEW.workspace_id; v_owner := NEW.user_id;
+          v_deep_link := '/knowledge';
         ELSE
           RETURN NEW;
       END CASE;
@@ -2380,11 +2506,38 @@ async function runMigrations() {
     END; $$ LANGUAGE plpgsql
   `);
 
+  // A Knowledge Base entry, like sections/milestones, carries no workspace of
+  // its own — it inherits the one its parent Knowledge Base is pinned to. The
+  // indexed title is the TERM (that's what a lookup resolves against) and the
+  // subtitle is the one-line summary, so entity search and the Net tooltip both
+  // show a usable definition without loading the entry body.
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION sync_entity_index_knowledge_entry() RETURNS TRIGGER AS $$
+    DECLARE v_ws VARCHAR(100); v_owner UUID;
+    BEGIN
+      IF (TG_OP = 'DELETE') THEN
+        DELETE FROM entity_index WHERE entity_type = 'knowledgeEntry' AND entity_id = OLD.id;
+        RETURN OLD;
+      END IF;
+      SELECT kb.workspace_id, kb.user_id INTO v_ws, v_owner FROM knowledge_bases kb WHERE kb.id = NEW.kb_id;
+      IF v_owner IS NULL THEN RETURN NEW; END IF;
+      INSERT INTO entity_index (entity_type, entity_id, workspace_id, owner_id, title, emoji, color, subtitle,
+                                deep_link, entity_created_at, entity_updated_at, indexed_at)
+      VALUES ('knowledgeEntry', NEW.id, v_ws, v_owner, COALESCE(NEW.term, ''), NEW.emoji, NEW.color, NEW.summary,
+              '/knowledge?entry=' || NEW.id, NEW.created_at, NOW(), NOW())
+      ON CONFLICT (entity_type, entity_id) DO UPDATE
+        SET workspace_id = EXCLUDED.workspace_id, owner_id = EXCLUDED.owner_id, title = EXCLUDED.title,
+            emoji = EXCLUDED.emoji, color = EXCLUDED.color, subtitle = EXCLUDED.subtitle,
+            deep_link = EXCLUDED.deep_link, entity_updated_at = NOW(), indexed_at = NOW();
+      RETURN NEW;
+    END; $$ LANGUAGE plpgsql
+  `);
+
   {
     const directEntityIndexTriggers: Array<[string, string]> = [
       ['tasks', 'task'], ['lists', 'list'], ['markdown_lists', 'markdownList'],
       ['timelines', 'timeline'], ['meetings', 'meeting'], ['folders', 'folder'],
-      ['shared_files', 'file'], ['gps_files', 'gpsFile'],
+      ['shared_files', 'file'], ['gps_files', 'gpsFile'], ['knowledge_bases', 'knowledgeBase'],
     ];
     for (const [table, type] of directEntityIndexTriggers) {
       await pool.query(`DROP TRIGGER IF EXISTS entity_index_${table} ON ${table}`);
@@ -2402,6 +2555,11 @@ async function runMigrations() {
     await pool.query(`
       CREATE TRIGGER entity_index_milestones AFTER INSERT OR UPDATE OR DELETE ON milestones
         FOR EACH ROW EXECUTE FUNCTION sync_entity_index_milestone()
+    `);
+    await pool.query(`DROP TRIGGER IF EXISTS entity_index_knowledge_entries ON knowledge_entries`);
+    await pool.query(`
+      CREATE TRIGGER entity_index_knowledge_entries AFTER INSERT OR UPDATE OR DELETE ON knowledge_entries
+        FOR EACH ROW EXECUTE FUNCTION sync_entity_index_knowledge_entry()
     `);
   }
 

@@ -8,6 +8,7 @@ import useMembersStore from './store/useMembersStore';
 import useWorkspaceStore from './store/useWorkspaceStore';
 import useInstalledAppsStore from './store/useInstalledAppsStore';
 import useMarkdownListsStore from './store/useMarkdownListsStore';
+import useKnowledgeBaseStore from './store/useKnowledgeBaseStore';
 import useNotificationsStore from './store/useNotificationsStore';
 import useSharedItemsStore from './store/useSharedItemsStore';
 import { apiCheckSetupRequired, connectSSE, disconnectSSE, setUnauthorizedHandler } from './api/client';
@@ -48,6 +49,7 @@ import AutomationsScreen from './screens/AutomationsScreen';
 // the primary dashboard bundle is unaffected (a hard requirement, not an
 // optimization; see CLAUDE.md's Graph Layer section).
 const GraphScreen = lazy(() => import('./screens/GraphScreen'));
+const KnowledgeScreen = lazy(() => import('./screens/KnowledgeScreen'));
 import AutomationEditorScreen from './screens/AutomationEditorScreen';
 import MarkdownListScreen from './screens/MarkdownListScreen';
 import AdminPasswordResetScreen from './screens/AdminPasswordResetScreen';
@@ -102,6 +104,15 @@ function AppLayout() {
     const onCreateList = () => { setAddWizardMode('list'); setModal('add'); };
     window.addEventListener('shortcut:create-list', onCreateList);
     return () => window.removeEventListener('shortcut:create-list', onCreateList);
+  }, []);
+
+  // "Open Knowledge" — a plain navigation, so it lives here rather than on the
+  // screen itself (which isn't mounted when the shortcut is most useful).
+  useEffect(() => {
+    const onOpenKnowledge = () => navigate('/knowledge');
+    window.addEventListener('shortcut:open-knowledge', onOpenKnowledge);
+    return () => window.removeEventListener('shortcut:open-knowledge', onOpenKnowledge);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadMembers = useMembersStore(s => s.load);
@@ -232,6 +243,10 @@ function AppLayout() {
     // SIGNAL sync entity, like templates/automations) — load them for the
     // Sidebar directly, scoped to the same workspace.
     void useMarkdownListsStore.getState().load(currentWorkspaceId);
+    // Same for the workspace's Knowledge Base — a SIGNAL entity too, and the
+    // Sidebar's pinned row needs to know whether one exists before /knowledge
+    // is ever opened.
+    void useKnowledgeBaseStore.getState().load(currentWorkspaceId);
 
     // Navigate to dashboard only when the user explicitly switches between two
     // real workspaces (not on initial load, and not on null → first workspace).
@@ -255,6 +270,14 @@ function AppLayout() {
   // recipient's own devices are nudged when a notification is created (see the
   // sync_log trigger in the backend). Refreshes the badge always, and the
   // loaded feed when the panel is open.
+  // One `knowledgeBase` signal covers base and entry mutations alike — a base
+  // is small enough that a second refetch path would buy nothing.
+  const knowledgeBaseRev = useSyncStore(s => s.entityRevisions.knowledgeBase ?? 0);
+  useEffect(() => {
+    if (knowledgeBaseRev === 0) return;
+    void useKnowledgeBaseStore.getState().syncRefresh();
+  }, [knowledgeBaseRev]);
+
   const notificationRev = useSyncStore(s => s.entityRevisions.notification ?? 0);
   useEffect(() => {
     if (notificationRev === 0) return;
@@ -317,7 +340,7 @@ function AppLayout() {
     arr.filter(l => l.folderId === folderId).forEach((l, i) => updateList(l.id, { position: i }));
   }, [lists, setLists, updateList]);
 
-  const getActive = (): 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph' => {
+  const getActive = (): 'dashboard' | 'calendar' | 'files' | 'list' | 'timeline' | 'settings' | 'folder' | 'gps' | 'templates' | 'automations' | 'markdownList' | 'graph' | 'knowledge' => {
     if (location.pathname.startsWith('/folder/')) return 'folder';
     if (location.pathname.startsWith('/list/')) return 'list';
     if (location.pathname.startsWith('/timeline/')) return 'timeline';
@@ -328,6 +351,7 @@ function AppLayout() {
     if (location.pathname.startsWith('/templates')) return 'templates';
     if (location.pathname.startsWith('/automations')) return 'automations';
     if (location.pathname.startsWith('/graph')) return 'graph';
+    if (location.pathname.startsWith('/knowledge')) return 'knowledge';
     if (location.pathname.startsWith('/markdown-list/')) return 'markdownList';
     return 'dashboard';
   };
@@ -395,6 +419,7 @@ function AppLayout() {
               <Route path="/templates" element={<TemplatesScreen />} />
               <Route path="/automations" element={!appsLoaded ? null : automationsInstalled ? <AutomationsScreen /> : <Navigate to="/dashboard" replace />} />
               <Route path="/graph" element={<Suspense fallback={null}><GraphScreen /></Suspense>} />
+              <Route path="/knowledge" element={<Suspense fallback={null}><KnowledgeScreen /></Suspense>} />
               <Route path="/automations/:id" element={!appsLoaded ? null : automationsInstalled ? <AutomationEditorScreen /> : <Navigate to="/dashboard" replace />} />
               <Route path="/gps" element={!appsLoaded ? null : gpsInstalled ? <GPSScreen /> : <Navigate to="/dashboard" replace />} />
               <Route path="/markdown-list/:id" element={<MarkdownListScreen />} />
@@ -411,6 +436,7 @@ function AppLayout() {
           onCreatedList={(_list: List) => { setModal(null); navigate(`/list/${_list.id}`); }}
           onCreatedTimeline={(_t: Timeline) => { setModal(null); navigate(`/timeline/${_t.id}`); }}
           onCreatedMarkdownList={(_md) => { setModal(null); navigate(`/markdown-list/${_md.id}`); }}
+          onCreatedKnowledgeBase={() => { setModal(null); navigate('/knowledge'); }}
         />
       )}
       <AIAssistant />

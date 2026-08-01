@@ -4,7 +4,7 @@
 // renders it for editing. Screens/components that perform the actual action
 // listen for a `shortcut:<id>` CustomEvent on `window`.
 
-export type ShortcutScope = 'global' | 'list' | 'timeline' | 'calendar' | 'dialog';
+export type ShortcutScope = 'global' | 'list' | 'timeline' | 'calendar' | 'dialog' | 'knowledge';
 
 export interface ShortcutDef {
   id: string;
@@ -32,6 +32,8 @@ export const SHORTCUT_DEFS: ShortcutDef[] = [
   { id: 'create-list', label: 'New board', description: 'Open the wizard to create a new board.', defaultKey: 'l', scope: 'global', scopeLabel: 'Anywhere' },
   { id: 'create-folder', label: 'New folder', description: 'Start creating a new folder in the sidebar.', defaultKey: 'f', scope: 'global', scopeLabel: 'Anywhere' },
   { id: 'create-workspace', label: 'New workspace', description: 'Open the wizard to create a new workspace.', defaultKey: 'w', scope: 'global', scopeLabel: 'Anywhere' },
+  { id: 'open-knowledge', label: 'Open Knowledge', description: "Open this workspace's Knowledge Base.", defaultKey: 'k', scope: 'global', scopeLabel: 'Anywhere' },
+  { id: 'create-knowledge-entry', label: 'New term', description: 'Add a term to the Knowledge Base.', defaultKey: 'n', scope: 'knowledge', scopeLabel: 'Knowledge page' },
   { id: 'create-item', label: 'New item', description: 'Focus the quick-add field to add a new item.', defaultKey: 'i', scope: 'list', scopeLabel: 'Inside a board' },
   { id: 'view-list', label: 'List view', description: 'Switch this board to List view.', defaultKey: '1', scope: 'list', scopeLabel: 'Inside a board' },
   { id: 'view-kanban', label: 'Kanban view', description: 'Switch this board to Kanban view.', defaultKey: '2', scope: 'list', scopeLabel: 'Inside a board' },

@@ -37,6 +37,20 @@ describe('buildParentIndex', () => {
     expect(parents.get('srn:list:list2')).toBe(root);
   });
 
+  it('the Knowledge Base hangs off the root, with every entry beneath it', () => {
+    const withKb = buildParentIndex({
+      ...SOURCE,
+      knowledgeBase: { id: 'kb1', entryIds: ['e1', 'e2'] },
+    });
+    expect(withKb.get('srn:knowledgeBase:kb1')).toBe(root);
+    expect(withKb.get('srn:knowledgeEntry:e1')).toBe('srn:knowledgeBase:kb1');
+    expect(withKb.get('srn:knowledgeEntry:e2')).toBe('srn:knowledgeBase:kb1');
+  });
+
+  it('omits Knowledge Base nodes entirely when the workspace has no base', () => {
+    expect([...parents.keys()].some(k => k.startsWith('srn:knowledge'))).toBe(false);
+  });
+
   it('milestones attach to their timeline, which attaches to the root', () => {
     expect(parents.get('srn:milestone:m1')).toBe('srn:timeline:tl1');
     expect(parents.get('srn:timeline:tl1')).toBe(root);
@@ -88,7 +102,7 @@ describe('buildRenderedHierarchy', () => {
 
   it('every rendered node gets a hierarchy edge, guaranteeing no visual orphan', () => {
     const nodes = [makeNode('srn:task:1'), makeNode('srn:section:sec1', 'section'), makeNode('srn:list:list1', 'list'), makeNode('srn:folder:folder1', 'folder')];
-    const h = buildRenderedHierarchy(nodes, fullIndex, 'ws1');
+    const h = buildRenderedHierarchy(nodes, fullIndex, root);
     expect(h.edges).toHaveLength(4); // one per rendered node, root -> folder -> list -> section -> task
     expect(h.parentOf.get('srn:task:1')).toBe('srn:section:sec1');
   });
@@ -96,19 +110,19 @@ describe('buildRenderedHierarchy', () => {
   it('skips over filtered-out ancestors to the nearest still-rendered one', () => {
     // section and list are filtered out of the rendered set — task should jump straight to the folder.
     const nodes = [makeNode('srn:task:1'), makeNode('srn:folder:folder1', 'folder')];
-    const h = buildRenderedHierarchy(nodes, fullIndex, 'ws1');
+    const h = buildRenderedHierarchy(nodes, fullIndex, root);
     expect(h.parentOf.get('srn:task:1')).toBe('srn:folder:folder1');
   });
 
   it('falls all the way back to the workspace root when nothing else is rendered', () => {
     const nodes = [makeNode('srn:task:1')];
-    const h = buildRenderedHierarchy(nodes, fullIndex, 'ws1');
+    const h = buildRenderedHierarchy(nodes, fullIndex, root);
     expect(h.parentOf.get('srn:task:1')).toBe(root);
   });
 
   it('computes depth from the workspace root', () => {
     const nodes = [makeNode('srn:task:1'), makeNode('srn:section:sec1', 'section'), makeNode('srn:list:list1', 'list'), makeNode('srn:folder:folder1', 'folder')];
-    const h = buildRenderedHierarchy(nodes, fullIndex, 'ws1');
+    const h = buildRenderedHierarchy(nodes, fullIndex, root);
     expect(h.depthOf.get(root)).toBe(0);
     expect(h.depthOf.get('srn:folder:folder1')).toBe(1);
     expect(h.depthOf.get('srn:list:list1')).toBe(2);
@@ -118,7 +132,39 @@ describe('buildRenderedHierarchy', () => {
 
   it('tallies direct child counts per parent, including the workspace root', () => {
     const nodes = [makeNode('srn:list:list2', 'list'), makeNode('srn:folder:folder1', 'folder')];
-    const h = buildRenderedHierarchy(nodes, fullIndex, 'ws1');
+    const h = buildRenderedHierarchy(nodes, fullIndex, root);
     expect(h.childCount.get(root)).toBe(2); // list2 + folder1 both attach directly to root
+  });
+});
+
+describe('buildRenderedHierarchy with a non-workspace root', () => {
+  // The Knowledge screen roots its net on the Knowledge Base itself rather than
+  // on the synthetic workspace node, which is why the root is a parameter.
+  const kbRoot = 'srn:knowledgeBase:kb1';
+  const parentIndex = new Map<string, string>([
+    ['srn:knowledgeEntry:e1', kbRoot],
+    ['srn:knowledgeEntry:e2', kbRoot],
+    ['srn:list:list9', 'srn:knowledgeEntry:e1'],
+  ]);
+
+  it('terminates every chain at the given root', () => {
+    const nodes = [makeNode('srn:knowledgeEntry:e1'), makeNode('srn:knowledgeEntry:e2')];
+    const h = buildRenderedHierarchy(nodes, parentIndex, kbRoot);
+    expect(h.parentOf.get('srn:knowledgeEntry:e1')).toBe(kbRoot);
+    expect(h.childCount.get(kbRoot)).toBe(2);
+    expect(h.depthOf.get(kbRoot)).toBe(0);
+  });
+
+  it('nests a referenced entity under the entry that references it', () => {
+    const nodes = [makeNode('srn:knowledgeEntry:e1'), makeNode('srn:list:list9', 'list')];
+    const h = buildRenderedHierarchy(nodes, parentIndex, kbRoot);
+    expect(h.parentOf.get('srn:list:list9')).toBe('srn:knowledgeEntry:e1');
+    expect(h.depthOf.get('srn:list:list9')).toBe(2);
+  });
+
+  it('promotes a referenced entity to the root when its referencing entry is filtered out', () => {
+    const nodes = [makeNode('srn:list:list9', 'list')];
+    const h = buildRenderedHierarchy(nodes, parentIndex, kbRoot);
+    expect(h.parentOf.get('srn:list:list9')).toBe(kbRoot);
   });
 });

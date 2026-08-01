@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import useAppStore from '../store/useAppStore';
 import useMarkdownListsStore from '../store/useMarkdownListsStore';
+import useKnowledgeBaseStore from '../store/useKnowledgeBaseStore';
 import { buildParentIndex, buildRenderedHierarchy, workspaceRootSrn, type GraphHierarchy } from '../utils/graphHierarchy';
 import type { GraphNode } from '../types';
 
@@ -17,6 +18,8 @@ export default function useGraphHierarchy(nodes: GraphNode[], workspaceId: strin
   const timelines = useAppStore((s) => s.timelines);
   const dashTasks = useAppStore((s) => s.dashTasks);
   const markdownLists = useMarkdownListsStore((s) => s.markdownLists);
+  const kbBase = useKnowledgeBaseStore((s) => s.base);
+  const kbEntries = useKnowledgeBaseStore((s) => s.entries);
 
   const fullParentIndex = useMemo(() => {
     if (!workspaceId) return null;
@@ -36,12 +39,15 @@ export default function useGraphHierarchy(nodes: GraphNode[], workspaceId: strin
         id: m.id, folderId: m.folderId ?? null, todoListId: m.todoListId ?? null,
       })),
       dashTaskIds: dashTasks.filter((t) => t.workspaceId === workspaceId).map((t) => t.id),
+      knowledgeBase: kbBase && kbBase.workspaceId === workspaceId
+        ? { id: kbBase.id, entryIds: kbEntries.map((e) => e.id) }
+        : null,
     });
-  }, [workspaceId, lists, folders, timelines, dashTasks, markdownLists]);
+  }, [workspaceId, lists, folders, timelines, dashTasks, markdownLists, kbBase, kbEntries]);
 
   return useMemo(() => {
     if (!workspaceId || !fullParentIndex) return null;
-    return buildRenderedHierarchy(nodes, fullParentIndex, workspaceId);
+    return buildRenderedHierarchy(nodes, fullParentIndex, workspaceRootSrn(workspaceId));
   }, [nodes, fullParentIndex, workspaceId]);
 }
 
