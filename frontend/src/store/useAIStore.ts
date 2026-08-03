@@ -286,12 +286,23 @@ export interface GlossaryHint {
   summary: string | null;
 }
 
+/** One AI Skill as carried into Sol's prompt — name + description only. The
+ *  full SKILL.md body is pulled on demand via the read_skill tool, the same
+ *  progressive-disclosure split lookup_knowledge uses for the Knowledge Base
+ *  glossary below. See types.ts's AiSkillHint. */
+export interface SkillHint {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export function buildSystemPrompt(
   ctx: AIContext,
   username: string,
   workspaces?: Array<{ id: string; name: string; role: string }>,
   currentWorkspaceId?: string | null,
-  glossary?: GlossaryHint[]
+  glossary?: GlossaryHint[],
+  skills?: SkillHint[]
 ): string {
   const today = toIso(new Date());
   const tlProgress = ctx.view === 'timeline'
@@ -330,6 +341,16 @@ export function buildSystemPrompt(
     ? `\nWorkspaces you can manage: ${workspaces.map((w) => `"${w.name}" (id: ${w.id}, role: ${w.role})`).join(', ')}. Current workspace: ${workspaces.find((w) => w.id === currentWorkspaceId)?.name ?? 'unknown'}.`
     : '';
 
+  // Admin-curated AI Skills, name+description only (progressive disclosure —
+  // the full SKILL.md body is pulled via read_skill only once a task actually
+  // matches one, so an instance with many/large skills doesn't bloat every
+  // single chat's context).
+  const skillsNote = skills?.length
+    ? `\n\nAI Skills available on this instance (admin-curated context bundles). When the user's request matches one of these, call read_skill(skill_id) FIRST to load its full instructions before proceeding — do not guess at what a skill covers from its description alone.\n${
+        skills.map((s) => `- "${s.name}" (id: ${s.id}): ${s.description || 'no description'}`).join('\n')
+      }`
+    : '';
+
   return `You are Sol, a helpful AI assistant embedded in Solytiq Cloud, a personal productivity and task management app.
 
 Current user: ${username}
@@ -363,7 +384,7 @@ Guidelines:
 - TIMELINES: You can create timelines (create_timeline), update/rename them (update_timeline), delete them (delete_timeline — ALWAYS confirm first). Navigate to a specific timeline with navigate_to_timeline using its ID from available_timelines. When on a timeline page you can add milestones (add_milestone), edit them (update_milestone), delete them (delete_milestone — confirm first), and reorder them (reorder_milestones).
 - MILESTONE STATUS: valid values are 'upcoming', 'in-progress', 'done'. Milestone dates use YYYY-MM-DD format. Color can be a hex string (e.g. "var(--color-success)") or null for auto.
 - TIMELINE IDs: Always use exact timeline_id strings from available_timelines. Milestone IDs come from the milestones array in the current context.
-- If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}${graphNote}${glossaryNote}`;
+- If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}${graphNote}${glossaryNote}${skillsNote}`;
 }
 
 // ── Tool definitions ────────────────────────────────────────────────

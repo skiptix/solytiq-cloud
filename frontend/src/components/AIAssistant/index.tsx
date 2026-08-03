@@ -16,6 +16,7 @@ import useAppStore, {
 import useAuthStore from '../../store/useAuthStore';
 import useWorkspaceStore from '../../store/useWorkspaceStore';
 import useKnowledgeBaseStore from '../../store/useKnowledgeBaseStore';
+import useAiSkillsStore from '../../store/useAiSkillsStore';
 import useGraphStore from '../../store/useGraphStore';
 import useUserPrefsStore from '../../store/useUserPrefsStore';
 import type { GraphEntityType } from '../../types';
@@ -80,6 +81,8 @@ interface ToolCall {
 // (the old executeTool branches remain as harmless dead code). Tools with no
 // backend equivalent — sublists, reorder/move, calendar scheduling, workspaces,
 // GPS, navigation — stay on the client.
+const SKILL_MUTATION_TOOL_NAMES = new Set(['create_skill', 'update_skill', 'delete_skill', 'set_skill_file', 'remove_skill_file']);
+
 const SUPERSEDED_CLIENT_TOOLS = new Set([
   'create_dashboard_task', 'update_dashboard_task', 'delete_dashboard_task',
   'create_list_task', 'update_list_task', 'delete_list_task', 'create_task_in_list',
@@ -952,7 +955,8 @@ export default function AIAssistant() {
 
         let tools = composeTools(buildTools(ctx, wsId, wsInfo));
         const glossary = useKnowledgeBaseStore.getState().entries.map(e => ({ term: e.term, aliases: e.aliases, summary: e.summary }));
-        const systemPrompt = buildSystemPrompt(ctx, username || 'User', wsInfo, wsId, glossary);
+        const skills = useAiSkillsStore.getState().enabledSkills;
+        const systemPrompt = buildSystemPrompt(ctx, username || 'User', wsInfo, wsId, glossary, skills);
 
         // Build API messages from history (last 20 + current)
         const history = useAIStore
@@ -1012,6 +1016,13 @@ export default function AIAssistant() {
           // keep the next round's tool list and IDs accurate.
           if (results.some((r) => backendToolNamesRef.current.has(r.name))) {
             await appStore.loadFromApi(workspaceStore.currentWorkspaceId ?? undefined);
+          }
+          // AI Skill mutations aren't part of the workspace-scoped app store
+          // above — refresh the enabled index separately so a skill created/
+          // edited/deleted mid-conversation is reflected immediately (both for
+          // the rest of this chat and for Settings → AI Skills, if open).
+          if (results.some((r) => SKILL_MUTATION_TOOL_NAMES.has(r.name))) {
+            useAiSkillsStore.getState().loadEnabled();
           }
 
           // Rebuild context with updated store state

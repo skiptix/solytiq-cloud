@@ -4,6 +4,7 @@ import { query } from '../db';
 import { authenticate } from '../middleware';
 import { extractTextFromBuffer, MAX_TEXT_CHARS } from '../fileText';
 import { getOpenRouterToolDefs, executeAiTool } from '../aiTools';
+import { listSkills } from '../aiSkills/skills';
 
 const router = Router();
 
@@ -373,6 +374,20 @@ router.delete('/files/:id', authenticate, async (req: Request, res: Response) =>
     res.json({ success: true });
   } catch (err) {
     console.error('ai/files/:id DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/ai/skills — the progressive-disclosure index Sol's system prompt is
+// built from: every ENABLED skill's name+description, never the full body
+// (that's what the read_skill tool is for — see aiTools.ts). Any signed-in
+// user can read this; only an admin can manage skills (routes/aiSkills.ts).
+router.get('/skills', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const skills = await listSkills({ enabledOnly: true });
+    res.json({ skills: skills.map((s) => ({ id: s.id, name: s.name, description: s.description })) });
+  } catch (err) {
+    console.error('ai/skills GET error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

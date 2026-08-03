@@ -59,6 +59,10 @@ import {
 } from './knowledgeBase/entries';
 import { mutateEntryBlocks } from './knowledgeBase/blocks';
 import { startAgentRun } from './agent/runtime';
+import {
+  listSkills, findSkill, createSkill, updateSkill, deleteSkill,
+  listSkillFiles, getSkillFile, setSkillFile, removeSkillFile, isUserAdmin,
+} from './aiSkills/skills';
 
 // A minimal JSON Schema object for a tool's parameters.
 export interface JsonSchema {
@@ -2550,6 +2554,188 @@ export const aiTools: AiTool[] = [
         return fail(err instanceof Error ? err.message : 'Could not create that relation');
       }
       return ok(`Linked "${found.entry.term}" to ${targetSrn}.`);
+    },
+  },
+
+  // ───────────────────────────── AI Skills ─────────────────────────────────
+  // Admin-curated, instance-wide context bundles (Settings → AI Skills) that
+  // personalize/extend Sol, the Agent Runtime, and MCP clients — a SKILL.md
+  // body plus optional bundled reference files. Progressive disclosure: every
+  // enabled skill's name+description already rides in the system prompt (see
+  // buildSystemPrompt in useAIStore.ts); these tools are how a model pulls
+  // the FULL content once a task actually matches one, and — for an admin —
+  // how it manages skills entirely by being asked to, no UI required.
+  //
+  // Reads (list/read) are open to any signed-in user but only ever surface
+  // ENABLED skills unless the caller is an admin — a disabled skill isn't
+  // "active" instance context yet. Writes (create/update/delete/file edits)
+  // are admin-only. Handlers only ever receive a userId (see the AiTool type
+  // above), so admin-gating happens by querying users.is_admin directly
+  // (isUserAdmin) rather than trusting anything the model claims.
+  {
+    name: 'list_skills',
+    description: 'List AI Skills — admin-curated context bundles that personalize this assistant. By default only ENABLED skills are shown (the ones actually informing responses right now). Pass include_disabled=true (admin only) to also see disabled ones.',
+    parameters: {
+      type: 'object',
+      properties: { include_disabled: { type: 'boolean', description: 'Admin only — also list disabled skills.' } },
+    },
+    handler: async (userId, args) => {
+      const includeDisabled = args.include_disabled === true;
+      if (includeDisabled && !(await isUserAdmin(userId))) return fail('admin access required to list disabled skills');
+      const skills = await listSkills({ enabledOnly: !includeDisabled });
+      if (!skills.length) return ok('No AI Skills defined yet.');
+      return ok(skills.map((s) => `- "${s.name}" (id: ${s.id})${s.enabled ? '' : ' [disabled]'}${s.file_count ? ` [${s.file_count} file${s.file_count === 1 ? '' : 's'}]` : ''}: ${s.description || 'no description'}`).join('\n'));
+    },
+  },
+  {
+    name: 'read_skill',
+    description: 'Get the full instructions (SKILL.md content) of one AI Skill by id or name, plus the names of any bundled reference files. Call this before acting on a task that matches a skill from list_skills.',
+    parameters: { type: 'object', properties: { skill_id: { type: 'string', description: 'The skill\'s id or name.' } }, required: ['skill_id'] },
+    handler: async (userId, args) => {
+      const skillRef = str(args.skill_id);
+      if (!skillRef) return fail('skill_id is required');
+      const skill = await findSkill(skillRef);
+      if (!skill) return fail('skill not found');
+      if (!skill.enabled && !(await isUserAdmin(userId))) return fail('this skill is currently disabled');
+      const files = await listSkillFiles(skill.id);
+      const fileList = files.length ? `\n\nBundled reference files (call read_skill_file to read one):\n${files.map((f) => `- ${f.file_path} (${f.size_bytes}B)`).join('\n')}` : '';
+      return ok(`# ${skill.name}\n\n${skill.content}${fileList}`);
+    },
+  },
+  {
+    name: 'list_skill_files',
+    description: 'List the bundled reference files (name + size) attached to an AI Skill.',
+    parameters: { type: 'object', properties: { skill_id: { type: 'string' } }, required: ['skill_id'] },
+    handler: async (userId, args) => {
+      const skillRef = str(args.skill_id);
+      if (!skillRef) return fail('skill_id is required');
+      const skill = await findSkill(skillRef);
+      if (!skill) return fail('skill not found');
+      if (!skill.enabled && !(await isUserAdmin(userId))) return fail('this skill is currently disabled');
+      const files = await listSkillFiles(skill.id);
+      if (!files.length) return ok('This skill has no bundled reference files.');
+      return ok(files.map((f) => `- ${f.file_path} (${f.size_bytes}B)`).join('\n'));
+    },
+  },
+  {
+    name: 'read_skill_file',
+    description: 'Read the text content of one bundled reference file attached to an AI Skill.',
+    parameters: {
+      type: 'object',
+      properties: { skill_id: { type: 'string' }, file_path: { type: 'string', description: 'Exact path as shown by list_skill_files/read_skill.' } },
+      required: ['skill_id', 'file_path'],
+    },
+    handler: async (userId, args) => {
+      const skillRef = str(args.skill_id), filePath = str(args.file_path);
+      if (!skillRef || !filePath) return fail('skill_id and file_path are required');
+      const skill = await findSkill(skillRef);
+      if (!skill) return fail('skill not found');
+      if (!skill.enabled && !(await isUserAdmin(userId))) return fail('this skill is currently disabled');
+      const file = await getSkillFile(skill.id, filePath);
+      if (!file) return fail(`no file "${filePath}" on this skill — check list_skill_files for exact paths`);
+      return ok(file.content);
+    },
+  },
+  {
+    name: 'create_skill',
+    description: 'ADMIN ONLY. Create a new AI Skill from raw text — name, a one-line description, and the SKILL.md content (instructions the assistant should follow when this skill applies). Skills are instance-wide and affect every user\'s assistant, so only an admin may create one.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        description: { type: 'string', description: 'One line — this is what rides in every chat\'s context, so keep it short and specific about when to use the skill.' },
+        content: { type: 'string', description: 'The full SKILL.md body — detailed instructions, examples, conventions.' },
+      },
+      required: ['name', 'content'],
+    },
+    handler: async (userId, args) => {
+      if (!(await isUserAdmin(userId))) return fail('admin access required');
+      const name = str(args.name), content = str(args.content);
+      if (!name || !content) return fail('name and content are required');
+      const result = await createSkill({ name, description: str(args.description) ?? '', content, source: 'manual', origin: 'ai', createdBy: userId });
+      if (!result.ok) return fail(result.error);
+      return ok(`Created the "${result.skill.name}" skill (id: ${result.skill.id}), enabled by default.`, `Created skill "${result.skill.name}"`);
+    },
+  },
+  {
+    name: 'update_skill',
+    description: 'ADMIN ONLY. Edit an AI Skill\'s name, description, content, or enabled state. Only the fields you pass are changed.',
+    parameters: {
+      type: 'object',
+      properties: {
+        skill_id: { type: 'string' },
+        name: { type: 'string' },
+        description: { type: 'string' },
+        content: { type: 'string' },
+        enabled: { type: 'boolean' },
+      },
+      required: ['skill_id'],
+    },
+    handler: async (userId, args) => {
+      if (!(await isUserAdmin(userId))) return fail('admin access required');
+      const skillRef = str(args.skill_id);
+      if (!skillRef) return fail('skill_id is required');
+      const skill = await findSkill(skillRef);
+      if (!skill) return fail('skill not found');
+      const result = await updateSkill(skill.id, {
+        name: str(args.name), description: str(args.description), content: str(args.content),
+        enabled: typeof args.enabled === 'boolean' ? args.enabled : undefined,
+        updatedBy: userId,
+      });
+      if (!result.ok) return fail(result.error);
+      return ok(`Updated "${result.skill.name}"${typeof args.enabled === 'boolean' ? ` (now ${result.skill.enabled ? 'enabled' : 'disabled'})` : ''}.`, `Updated skill "${result.skill.name}"`);
+    },
+  },
+  {
+    name: 'delete_skill',
+    description: 'ADMIN ONLY. Permanently delete an AI Skill and any bundled reference files. There is no undo.',
+    parameters: { type: 'object', properties: { skill_id: { type: 'string' } }, required: ['skill_id'] },
+    handler: async (userId, args) => {
+      if (!(await isUserAdmin(userId))) return fail('admin access required');
+      const skillRef = str(args.skill_id);
+      if (!skillRef) return fail('skill_id is required');
+      const skill = await findSkill(skillRef);
+      if (!skill) return fail('skill not found');
+      await deleteSkill(skill.id);
+      return ok(`Deleted the "${skill.name}" skill.`, `Deleted skill "${skill.name}"`);
+    },
+  },
+  {
+    name: 'set_skill_file',
+    description: 'ADMIN ONLY. Add or update one bundled text reference file on an AI Skill (e.g. a checklist or style guide alongside its main SKILL.md content). Reference-only — files are never executed.',
+    parameters: {
+      type: 'object',
+      properties: {
+        skill_id: { type: 'string' },
+        file_path: { type: 'string', description: 'Relative path, e.g. "reference/checklist.md".' },
+        content: { type: 'string' },
+      },
+      required: ['skill_id', 'file_path', 'content'],
+    },
+    handler: async (userId, args) => {
+      if (!(await isUserAdmin(userId))) return fail('admin access required');
+      const skillRef = str(args.skill_id), filePath = str(args.file_path), content = str(args.content);
+      if (!skillRef || !filePath || content === undefined) return fail('skill_id, file_path and content are required');
+      const skill = await findSkill(skillRef);
+      if (!skill) return fail('skill not found');
+      const result = await setSkillFile(skill.id, filePath, content);
+      if (!result.ok) return fail(result.error);
+      return ok(`Saved "${result.skill.file_path}" on "${skill.name}".`, `Updated a file on skill "${skill.name}"`);
+    },
+  },
+  {
+    name: 'remove_skill_file',
+    description: 'ADMIN ONLY. Remove one bundled reference file from an AI Skill.',
+    parameters: { type: 'object', properties: { skill_id: { type: 'string' }, file_path: { type: 'string' } }, required: ['skill_id', 'file_path'] },
+    handler: async (userId, args) => {
+      if (!(await isUserAdmin(userId))) return fail('admin access required');
+      const skillRef = str(args.skill_id), filePath = str(args.file_path);
+      if (!skillRef || !filePath) return fail('skill_id and file_path are required');
+      const skill = await findSkill(skillRef);
+      if (!skill) return fail('skill not found');
+      const removed = await removeSkillFile(skill.id, filePath);
+      if (!removed) return fail(`no file "${filePath}" on this skill`);
+      return ok(`Removed "${filePath}" from "${skill.name}".`, `Removed a file from skill "${skill.name}"`);
     },
   },
 

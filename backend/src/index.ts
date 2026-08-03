@@ -45,6 +45,7 @@ import graphRouter from './routes/graph';
 import canvasesRouter from './routes/canvases';
 import knowledgeRouter from './routes/knowledge';
 import knowledgeBaseRouter from './routes/knowledgeBase';
+import aiSkillsRouter from './routes/aiSkills';
 import { sweepEmbeddingQueue } from './knowledge/embeddingWorker';
 import { setPgvectorAvailable } from './knowledge/state';
 import agentRouter from './routes/agent';
@@ -251,6 +252,7 @@ app.use('/api/tasks/:taskId/tags', taskTagsRouter);
 app.use('/api/tasks',      tasksRouter);
 app.use('/api/lists',      listsRouter);
 app.use('/api/trash',      trashRouter);
+app.use('/api/admin/ai-skills', aiSkillsRouter);
 app.use('/api/admin',      adminRouter);
 app.use('/api/folders',    foldersRouter);
 app.use('/api/files',      filesRouter);
@@ -1999,6 +2001,52 @@ async function runMigrations() {
   // backfill relies on).
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS knowledge_suggestions_term_uniq ON knowledge_suggestions (kb_id, lower(term))`);
   await pool.query(`CREATE INDEX IF NOT EXISTS knowledge_suggestions_status_idx ON knowledge_suggestions (kb_id, status)`);
+
+  // ── AI Skills ─────────────────────────────────────────────────────────────
+  // Admin-curated, instance-wide context bundles that personalize/extend Sol,
+  // the Agent Runtime, and MCP clients — a SKILL.md body (markdown
+  // instructions) plus optional bundled reference files, uploaded as a raw
+  // .md file or a .zip (see aiSkills/bundle.ts for the zip-slip/zip-bomb
+  // guards on extraction). Progressive disclosure: every ENABLED skill's
+  // name+description rides in every chat's system prompt (cheap); the full
+  // content/files are pulled via the read_skill/read_skill_file AI tools only
+  // when a task actually matches one — mirrors how Claude's own Skill system
+  // works. Reference files only — nothing here is ever executed, so this
+  // stays out of the one narrow code-execution surface the app already has
+  // (the Automation Hub's isolated-vm sandbox).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_skills (
+      id           VARCHAR(100) PRIMARY KEY,
+      name         VARCHAR(200) NOT NULL,
+      slug         VARCHAR(120) NOT NULL UNIQUE,
+      description  VARCHAR(500) NOT NULL DEFAULT '',
+      content      TEXT NOT NULL DEFAULT '',
+      enabled      BOOLEAN NOT NULL DEFAULT TRUE,
+      source       VARCHAR(16) NOT NULL DEFAULT 'manual',
+      origin       VARCHAR(16) NOT NULL DEFAULT 'manual',
+      created_by   UUID REFERENCES users(id) ON DELETE SET NULL,
+      updated_by   UUID REFERENCES users(id) ON DELETE SET NULL,
+      version      INTEGER NOT NULL DEFAULT 1,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS ai_skills_enabled_idx ON ai_skills (enabled)`);
+
+  // A skill's supporting reference files (e.g. a bundled checklist or style
+  // guide alongside SKILL.md), text-only — see bundle.ts's extraction allow-list.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_skill_files (
+      id           VARCHAR(100) PRIMARY KEY,
+      skill_id     VARCHAR(100) NOT NULL REFERENCES ai_skills(id) ON DELETE CASCADE,
+      file_path    VARCHAR(500) NOT NULL,
+      content      TEXT NOT NULL DEFAULT '',
+      size_bytes   INTEGER NOT NULL DEFAULT 0,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS ai_skill_files_path_uniq ON ai_skill_files (skill_id, file_path)`);
 
   // ── User Notification System ─────────────────────────────────────────────────
   // A single general-purpose per-recipient notification feed (bell in the
