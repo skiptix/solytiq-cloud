@@ -64,6 +64,13 @@ export default function KnowledgeScreen() {
   const [members, setMembers] = useState<MentionMember[]>([]);
   const graphRef = useRef<{ centerOn: (srn: string) => void; resetCamera: () => void; hasNode: (srn: string) => boolean } | null>(null);
 
+  // Term search — filters the loaded entries client-side and, on pick, centers
+  // + selects the matching node so NeuralGraph's own selection highlighting
+  // (dim-neighbors, glow) does the actual "highlighting" for free.
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => { if (workspaceId) void load(workspaceId); }, [workspaceId, load]);
 
   // `shortcut:create-knowledge-entry` — the screen owns this one because the
@@ -178,23 +185,51 @@ export default function KnowledgeScreen() {
 
   const selectedEntry = entries.find(e => e.id === selectedId) ?? null;
 
+  // Polls briefly for the force simulation to have seeded a position for this
+  // node (it may not exist yet on the very first render after data loads).
+  const centerOnEntry = useCallback((srn: string) => {
+    let attempts = 0;
+    const tryCenter = () => {
+      attempts += 1;
+      if (graphRef.current?.hasNode(srn)) { graphRef.current.centerOn(srn); return; }
+      if (attempts < 15) setTimeout(tryCenter, 60);
+    };
+    tryCenter();
+  }, []);
+
   // Deep link: /knowledge?entry=<id> (what entity_index stores for an entry).
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('entry');
     if (id && entries.some(e => e.id === id)) {
       setSelectedId(id);
-      let attempts = 0;
-      const tryCenter = () => {
-        attempts += 1;
-        const srn = `${ENTRY_PREFIX}${id}`;
-        if (graphRef.current?.hasNode(srn)) { graphRef.current.centerOn(srn); return; }
-        if (attempts < 15) setTimeout(tryCenter, 60);
-      };
-      tryCenter();
+      centerOnEntry(`${ENTRY_PREFIX}${id}`);
       window.history.replaceState({}, '', '/knowledge');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries.length]);
+
+  // `shortcut:search-knowledge-terms` focuses the search bar (see registry.ts).
+  useEffect(() => {
+    const onSearchShortcut = () => searchInputRef.current?.focus();
+    window.addEventListener('shortcut:search-knowledge-terms', onSearchShortcut);
+    return () => window.removeEventListener('shortcut:search-knowledge-terms', onSearchShortcut);
+  }, []);
+
+  const searchMatches = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return entries
+      .filter(e => e.term.toLowerCase().includes(q) || e.aliases.some(a => a.toLowerCase().includes(q)))
+      .slice(0, 8);
+  }, [entries, searchQuery]);
+
+  const handlePickSearchResult = useCallback((entryId: string) => {
+    setSelectedId(entryId);
+    centerOnEntry(`${ENTRY_PREFIX}${entryId}`);
+    setSearchQuery('');
+    setSearchOpen(false);
+    searchInputRef.current?.blur();
+  }, [centerOnEntry]);
 
   const handleNodeClick = useCallback((n: NetRenderNode) => {
     if (n.type === 'knowledgeBase') { graphRef.current?.resetCamera(); setSelectedId(null); return; }
@@ -364,6 +399,51 @@ export default function KnowledgeScreen() {
           </Suspense>
         )}
 
+        {!loading && entries.length > 0 && (
+          <div style={{ position: 'absolute', top: 12, left: 12, width: isMobile ? 'calc(100% - 24px)' : 260, zIndex: 5 }}>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 10, background: 'var(--color-white)', border: '1px solid var(--color-border)', boxShadow: '0 4px 16px rgba(var(--color-black-rgb), 0.10)' }}>
+              <Icon name="search" size={16} color="var(--color-text-quaternary)" />
+              <input
+                ref={searchInputRef}
+                value={searchQuery}
+                onChange={e => { setSearchQuery(e.target.value); setSearchOpen(true); }}
+                onFocus={() => setSearchOpen(true)}
+                onBlur={() => setTimeout(() => setSearchOpen(false), 120)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && searchMatches[0]) handlePickSearchResult(searchMatches[0].id);
+                  if (e.key === 'Escape') { setSearchQuery(''); setSearchOpen(false); searchInputRef.current?.blur(); }
+                }}
+                placeholder="Search terms…"
+                style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)' }}
+              />
+              {searchQuery && (
+                <button onClick={() => { setSearchQuery(''); searchInputRef.current?.focus(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0, flexShrink: 0 }}>
+                  <Icon name="close" size={14} color="var(--color-text-quaternary)" />
+                </button>
+              )}
+            </div>
+            {searchOpen && searchQuery.trim() && (
+              <div style={{ marginTop: 6, background: 'var(--color-white)', borderRadius: 10, border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', overflow: 'hidden', animation: 'menuIn 140ms ease both' }}>
+                {searchMatches.length === 0 ? (
+                  <div style={{ padding: '10px 12px', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)' }}>No terms match "{searchQuery.trim()}"</div>
+                ) : (
+                  searchMatches.map(e => (
+                    <button key={e.id}
+                      onMouseDown={ev => ev.preventDefault()}
+                      onClick={() => handlePickSearchResult(e.id)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', background: 'none', border: 'none', borderTop: '1px solid var(--color-surface-tint-2)', cursor: 'pointer', textAlign: 'left' }}
+                      onMouseEnter={ev => { ev.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                      onMouseLeave={ev => { ev.currentTarget.style.background = 'none'; }}>
+                      <span style={{ fontSize: 15, flexShrink: 0 }}>{e.emoji || '📖'}</span>
+                      <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.term}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {selectedEntry && (
           <EntryInspector
             entry={selectedEntry}
@@ -380,7 +460,7 @@ export default function KnowledgeScreen() {
         )}
 
         {showSuggestions && suggestions.length > 0 && (
-          <div style={{ position: 'absolute', top: 12, left: 12, width: isMobile ? 'calc(100% - 24px)' : 340, maxHeight: 'calc(100% - 24px)', overflowY: 'auto', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.16)', zIndex: 5, animation: 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          <div style={{ position: 'absolute', top: 64, left: 12, width: isMobile ? 'calc(100% - 24px)' : 340, maxHeight: 'calc(100% - 76px)', overflowY: 'auto', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.16)', zIndex: 5, animation: 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
               <Icon name="rate_review" size={16} color="var(--color-primary)" />
               <span style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 700, color: 'var(--color-text-primary)' }}>Suggested terms</span>
