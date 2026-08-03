@@ -13,6 +13,7 @@ import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, a
 import Icon from '../components/Icon';
 import SaveStatusDot from '../components/SaveStatusDot';
 import EmojiSelector from '../components/EmojiSelector';
+import AutomationsButton from '../components/AutomationsButton';
 
 export default function ListScreen() {
   const { listId } = useParams<{ listId: string }>();
@@ -356,24 +357,27 @@ export default function ListScreen() {
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
       <div style={{ maxWidth: viewMode === 'list' ? 680 : 1400, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
 
-        {/* View switcher — List / Kanban / Timeline, top-left */}
-        <div style={{ display: 'inline-flex', alignSelf: 'flex-start', background: 'var(--color-surface-tint)', borderRadius: 10, padding: 3, gap: 2, flexWrap: 'wrap', maxWidth: '100%' }}>
-          {(['list', 'kanban', 'timeline'] as const).map(v => (
-            <button
-              key={v}
-              onClick={() => setViewMode(v)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 6,
-                fontFamily: 'var(--font-heading)', fontSize: isMobile ? 11.5 : 12.5, fontWeight: 600,
-                color: viewMode === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
-                background: viewMode === v ? 'var(--color-white)' : 'transparent',
-                boxShadow: viewMode === v ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none',
-                border: 'none', borderRadius: 8, padding: isMobile ? '6px 9px' : '7px 14px', cursor: 'pointer', transition: 'all 150ms', whiteSpace: 'nowrap',
-              }}>
-              <Icon name={v === 'list' ? 'format_list_bulleted' : v === 'kanban' ? 'view_kanban' : 'view_timeline'} size={15} color={viewMode === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
-              {v === 'list' ? 'List' : v === 'kanban' ? 'Kanban' : 'Timeline'}
-            </button>
-          ))}
+        {/* View switcher (top-left) + Automations entry point (top-right) */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'inline-flex', background: 'var(--color-surface-tint)', borderRadius: 10, padding: 3, gap: 2, flexWrap: 'wrap', maxWidth: '100%' }}>
+            {(['list', 'kanban', 'timeline'] as const).map(v => (
+              <button
+                key={v}
+                onClick={() => setViewMode(v)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 6,
+                  fontFamily: 'var(--font-heading)', fontSize: isMobile ? 11.5 : 12.5, fontWeight: 600,
+                  color: viewMode === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                  background: viewMode === v ? 'var(--color-white)' : 'transparent',
+                  boxShadow: viewMode === v ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none',
+                  border: 'none', borderRadius: 8, padding: isMobile ? '6px 9px' : '7px 14px', cursor: 'pointer', transition: 'all 150ms', whiteSpace: 'nowrap',
+                }}>
+                <Icon name={v === 'list' ? 'format_list_bulleted' : v === 'kanban' ? 'view_kanban' : 'view_timeline'} size={15} color={viewMode === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
+                {v === 'list' ? 'List' : v === 'kanban' ? 'Kanban' : 'Timeline'}
+              </button>
+            ))}
+          </div>
+          {list && <AutomationsButton ownerType="list" ownerId={list.id} isMobile={isMobile} />}
         </div>
 
         {/* Hero */}

@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent, TaskChangeLogEntry, EntityLink, ResolvedLink, LinkTypeDef, GraphPayload, GraphCanvas, GraphCanvasLayout, AgentRun, AgentProposal, AgentPolicy, AgentMode, EntityIndexEntry, KnowledgeBase, KnowledgeEntry, KnowledgeSuggestion, KnowledgeLookupResult, AiSkill, AiSkillFile, AiSkillHint } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationOwnerEntityType, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent, TaskChangeLogEntry, EntityLink, ResolvedLink, LinkTypeDef, GraphPayload, GraphCanvas, GraphCanvasLayout, AgentRun, AgentProposal, AgentPolicy, AgentMode, EntityIndexEntry, KnowledgeBase, KnowledgeEntry, KnowledgeSuggestion, KnowledgeLookupResult, AiSkill, AiSkillFile, AiSkillHint } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -1517,13 +1517,13 @@ export const apiUpdateTemplateStructure = (id: string, structure: TemplateListNo
 export const apiGetAutomationNodeTypes = () =>
   apiFetch<{ triggers: TriggerTypeDef[]; actions: ActionTypeDef[] }>('/automations/node-types');
 
-export const apiGetAutomations = (workspaceId: string) =>
-  apiFetch<{ automations: Automation[] }>(`/automations?workspaceId=${encodeURIComponent(workspaceId)}`);
+export const apiGetAutomations = (ownerEntityType: AutomationOwnerEntityType, ownerEntityId: string) =>
+  apiFetch<{ automations: Automation[] }>(`/automations?ownerType=${encodeURIComponent(ownerEntityType)}&ownerId=${encodeURIComponent(ownerEntityId)}`);
 
 export const apiGetAutomation = (id: string) =>
   apiFetch<{ automation: Automation }>(`/automations/${id}`);
 
-export const apiCreateAutomation = (data: { workspaceId: string; name: string; description?: string; graph: AutomationGraph }) =>
+export const apiCreateAutomation = (data: { ownerEntityType: AutomationOwnerEntityType; ownerEntityId: string; name: string; description?: string; graph: AutomationGraph }) =>
   apiFetch<{ automation: Automation }>('/automations', { method: 'POST', body: JSON.stringify(data) });
 
 export const apiUpdateAutomation = (id: string, data: { name?: string; description?: string | null; graph?: AutomationGraph; expectedVersion?: number }) =>

@@ -28,6 +28,7 @@ import CreatorBubble from '../components/CreatorBubble';
 import NotesEditor from '../components/NotesEditor';
 import RelationsPanel from '../components/graph/RelationsPanel';
 import MarkdownView from '../components/MarkdownView';
+import AutomationsButton from '../components/AutomationsButton';
 import { FilePicker, AttachBadge, useAttachmentDrop, AttachDropOverlay } from '../components/TaskDialog';
 import AttachmentPreviewModal from '../components/AttachmentPreview';
 import { isPreviewable } from '../utils/attachmentPreview';
@@ -703,12 +704,15 @@ export default function TimelineScreen() {
               <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)' }}>{done}/{total} done · {pct}%</span>
             </div>
           </div>
-          {isOwner && (
-            <button onClick={() => setAdding(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 10, border: 'none', background: accent, color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0, boxShadow: `0 4px 14px ${accent}40` }}>
-              <Icon name="add" size={17} color="var(--color-white)" /> Milestone
-            </button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <AutomationsButton ownerType="timeline" ownerId={timeline.id} isMobile={isMobile} />
+            {isOwner && (
+              <button onClick={() => setAdding(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 10, border: 'none', background: accent, color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0, boxShadow: `0 4px 14px ${accent}40` }}>
+                <Icon name="add" size={17} color="var(--color-white)" /> Milestone
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

@@ -28,6 +28,13 @@ router.use(requireAppInstalled('automations'));
 // Row type + sanitizer
 // ---------------------------------------------------------------------------
 
+type OwnerEntityType = 'list' | 'timeline' | 'markdownList';
+const OWNER_ENTITY_TABLES: Record<OwnerEntityType, string> = {
+  list: 'lists',
+  timeline: 'timelines',
+  markdownList: 'markdown_lists',
+};
+
 interface AutomationRow {
   id: string;
   workspace_id: string;
@@ -38,6 +45,8 @@ interface AutomationRow {
   graph: unknown;
   trigger_type: string;
   trigger_scope: Record<string, unknown>;
+  owner_entity_type: OwnerEntityType | null;
+  owner_entity_id: string | null;
   next_fire_at: string | null;
   version: number;
   created_at: string;
@@ -50,6 +59,8 @@ function sanitize(row: AutomationRow, requestingUserId: string) {
   return {
     id: row.id,
     workspaceId: row.workspace_id,
+    ownerEntityType: row.owner_entity_type,
+    ownerEntityId: row.owner_entity_id,
     name: row.name,
     description: row.description,
     enabled: row.enabled,
@@ -63,6 +74,18 @@ function sanitize(row: AutomationRow, requestingUserId: string) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+/** Resolve the workspace a Board/Page/Timeline belongs to — the sole source
+ *  of truth for which workspace a NEW automation is created in, replacing
+ *  the old free-standing `workspaceId` request field. Returns null if the
+ *  type is unrecognized or the entity doesn't exist (never guesses). */
+async function resolveOwnerEntityWorkspace(type: unknown, id: unknown): Promise<string | null> {
+  if (type !== 'list' && type !== 'timeline' && type !== 'markdownList') return null;
+  if (typeof id !== 'string' || !id) return null;
+  const table = OWNER_ENTITY_TABLES[type];
+  const r = await query<{ workspace_id: string }>(`SELECT workspace_id FROM ${table} WHERE id = $1`, [id]);
+  return r.rows[0]?.workspace_id ?? null;
 }
 
 async function loadAccessible(id: string, userId: string): Promise<AutomationRow | null> {
@@ -87,24 +110,43 @@ router.get('/node-types', (_req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /api/automations?workspaceId= — every automation in a workspace the
-// user can access (owner or not — visible read-only to the whole workspace).
+// GET /api/automations?ownerType=&ownerId= — every automation attached to one
+// Board/Page/Timeline the user can access (owner or not — visible read-only
+// to the whole workspace, per the model below). `?workspaceId=` alone is
+// still accepted as a fallback for a pre-scoping automation with no owner
+// entity (see the migration in index.ts) — there is no UI path to it anymore.
 // ---------------------------------------------------------------------------
 
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const workspaceId = req.query.workspaceId as string | undefined;
-    if (!workspaceId) { res.status(400).json({ error: 'workspaceId is required' }); return; }
+    const ownerType = req.query.ownerType as string | undefined;
+    const ownerId = req.query.ownerId as string | undefined;
+    const workspaceIdParam = req.query.workspaceId as string | undefined;
+
+    let workspaceId: string | null | undefined = workspaceIdParam;
+    let ownerFilter = '';
+    const params: unknown[] = [];
+    if (ownerType && ownerId) {
+      workspaceId = await resolveOwnerEntityWorkspace(ownerType, ownerId);
+      if (!workspaceId) { res.status(404).json({ error: 'Owner entity not found' }); return; }
+      params.push(ownerType, ownerId);
+      ownerFilter = `AND a.owner_entity_type = $2 AND a.owner_entity_id = $3`;
+    } else if (!workspaceId) {
+      res.status(400).json({ error: 'ownerType+ownerId (or workspaceId) is required' });
+      return;
+    }
+
     if (!(await userCanAccessWorkspace(req.userId!, workspaceId))) {
       res.json({ automations: [] });
       return;
     }
+    params.unshift(workspaceId);
     const result = await query<AutomationRow>(
       `SELECT a.*, u.full_name AS owner_name, u.username AS owner_username
        FROM automations a JOIN users u ON a.user_id = u.id
-       WHERE a.workspace_id = $1
+       WHERE a.workspace_id = $1 ${ownerFilter}
        ORDER BY a.updated_at DESC`,
-      [workspaceId]
+      params
     );
     res.json({ automations: result.rows.map((r) => sanitize(r, req.userId!)) });
   } catch (err) {
@@ -273,21 +315,30 @@ router.post('/:id/test', async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/automations — create (any workspace member; graph validated,
-// including that every referenced list belongs to this same workspace).
+// POST /api/automations — create, attached to one Board/Page/Timeline (any
+// workspace member; graph validated, including that every referenced list
+// belongs to this same workspace — unchanged from before this endpoint was
+// re-scoped, so a "move to another list/workspace" action still validates
+// and executes exactly as it always has, see automationGraph.ts).
+// The automation's workspace is derived from the owner entity, not supplied
+// independently — a client can no longer create an automation whose
+// workspace_id disagrees with the Board/Page/Timeline it's attached to.
 // ---------------------------------------------------------------------------
 
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { workspaceId, name, description, graph } = req.body as {
-      workspaceId?: string;
+    const { ownerEntityType, ownerEntityId, name, description, graph } = req.body as {
+      ownerEntityType?: string;
+      ownerEntityId?: string;
       name?: string;
       description?: string;
       graph?: unknown;
     };
 
-    if (!workspaceId) { res.status(400).json({ error: 'workspaceId is required' }); return; }
+    if (!ownerEntityType || !ownerEntityId) { res.status(400).json({ error: 'ownerEntityType and ownerEntityId are required' }); return; }
     if (!name?.trim()) { res.status(400).json({ error: 'name is required' }); return; }
+    const workspaceId = await resolveOwnerEntityWorkspace(ownerEntityType, ownerEntityId);
+    if (!workspaceId) { res.status(404).json({ error: 'Owner entity not found' }); return; }
     if (!(await userCanAccessWorkspace(req.userId!, workspaceId))) {
       res.status(403).json({ error: 'Permission denied' });
       return;
@@ -306,17 +357,18 @@ router.post('/', async (req: Request, res: Response) => {
       : null;
 
     const result = await query<AutomationRow>(
-      `INSERT INTO automations (id, workspace_id, user_id, name, description, graph, trigger_type, trigger_scope, next_fire_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO automations (id, workspace_id, user_id, name, description, graph, trigger_type, trigger_scope, owner_entity_type, owner_entity_id, next_fire_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         id, workspaceId, req.userId, name.trim(), description?.trim() || null,
         JSON.stringify(normalized.value.graph), normalized.value.triggerType,
-        JSON.stringify(normalized.value.triggerScope), nextFireAt ? nextFireAt.toISOString() : null,
+        JSON.stringify(normalized.value.triggerScope), ownerEntityType, ownerEntityId,
+        nextFireAt ? nextFireAt.toISOString() : null,
       ]
     );
 
-    wlog(`automation CREATE ✓ id=${id} workspace=${workspaceId} owner=${req.userId} trigger=${normalized.value.triggerType}`);
+    wlog(`automation CREATE ✓ id=${id} workspace=${workspaceId} owner=${req.userId} trigger=${normalized.value.triggerType} ownerEntity=${ownerEntityType}:${ownerEntityId}`);
     res.status(201).json({ automation: sanitize(result.rows[0], req.userId!) });
     broadcastToUser(req.userId!, 'automations');
   } catch (err) {

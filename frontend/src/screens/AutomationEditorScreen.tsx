@@ -1,18 +1,20 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ReactFlow, Background, Controls, Handle, Position, type Node as RFNode, type Edge as RFEdge, type NodeChange, type NodeProps } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useMobile } from '../hooks/useBreakpoint';
-import type { Automation, AutomationGraph, AutomationNode, AutomationRun, AutomationRunResult, AutomationRunStep, TriggerTypeDef, ActionTypeDef, AutomationParamProperty, List, Folder, Workspace } from '../types';
+import type { Automation, AutomationOwnerEntityType, AutomationGraph, AutomationNode, AutomationRun, AutomationRunResult, AutomationRunStep, TriggerTypeDef, ActionTypeDef, AutomationParamProperty, List, Folder, Workspace } from '../types';
 import useAutomationsStore from '../store/useAutomationsStore';
 import useAppStore from '../store/useAppStore';
+import useMarkdownListsStore from '../store/useMarkdownListsStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import { ApiError } from '../api/client';
 import Icon from '../components/Icon';
 import TimePicker from '../components/TimePicker';
 import CalendarPicker from '../components/CalendarPicker';
 import JsonTree from '../components/JsonTree';
+import { ownerEntityPath } from './AutomationsScreen';
 
 // ---------------------------------------------------------------------------
 // Pure graph helpers — shared by the desktop canvas and the mobile step-list
@@ -644,9 +646,14 @@ export default function AutomationEditorScreen() {
   const navigate = useNavigate();
   const isMobile = useMobile();
   const isNew = id === 'new';
+  const [searchParams] = useSearchParams();
+  const queryOwnerType = searchParams.get('ownerType') as AutomationOwnerEntityType | null;
+  const queryOwnerId = searchParams.get('ownerId');
   const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
   const allWorkspaces = useWorkspaceStore((s) => s.workspaces);
   const allLists = useAppStore((s) => s.lists);
+  const allTimelines = useAppStore((s) => s.timelines);
+  const allMarkdownLists = useMarkdownListsStore((s) => s.markdownLists);
   const allFolders = useAppStore((s) => s.folders);
   const { nodeTypes, loadNodeTypes, getDetail, create, update, getRuns, testNode } = useAutomationsStore();
 
@@ -684,10 +691,26 @@ export default function AutomationEditorScreen() {
   }, [id, isNew, getDetail]);
 
   const readOnly = !isNew && automation ? !automation.isOwner : false;
-  const effectiveWorkspaceId = automation?.workspaceId ?? currentWorkspaceId;
+  // For a brand-new automation the owner entity (the Board/Page/Timeline it
+  // was opened from) is the source of truth for which workspace it belongs
+  // to — not necessarily the active workspace switcher, since the entity can
+  // be a cross-workspace "shared with me" item. Falls back to the active
+  // workspace only if the entity isn't in a currently-loaded store.
+  const newOwnerWorkspaceId = useMemo(() => {
+    if (!isNew) return undefined;
+    if (queryOwnerType === 'list') return allLists.find((l) => l.id === queryOwnerId)?.workspaceId;
+    if (queryOwnerType === 'timeline') return allTimelines.find((t) => t.id === queryOwnerId)?.workspaceId;
+    if (queryOwnerType === 'markdownList') return allMarkdownLists.find((m) => m.id === queryOwnerId)?.workspaceId;
+    return undefined;
+  }, [isNew, queryOwnerType, queryOwnerId, allLists, allTimelines, allMarkdownLists]);
+  const effectiveWorkspaceId = automation?.workspaceId ?? newOwnerWorkspaceId ?? currentWorkspaceId;
   const workspaceLists = useMemo(() => allLists.filter((l) => l.workspaceId === effectiveWorkspaceId), [allLists, effectiveWorkspaceId]);
   const workspaceFolders = useMemo(() => allFolders.filter((f) => f.workspaceId === effectiveWorkspaceId), [allFolders, effectiveWorkspaceId]);
   const otherWorkspaces = useMemo(() => allWorkspaces.filter((w) => w.id !== effectiveWorkspaceId), [allWorkspaces, effectiveWorkspaceId]);
+  const backPath = ownerEntityPath(
+    automation?.ownerEntityType ?? queryOwnerType,
+    automation?.ownerEntityId ?? queryOwnerId
+  );
 
   const triggerNode = graph.nodes.find((n) => n.kind === 'trigger') ?? null;
   const orderedActionIds = actionOrder(graph);
@@ -786,8 +809,8 @@ export default function AutomationEditorScreen() {
     setError(null);
     try {
       if (isNew) {
-        if (!currentWorkspaceId) throw new Error('No active workspace.');
-        const created = await create({ workspaceId: currentWorkspaceId, name: name.trim() || 'Untitled automation', description: description.trim() || undefined, graph });
+        if (!queryOwnerType || !queryOwnerId) throw new Error('No Board, Page, or Timeline to attach this automation to.');
+        const created = await create({ ownerEntityType: queryOwnerType, ownerEntityId: queryOwnerId, name: name.trim() || 'Untitled automation', description: description.trim() || undefined, graph });
         navigate(`/automations/${created.id}`, { replace: true });
       } else if (automation) {
         const saved = await update(automation.id, { name: name.trim() || automation.name, description: description.trim() || null, graph, expectedVersion: automation.version });
@@ -811,7 +834,7 @@ export default function AutomationEditorScreen() {
     return (
       <div style={{ padding: 40, textAlign: 'center' }}>
         <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Automation not found</div>
-        <button onClick={() => navigate('/automations')} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer' }}>← Back to Automations</button>
+        <button onClick={() => navigate(backPath)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer' }}>← Back</button>
       </div>
     );
   }
@@ -830,7 +853,7 @@ export default function AutomationEditorScreen() {
     <div style={{ flex: 1, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isMobile ? '12px 14px' : '14px 24px', borderBottom: '1px solid var(--color-purple-pale-34)', flexWrap: 'wrap' }}>
-        <button onClick={() => navigate('/automations')} style={{ width: 32, height: 32, borderRadius: 9, border: 'none', background: 'var(--color-surface-tint)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <button onClick={() => navigate(backPath)} style={{ width: 32, height: 32, borderRadius: 9, border: 'none', background: 'var(--color-surface-tint)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <Icon name="arrow_back" size={16} color="var(--color-primary)" />
         </button>
         <input value={name} disabled={readOnly} onChange={(e) => setName(e.target.value)} placeholder="Untitled automation" maxLength={255}
@@ -842,7 +865,7 @@ export default function AutomationEditorScreen() {
         )}
         {!readOnly && (
           <>
-            <button onClick={() => navigate('/automations')} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 14px' }}>Cancel</button>
+            <button onClick={() => navigate(backPath)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px 14px' }}>Cancel</button>
             <button onClick={handleSave} disabled={saving} title={validationError ?? undefined}
               style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: saving ? 'var(--color-purple-tint-12)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '9px 20px', cursor: saving ? 'default' : 'pointer' }}>
               {saving ? 'Saving…' : 'Save'}

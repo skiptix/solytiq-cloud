@@ -1,13 +1,24 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useMobile } from '../hooks/useBreakpoint';
-import type { Automation } from '../types';
+import type { Automation, AutomationOwnerEntityType } from '../types';
 import useAutomationsStore from '../store/useAutomationsStore';
-import useWorkspaceStore from '../store/useWorkspaceStore';
+import useAppStore from '../store/useAppStore';
+import useMarkdownListsStore from '../store/useMarkdownListsStore';
 import useSyncStore from '../store/useSyncStore';
 import Icon from '../components/Icon';
+
+/** Where the "back" arrow returns to — the exact Board/Page/Timeline this
+ *  automation gallery was opened from (there's no standalone gallery route
+ *  in the sidebar anymore, so this is the only way back). */
+export function ownerEntityPath(type: AutomationOwnerEntityType | null, id: string | null): string {
+  if (type === 'list' && id) return `/list/${id}`;
+  if (type === 'timeline' && id) return `/timeline/${id}`;
+  if (type === 'markdownList' && id) return `/markdown-list/${id}`;
+  return '/dashboard';
+}
 
 function chainSummary(automation: Automation, nodeTypes: ReturnType<typeof useAutomationsStore.getState>['nodeTypes']): string {
   const trigger = nodeTypes?.triggers.find((t) => t.id === automation.triggerType);
@@ -119,17 +130,31 @@ export default function AutomationsScreen() {
   usePageTitle('Automations');
   const isMobile = useMobile();
   const navigate = useNavigate();
-  const currentWorkspaceId = useWorkspaceStore((s) => s.currentWorkspaceId);
+  const [searchParams] = useSearchParams();
+  const ownerType = searchParams.get('ownerType') as AutomationOwnerEntityType | null;
+  const ownerId = searchParams.get('ownerId');
+  const hasOwner = Boolean(ownerType && ownerId);
+
+  const lists = useAppStore((s) => s.lists);
+  const timelines = useAppStore((s) => s.timelines);
+  const markdownLists = useMarkdownListsStore((s) => s.markdownLists);
+  const ownerName = useMemo(() => {
+    if (ownerType === 'list') return lists.find((l) => l.id === ownerId)?.name;
+    if (ownerType === 'timeline') return timelines.find((t) => t.id === ownerId)?.name;
+    if (ownerType === 'markdownList') return markdownLists.find((m) => m.id === ownerId)?.name;
+    return undefined;
+  }, [ownerType, ownerId, lists, timelines, markdownLists]);
+  const backPath = ownerEntityPath(ownerType, ownerId);
 
   const { automations, loading, nodeTypes, load, loadNodeTypes, remove, setEnabled } = useAutomationsStore();
   const [search, setSearch] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<Automation | null>(null);
 
   useEffect(() => { loadNodeTypes(); }, [loadNodeTypes]);
-  useEffect(() => { if (currentWorkspaceId) load(currentWorkspaceId); }, [currentWorkspaceId, load]);
+  useEffect(() => { if (ownerType && ownerId) load(ownerType, ownerId); }, [ownerType, ownerId, load]);
 
   const automationRev = useSyncStore((s) => s.entityRevisions.automation ?? 0);
-  useEffect(() => { if (automationRev > 0 && currentWorkspaceId) load(currentWorkspaceId); }, [automationRev, currentWorkspaceId, load]);
+  useEffect(() => { if (automationRev > 0 && ownerType && ownerId) load(ownerType, ownerId); }, [automationRev, ownerType, ownerId, load]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -137,18 +162,34 @@ export default function AutomationsScreen() {
     return automations.filter((a) => a.name.toLowerCase().includes(q) || (a.description ?? '').toLowerCase().includes(q));
   }, [automations, search]);
 
+  if (!hasOwner) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+        <Icon name="bolt" size={40} color="var(--color-border-strong)" />
+        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>No Board, Page, or Timeline selected</div>
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)' }}>Open Automations from the ⚡ button on a Board, Page, or Timeline.</div>
+        <button onClick={() => navigate('/dashboard')} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer' }}>Back to Dashboard</button>
+      </div>
+    );
+  }
+
   return (
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
       <div style={{ maxWidth: 980, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 20, width: '100%', animation: 'sectionFadeUp 360ms cubic-bezier(0.22,1,0.36,1) both' }}>
+
+        <button onClick={() => navigate(backPath)}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <Icon name="arrow_back" size={14} color="var(--color-primary)" /> Back{ownerName ? ` to ${ownerName}` : ''}
+        </button>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 28, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>Automations</h1>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-              Build flow-chart automations for this workspace — visible to everyone here, editable only by their creator.
+              {ownerName ? `Attached to "${ownerName}"` : 'Attached to this item'} — visible to everyone in the workspace, editable only by their creator.
             </div>
           </div>
-          <button onClick={() => navigate('/automations/new')}
+          <button onClick={() => navigate(`/automations/new?ownerType=${ownerType}&ownerId=${ownerId}`)}
             style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '9px 16px', cursor: 'pointer', transition: 'background 180ms, transform 180ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 180ms' }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-purple-mid-10)'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(var(--color-primary-rgb), 0.3)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>

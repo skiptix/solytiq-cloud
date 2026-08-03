@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Automation, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef } from '../types';
+import type { Automation, AutomationOwnerEntityType, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef } from '../types';
 import {
   apiGetAutomations,
   apiGetAutomation,
@@ -17,12 +17,15 @@ interface AutomationsStore {
   nodeTypes: { triggers: TriggerTypeDef[]; actions: ActionTypeDef[] } | null;
   loading: boolean;
   loaded: boolean;
-  workspaceId: string | null;
+  /** `"<ownerEntityType>:<ownerEntityId>"` of the currently-loaded scope, so a
+   *  late response from a scope the user has since navigated away from can't
+   *  clobber newer data. */
+  ownerKey: string | null;
 
-  load: (workspaceId: string) => Promise<void>;
+  load: (ownerEntityType: AutomationOwnerEntityType, ownerEntityId: string) => Promise<void>;
   loadNodeTypes: () => Promise<void>;
   getDetail: (id: string) => Promise<Automation>;
-  create: (data: { workspaceId: string; name: string; description?: string; graph: AutomationGraph }) => Promise<Automation>;
+  create: (data: { ownerEntityType: AutomationOwnerEntityType; ownerEntityId: string; name: string; description?: string; graph: AutomationGraph }) => Promise<Automation>;
   update: (id: string, data: { name?: string; description?: string | null; graph?: AutomationGraph; expectedVersion?: number }) => Promise<Automation>;
   setEnabled: (id: string, enabled: boolean) => Promise<void>;
   remove: (id: string) => Promise<void>;
@@ -35,15 +38,16 @@ const useAutomationsStore = create<AutomationsStore>()((set, get) => ({
   nodeTypes: null,
   loading: false,
   loaded: false,
-  workspaceId: null,
+  ownerKey: null,
 
-  load: async (workspaceId) => {
-    set({ loading: true, workspaceId });
+  load: async (ownerEntityType, ownerEntityId) => {
+    const ownerKey = `${ownerEntityType}:${ownerEntityId}`;
+    set({ loading: true, ownerKey });
     try {
-      const res = await apiGetAutomations(workspaceId);
-      // A workspace switch mid-flight shouldn't let a stale response overwrite
-      // the newer one's data.
-      if (get().workspaceId !== workspaceId) return;
+      const res = await apiGetAutomations(ownerEntityType, ownerEntityId);
+      // Navigating to a different Board/Page/Timeline mid-flight shouldn't let
+      // a stale response overwrite the newer scope's data.
+      if (get().ownerKey !== ownerKey) return;
       set({ automations: res.automations, loading: false, loaded: true });
     } catch {
       set({ loading: false });

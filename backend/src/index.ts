@@ -1800,6 +1800,25 @@ async function runMigrations() {
   await pool.query(`CREATE INDEX IF NOT EXISTS automations_next_fire_idx ON automations (next_fire_at) WHERE enabled = true AND trigger_type = 'schedule'`);
   await pool.query(`CREATE INDEX IF NOT EXISTS automations_workspace_idx ON automations (workspace_id)`);
 
+  // Owner entity — which single Board/Page/Timeline an automation's editor is
+  // reached from (Settings-level sidebar access was removed in favor of a
+  // per-item entry point). Purely a UI/discovery anchor: workspace_id stays
+  // the authoritative scope for every IDOR guard and execution check in
+  // automationGraph.ts/automationTypes.ts/automationEngine.ts, none of which
+  // this touches — an action that moves a task/list to another list or
+  // workspace keeps working exactly as before. Nullable because a pre-existing
+  // automation (from before this column existed) has no natural single owner
+  // to backfill for a `schedule` trigger with no list scope — it keeps running,
+  // it's just not reachable from any one Board/Page/Timeline's button anymore.
+  await pool.query(`ALTER TABLE automations ADD COLUMN IF NOT EXISTS owner_entity_type VARCHAR(20)`);
+  await pool.query(`ALTER TABLE automations ADD COLUMN IF NOT EXISTS owner_entity_id VARCHAR(100)`);
+  await pool.query(`
+    UPDATE automations
+       SET owner_entity_type = 'list', owner_entity_id = trigger_scope->>'listId'
+     WHERE owner_entity_type IS NULL AND trigger_scope->>'listId' IS NOT NULL
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS automations_owner_entity_idx ON automations (owner_entity_type, owner_entity_id)`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS automation_runs (
       id              VARCHAR(100) PRIMARY KEY,

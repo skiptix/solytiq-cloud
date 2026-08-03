@@ -4,7 +4,6 @@ import type { List, Folder, Timeline, GpsFile, MarkdownList } from '../types';
 import Icon from './Icon';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
-import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import useMarkdownListsStore from '../store/useMarkdownListsStore';
 import useKnowledgeBaseStore from '../store/useKnowledgeBaseStore';
 import useSharedItemsStore from '../store/useSharedItemsStore';
@@ -1401,9 +1400,6 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   const [addHov, setAddHov] = useState(false);
   const [folderHov, setFolderHov] = useState(false);
   const [templatesHov, setTemplatesHov] = useState(false);
-  const [automationsHov, setAutomationsHov] = useState(false);
-  const automationsInstalled = useInstalledAppsStore((s) => s.installedApps.includes('automations'));
-  const [graphHov, setGraphHov] = useState(false);
   const [handleHov, setHandleHov] = useState(false);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dragOverTimelineId, setDragOverTimelineId] = useState<string | null>(null);
@@ -1768,7 +1764,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           <ProfileCard collapsed={collapsed} />
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.74.1
+              v1.75.0
             </div>
           )}
         </div>
@@ -1851,47 +1847,6 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           }}>
           <Icon name="dashboard_customize" size={17} color={active === 'templates' ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
           {!collapsed && <span>Templates</span>}
-        </button>
-
-        {/* Automations — per-workspace, only shown once the admin has
-            installed the Automation Hub app (Settings → System → Discover Apps) */}
-        {automationsInstalled && (
-          <button
-            onClick={() => onNavigate('/automations')}
-            title={collapsed ? 'Automations' : undefined}
-            onMouseEnter={() => setAutomationsHov(true)}
-            onMouseLeave={() => setAutomationsHov(false)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8,
-              padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start',
-              borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5,
-              fontWeight: active === 'automations' ? 700 : 500,
-              color: active === 'automations' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-              background: active === 'automations' ? 'var(--color-surface-tint)' : (automationsHov ? 'var(--color-surface-tint-3)' : 'transparent'),
-              border: 'none', transition: 'background 150ms', width: '100%',
-            }}>
-            <Icon name="bolt" size={17} color={active === 'automations' ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
-            {!collapsed && <span>Automations</span>}
-          </button>
-        )}
-
-        {/* Graph Layer — per-workspace Explore/Canvas view of every linked entity */}
-        <button
-          onClick={() => onNavigate('/graph')}
-          title={collapsed ? 'Net' : undefined}
-          onMouseEnter={() => setGraphHov(true)}
-          onMouseLeave={() => setGraphHov(false)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8,
-            padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start',
-            borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5,
-            fontWeight: active === 'graph' ? 700 : 500,
-            color: active === 'graph' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-            background: active === 'graph' ? 'var(--color-surface-tint)' : (graphHov ? 'var(--color-surface-tint-3)' : 'transparent'),
-            border: 'none', transition: 'background 150ms', width: '100%',
-          }}>
-          <Icon name="hub" size={17} color={active === 'graph' ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
-          {!collapsed && <span>Net</span>}
         </button>
 
         <div style={{ height: 1, background: 'var(--color-border)', margin: '6px 8px' }} />
@@ -2170,7 +2125,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <ProfileCard collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.74.1
+            v1.75.0
           </div>
         )}
       </div>

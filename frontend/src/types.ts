@@ -460,9 +460,17 @@ export interface AutomationGraph {
   edges: AutomationEdge[];
 }
 
+export type AutomationOwnerEntityType = 'list' | 'timeline' | 'markdownList';
+
 export interface Automation {
   id: string;
   workspaceId: string;
+  /** The single Board/Page/Timeline this automation's editor is reached from
+   *  (Settings-level sidebar access was removed in favor of a per-item entry
+   *  point). Null only for a pre-scoping automation with no natural owner —
+   *  see the migration comment in backend/src/index.ts. */
+  ownerEntityType: AutomationOwnerEntityType | null;
+  ownerEntityId: string | null;
   name: string;
   description: string | null;
   enabled: boolean;

@@ -15,6 +15,7 @@ import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSetti
 import MarkdownListAIAssist from '../components/AIAssistant/MarkdownListAIAssist';
 import SaveStatusDot from '../components/SaveStatusDot';
 import BacklinksPanel from '../components/graph/BacklinksPanel';
+import AutomationsButton from '../components/AutomationsButton';
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 export default function MarkdownListScreen() {
@@ -231,6 +232,7 @@ export default function MarkdownListScreen() {
             <Icon name="swap_vert" size={15} color={reorderMode ? 'var(--color-white)' : 'var(--color-primary)'} />
             {!isMobile && <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: reorderMode ? 'var(--color-white)' : 'var(--color-primary)' }}>{reorderMode ? 'Done' : 'Reorder'}</span>}
           </button>
+          {mdId && <AutomationsButton ownerType="markdownList" ownerId={mdId} isMobile={isMobile} />}
           {todoListId && (
             <button
               onClick={() => navigate(`/list/${todoListId}`)}
