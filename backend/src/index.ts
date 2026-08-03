@@ -2032,6 +2032,10 @@ async function runMigrations() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS ai_skills_enabled_idx ON ai_skills (enabled)`);
+  // Widen description — real SKILL.md frontmatter (mirroring Claude's own skill
+  // format) routinely runs 800-1200+ chars enumerating trigger conditions; the
+  // original 500-char cap rejected legitimate uploads with a raw DB error.
+  await pool.query(`ALTER TABLE ai_skills ALTER COLUMN description TYPE VARCHAR(2000)`);
 
   // A skill's supporting reference files (e.g. a bundled checklist or style
   // guide alongside SKILL.md), text-only — see bundle.ts's extraction allow-list.

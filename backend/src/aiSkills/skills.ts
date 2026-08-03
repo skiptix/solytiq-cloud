@@ -183,6 +183,11 @@ export interface CreateSkillInput {
 
 export type SkillResult<T> = { ok: true; skill: T } | { ok: false; error: string };
 
+// Mirrors ai_skills.description's column width — real SKILL.md frontmatter
+// (the format this feature mirrors from Claude's own skill system) routinely
+// enumerates trigger conditions in 800-1200+ chars, so this stays generous.
+const MAX_DESCRIPTION_LENGTH = 2000;
+
 export async function createSkill(
   input: CreateSkillInput,
   exec: QueryExec = query
@@ -193,13 +198,18 @@ export async function createSkill(
   const content = input.content ?? '';
   if (!content.trim()) return { ok: false, error: 'content (the SKILL.md body) is required' };
 
+  const description = (input.description ?? '').trim();
+  if (description.length > MAX_DESCRIPTION_LENGTH) {
+    return { ok: false, error: `Description is too long (max ${MAX_DESCRIPTION_LENGTH} characters)` };
+  }
+
   const id = `skill_${uuidv4()}`;
   const slug = await uniqueSlug(name, exec);
   const r = await exec(
     `INSERT INTO ai_skills (id, name, slug, description, content, source, origin, created_by, updated_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
      RETURNING *, 0 AS file_count`,
-    [id, name, slug, (input.description ?? '').trim(), content, input.source ?? 'manual', input.origin ?? 'manual', input.createdBy ?? null]
+    [id, name, slug, description, content, input.source ?? 'manual', input.origin ?? 'manual', input.createdBy ?? null]
   );
   return { ok: true, skill: r.rows[0] as AiSkillRow };
 }
@@ -231,7 +241,13 @@ export async function updateSkill(
     push('name', name);
     if (name !== existing.name) push('slug', await uniqueSlug(name, exec, id));
   }
-  if (input.description !== undefined) push('description', input.description.trim());
+  if (input.description !== undefined) {
+    const description = input.description.trim();
+    if (description.length > MAX_DESCRIPTION_LENGTH) {
+      return { ok: false, error: `Description is too long (max ${MAX_DESCRIPTION_LENGTH} characters)` };
+    }
+    push('description', description);
+  }
   if (input.content !== undefined) {
     if (!input.content.trim()) return { ok: false, error: 'content cannot be empty' };
     push('content', input.content);

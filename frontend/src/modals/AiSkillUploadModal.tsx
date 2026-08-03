@@ -30,11 +30,30 @@ export default function AiSkillUploadModal({ onClose, onCreated }: AiSkillUpload
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFilePick = (f: File | null) => {
     setFile(f);
     setError(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (!busy) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (busy) return;
+    const dropped = e.dataTransfer.files?.[0];
+    if (dropped) handleFilePick(dropped);
   };
 
   const handleUpload = async () => {
@@ -122,22 +141,26 @@ export default function AiSkillUploadModal({ onClose, onCreated }: AiSkillUpload
             <>
               <div
                 onClick={() => fileInputRef.current?.click()}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
                 style={{
-                  border: `1.5px dashed ${file ? 'var(--color-primary)' : 'var(--color-border)'}`, borderRadius: 12,
+                  border: `1.5px dashed ${isDragging || file ? 'var(--color-primary)' : 'var(--color-border)'}`, borderRadius: 12,
                   padding: '22px 16px', textAlign: 'center', cursor: 'pointer', marginBottom: 16,
-                  background: file ? 'var(--color-purple-pale-14)' : 'var(--color-surface-neutral)',
+                  background: isDragging || file ? 'var(--color-purple-pale-14)' : 'var(--color-surface-neutral)',
+                  transition: 'background 120ms, border-color 120ms',
                 }}
               >
                 <input
                   ref={fileInputRef} type="file" accept=".md,.markdown,.zip" style={{ display: 'none' }}
                   onChange={(e) => handleFilePick(e.target.files?.[0] ?? null)}
                 />
-                <Icon name={file ? 'description' : 'upload_file'} size={22} color={file ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
+                <Icon name={file ? 'description' : 'upload_file'} size={22} color={isDragging || file ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', marginTop: 8 }}>
-                  {file ? file.name : 'Choose a SKILL.md file or a .zip bundle'}
+                  {isDragging ? 'Drop to upload' : file ? file.name : 'Choose a SKILL.md file or a .zip bundle'}
                 </div>
                 <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', marginTop: 2 }}>
-                  A .zip must contain a SKILL.md, optionally with reference files alongside it.
+                  A .zip must contain a SKILL.md, optionally with reference files alongside it. Drag and drop works too.
                 </div>
               </div>
 

@@ -114,6 +114,21 @@ describe('createSkill', () => {
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.skill.enabled).toBe(true);
   });
+
+  it('accepts a long, realistic SKILL.md-style description (real skills routinely run 800-1200+ chars)', async () => {
+    const { exec } = makeSkillsTableExec();
+    const longDescription = 'x'.repeat(1200);
+    const result = await createSkill({ name: 'A Skill', content: 'body', description: longDescription }, exec);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.skill.description).toBe(longDescription);
+  });
+
+  it('rejects a description over the max length with a clean error rather than letting a DB error surface', async () => {
+    const { exec } = makeSkillsTableExec();
+    const result = await createSkill({ name: 'A Skill', content: 'body', description: 'x'.repeat(2001) }, exec);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/too long/i);
+  });
 });
 
 describe('updateSkill', () => {
@@ -150,6 +165,15 @@ describe('updateSkill', () => {
     const result = await updateSkill('nope', { name: 'X' }, exec);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/not found/i);
+  });
+
+  it('rejects an over-length description on update the same way create does', async () => {
+    const { exec } = makeSkillsTableExec();
+    const created = await createSkill({ name: 'A Skill', content: 'body' }, exec);
+    if (!created.ok) throw new Error('setup failed');
+    const updated = await updateSkill(created.skill.id, { description: 'x'.repeat(2001) }, exec);
+    expect(updated.ok).toBe(false);
+    if (!updated.ok) expect(updated.error).toMatch(/too long/i);
   });
 });
 
