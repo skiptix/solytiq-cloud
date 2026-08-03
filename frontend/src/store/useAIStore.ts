@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import type { AppState, AIFile, Task } from '../types';
+import type { AppState, AIFile, Task, MarkdownBlock } from '../types';
 import useGraphStore from './useGraphStore';
 import useWorkspaceStore from './useWorkspaceStore';
+import useMarkdownListsStore from './useMarkdownListsStore';
 
 export interface AIChatMessage {
   id: string;
@@ -90,11 +91,32 @@ export interface AIContext {
   view: string;
   listId?: string;
   timelineId?: string;
+  markdownListId?: string;
   data: Record<string, unknown>;
 }
 
 function toIso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** A compact, tool-argument-shaped summary of one block — mirrors the
+ *  {type, text?, level?, checked?, url?, title?, description?, layout?,
+ *  columns?, rows?} shape the markdown AI tools already take, so Sol can
+ *  read this straight out of context without an extra get_markdown_list
+ *  round-trip for the common case of "what does this page say right now". */
+function markdownBlockSummary(b: MarkdownBlock): Record<string, unknown> {
+  const base = { id: b.id, type: b.type };
+  switch (b.type) {
+    case 'heading': return { ...base, level: b.level, text: b.text };
+    case 'paragraph': case 'bulleted-list-item': case 'numbered-list-item': case 'quote':
+      return { ...base, text: b.text };
+    case 'todo': return { ...base, text: b.text, checked: b.checked };
+    case 'divider': return { ...base, layout: b.layout ?? 'stack' };
+    case 'image': return { ...base, image_id: b.imageId, caption: b.caption ?? null };
+    case 'link': return { ...base, url: b.url, title: b.title ?? null, description: b.description ?? null };
+    case 'table': return { ...base, header_row: b.rows[0]?.cells ?? [], body_rows: b.rows.slice(1).map(r => r.cells), aggregates: b.columns.map(c => c.aggregate ?? null) };
+    default: return base;
+  }
 }
 
 export function buildContext(pathname: string, appStore: AppState): AIContext {
@@ -150,6 +172,31 @@ export function buildContext(pathname: string, appStore: AppState): AIContext {
             description: m.description ?? null,
             position: m.position ?? 0,
           })),
+          available_timelines: timelinesSnapshot,
+          available_lists: listsSnapshot,
+          available_folders: foldersSnapshot,
+        },
+      };
+    }
+  }
+
+  if (pathname.startsWith('/markdown-list/')) {
+    const markdownListId = pathname.split('/markdown-list/')[1];
+    const md = useMarkdownListsStore.getState().markdownLists.find((m) => m.id === markdownListId);
+    if (md) {
+      return {
+        view: 'markdownList',
+        markdownListId,
+        data: {
+          markdown_list_id: md.id,
+          page_name: md.name,
+          emoji: md.emoji ?? null,
+          subtitle: md.subtitle ?? null,
+          is_public: md.isPublic ?? false,
+          full_width: md.fullWidth ?? false,
+          folder_id: md.folderId ?? null,
+          todo_list_id: md.todoListId ?? null,
+          blocks: md.content.blocks.map(markdownBlockSummary),
           available_timelines: timelinesSnapshot,
           available_lists: listsSnapshot,
           available_folders: foldersSnapshot,
@@ -315,6 +362,7 @@ export function buildSystemPrompt(
     gps: 'GPS Routes — route/workout file manager for .GPX and .FIT files',
     timeline: `Timeline — "${(ctx.data.timeline_name as string) ?? 'unknown'}"${tlProgress}`,
     graph: `Net — the Graph Layer's visual map of "${(ctx.data.workspace_name as string) ?? 'this workspace'}": every board, page, task, timeline, milestone, and folder rendered as a connected node, always rooted at a central workspace hub. Every item is linked hierarchically up to that hub (task -> section -> board -> folder -> workspace), and items can additionally carry explicit relations (e.g. "blocks", "tracks", "relates_to") drawn as a second, more prominent connection`,
+    markdownList: `Markdown Page — "${(ctx.data.page_name as string) ?? 'unknown'}", a freeform document built from blocks (headings, paragraphs, lists, to-dos, quotes, dividers, links, tables)`,
   };
 
   const contextJson = JSON.stringify(ctx.data, null, 2);
@@ -382,6 +430,7 @@ Guidelines:
 - GPS FILES: list_gps_files/rename_gps_file/delete_gps_file work on the user's uploaded GPX/FIT route files from any view (not just the GPS page).
 - TRASH: list_trash shows recently deleted tasks/lists/folders/timelines (30-day recovery window) — restoring itself must be done from the Trash view in the app, so point the user there if they want something back.
 - TIMELINES: You can create timelines (create_timeline), update/rename them (update_timeline), delete them (delete_timeline — ALWAYS confirm first). Navigate to a specific timeline with navigate_to_timeline using its ID from available_timelines. When on a timeline page you can add milestones (add_milestone), edit them (update_milestone), delete them (delete_milestone — confirm first), and reorder them (reorder_milestones).
+- MARKDOWN PAGES: You have full read/write control over Markdown Pages — freeform documents built from blocks (heading, paragraph, bulleted/numbered-list-item, todo, quote, divider, link, table). list_markdown_lists finds pages by name across the workspace; get_markdown_list reads one page's full block-by-block content with block ids. create_markdown_list makes a new page (optionally seeded with blocks); update_markdown_list edits the page's own settings (name/emoji/color/subtitle/visibility/folder — NOT content); delete_markdown_list moves it to Trash (ALWAYS confirm first). For content, use add_markdown_block/add_markdown_blocks to insert, update_markdown_block to edit one, remove_markdown_block to delete one, move_markdown_block/reorder_markdown_blocks to reposition, or set_markdown_content to replace the ENTIRE page in one call (the best choice for "rewrite"/"restructure" requests — but it overwrites everything, so include every block you want kept). When the user is currently viewing a Markdown Page (see Current view/context data above), its blocks are already inlined in context with their ids — you don't need get_markdown_list first unless you need the very latest state after another tool call changed it. A todo block mirrors live into that page's auto-managed Todo list (todo_list_id in context) — you don't need to touch that list separately.
 - MILESTONE STATUS: valid values are 'upcoming', 'in-progress', 'done'. Milestone dates use YYYY-MM-DD format. Color can be a hex string (e.g. "var(--color-success)") or null for auto.
 - TIMELINE IDs: Always use exact timeline_id strings from available_timelines. Milestone IDs come from the milestones array in the current context.
 - If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}${graphNote}${glossaryNote}${skillsNote}`;
