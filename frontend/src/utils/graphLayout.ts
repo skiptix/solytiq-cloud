@@ -97,6 +97,47 @@ export const EDGE_STYLE_DASH: Record<'solid' | 'dashed' | 'dotted', string | und
   dotted: '2 3',
 };
 
+// ── hierarchy spring lengths ───────────────────────────────────────────
+// A parent's children are laid out on concentric shells around it rather than
+// on one circle at a fixed rest length. With a fixed length every sibling set —
+// 3 children or 300 — gets pulled onto the same small circle, so a hub like a
+// Knowledge Base with a hundred terms collapses into an unreadable ring of
+// overlapping dots and labels. Sizing the ring from the sibling count (arc
+// length per child) and spilling into further shells past MAX_PER_SHELL keeps
+// on-screen density roughly constant however wide the graph gets.
+
+/** Arc length each child is given on its shell, world units. */
+const SIBLING_ARC = 46;
+/** Past this many children on one shell, open another one further out. */
+const MAX_PER_SHELL = 20;
+/** Radial gap between consecutive shells, world units. */
+const SHELL_GAP = 64;
+/** Floor for a shell's radius, so small sibling sets keep their compact look. */
+const HIERARCHY_BASE_DISTANCE = 58;
+
+export interface HierarchyLinkSpec {
+  /** Radius of the parent dot, world units — the ring starts outside it. */
+  parentRadius: number;
+  /** This child's stable slot among its siblings. */
+  siblingIndex: number;
+  /** How many children the parent has in total. */
+  siblingCount: number;
+  /** The child's depth from the root; deeper levels get slightly more room. */
+  depth: number;
+}
+
+/** Spring rest length for one parent→child hierarchy edge. */
+export function hierarchyLinkDistance({ parentRadius, siblingIndex, siblingCount, depth }: HierarchyLinkSpec): number {
+  const shells = Math.max(1, Math.ceil(Math.max(siblingCount, 1) / MAX_PER_SHELL));
+  const perShell = Math.ceil(Math.max(siblingCount, 1) / shells);
+  // Interleaved (index % shells) rather than blocked, so the shells fill evenly
+  // instead of the innermost one saturating first.
+  const shell = siblingIndex % shells;
+  const circumferenceFit = (perShell * SIBLING_ARC) / (2 * Math.PI);
+  const ring = Math.max(HIERARCHY_BASE_DISTANCE + Math.min(depth, 4) * 10, circumferenceFit) + parentRadius;
+  return ring + shell * SHELL_GAP;
+}
+
 export type LayoutPositions = Map<string, { x: number; y: number }>;
 
 /** Simple deterministic radial layout — the Dashboard's live mini-map preview's layout basis (NeuralGraph.tsx uses a live force simulation instead, see utils/forceSimulation.ts). */

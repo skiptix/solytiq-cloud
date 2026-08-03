@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { nodeColor, nodeSize, shouldUseSigma, NODE_TYPE_COLOR, SIGMA_THRESHOLD_NODES, radialLayout } from '../graphLayout';
+import { nodeColor, nodeSize, shouldUseSigma, NODE_TYPE_COLOR, SIGMA_THRESHOLD_NODES, radialLayout, hierarchyLinkDistance } from '../graphLayout';
 import type { GraphNode } from '../../types';
 
 function makeNode(srn: string, overrides: Partial<GraphNode> = {}): GraphNode {
@@ -71,5 +71,57 @@ describe('radialLayout', () => {
     const dist = (srn: string) => { const p = positions.get(srn)!; return Math.hypot(p.x, p.y); };
     // Ring size is 12 — the 13th-ranked node (index 12) must be pushed to the second ring, farther out than the top node.
     expect(dist('srn:task:12')).toBeGreaterThan(dist('srn:task:0'));
+  });
+});
+
+describe('hierarchyLinkDistance', () => {
+  const spec = (siblingCount: number, siblingIndex = 0, depth = 1) =>
+    hierarchyLinkDistance({ parentRadius: 30, siblingIndex, siblingCount, depth });
+
+  it('leaves a small sibling set compact', () => {
+    // Few enough children to fit on the base ring — no need to push them out.
+    expect(spec(4)).toBeLessThan(120);
+  });
+
+  it('grows the occupied area with the sibling count, so density stays constant', () => {
+    // The bug this fixes: a fixed rest length pulled 3 children and 300
+    // children onto the same circle, so a big hub collapsed into a knot.
+    // The innermost shell stays put by design — it's the outer extent that
+    // has to grow, since that's where the extra children go.
+    const extent = (count: number) => Math.max(...Array.from({ length: count }, (_, i) => spec(count, i)));
+    expect(extent(200)).toBeGreaterThan(extent(60));
+    expect(extent(60)).toBeGreaterThan(extent(20));
+    expect(extent(20)).toBeGreaterThan(extent(4));
+  });
+
+  it('spills past one shell into further-out shells', () => {
+    const shells = new Set(Array.from({ length: 100 }, (_, i) => spec(100, i)));
+    expect(shells.size).toBeGreaterThan(1);
+  });
+
+  it('interleaves shells so the innermost does not saturate first', () => {
+    // Consecutive siblings land on different shells.
+    expect(spec(100, 0)).not.toBe(spec(100, 1));
+  });
+
+  it('gives every sibling of a set the same shell radii regardless of order', () => {
+    const distances = Array.from({ length: 40 }, (_, i) => spec(40, i));
+    // Every distance repeats across the set — no single child gets a unique
+    // orbit, which would read as an accidental outlier.
+    expect(new Set(distances).size).toBeLessThan(distances.length);
+  });
+
+  it('is stable and finite for degenerate counts', () => {
+    for (const count of [0, 1]) {
+      const d = spec(count);
+      expect(Number.isFinite(d)).toBe(true);
+      expect(d).toBeGreaterThan(0);
+    }
+  });
+
+  it('starts the ring outside the parent dot', () => {
+    const small = hierarchyLinkDistance({ parentRadius: 8, siblingIndex: 0, siblingCount: 5, depth: 1 });
+    const large = hierarchyLinkDistance({ parentRadius: 60, siblingIndex: 0, siblingCount: 5, depth: 1 });
+    expect(large - small).toBeCloseTo(52);
   });
 });
