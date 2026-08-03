@@ -9,8 +9,11 @@ import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemS
 import Icon from '../components/Icon';
 import AdminApiKeyWizard from '../modals/AdminApiKeyWizard';
 import AppsStoreModal from '../modals/AppsStoreModal';
+import AiSkillUploadModal from '../modals/AiSkillUploadModal';
+import AiSkillEditModal from '../modals/AiSkillEditModal';
 import { featureForScope } from '../modals/adminApiFeatures';
 import useInstalledAppsStore from '../store/useInstalledAppsStore';
+import useAiSkillsStore from '../store/useAiSkillsStore';
 
 interface UserEntry {
   id: string;
@@ -23,7 +26,7 @@ interface UserEntry {
   createdAt: string;
 }
 
-type TabId = 'system' | 'ai' | 'security' | 'api' | 'mobile' | 'users' | 'danger';
+type TabId = 'system' | 'ai' | 'ai_skills' | 'security' | 'api' | 'mobile' | 'users' | 'danger';
 
 function relativeTime(iso: string | null): string {
   if (!iso) return 'Never';
@@ -142,6 +145,11 @@ export default function SettingsScreen() {
 
   // Discover Apps dialog
   const [showAppsStore, setShowAppsStore] = useState(false);
+
+  // ── AI Skills ──
+  const { skills: aiSkills, loading: aiSkillsLoading, loaded: aiSkillsLoaded, load: loadAiSkills, setEnabled: setAiSkillEnabled } = useAiSkillsStore();
+  const [showSkillUploadModal, setShowSkillUploadModal] = useState(false);
+  const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
   const installedApps = useInstalledAppsStore(s => s.installedApps);
   const loadInstalledApps = useInstalledAppsStore(s => s.load);
 
@@ -264,6 +272,11 @@ export default function SettingsScreen() {
       .catch(() => setApiKeys([]))
       .finally(() => setApiKeysLoading(false));
   }, [activeTab, isAdmin]);
+
+  useEffect(() => {
+    if (activeTab !== 'ai_skills' || !isAdmin || aiSkillsLoaded) return;
+    loadAiSkills();
+  }, [activeTab, isAdmin, aiSkillsLoaded, loadAiSkills]);
 
   const apiOrigin = `${window.location.origin}/api/admin-read`;
   const exportExample = `curl -H "Authorization: Bearer <ADMIN_API_KEY>" \\\n  "${apiOrigin}/export?workspaceId=<workspace-id>&userId=<user-id>"`;
@@ -623,6 +636,7 @@ export default function SettingsScreen() {
   const TABS: { id: TabId; label: string; icon: string }[] = [
     { id: 'system',   label: 'System',      icon: 'storage' },
     { id: 'ai',       label: 'AI',          icon: 'smart_toy' },
+    { id: 'ai_skills', label: 'AI Skills',  icon: 'auto_awesome' },
     { id: 'security', label: 'Security',    icon: 'shield_lock' },
     { id: 'api',      label: 'API',         icon: 'key' },
     { id: 'mobile',   label: 'Mobile',      icon: 'smartphone' },
@@ -1215,6 +1229,84 @@ export default function SettingsScreen() {
                 {!usageLoading && !usage && (
                   <div style={{ ...card, padding: '32px', textAlign: 'center' as const }}>
                     <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>No AI usage data for the last 30 days.</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── AI Skills Tab ── */}
+            {activeTab === 'ai_skills' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {sectionLabel('AI Skills')}
+                <div style={card}>
+                  <div style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Skill bundles</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                        {aiSkills.length === 0 ? 'No skills yet.' : `${aiSkills.length} skill${aiSkills.length === 1 ? '' : 's'}, ${aiSkills.filter(s => s.enabled).length} enabled.`}
+                        {' '}Admin-curated context that personalizes Sol, the workspace Agent, and MCP clients.
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowSkillUploadModal(true)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0, boxShadow: '0 4px 14px rgba(var(--color-primary-rgb), 0.28)' }}
+                      onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(0.92)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.filter = 'none'; }}
+                    >
+                      <Icon name="add" size={16} color="var(--color-white)" />
+                      Add Skill
+                    </button>
+                  </div>
+                </div>
+
+                {aiSkillsLoading && !aiSkillsLoaded ? (
+                  <div style={card}>
+                    <div style={{ ...row, justifyContent: 'center' }}>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Loading…</div>
+                    </div>
+                  </div>
+                ) : aiSkills.length === 0 ? (
+                  <div style={{ ...card, padding: '40px 20px', textAlign: 'center' as const, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 52, height: 52, borderRadius: 16, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Icon name="auto_awesome" size={24} color="var(--color-primary)" />
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>No AI Skills yet</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-tertiary)', maxWidth: 340 }}>Upload a SKILL.md file or a .zip bundle, or write one manually, to give the assistant extra, curated knowledge and instructions.</div>
+                  </div>
+                ) : (
+                  <div style={card}>
+                    {aiSkills.map((skill, i) => (
+                      <div
+                        key={skill.id}
+                        onClick={() => setEditingSkillId(skill.id)}
+                        style={{ ...row, borderBottom: i < aiSkills.length - 1 ? '1px solid var(--color-border-alt)' : 'none', cursor: 'pointer', opacity: skill.enabled ? 1 : 0.6, transition: 'background 120ms' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{skill.name}</span>
+                            {skill.origin === 'ai' && (
+                              <span style={{ fontFamily: 'var(--font-body)', fontSize: 9.5, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-purple-pale-14)', borderRadius: 5, padding: '1px 6px', letterSpacing: '0.02em', flexShrink: 0 }}>SOL</span>
+                            )}
+                            {skill.fileCount > 0 && (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', flexShrink: 0 }}>
+                                <Icon name="attach_file" size={11} color="var(--color-text-quaternary)" />{skill.fileCount}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {skill.description || 'No description'}
+                          </div>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setAiSkillEnabled(skill.id, !skill.enabled); }}
+                          style={{ width: 40, height: 22, borderRadius: 11, background: skill.enabled ? 'var(--color-primary)' : 'var(--color-border)', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 200ms' }}
+                        >
+                          <span style={{ position: 'absolute', top: 2, left: skill.enabled ? 20 : 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)', transition: 'left 200ms' }} />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1868,6 +1960,17 @@ export default function SettingsScreen() {
       {/* ── Discover Apps ── */}
       {showAppsStore && (
         <AppsStoreModal onClose={() => { setShowAppsStore(false); loadInstalledApps(); }} />
+      )}
+
+      {/* ── AI Skills ── */}
+      {showSkillUploadModal && (
+        <AiSkillUploadModal
+          onClose={() => setShowSkillUploadModal(false)}
+          onCreated={(skill) => setEditingSkillId(skill.id)}
+        />
+      )}
+      {editingSkillId && (
+        <AiSkillEditModal skillId={editingSkillId} onClose={() => setEditingSkillId(null)} />
       )}
     </div>
   );

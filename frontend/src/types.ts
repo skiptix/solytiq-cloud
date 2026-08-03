@@ -677,6 +677,47 @@ export interface AIFile {
   isImage: boolean;
 }
 
+// ── AI Skills (Settings → AI Skills) ────────────────────────────────────────
+// Admin-curated, instance-wide context bundles that personalize/extend Sol —
+// see CLAUDE.md "AI Skills" for the full design (progressive disclosure into
+// the system prompt, admin-only writes, reference-files-only bundles).
+export type AiSkillSource = 'manual' | 'upload_md' | 'upload_zip';
+export type AiSkillOrigin = 'manual' | 'ai';
+
+export interface AiSkill {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  content: string;
+  enabled: boolean;
+  source: AiSkillSource;
+  origin: AiSkillOrigin;
+  createdBy: string | null;
+  updatedBy: string | null;
+  version: number;
+  fileCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AiSkillFile {
+  id: string;
+  skillId: string;
+  filePath: string;
+  content: string;
+  sizeBytes: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The lightweight index used for progressive disclosure in Sol's system prompt — see buildSystemPrompt in useAIStore.ts. */
+export interface AiSkillHint {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export interface AuthUser {
   id: string;
   username: string;

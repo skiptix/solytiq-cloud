@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent, TaskChangeLogEntry, EntityLink, ResolvedLink, LinkTypeDef, GraphPayload, GraphCanvas, GraphCanvasLayout, AgentRun, AgentProposal, AgentPolicy, AgentMode, EntityIndexEntry, KnowledgeBase, KnowledgeEntry, KnowledgeSuggestion, KnowledgeLookupResult } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent, TaskChangeLogEntry, EntityLink, ResolvedLink, LinkTypeDef, GraphPayload, GraphCanvas, GraphCanvasLayout, AgentRun, AgentProposal, AgentPolicy, AgentMode, EntityIndexEntry, KnowledgeBase, KnowledgeEntry, KnowledgeSuggestion, KnowledgeLookupResult, AiSkill, AiSkillFile, AiSkillHint } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -937,6 +937,97 @@ export function apiUploadAIFile(
 
 export const apiDeleteAIFile = (id: string) =>
   apiFetch<{ success: boolean }>(`/ai/files/${id}`, { method: 'DELETE' });
+
+// ── AI Skills (Settings → AI Skills) ────────────────────────────────────────
+// Admin-curated, instance-wide context bundles that personalize/extend Sol.
+// See types.ts for the shared shapes.
+
+/** The lightweight index any signed-in user can read — feeds Sol's system
+ *  prompt via progressive disclosure. See useAiSkillsStore.ts. */
+export const apiGetEnabledAiSkills = () =>
+  apiFetch<{ skills: AiSkillHint[] }>('/ai/skills');
+
+export const apiListAiSkills = () =>
+  apiFetch<{ skills: AiSkill[] }>('/admin/ai-skills');
+
+export const apiGetAiSkill = (id: string) =>
+  apiFetch<{ skill: AiSkill; files: AiSkillFile[] }>(`/admin/ai-skills/${id}`);
+
+export const apiCreateAiSkill = (data: { name: string; description?: string; content: string }) =>
+  apiFetch<{ skill: AiSkill }>('/admin/ai-skills', { method: 'POST', body: JSON.stringify(data) });
+
+export const apiUpdateAiSkill = (id: string, data: { name?: string; description?: string; content?: string; enabled?: boolean }) =>
+  apiFetch<{ skill: AiSkill }>(`/admin/ai-skills/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
+export const apiSetAiSkillEnabled = (id: string, enabled: boolean) =>
+  apiUpdateAiSkill(id, { enabled });
+
+export const apiDeleteAiSkill = (id: string) =>
+  apiFetch<{ success: boolean }>(`/admin/ai-skills/${id}`, { method: 'DELETE' });
+
+/** Create a new skill from an uploaded SKILL.md file or a .zip bundle. */
+export function apiUploadAiSkill(
+  file: File,
+  overrides: { name?: string; description?: string },
+  onProgress: (pct: number) => void,
+): Promise<{ skill: AiSkill; skippedFiles: number }> {
+  return new Promise((resolve, reject) => {
+    const token = localStorage.getItem('solytiq_token');
+    const form = new FormData();
+    form.append('file', file);
+    if (overrides.name) form.append('name', overrides.name);
+    if (overrides.description) form.append('description', overrides.description);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${(import.meta.env.VITE_API_URL as string | undefined) ?? '/api'}/admin/ai-skills/upload`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText) as { skill: AiSkill; skippedFiles: number });
+      } else {
+        let message = `HTTP ${xhr.status}`;
+        try { message = (JSON.parse(xhr.responseText) as { error?: string }).error ?? message; } catch { /* keep default */ }
+        reject(new Error(message));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(form);
+  });
+}
+
+/** Replace an existing skill's content + bundled files from a re-uploaded SKILL.md or .zip. */
+export function apiReplaceAiSkillBundle(
+  id: string,
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<{ skill: AiSkill; files: AiSkillFile[]; skippedFiles: number }> {
+  return new Promise((resolve, reject) => {
+    const token = localStorage.getItem('solytiq_token');
+    const form = new FormData();
+    form.append('file', file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', `${(import.meta.env.VITE_API_URL as string | undefined) ?? '/api'}/admin/ai-skills/${id}/upload`);
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(JSON.parse(xhr.responseText) as { skill: AiSkill; files: AiSkillFile[]; skippedFiles: number });
+      } else {
+        let message = `HTTP ${xhr.status}`;
+        try { message = (JSON.parse(xhr.responseText) as { error?: string }).error ?? message; } catch { /* keep default */ }
+        reject(new Error(message));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(form);
+  });
+}
 
 export const apiUpdateAppSettingsAI = (data: { aiAssistantEnabled?: boolean; aiModel?: string }) =>
   apiFetch<{ settings: Record<string, string> }>('/admin/settings', {

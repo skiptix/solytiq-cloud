@@ -7,6 +7,7 @@ import useSyncStore from './store/useSyncStore';
 import useMembersStore from './store/useMembersStore';
 import useWorkspaceStore from './store/useWorkspaceStore';
 import useInstalledAppsStore from './store/useInstalledAppsStore';
+import useAiSkillsStore from './store/useAiSkillsStore';
 import useMarkdownListsStore from './store/useMarkdownListsStore';
 import useKnowledgeBaseStore from './store/useKnowledgeBaseStore';
 import useNotificationsStore from './store/useNotificationsStore';
@@ -486,6 +487,13 @@ export default function App() {
   useEffect(() => {
     if (loggedIn) loadInstalledApps();
   }, [loggedIn, loadInstalledApps]);
+
+  // Enabled AI Skills' name+description — feeds Sol's system prompt via
+  // progressive disclosure (see buildSystemPrompt in useAIStore.ts).
+  const loadEnabledSkills = useAiSkillsStore((s) => s.loadEnabled);
+  useEffect(() => {
+    if (loggedIn) loadEnabledSkills();
+  }, [loggedIn, loadEnabledSkills]);
 
   const gpsInstalled = installedApps.includes('gps');
 
