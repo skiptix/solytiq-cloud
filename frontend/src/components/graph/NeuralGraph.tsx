@@ -17,7 +17,8 @@
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { GraphEdge } from '../../types';
 import type { GraphHierarchy, NetRenderNode } from '../../utils/graphHierarchy';
-import { nodeColor, nodeIcon, nodeSize } from '../../utils/graphLayout';
+import { hierarchyLinkDistance, nodeColor, nodeIcon, nodeSize } from '../../utils/graphLayout';
+import { LABEL_MAX_CHARS, planLabels, type LabelCandidate } from '../../utils/graphLabels';
 import useForceSimulation from '../../hooks/useForceSimulation';
 import type { SimLink, SimNodeSpec } from '../../utils/forceSimulation';
 import Icon from '../Icon';
@@ -26,6 +27,24 @@ import NodeInspector from './NodeInspector';
 const MIN_K = 0.2;
 const MAX_K = 3;
 const ROOT_RADIUS = 32;
+
+// ── spacing ────────────────────────────────────────────────────────────
+// Hierarchy spring lengths come from utils/graphLayout.ts's
+// hierarchyLinkDistance (pure + tested) — see that module for why a fixed rest
+// length collapses large sibling sets into an unreadable ring.
+const HIERARCHY_SPRING_STRENGTH = 0.12;
+const RELATION_DISTANCE = 150;
+const RELATION_SPRING_STRENGTH = 0.045;
+/** Personal space beyond the dot itself, so labels have somewhere to live. */
+const NODE_CLEARANCE = 16;
+
+// ── labels ─────────────────────────────────────────────────────────────
+// Label sizing/culling math lives in utils/graphLabels.ts (pure + tested);
+// this file only applies its output to the DOM. See that module's header for
+// why labels are counter-scaled and occlusion-culled rather than drawn at a
+// fixed size.
+/** Frames between occlusion passes — motion is slow, so this is imperceptible. */
+const LABEL_PASS_INTERVAL = 3;
 
 export interface NeuralGraphHandle {
   centerOn: (srn: string) => void;
@@ -144,20 +163,44 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
     const radius = isRoot ? ROOT_RADIUS : Math.max(nodeSize(visualDegree.get(n.srn) ?? 0), 8);
     const depth = hierarchy.depthOf.get(n.srn) ?? 0;
     const pin = isRoot ? { x: 0, y: 0 } : pinnedPositions?.[n.srn];
-    return { id: n.srn, radius, depth, pinned: pin };
+    return { id: n.srn, radius, collisionRadius: radius + NODE_CLEARANCE, depth, pinned: pin };
   }), [nodes, hierarchy, visualDegree, workspaceRootSrn, pinnedPositions]);
 
   const radiusBySrn = useMemo(() => new Map(nodeSpecs.map((s) => [s.id, s.radius])), [nodeSpecs]);
 
+  /** Each child's slot among its siblings — what lets hierarchyLinkDistance()
+   *  turn a fixed rest length into a count-aware set of shells. Sorted so the
+   *  assignment is stable across re-renders and the layout doesn't churn. */
+  const siblingSlot = useMemo(() => {
+    const byParent = new Map<string, string[]>();
+    for (const e of hierarchy.edges) {
+      const arr = byParent.get(e.src);
+      if (arr) arr.push(e.dst); else byParent.set(e.src, [e.dst]);
+    }
+    const slots = new Map<string, { index: number; count: number }>();
+    for (const children of byParent.values()) {
+      children.sort();
+      children.forEach((c, index) => slots.set(c, { index, count: children.length }));
+    }
+    return slots;
+  }, [hierarchy]);
+
   const links: SimLink[] = useMemo(() => {
-    const out: SimLink[] = hierarchy.edges.map((e) => ({
-      source: e.src, target: e.dst, distance: 60 + Math.min(e.depth, 4) * 14, strength: 0.14,
-    }));
+    const out: SimLink[] = hierarchy.edges.map((e) => {
+      const { index, count } = siblingSlot.get(e.dst) ?? { index: 0, count: 1 };
+      const distance = hierarchyLinkDistance({
+        parentRadius: radiusBySrn.get(e.src) ?? 10,
+        siblingIndex: index,
+        siblingCount: count,
+        depth: e.depth,
+      });
+      return { source: e.src, target: e.dst, distance, strength: HIERARCHY_SPRING_STRENGTH };
+    });
     for (const e of relationEdges) {
-      if (nodeBySrn.has(e.src) && nodeBySrn.has(e.dst)) out.push({ source: e.src, target: e.dst, distance: 130, strength: 0.045 });
+      if (nodeBySrn.has(e.src) && nodeBySrn.has(e.dst)) out.push({ source: e.src, target: e.dst, distance: RELATION_DISTANCE, strength: RELATION_SPRING_STRENGTH });
     }
     return out;
-  }, [hierarchy, relationEdges, nodeBySrn]);
+  }, [hierarchy, relationEdges, nodeBySrn, siblingSlot, radiusBySrn]);
 
   // ── highlight set (hover, falling back to selection) ────────────────
   const focusSrn = hoveredSrn ?? selectedSrn ?? null;
@@ -170,6 +213,53 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
     }
     return set;
   }, [focusSrn, links]);
+
+  // ── label sizing + occlusion culling ────────────────────────────────
+  // Everything here is imperative and driven off the RAF loop for the same
+  // reason node positions are: it runs continuously and must never trigger a
+  // React re-render. The hover/selection state it needs is mirrored into refs
+  // rather than closed over, so the pass always sees current values without
+  // the callback identity changing every frame.
+  const highlightRef = useRef(highlightNeighbors);
+  const focusRef = useRef(focusSrn);
+  const sizeRef = useRef(size);
+  useEffect(() => { highlightRef.current = highlightNeighbors; }, [highlightNeighbors]);
+  useEffect(() => { focusRef.current = focusSrn; }, [focusSrn]);
+  useEffect(() => { sizeRef.current = size; }, [size]);
+
+  const labelElRefs = useRef(new Map<string, SVGTextElement>());
+  const labelPassFrame = useRef(0);
+
+  /** Static priority order: the root first, then best-connected first — so when
+   *  space is tight the labels that survive are the ones that orient you. */
+  const labelOrder = useMemo<LabelCandidate[]>(() => nodes
+    .map((n) => ({
+      srn: n.srn,
+      radius: n.srn === workspaceRootSrn ? ROOT_RADIUS : Math.max(nodeSize(visualDegree.get(n.srn) ?? 0), 8),
+      length: Math.min((n.title || 'Untitled').length, LABEL_MAX_CHARS),
+      isRoot: n.srn === workspaceRootSrn,
+      weight: visualDegree.get(n.srn) ?? 0,
+    }))
+    .sort((a, b) => (Number(b.isRoot) - Number(a.isRoot)) || (b.weight - a.weight) || a.srn.localeCompare(b.srn)),
+  [nodes, visualDegree, workspaceRootSrn]);
+
+  const updateLabels = useCallback((positions: Map<string, { x: number; y: number }>) => {
+    const plan = planLabels(labelOrder, positions, cameraRef.current, sizeRef.current, {
+      focus: focusRef.current,
+      highlight: highlightRef.current,
+    });
+    for (const placement of plan) {
+      const el = labelElRefs.current.get(placement.srn);
+      if (!el) continue;
+      el.style.opacity = placement.visible ? '1' : '0';
+      // Skip the layout writes for a label nobody can see — most of them, most
+      // of the time, on a large graph.
+      if (!placement.visible) continue;
+      el.style.fontSize = `${placement.fontSize}px`;
+      el.style.strokeWidth = `${placement.strokeWidth}px`;
+      el.setAttribute('y', String(placement.y));
+    }
+  }, [labelOrder]);
 
   // ── RAF-driven imperative position updates ──────────────────────────
   // moved() only re-renders React when a screen position shifts by more than
@@ -192,6 +282,8 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
         el.setAttribute('x2', b.x.toFixed(1)); el.setAttribute('y2', b.y.toFixed(1));
       }
     }
+    labelPassFrame.current = (labelPassFrame.current + 1) % LABEL_PASS_INTERVAL;
+    if (labelPassFrame.current === 0) updateLabels(positions);
     if (tooltip) {
       const p = positions.get(tooltip.srn);
       if (p) {
@@ -207,7 +299,7 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tooltip?.srn, selectedSrn, size.w, size.h]);
+  }, [tooltip?.srn, selectedSrn, size.w, size.h, updateLabels]);
 
   const simRef = useForceSimulation(nodeSpecs, links, onTick, true);
 
@@ -372,6 +464,7 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
                 hovered={n.srn === hoveredSrn}
                 dimmed={!!highlightNeighbors && !highlightNeighbors.has(n.srn)}
                 registerRef={(el) => { if (el) nodeElRefs.current.set(n.srn, el); else nodeElRefs.current.delete(n.srn); }}
+                registerLabelRef={(el) => { if (el) labelElRefs.current.set(n.srn, el); else labelElRefs.current.delete(n.srn); }}
                 onDoubleClick={(e) => handleNodeDoubleClick(e, n)}
                 onEnter={() => { setHoveredSrn(n.srn); setTooltip({ srn: n.srn, x: 0, y: 0 }); }}
                 onLeave={() => { setHoveredSrn(null); setTooltip(null); }}
@@ -428,12 +521,13 @@ interface NetNodeProps {
   hovered: boolean;
   dimmed: boolean;
   registerRef: (el: SVGGElement | null) => void;
+  registerLabelRef: (el: SVGTextElement | null) => void;
   onDoubleClick: (e: React.MouseEvent) => void;
   onEnter: () => void;
   onLeave: () => void;
 }
 
-const NetNode = memo(function NetNode({ node, radius, isRoot, isPinned, selected, hovered, dimmed, registerRef, onDoubleClick, onEnter, onLeave }: NetNodeProps) {
+const NetNode = memo(function NetNode({ node, radius, isRoot, isPinned, selected, hovered, dimmed, registerRef, registerLabelRef, onDoubleClick, onEnter, onLeave }: NetNodeProps) {
   const color = nodeColor(node.type, node.status);
   const icon = nodeIcon(node.type);
   const scale = hovered ? 1.22 : selected ? 1.1 : 1;
@@ -467,17 +561,20 @@ const NetNode = memo(function NetNode({ node, radius, isRoot, isPinned, selected
           <circle cx={radius * 0.72} cy={-radius * 0.72} r={4} fill="var(--color-white)" stroke={color} strokeWidth={1.5} />
         )}
       </g>
+      {/* `y`, `font-size` and `opacity` are owned by NeuralGraph's imperative
+          label pass (counter-scaling + occlusion culling) — deliberately not
+          set here, or a React re-render would clobber the pass's decision. */}
       <text
-        y={radius + 16}
+        ref={registerLabelRef}
         textAnchor="middle"
         style={{
           fontFamily: 'var(--font-heading)', fontWeight: hovered || selected ? 700 : 600,
-          fontSize: hovered || selected ? 11.5 : 10.5, fill: hovered || selected ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
-          opacity: dimmed ? 0.15 : 1, pointerEvents: 'none', transition: 'opacity 200ms, fill 150ms',
-          paintOrder: 'stroke', stroke: 'var(--color-white)', strokeWidth: 3, strokeLinejoin: 'round',
+          fill: hovered || selected ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+          opacity: 0, pointerEvents: 'none', transition: 'opacity 220ms ease, fill 150ms',
+          paintOrder: 'stroke', stroke: 'var(--color-white)', strokeLinejoin: 'round',
         }}
       >
-        {(node.title || (isRoot ? 'Workspace' : 'Untitled')).slice(0, 28)}
+        {(node.title || (isRoot ? 'Workspace' : 'Untitled')).slice(0, LABEL_MAX_CHARS)}
       </text>
     </g>
   );

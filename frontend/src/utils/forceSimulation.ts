@@ -22,6 +22,11 @@ export interface SimNode {
   radius: number;
   /** Hops from the workspace root — deeper nodes get a weaker pull to center, so they fan outward. */
   depth: number;
+  /** Personal-space radius used for overlap resolution. Defaults to `radius`,
+   *  but callers pass a larger footprint when a node's real visual extent is
+   *  bigger than its dot — a 10px dot with a 120px label needs room for the
+   *  label, or the layout looks fine and reads as mush. */
+  collisionRadius: number;
 }
 
 export interface SimLink {
@@ -37,6 +42,8 @@ export interface SimNodeSpec {
   id: string;
   radius: number;
   depth: number;
+  /** See SimNode.collisionRadius — defaults to `radius` when omitted. */
+  collisionRadius?: number;
   /** A caller-supplied pinned position (e.g. a previously dragged node) — applied as fx/fy. */
   pinned?: { x: number; y: number };
 }
@@ -47,6 +54,23 @@ const CENTER_STRENGTH = 0.012;
 const DAMPING = 0.82;
 const MAX_VELOCITY = 40;
 const JITTER = 1.1;
+// Extra breathing room on top of the two nodes' collision radii.
+const SEPARATION_PADDING = 14;
+// How hard an actual overlap is pushed apart. Unlike the inverse-square
+// repulsion this is a *constraint*, not an exploratory force, so it is
+// deliberately NOT alpha-scaled (see the tick() comment) — a cooled-down
+// layout must still refuse to let two nodes sit on top of each other.
+const SEPARATION_STRENGTH = 0.5;
+// Floor applied to alpha for repulsion only. Without it, repulsion decays to
+// ~4% of nominal once the layout cools while the springs stay at full
+// strength — so every sibling set slowly collapses back onto its parent's
+// ring and the whole graph ends up an unreadable knot. Springs set the
+// distance; repulsion has to stay strong enough to hold the spread.
+const REPULSION_ALPHA_FLOOR = 0.55;
+// Seeding: siblings are fanned around their parent using the golden angle so
+// even a large child set starts spread out instead of heaped on one spot and
+// having to slowly untangle itself.
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 // Below this speed a node's velocity snaps to zero rather than continuing to
 // integrate — without this, ambient jitter never quite settles and every
 // node reads as constantly, visibly vibrating instead of calm and alive.
@@ -93,42 +117,67 @@ export class ForceSimulation {
     const wanted = new Set(nodeSpecs.map((n) => n.id));
     for (const id of this.nodes.keys()) if (!wanted.has(id)) this.nodes.delete(id);
 
-    const firstNeighbor = new Map<string, string>();
+    // Each node's seed anchor: the first link it appears on, and that link's
+    // rest length — so a new node lands roughly where the springs want it
+    // rather than at an arbitrary 40-70px from its neighbor.
+    const anchor = new Map<string, { other: string; distance: number }>();
     for (const l of links) {
-      if (!firstNeighbor.has(l.target)) firstNeighbor.set(l.target, l.source);
-      if (!firstNeighbor.has(l.source)) firstNeighbor.set(l.source, l.target);
+      if (!anchor.has(l.target)) anchor.set(l.target, { other: l.source, distance: l.distance });
+      if (!anchor.has(l.source)) anchor.set(l.source, { other: l.target, distance: l.distance });
     }
 
-    let addedNew = false;
-    for (const spec of nodeSpecs) {
-      const existing = this.nodes.get(spec.id);
-      if (existing) {
-        existing.radius = spec.radius;
-        existing.depth = spec.depth;
-        if (spec.pinned) { existing.fx = spec.pinned.x; existing.fy = spec.pinned.y; }
-        else if (existing.fx !== undefined && !this.userPinned.has(spec.id)) { existing.fx = undefined; existing.fy = undefined; }
-        continue;
-      }
-      addedNew = true;
-      const seedNear = spec.pinned ?? this.seedPosition(spec, firstNeighbor.get(spec.id));
+    const existingSpecs: SimNodeSpec[] = [];
+    const newSpecs: SimNodeSpec[] = [];
+    for (const spec of nodeSpecs) (this.nodes.has(spec.id) ? existingSpecs : newSpecs).push(spec);
+
+    for (const spec of existingSpecs) {
+      const existing = this.nodes.get(spec.id)!;
+      existing.radius = spec.radius;
+      existing.collisionRadius = spec.collisionRadius ?? spec.radius;
+      existing.depth = spec.depth;
+      if (spec.pinned) { existing.fx = spec.pinned.x; existing.fy = spec.pinned.y; }
+      else if (existing.fx !== undefined && !this.userPinned.has(spec.id)) { existing.fx = undefined; existing.fy = undefined; }
+    }
+
+    // Shallowest first, so a parent is already placed by the time its children
+    // are seeded around it and the whole tree fans out in one pass.
+    newSpecs.sort((a, b) => a.depth - b.depth);
+    const seededPerAnchor = new Map<string, number>();
+    for (const spec of newSpecs) {
+      const anchorId = anchor.get(spec.id)?.other;
+      const siblingIndex = anchorId ? (seededPerAnchor.get(anchorId) ?? 0) : 0;
+      if (anchorId) seededPerAnchor.set(anchorId, siblingIndex + 1);
+      const seedNear = spec.pinned ?? this.seedPosition(spec, anchor.get(spec.id), siblingIndex);
       this.nodes.set(spec.id, {
         id: spec.id, x: seedNear.x, y: seedNear.y, vx: 0, vy: 0,
-        fx: spec.pinned?.x, fy: spec.pinned?.y, radius: spec.radius, depth: spec.depth,
+        fx: spec.pinned?.x, fy: spec.pinned?.y, radius: spec.radius,
+        collisionRadius: spec.collisionRadius ?? spec.radius, depth: spec.depth,
       });
     }
     this.links = links.filter((l) => this.nodes.has(l.source) && this.nodes.has(l.target));
-    if (addedNew) this.alpha = Math.max(this.alpha, ALPHA_REHEAT);
+    if (newSpecs.length > 0) this.alpha = Math.max(this.alpha, ALPHA_REHEAT);
   }
 
   /** IDs the user has explicitly pinned by dragging (survives setData's node-position preservation even without a fresh `pinned` spec each call). */
   private userPinned = new Set<string>();
 
-  private seedPosition(spec: SimNodeSpec, neighborId?: string): { x: number; y: number } {
-    const neighbor = neighborId ? this.nodes.get(neighborId) : undefined;
-    const angle = this.rand() * Math.PI * 2;
-    const radius = neighbor ? 40 + this.rand() * 30 : spec.depth * 70 + this.rand() * 40;
-    const base = neighbor ?? { x: 0, y: 0 };
-    return { x: base.x + Math.cos(angle) * radius, y: base.y + Math.sin(angle) * radius };
+  private seedPosition(
+    spec: SimNodeSpec,
+    anchor: { other: string; distance: number } | undefined,
+    siblingIndex: number
+  ): { x: number; y: number } {
+    const neighbor = anchor ? this.nodes.get(anchor.other) : undefined;
+    if (!neighbor) {
+      const angle = this.rand() * Math.PI * 2;
+      const radius = spec.depth * 90 + this.rand() * 40;
+      return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+    }
+    // Fan siblings by the golden angle rather than at random: random angles
+    // clump (that's what random does), and a clumped seed on a large child set
+    // takes a long, visibly messy time to untangle.
+    const angle = siblingIndex * GOLDEN_ANGLE + this.rand() * 0.25;
+    const radius = (anchor?.distance ?? 80) * (0.9 + this.rand() * 0.2);
+    return { x: neighbor.x + Math.cos(angle) * radius, y: neighbor.y + Math.sin(angle) * radius };
   }
 
   pin(id: string, x: number, y: number) {
@@ -160,6 +209,13 @@ export class ForceSimulation {
     const alpha = this.alpha;
 
     // Pairwise repulsion (Coulomb-like), O(n^2) — fine at the node counts this renderer handles (<=~400).
+    // Repulsion is floored (REPULSION_ALPHA_FLOOR) rather than fully
+    // alpha-scaled: the springs never cool, so letting repulsion decay to
+    // nothing means a settled layout is one where only the springs have a
+    // say — every child collapses onto its parent's rest circle and the graph
+    // reads as a solid blob. The overlap term below is a separate, entirely
+    // unscaled constraint.
+    const spread = Math.max(alpha, REPULSION_ALPHA_FLOOR);
     for (let i = 0; i < n; i++) {
       const a = list[i];
       for (let j = i + 1; j < n; j++) {
@@ -169,8 +225,9 @@ export class ForceSimulation {
         let distSq = dx * dx + dy * dy;
         if (distSq < 0.01) { dx = this.rand() - 0.5; dy = this.rand() - 0.5; distSq = 0.01; }
         const dist = Math.max(Math.sqrt(distSq), MIN_DISTANCE);
-        const minSeparation = a.radius + b.radius + 18;
-        const force = (REPULSION / (dist * dist) + (dist < minSeparation ? (minSeparation - dist) * 0.6 : 0)) * alpha;
+        const minSeparation = a.collisionRadius + b.collisionRadius + SEPARATION_PADDING;
+        const overlap = dist < minSeparation ? (minSeparation - dist) * SEPARATION_STRENGTH : 0;
+        const force = (REPULSION / (dist * dist)) * spread + overlap;
         const fx = (dx / dist) * force;
         const fy = (dy / dist) * force;
         if (a.fx === undefined) { a.vx += fx * dt; a.vy += fy * dt; }
