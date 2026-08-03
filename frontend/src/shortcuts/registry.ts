@@ -34,6 +34,7 @@ export const SHORTCUT_DEFS: ShortcutDef[] = [
   { id: 'create-workspace', label: 'New workspace', description: 'Open the wizard to create a new workspace.', defaultKey: 'w', scope: 'global', scopeLabel: 'Anywhere' },
   { id: 'open-knowledge', label: 'Open Knowledge', description: "Open this workspace's Knowledge Base.", defaultKey: 'k', scope: 'global', scopeLabel: 'Anywhere' },
   { id: 'create-knowledge-entry', label: 'New term', description: 'Add a term to the Knowledge Base.', defaultKey: 'n', scope: 'knowledge', scopeLabel: 'Knowledge page' },
+  { id: 'search-knowledge-terms', label: 'Search terms', description: 'Focus the search bar to find and highlight a term.', defaultKey: '/', scope: 'knowledge', scopeLabel: 'Knowledge page' },
   { id: 'create-item', label: 'New item', description: 'Focus the quick-add field to add a new item.', defaultKey: 'i', scope: 'list', scopeLabel: 'Inside a board' },
   { id: 'view-list', label: 'List view', description: 'Switch this board to List view.', defaultKey: '1', scope: 'list', scopeLabel: 'Inside a board' },
   { id: 'view-kanban', label: 'Kanban view', description: 'Switch this board to Kanban view.', defaultKey: '2', scope: 'list', scopeLabel: 'Inside a board' },
