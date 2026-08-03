@@ -54,9 +54,10 @@ import { userCanAccessWorkspace } from './workspaceUtil';
 import { lookupTerm, listGlossary } from './knowledgeBase/lookup';
 import { enqueueEmbedding } from './knowledge/queue';
 import {
-  getBaseForWorkspace, createEntry, updateEntry, deleteEntry, getEntry, getBaseById,
-  ENTRY_TYPES, type KnowledgeBaseRow, type KnowledgeEntryRow,
+  getBaseForWorkspace, createBase, createEntry, updateEntry, deleteEntry, getEntry, getBaseById,
+  ENTRY_TYPES, type BlockLike, type KnowledgeBaseRow, type KnowledgeEntryRow,
 } from './knowledgeBase/entries';
+import { mutateEntryBlocks } from './knowledgeBase/blocks';
 import { startAgentRun } from './agent/runtime';
 
 // A minimal JSON Schema object for a tool's parameters.
@@ -130,7 +131,10 @@ async function requireWritableBase(
 ): Promise<{ base: KnowledgeBaseRow } | { error: string }> {
   if (!(await isWorkspaceMemberForTools(userId, workspaceId))) return { error: 'workspace not found' };
   const base = await getBaseForWorkspace(workspaceId);
-  if (!base) return { error: 'this workspace has no Knowledge Base yet — add one from the sidebar first' };
+  // Name the tool that fixes this. An MCP client has no sidebar to be pointed
+  // at, so an instruction it cannot follow reads as a dead end rather than a
+  // recoverable step.
+  if (!base) return { error: 'this workspace has no Knowledge Base yet — call create_knowledge_base first' };
   return { base };
 }
 
@@ -145,6 +149,20 @@ async function requireWritableEntry(
   // absent, never as forbidden.
   if (!base || !(await isWorkspaceMemberForTools(userId, base.workspace_id))) return { error: 'entry not found' };
   return { entry, base };
+}
+
+/**
+ * Plain text → paragraph blocks, the body format both Knowledge Base write
+ * tools accept. A model hands us prose, not the editor's block JSON, so the
+ * split is on blank lines — the same paragraph boundary knowledge/chunker.ts
+ * already treats as meaningful.
+ */
+function knowledgeBodyBlocks(raw: string): BlockLike[] {
+  return raw
+    .split(/\n{2,}/)
+    .map((para) => para.trim())
+    .filter(Boolean)
+    .map((text) => ({ id: genBlockId(), type: 'paragraph', text }));
 }
 
 function ok(result: string, summary?: string): ToolResult {
@@ -2304,6 +2322,33 @@ export const aiTools: AiTool[] = [
   // vocabulary, a clean miss beats a 60%-right guess — so lookup never falls
   // back to fuzzy matching, it returns near-misses labelled as such.
   {
+    name: 'create_knowledge_base',
+    description: "Create a workspace's Knowledge Base — the single curated dictionary each workspace can have. Call this when another Knowledge Base tool reports the workspace has none yet. Safe to call twice: it returns the existing base rather than creating a second one.",
+    parameters: {
+      type: 'object',
+      properties: {
+        workspace_id: { type: 'string' },
+        name: { type: 'string', description: 'Defaults to "Knowledge".' },
+        description: { type: 'string', description: 'Optional one-line description of what this workspace\'s vocabulary covers.' },
+      },
+      required: ['workspace_id'],
+    },
+    handler: async (userId, args) => {
+      const workspaceId = str(args.workspace_id);
+      if (!workspaceId) return fail('workspace_id is required');
+      // Creating the base is a WRITE, so it needs membership — not the looser
+      // workspace access the read tools take.
+      if (!(await isWorkspaceMemberForTools(userId, workspaceId))) return fail('workspace not found');
+      const { base, created } = await createBase(userId, workspaceId, {
+        name: str(args.name),
+        description: str(args.description) ?? null,
+      });
+      return created
+        ? ok(`Created this workspace's Knowledge Base. Define terms in it with create_knowledge_entry.`, 'Created the Knowledge Base')
+        : ok(`This workspace already has a Knowledge Base ("${base.name}"). Define terms in it with create_knowledge_entry.`);
+    },
+  },
+  {
     name: 'lookup_knowledge',
     description: "Look up what a workspace means by a specific term, in its Knowledge Base. Use this BEFORE guessing at any project/system/acronym name you don't recognise. Returns the definition, or an explicit \"not defined\" plus near-miss terms — never an invented answer.",
     parameters: {
@@ -2328,7 +2373,7 @@ export const aiTools: AiTool[] = [
       }
       const e = res.entry;
       const lines = [
-        `${e.term}${res.matchedOn === 'alias' ? ` (matched alias "${res.matchedAlias}")` : ''} — ${e.entryType}`,
+        `${e.term}${res.matchedOn === 'alias' ? ` (matched alias "${res.matchedAlias}")` : ''} — ${e.entryType} (entry_id: ${e.id})`,
         e.summary ? `Summary: ${e.summary}` : null,
         e.aliases.length ? `Also known as: ${e.aliases.join(', ')}` : null,
         Object.keys(e.properties).length ? `Properties: ${JSON.stringify(e.properties)}` : null,
@@ -2339,7 +2384,7 @@ export const aiTools: AiTool[] = [
   },
   {
     name: 'list_knowledge_terms',
-    description: "List every term defined in a workspace's Knowledge Base, with one-line summaries. Use this to orient yourself in an unfamiliar workspace before answering questions about it.",
+    description: "List every term defined in a workspace's Knowledge Base, with one-line summaries and the entry_id needed to revise, delete or link each one. Use this to orient yourself in an unfamiliar workspace before answering questions about it.",
     parameters: {
       type: 'object',
       properties: { workspace_id: { type: 'string' } },
@@ -2349,10 +2394,17 @@ export const aiTools: AiTool[] = [
       const workspaceId = str(args.workspace_id);
       if (!workspaceId) return fail('workspace_id is required');
       if (!(await userCanAccessWorkspace(userId, workspaceId))) return fail('workspace not found');
+      // "No base at all" and "a base with nothing in it" are different
+      // situations with different fixes, so they must not collapse into one
+      // message — the first is actionable, the second is just empty.
+      const base = await getBaseForWorkspace(workspaceId);
+      if (!base) return ok('This workspace has no Knowledge Base yet. Create one with create_knowledge_base.');
       const terms = await listGlossary(workspaceId);
-      if (!terms.length) return ok('This workspace has no Knowledge Base terms defined yet.');
+      if (!terms.length) return ok('This workspace has a Knowledge Base, but no terms are defined in it yet.');
+      // The entry_id is carried here because nothing else produces one, and
+      // update/delete/link_knowledge_entry all require it.
       return ok(terms.map((t) =>
-        `- ${t.term}${t.aliases.length ? ` (aka ${t.aliases.join(', ')})` : ''} [${t.entryType}]${t.summary ? `: ${t.summary}` : ''}`
+        `- ${t.term}${t.aliases.length ? ` (aka ${t.aliases.join(', ')})` : ''} [${t.entryType}] (entry_id: ${t.id})${t.summary ? `: ${t.summary}` : ''}`
       ).join('\n'));
     },
   },
@@ -2380,10 +2432,7 @@ export const aiTools: AiTool[] = [
 
       const aliasRaw = str(args.aliases);
       const bodyRaw = str(args.body);
-      const blocks = bodyRaw
-        ? bodyRaw.split(/\n{2,}/).map((para) => para.trim()).filter(Boolean)
-            .map((text) => ({ id: genBlockId(), type: 'paragraph', text }))
-        : [];
+      const blocks = bodyRaw ? knowledgeBodyBlocks(bodyRaw) : [];
 
       const created = await createEntry(userId, base.base.id, {
         term,
@@ -2397,20 +2446,27 @@ export const aiTools: AiTool[] = [
       });
       if (!created.ok) return fail(created.error);
       await enqueueEmbedding('knowledgeEntry', created.entry.id, workspaceId);
-      return ok(`Defined "${created.entry.term}" in the Knowledge Base.`, `Defined ${created.entry.term}`);
+      return ok(
+        `Defined "${created.entry.term}" in the Knowledge Base (entry_id: ${created.entry.id}).`,
+        `Defined ${created.entry.term}`
+      );
     },
   },
   {
     name: 'update_knowledge_entry',
-    description: "Revise an existing Knowledge Base term — its summary, aliases, type, or the term itself. Only the fields you pass change.",
+    description: "Revise an existing Knowledge Base term — its definition body, summary, aliases, type, or the term itself. Get the entry_id from list_knowledge_terms or lookup_knowledge. Only the fields you pass change.",
     parameters: {
       type: 'object',
       properties: {
         entry_id: { type: 'string' },
         term: { type: 'string' },
         summary: { type: 'string' },
-        entry_type: { type: 'string' },
+        entry_type: { type: 'string', description: `One of: ${ENTRY_TYPES.join(', ')}` },
         aliases: { type: 'string', description: 'Comma-separated. Replaces the existing aliases.' },
+        body: {
+          type: 'string',
+          description: "Replaces the entry's full definition body. Blank-line-separated paragraphs. Read the current body with lookup_knowledge first if you mean to extend it rather than overwrite it. Pass an empty string to clear the body; omit to leave it untouched.",
+        },
       },
       required: ['entry_id'],
     },
@@ -2428,8 +2484,22 @@ export const aiTools: AiTool[] = [
         aliases: aliasRaw !== undefined ? aliasRaw.split(',').map((a) => a.trim()).filter(Boolean) : undefined,
       });
       if (!updated.ok) return fail(updated.error);
+
+      // The body goes through mutateEntryBlocks rather than a bare content
+      // write, so an AI edit runs the same post-save pipeline a human edit does:
+      // inline `[[...]]` link sync, @-mention notifications, image pruning and
+      // the embedding enqueue. `str()` is deliberately not used here — it maps
+      // '' to undefined, which would make clearing a body impossible.
+      let bodyNote = '';
+      if (typeof args.body === 'string') {
+        const blocks = knowledgeBodyBlocks(args.body);
+        const res = await mutateEntryBlocks(userId, entryId, found.base.workspace_id, () => blocks);
+        if (!res.ok) return fail(res.error);
+        bodyNote = blocks.length ? ' Body replaced.' : ' Body cleared.';
+      }
+
       await enqueueEmbedding('knowledgeEntry', entryId, found.base.workspace_id);
-      return ok(`Updated "${updated.entry.term}".`, `Updated ${updated.entry.term}`);
+      return ok(`Updated "${updated.entry.term}".${bodyNote}`, `Updated ${updated.entry.term}`);
     },
   },
   {
