@@ -3270,6 +3270,12 @@ async function runMigrations() {
     console.log('🔗 🗑️  Legacy hard-link columns and their sync triggers are gone. entity_links (origin=\'system\') is now the sole source of truth for these relationships.');
   }
 
+  // Per-user "last visited screen" — a new tab (or reload) restores this
+  // path instead of always landing on the dashboard. Set from AppLayout on
+  // every route change (routes/auth.ts's `PUT /last-route`); read back at
+  // login/session-verify time via sanitizeUser().
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_route VARCHAR(500)`);
+
   console.log('Database migrations applied.');
 }
 

@@ -1158,9 +1158,14 @@ export default function AIAssistant() {
           onAddFile={addUploadedFile}
           onRemoveFile={removeUploadedFile}
           sessionId={useAIStore.getState().currentSessionId}
+          isMobile={isMobile}
         />
       )}
-      <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} size={isMobile ? 44 : 52} />
+      {/* On mobile the open chat is a full-screen bottom sheet with its own
+          close button — the floating bubble would just sit uselessly under it. */}
+      {!(isMobile && isOpen) && (
+        <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} size={isMobile ? 44 : 52} />
+      )}
     </div>
   );
 }

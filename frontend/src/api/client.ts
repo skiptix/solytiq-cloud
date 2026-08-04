@@ -168,14 +168,14 @@ export const apiRequestSetupToken = () =>
   apiFetch<{ ok: boolean }>('/auth/request-setup-token', { method: 'POST' });
 
 export const apiRegister = (username: string, email: string, password: string, setupToken?: string) =>
-  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; token_version?: number; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }> } }>(
+  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; token_version?: number; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>; lastRoute?: string | null } }>(
     '/auth/register', { method: 'POST', body: JSON.stringify({ username, email, password, setupToken }) }
   );
 
 export const apiLogin = (username: string, password: string) =>
   apiFetch<{
     token?: string;
-    user?: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }> };
+    user?: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>; lastRoute?: string | null };
     requires2FA?: boolean;
     pendingToken?: string;
   }>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
@@ -190,7 +190,7 @@ export const api2FADisable = (code: string) =>
   apiFetch<{ success: boolean }>('/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ code }) });
 
 export const api2FAVerify = (pendingToken: string, code: string) =>
-  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }> } }>(
+  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>; lastRoute?: string | null } }>(
     '/auth/2fa/verify', { method: 'POST', body: JSON.stringify({ pendingToken, code }) }
   );
 
@@ -208,6 +208,7 @@ type SessionUserPayload = {
   id: string; username: string; email: string; fullName: string;
   isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean;
   keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>;
+  lastRoute?: string | null;
 };
 
 /** Sign in an ADDITIONAL account while one is already active. Same endpoint and
@@ -305,6 +306,9 @@ export const apiUpdateShortcuts = (shortcuts: Record<string, { key?: string; ena
   apiFetch<{ user: { id: string; username: string; email: string; fullName: string; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }> } }>(
     '/auth/shortcuts', { method: 'PUT', body: JSON.stringify({ shortcuts }) }
   );
+
+export const apiUpdateLastRoute = (route: string) =>
+  apiFetch<{ ok: boolean }>('/auth/last-route', { method: 'PUT', body: JSON.stringify({ route }) });
 
 export const apiUploadProfileImage = (imageData: string | null) =>
   apiFetch<{ user: { id: string; username: string; email: string; fullName: string; profileImage: string | null } }>(

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { apiLogin, apiRegister, apiVerifySessionToken } from '../api/client';
+import { apiLogin, apiRegister, apiVerifySessionToken, apiUpdateLastRoute } from '../api/client';
 import useUserPrefsStore from './useUserPrefsStore';
 import useShortcutsStore from './useShortcutsStore';
 import useNotificationsStore from './useNotificationsStore';
@@ -34,6 +34,11 @@ function resetPerUserState(): void {
   clearSyncStore();
 }
 
+// Debounces the network write behind setLastRoute() so rapid navigation
+// (e.g. a multi-step wizard or a screen that rewrites its own query string)
+// doesn't fire a PUT per hop — only the settled destination is persisted.
+let lastRouteSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
 /** Remember a freshly authenticated account in the switcher vault. Only ever
  *  called with a token the server just issued for a real credential login. */
 function rememberAccount(token: string, user: AuthUser): void {
@@ -62,6 +67,7 @@ const useAuthStore = create<AuthState>()(
       isAdmin: false,
       token: null,
       totpEnabled: false,
+      lastRoute: null,
 
       register: async ({ username, email, password, setupToken }) => {
         const data = await apiRegister(username, email, password, setupToken);
@@ -77,6 +83,7 @@ const useAuthStore = create<AuthState>()(
           isAdmin: (data.user as { isAdmin?: boolean }).isAdmin ?? false,
           totpEnabled: false,
           token: data.token,
+          lastRoute: data.user.lastRoute ?? null,
         });
         useShortcutsStore.getState().hydrate(data.user.keyboardShortcuts);
         rememberAccount(data.token, data.user as AuthUser);
@@ -98,6 +105,7 @@ const useAuthStore = create<AuthState>()(
             isAdmin: data.user.isAdmin ?? false,
             totpEnabled: data.user.totpEnabled ?? false,
             token: data.token,
+            lastRoute: data.user.lastRoute ?? null,
           });
           useShortcutsStore.getState().hydrate(data.user.keyboardShortcuts);
           rememberAccount(data.token, data.user as AuthUser);
@@ -120,6 +128,7 @@ const useAuthStore = create<AuthState>()(
           isAdmin: user.isAdmin ?? false,
           totpEnabled: user.totpEnabled ?? false,
           token,
+          lastRoute: user.lastRoute ?? null,
         });
         useShortcutsStore.getState().hydrate(user.keyboardShortcuts);
         rememberAccount(token, user);
@@ -164,6 +173,7 @@ const useAuthStore = create<AuthState>()(
           isAdmin: user.isAdmin ?? false,
           totpEnabled: user.totpEnabled ?? false,
           token: stored.token,
+          lastRoute: user.lastRoute ?? null,
         });
         useShortcutsStore.getState().hydrate(user.keyboardShortcuts);
         // Refresh the vault entry from the server's answer, correcting any
@@ -196,6 +206,7 @@ const useAuthStore = create<AuthState>()(
         // Forget session-scoped UI preferences (calendar view + filter) and
         // every other per-user slice.
         resetPerUserState();
+        if (lastRouteSaveTimer) { clearTimeout(lastRouteSaveTimer); lastRouteSaveTimer = null; }
         set({
           loggedIn: false,
           userId: null,
@@ -206,6 +217,7 @@ const useAuthStore = create<AuthState>()(
           isAdmin: false,
           totpEnabled: false,
           token: null,
+          lastRoute: null,
         });
       },
 
@@ -216,6 +228,19 @@ const useAuthStore = create<AuthState>()(
           fullName: data.fullName ?? state.fullName,
           profileImage: data.profileImage !== undefined ? data.profileImage : state.profileImage,
         }));
+      },
+
+      // Optimistic-local + debounced-remote: the next tab opened in THIS
+      // browser sees the new route instantly via the persisted store, while
+      // the server write (for a different browser/device, or after clearing
+      // local storage) settles a beat later so rapid navigation doesn't fire
+      // a PUT per hop.
+      setLastRoute: (route: string) => {
+        set({ lastRoute: route });
+        if (lastRouteSaveTimer) clearTimeout(lastRouteSaveTimer);
+        lastRouteSaveTimer = setTimeout(() => {
+          apiUpdateLastRoute(route).catch(() => {});
+        }, 1000);
       },
     }),
     {

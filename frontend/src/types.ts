@@ -735,6 +735,7 @@ export interface AuthUser {
   profileImage?: string | null;
   totpEnabled?: boolean;
   keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>;
+  lastRoute?: string | null;
 }
 
 export interface AuthState {
@@ -748,12 +749,22 @@ export interface AuthState {
   isAdmin: boolean;
   token: string | null;
   totpEnabled: boolean;
+  /** The last in-app path (pathname + search) this user visited, persisted
+   *  server-side (`users.last_route`). Used to restore the same screen when
+   *  the app opens in a new tab, on desktop and mobile alike, instead of
+   *  always defaulting to the dashboard. */
+  lastRoute: string | null;
   register: (creds: { username: string; email: string; password: string; setupToken?: string }) => Promise<void>;
   signIn: (username: string, password: string) => Promise<boolean>;
   signOut: () => void;
   setProfile: (data: { username?: string; email?: string; fullName?: string; profileImage?: string | null }) => void;
   setAuthFromToken: (token: string, user: AuthUser) => void;
   setTotpEnabled: (enabled: boolean) => void;
+  /** Record the current in-app path as the "resume here" target — updates
+   *  local state immediately (so a new tab opened right after benefits
+   *  without a network round trip) and best-effort persists it server-side,
+   *  debounced so rapid navigation doesn't spam the API. */
+  setLastRoute: (route: string) => void;
   /** Activate another already-signed-in account from the switcher vault. The
    *  stored token is re-verified server-side first; `expired` means that
    *  account needs a fresh login and the current session was left untouched. */

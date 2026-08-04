@@ -47,6 +47,7 @@ interface UserRow {
   totp_enabled: boolean;
   token_version: number;
   keyboard_shortcuts: Record<string, { key?: string; enabled?: boolean }>;
+  last_route: string | null;
 }
 
 function sanitizeUser(user: UserRow) {
@@ -60,7 +61,18 @@ function sanitizeUser(user: UserRow) {
     createdAt:         user.created_at,
     totpEnabled:       user.totp_enabled,
     keyboardShortcuts: user.keyboard_shortcuts ?? {},
+    lastRoute:         user.last_route ?? null,
   };
+}
+
+// A stored last-visited path is later handed straight to <Navigate to=…> —
+// validate its shape defensively so only a genuine internal app path (never
+// a full/protocol-relative URL) is ever persisted.
+function isValidInternalRoute(route: string): boolean {
+  if (typeof route !== 'string' || route.length === 0 || route.length > 500) return false;
+  if (!route.startsWith('/') || route.startsWith('//')) return false;
+  if (route.includes('://') || /[\s\\<>"'`]/.test(route)) return false;
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -432,6 +444,26 @@ router.put('/shortcuts', authenticate, async (req: Request, res: Response) => {
     res.json({ user: sanitizeUser(result.rows[0]) });
   } catch (err) {
     console.error('shortcuts update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/auth/last-route — remember the last in-app screen this user
+// visited, so opening a new tab (or reloading) lands back there instead of
+// always defaulting to the dashboard. Fired on every route change from
+// AppLayout, so this stays a lightweight UPDATE with no RETURNING — the
+// frontend already has the path it just sent, it doesn't need it echoed back.
+router.put('/last-route', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { route } = req.body as { route?: unknown };
+    if (typeof route !== 'string' || !isValidInternalRoute(route)) {
+      res.status(400).json({ error: 'Invalid route' });
+      return;
+    }
+    await pool.query(`UPDATE users SET last_route = $1 WHERE id = $2`, [route, req.userId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('last-route update error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
