@@ -323,6 +323,7 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
   // can't promise. That gap was the cause of a node getting stuck to the
   // cursor after release instead of dropping where the user let go.
   const dragState = useRef<{ mode: 'pan' | 'node'; srn?: string; startX: number; startY: number; moved: boolean; pointerId: number } | null>(null);
+  const lastPointer = useRef({ x: 0, y: 0 });
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -340,6 +341,13 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
     const targetEl = (e.target as Element).closest('[data-srn]');
     const srn = targetEl?.getAttribute('data-srn') ?? undefined;
     e.currentTarget.setPointerCapture(e.pointerId);
+    // Seed lastPointer to the down position so the first pan delta is measured
+    // from here, not from wherever the pointer happened to be at the end of a
+    // previous, unrelated gesture. Without this, a move event that crosses the
+    // moved-threshold in one jump (routine — pointermove is coarser than 3px)
+    // pans by the distance from that stale point instead of the real delta,
+    // which reads as the camera "flipping" the instant a drag starts.
+    lastPointer.current = { x: e.clientX, y: e.clientY };
     if (srn && srn !== workspaceRootSrn) {
       dragState.current = { mode: 'node', srn, startX: e.clientX, startY: e.clientY, moved: false, pointerId: e.pointerId };
     } else {
@@ -347,7 +355,6 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
     }
   }, [workspaceRootSrn]);
 
-  const lastPointer = useRef({ x: 0, y: 0 });
   const handlePointerMove = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
     const drag = dragState.current;
     if (!drag || drag.pointerId !== e.pointerId) return;
