@@ -80,6 +80,28 @@ function Protected({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Routes that live outside AppLayout (or aren't a real "screen" to resume
+// on) — a persisted lastRoute is never allowed to point at one of these, so
+// a stale/malformed value can't create a redirect loop or land the user
+// somewhere unexpected.
+const NON_RESUMABLE_ROUTE_PREFIXES = ['/login', '/setup', '/admin-reset', '/nuke', '/share', '/oauth'];
+
+/** The path to send an already-logged-in user to when they land on a
+ *  "front door" route (app root, /login, /setup, …) — their last visited
+ *  in-app screen when we have one, the dashboard otherwise. Used so opening
+ *  the app in a new tab (desktop or mobile) resumes where they left off. */
+function resolveHomeRoute(lastRoute: string | null | undefined): string {
+  if (
+    lastRoute &&
+    lastRoute.startsWith('/') &&
+    !lastRoute.startsWith('//') &&
+    !NON_RESUMABLE_ROUTE_PREFIXES.some((p) => lastRoute.startsWith(p))
+  ) {
+    return lastRoute;
+  }
+  return '/dashboard';
+}
+
 // ── App Layout (authenticated pages) ──────────────────────────
 function AppLayout() {
   const navigate = useNavigate();
@@ -314,6 +336,16 @@ function AppLayout() {
     if (isMobile) setDrawerOpen(false);
   }, [location.pathname, isMobile]);
 
+  // Remember the current screen as the "resume here" target for this user's
+  // next new tab / reload (desktop and mobile alike) — see resolveHomeRoute()
+  // and useAuthStore's setLastRoute. Every route this effect can ever see is
+  // already inside AppLayout's own <Routes>, so no further filtering is
+  // needed here — see NON_RESUMABLE_ROUTE_PREFIXES for the routes outside it.
+  const setLastRoute = useAuthStore((s) => s.setLastRoute);
+  useEffect(() => {
+    setLastRoute(location.pathname + location.search);
+  }, [location.pathname, location.search, setLastRoute]);
+
   // Sidebar resize
   const handleResizeStart = useCallback((initialX: number) => {
     const startW = sidebarWidth;
@@ -472,7 +504,7 @@ function AppLayout() {
 
 // ── Root App ───────────────────────────────────────────────────
 export default function App() {
-  const { loggedIn, adminRegistered, isAdmin } = useAuthStore();
+  const { loggedIn, adminRegistered, isAdmin, lastRoute } = useAuthStore();
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
   const { installedApps, loaded: appsLoaded, load: loadInstalledApps } = useInstalledAppsStore();
 
@@ -505,9 +537,9 @@ export default function App() {
       <Route path="/share/folder/:token" element={<SharedFolderPage />} />
       <Route path="/share/:token" element={<SharePage />} />
       <Route path="/oauth/consent" element={loggedIn ? <OAuthConsentScreen /> : <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />} />
-      <Route path="/login" element={loggedIn ? <Navigate to="/dashboard" replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : <LoginScreen />} />
-      <Route path="/setup" element={loggedIn ? <Navigate to="/dashboard" replace /> : <SetupWizard />} />
-      <Route path="/admin-reset" element={loggedIn ? <Navigate to="/dashboard" replace /> : <AdminPasswordResetScreen />} />
+      <Route path="/login" element={loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : <LoginScreen />} />
+      <Route path="/setup" element={loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> : <SetupWizard />} />
+      <Route path="/admin-reset" element={loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> : <AdminPasswordResetScreen />} />
       <Route path="/nuke" element={loggedIn && isAdmin ? <NukeScreen /> : <Navigate to={loggedIn ? '/dashboard' : '/login'} replace />} />
       <Route path="/gps/:id/edit" element={
         !loggedIn ? <Navigate to="/login" replace /> :
@@ -520,7 +552,7 @@ export default function App() {
         </Protected>
       } />
       <Route path="/" element={
-        loggedIn ? <Navigate to="/dashboard" replace /> :
+        loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> :
         (setupRequired === null ? null : setupRequired ? <Navigate to="/setup" replace /> : <Navigate to="/login" replace />)
       } />
     </Routes>

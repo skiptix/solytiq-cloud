@@ -87,7 +87,7 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
 
   return (
     <>
-      <header style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(var(--color-page-bg-rgb), 0.92)', backdropFilter: 'blur(12px)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16, padding: isMobile ? '10px 16px' : '10px 24px', height: 56 }}>
+      <header style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(var(--color-page-bg-rgb), 0.92)', backdropFilter: 'blur(12px)', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 16, padding: isMobile ? 'calc(env(safe-area-inset-top, 0px) + 16px) 16px 12px' : '10px 24px', height: isMobile ? 'auto' : 56, minHeight: isMobile ? 56 : undefined }}>
         {/* Hamburger — mobile only */}
         {isMobile && (
           <button

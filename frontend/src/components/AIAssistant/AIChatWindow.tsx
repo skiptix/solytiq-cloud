@@ -23,6 +23,7 @@ interface Props {
   onAddFile: (file: AIFile) => void;
   onRemoveFile: (id: string) => void;
   sessionId: string | null;
+  isMobile?: boolean;
 }
 
 const VIEW_LABELS: Record<string, string> = {
@@ -266,6 +267,7 @@ export default function AIChatWindow({
   onAddFile,
   onRemoveFile,
   sessionId,
+  isMobile,
 }: Props) {
   const [input, setInput] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -375,9 +377,28 @@ export default function AIChatWindow({
   const viewLabel = VIEW_LABELS[contextView] ?? contextView;
   const hasFiles = uploadedFiles.length > 0 || uploadingFiles.length > 0;
 
-  return (
-    <div
-      style={{
+  const sheetStyle: React.CSSProperties = isMobile
+    ? {
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: 'min(88vh, 680px)',
+        maxHeight: '88vh',
+        background: 'var(--color-white)',
+        borderRadius: '22px 22px 0 0',
+        boxShadow: '0 -12px 40px rgba(var(--color-purple-deep-4-rgb), 0.24)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        animation: 'aiSheetIn 340ms cubic-bezier(0.22,1,0.36,1) both',
+        border: `1.5px solid ${isDragOver ? 'rgba(var(--color-purple-mid-8-rgb), 0.5)' : 'rgba(var(--color-primary-rgb), 0.12)'}`,
+        borderBottom: 'none',
+        transition: 'border-color 200ms ease',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        zIndex: 9001,
+      }
+    : {
         position: 'absolute',
         bottom: 64,
         right: 0,
@@ -392,13 +413,37 @@ export default function AIChatWindow({
         animation: 'aiWindowIn 300ms cubic-bezier(0.34,1.56,0.64,1) both',
         border: `1.5px solid ${isDragOver ? 'rgba(var(--color-purple-mid-8-rgb), 0.5)' : 'rgba(var(--color-primary-rgb), 0.12)'}`,
         transition: 'border-color 200ms ease',
-      }}
-      onClick={(e) => e.stopPropagation()}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-    >
+      };
+
+  return (
+    <>
+      {isMobile && (
+        <div
+          onClick={onClose}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(var(--color-black-rgb), 0.4)',
+            backdropFilter: 'blur(2px)',
+            zIndex: 9000,
+            animation: 'backdropIn 220ms ease both',
+          }}
+        />
+      )}
+      <div
+        style={sheetStyle}
+        onClick={(e) => e.stopPropagation()}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        {/* Drag handle — mobile bottom sheet only */}
+        {isMobile && (
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8, paddingBottom: 4, flexShrink: 0 }}>
+            <div style={{ width: 36, height: 4, borderRadius: 9999, background: 'var(--color-border-strong)' }} />
+          </div>
+        )}
       {/* Header */}
       <div
         style={{
@@ -943,6 +988,7 @@ export default function AIChatWindow({
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
