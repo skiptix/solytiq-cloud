@@ -152,9 +152,12 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
   }, [applyCamera]);
 
   // ── simulation data ──────────────────────────────────────────────
+  // infoWeight (see GraphNode) is an opt-in bonus — unset/0 for ordinary Net
+  // nodes, so this is a strict no-op there and only changes sizing where a
+  // caller (the Knowledge page) actually populates it.
   const visualDegree = useMemo(() => {
     const m = new Map<string, number>();
-    for (const n of nodes) m.set(n.srn, (hierarchy.childCount.get(n.srn) ?? 0) + n.degree + (hierarchy.parentOf.has(n.srn) ? 1 : 0));
+    for (const n of nodes) m.set(n.srn, (hierarchy.childCount.get(n.srn) ?? 0) + n.degree + (hierarchy.parentOf.has(n.srn) ? 1 : 0) + (n.infoWeight ?? 0));
     return m;
   }, [nodes, hierarchy]);
 

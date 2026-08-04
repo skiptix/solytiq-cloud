@@ -22,9 +22,25 @@ import useAuthStore from '../store/useAuthStore';
 import Icon from '../components/Icon';
 import EntryInspector from '../components/knowledge/EntryInspector';
 import { buildKnowledgeRootNode, buildRenderedHierarchy, type NetRenderNode } from '../utils/graphHierarchy';
+import { blockTextLength } from '../utils/markdownBlocks';
+import { ENTRY_TYPE_OPTIONS } from '../utils/knowledgeEntryTypes';
 import { apiGetWorkspaceGraph, apiGetEntityLinks, apiGetWorkspaceMembers } from '../api/client';
 import type { GraphEdge, GraphNode, MarkdownBlock, ResolvedLink, KnowledgeEntry } from '../types';
 import type { MentionMember } from '../utils/mention';
+
+// A term's bubble grows with how much its definition actually holds — summary,
+// aliases, and written block content — not just its explicit relation degree.
+// Chars-per-unit and the cap are tuned so a rich entry noticeably out-sizes a
+// stub without ever swamping a well-connected term's degree-based size (see
+// nodeSize() in utils/graphLayout.ts, which this feeds into as bonus degree).
+const INFO_WEIGHT_CHARS_PER_UNIT = 40;
+const INFO_WEIGHT_MAX = 14;
+
+function contentInfoWeight(entry: KnowledgeEntry): number {
+  const chars = (entry.summary?.length ?? 0) + entry.aliases.join(' ').length + blockTextLength(entry.content?.blocks ?? []);
+  const structureBonus = (entry.content?.blocks?.length ?? 0) * 0.5;
+  return Math.min(chars / INFO_WEIGHT_CHARS_PER_UNIT + structureBonus, INFO_WEIGHT_MAX);
+}
 
 // Lazily loaded for the same reason the main Net's renderers are: the force
 // simulation and its SVG layer shouldn't grow the bundle for anyone who never
@@ -70,6 +86,23 @@ export default function KnowledgeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Term-type filter, next to the search bar — same "empty = show all" convention
+  // as the main Net's GraphControls entityTypes filter.
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [typeFilterOpen, setTypeFilterOpen] = useState(false);
+  const typeFilterRef = useRef<HTMLDivElement>(null);
+  const toggleTypeFilter = useCallback((key: string) => {
+    setTypeFilter((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  }, []);
+  useEffect(() => {
+    if (!typeFilterOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (typeFilterRef.current && !typeFilterRef.current.contains(e.target as Node)) setTypeFilterOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [typeFilterOpen]);
 
   useEffect(() => { if (workspaceId) void load(workspaceId); }, [workspaceId, load]);
 
@@ -146,7 +179,16 @@ export default function KnowledgeScreen() {
     [base, workspaceId]
   );
 
-  const entryNodes: NetRenderNode[] = useMemo(() => entries.map(e => ({
+  // "empty filter = show all" — same convention as the main Net's GraphControls.
+  // Filtered-out entries just aren't rendered; buildRenderedHierarchy walks any
+  // neighbor whose owning entry got hidden up to the nearest still-rendered
+  // ancestor (root, here), so nothing goes visually orphaned.
+  const visibleEntries = useMemo(
+    () => (typeFilter.length === 0 ? entries : entries.filter(e => typeFilter.includes(e.entryType))),
+    [entries, typeFilter]
+  );
+
+  const entryNodes: NetRenderNode[] = useMemo(() => visibleEntries.map(e => ({
     srn: `${ENTRY_PREFIX}${e.id}`,
     type: 'knowledgeEntry' as const,
     id: e.id,
@@ -156,12 +198,14 @@ export default function KnowledgeScreen() {
     deepLink: `/knowledge?entry=${e.id}`,
     // Degree drives node size, so a well-connected term reads as a hub.
     degree: relationEdges.filter(r => r.src === `${ENTRY_PREFIX}${e.id}` || r.dst === `${ENTRY_PREFIX}${e.id}`).length,
+    // A richly-written term reads as bigger even with few explicit relations.
+    infoWeight: contentInfoWeight(e),
     pagerank: 0,
     community: null,
     status: null,
     isArchived: false,
     workspaceId: workspaceId ?? undefined,
-  })), [entries, relationEdges, workspaceId]);
+  })), [visibleEntries, relationEdges, workspaceId]);
 
   const renderNodes: NetRenderNode[] = useMemo(
     () => (rootNode ? [rootNode, ...entryNodes, ...neighborNodes] : []),
@@ -218,10 +262,10 @@ export default function KnowledgeScreen() {
   const searchMatches = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
-    return entries
+    return visibleEntries
       .filter(e => e.term.toLowerCase().includes(q) || e.aliases.some(a => a.toLowerCase().includes(q)))
       .slice(0, 8);
-  }, [entries, searchQuery]);
+  }, [visibleEntries, searchQuery]);
 
   const handlePickSearchResult = useCallback((entryId: string) => {
     setSelectedId(entryId);
@@ -400,47 +444,97 @@ export default function KnowledgeScreen() {
         )}
 
         {!loading && entries.length > 0 && (
-          <div style={{ position: 'absolute', top: 12, left: 12, width: isMobile ? 'calc(100% - 24px)' : 260, zIndex: 5 }}>
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 10, background: 'var(--color-white)', border: '1px solid var(--color-border)', boxShadow: '0 4px 16px rgba(var(--color-black-rgb), 0.10)' }}>
-              <Icon name="search" size={16} color="var(--color-text-quaternary)" />
-              <input
-                ref={searchInputRef}
-                value={searchQuery}
-                onChange={e => { setSearchQuery(e.target.value); setSearchOpen(true); }}
-                onFocus={() => setSearchOpen(true)}
-                onBlur={() => setTimeout(() => setSearchOpen(false), 120)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && searchMatches[0]) handlePickSearchResult(searchMatches[0].id);
-                  if (e.key === 'Escape') { setSearchQuery(''); setSearchOpen(false); searchInputRef.current?.blur(); }
-                }}
-                placeholder="Search terms…"
-                style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)' }}
-              />
-              {searchQuery && (
-                <button onClick={() => { setSearchQuery(''); searchInputRef.current?.focus(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0, flexShrink: 0 }}>
-                  <Icon name="close" size={14} color="var(--color-text-quaternary)" />
-                </button>
-              )}
-            </div>
-            {searchOpen && searchQuery.trim() && (
-              <div style={{ marginTop: 6, background: 'var(--color-white)', borderRadius: 10, border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', overflow: 'hidden', animation: 'menuIn 140ms ease both' }}>
-                {searchMatches.length === 0 ? (
-                  <div style={{ padding: '10px 12px', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)' }}>No terms match "{searchQuery.trim()}"</div>
-                ) : (
-                  searchMatches.map(e => (
-                    <button key={e.id}
-                      onMouseDown={ev => ev.preventDefault()}
-                      onClick={() => handlePickSearchResult(e.id)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', background: 'none', border: 'none', borderTop: '1px solid var(--color-surface-tint-2)', cursor: 'pointer', textAlign: 'left' }}
-                      onMouseEnter={ev => { ev.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-                      onMouseLeave={ev => { ev.currentTarget.style.background = 'none'; }}>
-                      <span style={{ fontSize: 15, flexShrink: 0 }}>{e.emoji || '📖'}</span>
-                      <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.term}</span>
-                    </button>
-                  ))
+          <div style={{ position: 'absolute', top: 12, left: 12, width: isMobile ? 'calc(100% - 24px)' : 300, zIndex: 5, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 10, background: 'var(--color-white)', border: '1px solid var(--color-border)', boxShadow: '0 4px 16px rgba(var(--color-black-rgb), 0.10)' }}>
+                <Icon name="search" size={16} color="var(--color-text-quaternary)" />
+                <input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); setSearchOpen(true); }}
+                  onFocus={() => setSearchOpen(true)}
+                  onBlur={() => setTimeout(() => setSearchOpen(false), 120)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && searchMatches[0]) handlePickSearchResult(searchMatches[0].id);
+                    if (e.key === 'Escape') { setSearchQuery(''); setSearchOpen(false); searchInputRef.current?.blur(); }
+                  }}
+                  placeholder="Search terms…"
+                  style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)' }}
+                />
+                {searchQuery && (
+                  <button onClick={() => { setSearchQuery(''); searchInputRef.current?.focus(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0, flexShrink: 0 }}>
+                    <Icon name="close" size={14} color="var(--color-text-quaternary)" />
+                  </button>
                 )}
               </div>
-            )}
+              {searchOpen && searchQuery.trim() && (
+                <div style={{ marginTop: 6, background: 'var(--color-white)', borderRadius: 10, border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', overflow: 'hidden', animation: 'menuIn 140ms ease both' }}>
+                  {searchMatches.length === 0 ? (
+                    <div style={{ padding: '10px 12px', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)' }}>No terms match "{searchQuery.trim()}"</div>
+                  ) : (
+                    searchMatches.map(e => (
+                      <button key={e.id}
+                        onMouseDown={ev => ev.preventDefault()}
+                        onClick={() => handlePickSearchResult(e.id)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 12px', background: 'none', border: 'none', borderTop: '1px solid var(--color-surface-tint-2)', cursor: 'pointer', textAlign: 'left' }}
+                        onMouseEnter={ev => { ev.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                        onMouseLeave={ev => { ev.currentTarget.style.background = 'none'; }}>
+                        <span style={{ fontSize: 15, flexShrink: 0 }}>{e.emoji || '📖'}</span>
+                        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.term}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div ref={typeFilterRef} style={{ position: 'relative', flexShrink: 0 }}>
+              <button
+                onClick={() => setTypeFilterOpen(o => !o)}
+                title="Filter by term type"
+                style={{
+                  width: 38, height: 38, borderRadius: 10, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: typeFilter.length > 0 ? 'var(--color-primary)' : 'var(--color-white)',
+                  border: '1px solid var(--color-border)', boxShadow: '0 4px 16px rgba(var(--color-black-rgb), 0.10)', cursor: 'pointer',
+                }}
+              >
+                <Icon name="filter_list" size={16} color={typeFilter.length > 0 ? 'var(--color-white)' : 'var(--color-text-quaternary)'} />
+                {typeFilter.length > 0 && (
+                  <span style={{
+                    position: 'absolute', top: -4, right: -4, minWidth: 14, height: 14, padding: '0 3px', borderRadius: 7,
+                    background: 'var(--color-primary)', color: 'var(--color-white)', border: '1.5px solid var(--color-white)',
+                    fontFamily: 'var(--font-heading)', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>{typeFilter.length}</span>
+                )}
+              </button>
+              {typeFilterOpen && (
+                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 190, background: 'var(--color-white)', borderRadius: 10, border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: 8, animation: 'menuIn 140ms ease both' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 4px 6px' }}>
+                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 700, color: 'var(--color-text-secondary)' }}>Term type</span>
+                    {typeFilter.length > 0 && (
+                      <button onClick={() => setTypeFilter([])} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Reset</button>
+                    )}
+                  </div>
+                  {ENTRY_TYPE_OPTIONS.map(opt => {
+                    const active = typeFilter.length === 0 || typeFilter.includes(opt.key);
+                    return (
+                      <button
+                        key={opt.key}
+                        onClick={() => toggleTypeFilter(opt.key)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '5px 6px', borderRadius: 6, border: 'none',
+                          background: active ? 'var(--color-surface-tint)' : 'transparent', opacity: active ? 1 : 0.45, cursor: 'pointer', textAlign: 'left',
+                          fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)', transition: 'background 120ms, opacity 120ms',
+                        }}
+                      >
+                        <Icon name={opt.icon} size={14} color="var(--color-text-tertiary)" />
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

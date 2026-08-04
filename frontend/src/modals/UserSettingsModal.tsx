@@ -4,6 +4,7 @@ import { useMobile } from '../hooks/useBreakpoint';
 import useAuthStore from '../store/useAuthStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
 import useShortcutsStore from '../store/useShortcutsStore';
+import useAiMemoryStore from '../store/useAiMemoryStore';
 import { SHORTCUT_DEFS, bindingFor, comboFromEvent, formatCombo, isReservedCombo } from '../shortcuts/registry';
 import {
   apiUpdateProfile,
@@ -563,6 +564,8 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                     ))}
                   </div>
                 </div>
+                <div style={{ height: 1, background: 'var(--color-surface-tint-2)' }} />
+                <MemorySection />
               </div>
             </div>
             )}
@@ -1009,6 +1012,90 @@ function fmtTokenDate(iso: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function MemorySection() {
+  const { entries, loaded, loading, load, remove, clear } = useAiMemoryStore();
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  useEffect(() => { if (!loaded) load(); }, [loaded, load]);
+
+  const handleRemove = async (id: string) => {
+    setRemovingId(id);
+    await remove(id);
+    setRemovingId(null);
+  };
+
+  const handleClear = async () => {
+    setClearing(true);
+    await clear();
+    setClearing(false);
+    setConfirmingClear(false);
+  };
+
+  return (
+    <div style={{ padding: '14px 18px' }}>
+      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>Sol's Memory</div>
+      <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 10, lineHeight: 1.5 }}>
+        Durable facts Sol has saved about you, carried into every chat so you don't have to repeat yourself. Sol saves these on its own — ask it to remember or forget something any time.
+      </div>
+
+      {loading && !loaded && (
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', padding: '4px 0' }}>Loading…</div>
+      )}
+      {loaded && entries.length === 0 && (
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', padding: '4px 0' }}>Nothing saved yet.</div>
+      )}
+
+      {entries.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+          {entries.map(e => (
+            <div key={e.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'var(--color-white)', border: '1px solid var(--color-border-alt)' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)', lineHeight: 1.5 }}>{e.content}</div>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-quaternary)', marginTop: 2 }}>Saved {fmtTokenDate(e.createdAt)}</div>
+              </div>
+              <button
+                onClick={() => handleRemove(e.id)}
+                disabled={removingId === e.id}
+                title="Forget this"
+                style={{ background: 'none', border: 'none', cursor: removingId === e.id ? 'default' : 'pointer', display: 'flex', padding: 2, flexShrink: 0, opacity: removingId === e.id ? 0.5 : 1, marginTop: 1 }}
+              >
+                <Icon name="close" size={14} color="var(--color-text-quaternary)" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {entries.length > 0 && (
+        confirmingClear ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-error)' }}>Clear all {entries.length} memories? This cannot be undone.</span>
+            <button
+              onClick={() => setConfirmingClear(false)}
+              style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', flexShrink: 0 }}
+            >Cancel</button>
+            <button
+              onClick={handleClear}
+              disabled={clearing}
+              style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: clearing ? 'not-allowed' : 'pointer', flexShrink: 0 }}
+            >{clearing ? 'Clearing…' : 'Confirm'}</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmingClear(true)}
+            style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}
+          >
+            <Icon name="delete_sweep" size={14} color="var(--color-error)" />
+            Clear all memory
+          </button>
+        )
+      )}
+    </div>
+  );
 }
 
 function ClaudeMcpSection() {

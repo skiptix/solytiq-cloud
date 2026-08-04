@@ -5,6 +5,7 @@ import { authenticate } from '../middleware';
 import { extractTextFromBuffer, MAX_TEXT_CHARS } from '../fileText';
 import { getOpenRouterToolDefs, executeAiTool } from '../aiTools';
 import { listSkills } from '../aiSkills/skills';
+import { listMemory, removeMemory, clearMemory } from '../aiMemory';
 
 const router = Router();
 
@@ -388,6 +389,52 @@ router.get('/skills', authenticate, async (_req: Request, res: Response) => {
     res.json({ skills: skills.map((s) => ({ id: s.id, name: s.name, description: s.description })) });
   } catch (err) {
     console.error('ai/skills GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Long-term memory (per user) ─────────────────────────────────────────
+// One small list per user — the same shape feeds both Sol's system prompt
+// (progressive-disclosure store, see useAiMemoryStore.ts) and the Account
+// Settings "Memory" panel, so there's a single GET rather than an
+// index/full-detail split like AI Skills (which has that split because
+// skill bodies are large and admin-only; memory entries are neither).
+
+// GET /api/ai/memory — every memory entry for the current user.
+router.get('/memory', authenticate, async (req: Request, res: Response) => {
+  try {
+    const rows = await listMemory(req.userId!);
+    res.json({ memory: rows.map((r) => ({ id: r.id, content: r.content, createdAt: r.created_at })) });
+  } catch (err) {
+    console.error('ai/memory GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/ai/memory/:id — remove one entry (scoped to the caller — the
+// query includes user_id, so this can't touch another user's memory even if
+// an id were guessed).
+router.delete('/memory/:id', authenticate, async (req: Request, res: Response) => {
+  try {
+    const removed = await removeMemory(req.userId!, req.params.id);
+    if (!removed) {
+      res.status(404).json({ error: 'Memory entry not found' });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('ai/memory/:id DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/ai/memory — clear everything (the User Settings "Clear all" action).
+router.delete('/memory', authenticate, async (req: Request, res: Response) => {
+  try {
+    const cleared = await clearMemory(req.userId!);
+    res.json({ success: true, cleared });
+  } catch (err) {
+    console.error('ai/memory DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -3276,6 +3276,28 @@ async function runMigrations() {
   // login/session-verify time via sanitizeUser().
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_route VARCHAR(500)`);
 
+  // Sol's long-term memory: small, durable facts about a user (preferences,
+  // standing context) that ride in every chat's system prompt — the "stop
+  // asking me every time" layer, scoped per-user rather than the instance-wide
+  // AI Skills. Deliberately NOT a dump of chat history — that stays out of the
+  // system prompt entirely and is reachable only via the search_chat_history
+  // tool, on demand, so an old conversation never inflates every future call.
+  // Entry-count/length caps live in aiMemory.ts, not here.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ai_user_memory (
+      id         VARCHAR(100) PRIMARY KEY,
+      user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      content    TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS ai_user_memory_user_idx ON ai_user_memory (user_id, created_at ASC)`);
+
+  // Trigram index backing search_chat_history's on-demand lookups over past
+  // sessions — pg_trgm is already enabled above (Knowledge Layer migration).
+  await pool.query(`CREATE INDEX IF NOT EXISTS ai_chats_content_trgm ON ai_chats USING gin (content gin_trgm_ops)`);
+
   console.log('Database migrations applied.');
 }
 

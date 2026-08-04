@@ -40,3 +40,10 @@ const TEXT_BLOCK_TYPES = new Set<MarkdownBlockType>(['heading', 'paragraph', 'bu
 export function hasText(block: MarkdownBlock): block is TextBlock {
   return TEXT_BLOCK_TYPES.has(block.type);
 }
+
+/** Total character count across a block list's text blocks — a cheap, pure
+ *  proxy for "how much has been written" (used e.g. to size a Knowledge Base
+ *  term's bubble by its definition's content, not just its relation degree). */
+export function blockTextLength(blocks: MarkdownBlock[]): number {
+  return blocks.reduce((sum, b) => sum + (hasText(b) ? b.text.length : 0), 0);
+}

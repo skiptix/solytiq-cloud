@@ -63,6 +63,7 @@ import {
   listSkills, findSkill, createSkill, updateSkill, deleteSkill,
   listSkillFiles, getSkillFile, setSkillFile, removeSkillFile, isUserAdmin,
 } from './aiSkills/skills';
+import { listMemory, addMemory, removeMemory } from './aiMemory';
 
 // A minimal JSON Schema object for a tool's parameters.
 export interface JsonSchema {
@@ -2736,6 +2737,93 @@ export const aiTools: AiTool[] = [
       const removed = await removeSkillFile(skill.id, filePath);
       if (!removed) return fail(`no file "${filePath}" on this skill`);
       return ok(`Removed "${filePath}" from "${skill.name}".`, `Removed a file from skill "${skill.name}"`);
+    },
+  },
+
+  // ───────────────────────────── Long-term memory (per user) ──────────────────
+  // Small, durable facts about the calling user — the current entries already
+  // ride in every chat's system prompt (see the MEMORY note buildSystemPrompt
+  // injects in useAIStore.ts), so these tools exist for the model to WRITE new
+  // ones and to get an explicit, fresh read when needed, not as the primary
+  // way memory reaches the model. Unlike AI Skills these are user-scoped, not
+  // admin-gated — every signed-in user manages only their own memory, enforced
+  // by the userId-scoped queries in aiMemory.ts.
+  {
+    name: 'list_memory',
+    description: 'List every long-term memory entry saved for the CURRENT user, each with its id. These are usually already shown in your system prompt under MEMORY — call this only for an explicit fresh read (e.g. right before remove_memory) or if the prompt shows none yet.',
+    parameters: { type: 'object', properties: {} },
+    handler: async (userId) => {
+      const rows = await listMemory(userId);
+      if (!rows.length) return ok('No memory saved yet for this user.');
+      return ok(rows.map((r) => `- [${r.id}] ${r.content}`).join('\n'));
+    },
+  },
+  {
+    name: 'add_memory',
+    description: 'Save ONE short, durable fact or preference about the current user that should be remembered in EVERY future conversation, not just this one — e.g. their preferred units, a standing constraint, a recurring project name, how they like responses formatted. Call this when the user explicitly asks you to remember something, or when a clearly durable preference comes up naturally. Do NOT use this for one-off task details already tracked elsewhere (tasks/lists/notes/timelines) — memory is for things that should color EVERY chat, not this task.',
+    parameters: {
+      type: 'object',
+      properties: { content: { type: 'string', description: 'One specific fact, as a short sentence.' } },
+      required: ['content'],
+    },
+    handler: async (userId, args) => {
+      const content = str(args.content);
+      if (!content) return fail('content is required');
+      const result = await addMemory(userId, content);
+      if (!result.ok) return fail(result.error);
+      return ok(`Remembered: "${result.memory.content}" (id: ${result.memory.id}).`, 'Saved a memory');
+    },
+  },
+  {
+    name: 'remove_memory',
+    description: 'Delete one saved long-term memory entry by id (see list_memory or the MEMORY section already in your context for ids) — e.g. when the user says to forget something, or a saved fact is now outdated or wrong.',
+    parameters: { type: 'object', properties: { memory_id: { type: 'string' } }, required: ['memory_id'] },
+    handler: async (userId, args) => {
+      const id = str(args.memory_id);
+      if (!id) return fail('memory_id is required');
+      const removed = await removeMemory(userId, id);
+      if (!removed) return fail('no memory entry with that id');
+      return ok('Forgot that.', 'Removed a memory');
+    },
+  },
+
+  // ───────────────────────────── Past chat history (on demand only) ───────────
+  // Deliberately the ONE piece of context in this whole registry that is never
+  // preloaded into the system prompt — full history is comparatively huge, and
+  // most turns have nothing to do with an earlier conversation. This tool is
+  // the entire mechanism: call it only when the user's own message references
+  // something from a past chat, and skip it otherwise. See the "PAST
+  // CONVERSATIONS" guideline in buildSystemPrompt (useAIStore.ts).
+  {
+    name: 'search_chat_history',
+    description: 'Search the CURRENT user\'s own past conversations with you (Sol), across every earlier chat session, not the current one. Use this ONLY when the user is explicitly asking about something from an earlier conversation — e.g. "what did I ask you on Monday", "did we talk about this before", "what did you tell me about X last week". Do NOT call this for ordinary questions about the current conversation or unrelated topics — it costs real tokens and most turns don\'t need it.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Keywords to search for — a topic, name, or phrase the user is trying to recall.' },
+        limit: { type: 'number', description: 'Max results, default 10, capped at 25.' },
+      },
+      required: ['query'],
+    },
+    handler: async (userId, args) => {
+      const q = str(args.query);
+      if (!q) return fail('query is required');
+      const limit = Math.min(Math.max(Number(args.limit) || 10, 1), 25);
+      // Escape LIKE metacharacters in the model-supplied query so a literal
+      // "%"/"_" in the search term can't silently widen the match.
+      const likeTerm = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+      const r = await query<{ id: number; role: string; content: string; created_at: string; session_title: string | null }>(
+        `SELECT c.id, c.role, c.content, c.created_at, s.title AS session_title
+           FROM ai_chats c
+           LEFT JOIN ai_chat_sessions s ON s.id = c.session_id
+          WHERE c.user_id = $1 AND c.role IN ('user', 'assistant') AND c.content ILIKE $2 ESCAPE '\\'
+          ORDER BY c.created_at DESC
+          LIMIT $3`,
+        [userId, likeTerm, limit]
+      );
+      if (!r.rows.length) return ok(`No past conversation matched "${q}".`);
+      const snippet = (s: string) => (s.length > 280 ? `${s.slice(0, 280)}…` : s);
+      return ok(r.rows.map((row) => `- [${row.created_at}] ${row.session_title ? `"${row.session_title}" — ` : ''}${row.role}: ${snippet(row.content)}`).join('\n'));
     },
   },
 
