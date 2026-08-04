@@ -17,6 +17,7 @@ import useAuthStore from '../../store/useAuthStore';
 import useWorkspaceStore from '../../store/useWorkspaceStore';
 import useKnowledgeBaseStore from '../../store/useKnowledgeBaseStore';
 import useAiSkillsStore from '../../store/useAiSkillsStore';
+import useAiMemoryStore from '../../store/useAiMemoryStore';
 import useGraphStore from '../../store/useGraphStore';
 import useUserPrefsStore from '../../store/useUserPrefsStore';
 import type { GraphEntityType } from '../../types';
@@ -82,6 +83,7 @@ interface ToolCall {
 // backend equivalent — sublists, reorder/move, calendar scheduling, workspaces,
 // GPS, navigation — stay on the client.
 const SKILL_MUTATION_TOOL_NAMES = new Set(['create_skill', 'update_skill', 'delete_skill', 'set_skill_file', 'remove_skill_file']);
+const MEMORY_MUTATION_TOOL_NAMES = new Set(['add_memory', 'remove_memory']);
 
 const SUPERSEDED_CLIENT_TOOLS = new Set([
   'create_dashboard_task', 'update_dashboard_task', 'delete_dashboard_task',
@@ -956,7 +958,8 @@ export default function AIAssistant() {
         let tools = composeTools(buildTools(ctx, wsId, wsInfo));
         const glossary = useKnowledgeBaseStore.getState().entries.map(e => ({ term: e.term, aliases: e.aliases, summary: e.summary }));
         const skills = useAiSkillsStore.getState().enabledSkills;
-        const systemPrompt = buildSystemPrompt(ctx, username || 'User', wsInfo, wsId, glossary, skills);
+        const memory = useAiMemoryStore.getState().entries;
+        const systemPrompt = buildSystemPrompt(ctx, username || 'User', wsInfo, wsId, glossary, skills, memory);
 
         // Build API messages from history (last 20 + current)
         const history = useAIStore
@@ -1023,6 +1026,14 @@ export default function AIAssistant() {
           // the rest of this chat and for Settings → AI Skills, if open).
           if (results.some((r) => SKILL_MUTATION_TOOL_NAMES.has(r.name))) {
             useAiSkillsStore.getState().loadEnabled();
+          }
+          // Same reasoning for long-term memory: a fact added/removed via a
+          // tool call refreshes the store immediately, so the NEXT message in
+          // this chat (and the Settings → Preferences list, if open) reflects
+          // it — the system prompt for the CURRENT round is already sent and
+          // isn't rebuilt mid-loop, same as skills above.
+          if (results.some((r) => MEMORY_MUTATION_TOOL_NAMES.has(r.name))) {
+            useAiMemoryStore.getState().load();
           }
 
           // Rebuild context with updated store state

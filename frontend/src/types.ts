@@ -726,6 +726,15 @@ export interface AiSkillHint {
   description: string;
 }
 
+// Sol's long-term memory — small, durable per-user facts that ride in every
+// chat's system prompt (see CLAUDE.md "AI Assistant" / buildSystemPrompt in
+// useAIStore.ts). User-scoped and user-manageable, unlike admin-only AI Skills.
+export interface AiMemoryEntry {
+  id: string;
+  content: string;
+  createdAt: string;
+}
+
 export interface AuthUser {
   id: string;
   username: string;
@@ -1109,6 +1118,11 @@ export interface GraphNode {
   isArchived: boolean;
   workspaceId?: string | null;
   depth?: number;
+  /** Extra size signal beyond relation degree — e.g. the Knowledge page uses this
+   *  to size a term's bubble by how much content its definition holds, so a
+   *  richly-written term reads as bigger even with few explicit relations.
+   *  Unset (0) for ordinary Net nodes, which size purely by degree as before. */
+  infoWeight?: number;
 }
 
 export interface GraphEdge {

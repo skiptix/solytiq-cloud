@@ -288,6 +288,16 @@ export default function AIChatWindow({
     inputRef.current?.focus();
   }, []);
 
+  // Sending disables the textarea while Sol is thinking, which the browser
+  // blurs automatically — re-focus once it's re-enabled so the user can keep
+  // typing the next message without an extra click. Skipped on mobile, where
+  // it would pop the on-screen keyboard back over the just-arrived reply.
+  const wasThinking = useRef(isThinking);
+  useEffect(() => {
+    if (wasThinking.current && !isThinking && !isMobile) inputRef.current?.focus();
+    wasThinking.current = isThinking;
+  }, [isThinking, isMobile]);
+
   const handleSend = () => {
     const text = input.trim();
     if (!text || isThinking) return;

@@ -18,19 +18,9 @@ import BlockEditor from '../markdown/BlockEditor';
 import SaveStatusDot from '../SaveStatusDot';
 import EntityChip from '../EntityChip';
 import { makeEmptyBlock } from '../../utils/markdownBlocks';
+import { ENTRY_TYPE_OPTIONS } from '../../utils/knowledgeEntryTypes';
 import { knowledgeEntryImageUrl, apiUploadKnowledgeEntryImage } from '../../api/client';
 import type { MentionMember } from '../../utils/mention';
-
-const ENTRY_TYPE_OPTIONS: Array<{ key: string; label: string; icon: string }> = [
-  { key: 'concept', label: 'Concept', icon: 'lightbulb' },
-  { key: 'person', label: 'Person', icon: 'person' },
-  { key: 'project', label: 'Project', icon: 'rocket_launch' },
-  { key: 'system', label: 'System', icon: 'dns' },
-  { key: 'acronym', label: 'Acronym', icon: 'abc' },
-  { key: 'policy', label: 'Policy', icon: 'gavel' },
-  { key: 'process', label: 'Process', icon: 'account_tree' },
-  { key: 'other', label: 'Other', icon: 'more_horiz' },
-];
 
 const ORIGIN_LABEL: Record<string, string> = {
   ai: 'Written by the assistant',

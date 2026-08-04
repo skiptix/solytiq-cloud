@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AppState, AIFile, Task, MarkdownBlock } from '../types';
+import type { AppState, AIFile, Task, MarkdownBlock, AiMemoryEntry } from '../types';
 import useGraphStore from './useGraphStore';
 import useWorkspaceStore from './useWorkspaceStore';
 import useMarkdownListsStore from './useMarkdownListsStore';
@@ -349,7 +349,8 @@ export function buildSystemPrompt(
   workspaces?: Array<{ id: string; name: string; role: string }>,
   currentWorkspaceId?: string | null,
   glossary?: GlossaryHint[],
-  skills?: SkillHint[]
+  skills?: SkillHint[],
+  memory?: AiMemoryEntry[]
 ): string {
   const today = toIso(new Date());
   const tlProgress = ctx.view === 'timeline'
@@ -399,6 +400,16 @@ export function buildSystemPrompt(
       }`
     : '';
 
+  // Long-term memory about THIS user — small enough to inline outright (no
+  // progressive-disclosure step, unlike skills/glossary above). Use add_memory
+  // to save a new durable fact and remove_memory to delete one by the id shown
+  // here.
+  const memoryNote = memory?.length
+    ? `\n\nMEMORY — durable facts you've saved about ${username} that persist across every conversation, not just this one:\n${
+        memory.map((m) => `- [${m.id}] ${m.content}`).join('\n')
+      }`
+    : '';
+
   return `You are Sol, a helpful AI assistant embedded in Solytiq Cloud, a personal productivity and task management app.
 
 Current user: ${username}
@@ -433,7 +444,9 @@ Guidelines:
 - MARKDOWN PAGES: You have full read/write control over Markdown Pages — freeform documents built from blocks (heading, paragraph, bulleted/numbered-list-item, todo, quote, divider, link, table). list_markdown_lists finds pages by name across the workspace; get_markdown_list reads one page's full block-by-block content with block ids. create_markdown_list makes a new page (optionally seeded with blocks); update_markdown_list edits the page's own settings (name/emoji/color/subtitle/visibility/folder — NOT content); delete_markdown_list moves it to Trash (ALWAYS confirm first). For content, use add_markdown_block/add_markdown_blocks to insert, update_markdown_block to edit one, remove_markdown_block to delete one, move_markdown_block/reorder_markdown_blocks to reposition, or set_markdown_content to replace the ENTIRE page in one call (the best choice for "rewrite"/"restructure" requests — but it overwrites everything, so include every block you want kept). When the user is currently viewing a Markdown Page (see Current view/context data above), its blocks are already inlined in context with their ids — you don't need get_markdown_list first unless you need the very latest state after another tool call changed it. A todo block mirrors live into that page's auto-managed Todo list (todo_list_id in context) — you don't need to touch that list separately.
 - MILESTONE STATUS: valid values are 'upcoming', 'in-progress', 'done'. Milestone dates use YYYY-MM-DD format. Color can be a hex string (e.g. "var(--color-success)") or null for auto.
 - TIMELINE IDs: Always use exact timeline_id strings from available_timelines. Milestone IDs come from the milestones array in the current context.
-- If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}${graphNote}${glossaryNote}${skillsNote}`;
+- LONG-TERM MEMORY: Any MEMORY entries above are durable facts about ${username} that already ride in every conversation — treat them as known, don't ask about them again. Call add_memory when the user tells you to remember something, or a clearly durable preference comes up naturally (keep it to one short fact per call, and don't duplicate one already listed). Call remove_memory(memory_id) when the user says to forget something or a saved fact goes stale. Do NOT save one-off task details already tracked elsewhere (tasks/lists/notes) — memory is only for things that should color every future chat.
+- PAST CONVERSATIONS: search_chat_history looks across the user's OTHER past chat sessions (not this one). Call it ONLY when the user explicitly references an earlier conversation — e.g. "what did I ask you before", "did we talk about this already", "what did you tell me last time". Never call it speculatively; most turns have nothing to do with past chats, and it costs extra tokens for no benefit when the answer is already in front of you.
+- If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}${graphNote}${glossaryNote}${skillsNote}${memoryNote}`;
 }
 
 // ── Tool definitions ────────────────────────────────────────────────

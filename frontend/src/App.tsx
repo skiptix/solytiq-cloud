@@ -8,6 +8,7 @@ import useMembersStore from './store/useMembersStore';
 import useWorkspaceStore from './store/useWorkspaceStore';
 import useInstalledAppsStore from './store/useInstalledAppsStore';
 import useAiSkillsStore from './store/useAiSkillsStore';
+import useAiMemoryStore from './store/useAiMemoryStore';
 import useMarkdownListsStore from './store/useMarkdownListsStore';
 import useKnowledgeBaseStore from './store/useKnowledgeBaseStore';
 import useNotificationsStore from './store/useNotificationsStore';
@@ -526,6 +527,14 @@ export default function App() {
   useEffect(() => {
     if (loggedIn) loadEnabledSkills();
   }, [loggedIn, loadEnabledSkills]);
+
+  // Sol's long-term memory — also feeds the system prompt directly (see
+  // buildSystemPrompt in useAIStore.ts) and backs the Account Settings
+  // Memory list, so it's loaded once here the same way.
+  const loadMemory = useAiMemoryStore((s) => s.load);
+  useEffect(() => {
+    if (loggedIn) loadMemory();
+  }, [loggedIn, loadMemory]);
 
   const gpsInstalled = installedApps.includes('gps');
 

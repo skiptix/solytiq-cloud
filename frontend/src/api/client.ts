@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationOwnerEntityType, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent, TaskChangeLogEntry, EntityLink, ResolvedLink, LinkTypeDef, GraphPayload, GraphCanvas, GraphCanvasLayout, AgentRun, AgentProposal, AgentPolicy, AgentMode, EntityIndexEntry, KnowledgeBase, KnowledgeEntry, KnowledgeSuggestion, KnowledgeLookupResult, AiSkill, AiSkillFile, AiSkillHint } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationOwnerEntityType, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent, TaskChangeLogEntry, EntityLink, ResolvedLink, LinkTypeDef, GraphPayload, GraphCanvas, GraphCanvasLayout, AgentRun, AgentProposal, AgentPolicy, AgentMode, EntityIndexEntry, KnowledgeBase, KnowledgeEntry, KnowledgeSuggestion, KnowledgeLookupResult, AiSkill, AiSkillFile, AiSkillHint, AiMemoryEntry } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -1032,6 +1032,19 @@ export function apiReplaceAiSkillBundle(
     xhr.send(form);
   });
 }
+
+// ── Sol's long-term memory (Account Settings → Preferences) ────────────────
+// Small, durable per-user facts that ride in every chat's system prompt. See
+// types.ts's AiMemoryEntry and useAiMemoryStore.ts.
+
+export const apiGetMemory = () =>
+  apiFetch<{ memory: AiMemoryEntry[] }>('/ai/memory');
+
+export const apiDeleteMemoryEntry = (id: string) =>
+  apiFetch<{ success: boolean }>(`/ai/memory/${id}`, { method: 'DELETE' });
+
+export const apiClearMemory = () =>
+  apiFetch<{ success: boolean; cleared: number }>('/ai/memory', { method: 'DELETE' });
 
 export const apiUpdateAppSettingsAI = (data: { aiAssistantEnabled?: boolean; aiModel?: string }) =>
   apiFetch<{ settings: Record<string, string> }>('/admin/settings', {
