@@ -343,15 +343,28 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
     }
   };
 
+  // Controls (keyboard shortcuts), Mobile (device connections), and Calendar Sync
+  // (CalDAV) are all about configuring desktop-adjacent workflows that don't
+  // apply from a phone already running the mobile web app — hidden on mobile
+  // to keep the tab bar short enough to not need horizontal scrolling.
   const TABS: { id: SettingsTab; label: string; icon: string }[] = [
     { id: 'profile',     label: 'Profile',     icon: 'person' },
     { id: 'preferences', label: 'Preferences', icon: 'tune' },
-    { id: 'controls',    label: 'Controls',    icon: 'keyboard' },
+    ...(isMobile ? [] : [{ id: 'controls' as SettingsTab, label: 'Controls', icon: 'keyboard' }]),
     { id: 'security',    label: 'Security',    icon: 'shield_lock' },
     ...(mcpVisible ? [{ id: 'connections' as SettingsTab, label: 'Connections', icon: 'smart_toy' }] : []),
-    ...(mobileEnabled ? [{ id: 'mobile' as SettingsTab, label: 'Mobile', icon: 'smartphone' }] : []),
-    { id: 'calendar',    label: 'Calendar Sync', icon: 'event_available' },
+    ...(mobileEnabled && !isMobile ? [{ id: 'mobile' as SettingsTab, label: 'Mobile', icon: 'smartphone' }] : []),
+    ...(isMobile ? [] : [{ id: 'calendar' as SettingsTab, label: 'Calendar Sync', icon: 'event_available' }]),
   ];
+
+  // If the viewport crosses into mobile while a now-hidden tab is active
+  // (e.g. rotating/resizing mid-session), fall back to Profile rather than
+  // stranding the panel on a tab with no corresponding pill to reselect.
+  useEffect(() => {
+    if (isMobile && (activeTab === 'controls' || activeTab === 'mobile' || activeTab === 'calendar')) {
+      setActiveTab('profile');
+    }
+  }, [isMobile, activeTab]);
 
   // Portaled to <body>: this modal is opened from ProfileCard, deep inside the
   // fixed-position, z-indexed Sidebar (see Sidebar's own zIndex: 40/60). A
