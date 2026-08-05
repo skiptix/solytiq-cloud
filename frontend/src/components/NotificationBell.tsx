@@ -35,6 +35,10 @@ export default function NotificationBell({ isMobile, onNavigate }: NotificationB
 
   const setCurrentWorkspace = useWorkspaceStore((s) => s.setCurrentWorkspace);
   const listRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const bellBtnRef = useRef<HTMLButtonElement>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
 
   // Pull the badge count once on mount (live updates then arrive via sync).
   useEffect(() => { void refreshCount(); }, [refreshCount]);
@@ -46,6 +50,41 @@ export default function NotificationBell({ isMobile, onNavigate }: NotificationB
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [panelOpen, setPanelOpen]);
+
+  // Focus management: move focus into the panel on open, and back to the bell
+  // trigger when it closes — a screen reader / keyboard user is otherwise left
+  // with focus on a button that's no longer there (or nowhere at all).
+  // wasOpenRef guards against firing the "closed" branch on first mount.
+  useEffect(() => {
+    if (panelOpen) {
+      closeBtnRef.current?.focus();
+      wasOpenRef.current = true;
+    } else if (wasOpenRef.current) {
+      bellBtnRef.current?.focus();
+      wasOpenRef.current = false;
+    }
+  }, [panelOpen]);
+
+  // Basic focus trap while the panel is open — Tab/Shift+Tab wrap within it
+  // instead of escaping to the dimmed page behind the backdrop.
+  const onPanelKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Tab') return;
+    const root = panelRef.current;
+    if (!root) return;
+    const focusables = root.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
 
   const activate = (n: AppNotification) => {
     void markRead(n.id);
@@ -74,8 +113,12 @@ export default function NotificationBell({ isMobile, onNavigate }: NotificationB
       {/* Bell button */}
       <div style={{ position: 'relative' }}>
         <button
+          ref={bellBtnRef}
           onClick={() => setPanelOpen(!panelOpen)}
           title="Notifications"
+          aria-label={unreadCount > 0 ? `Notifications, ${badge} unread` : 'Notifications'}
+          aria-haspopup="dialog"
+          aria-expanded={panelOpen}
           data-touch={isMobile ? true : undefined}
           style={{
             width: isMobile ? 40 : 32, height: isMobile ? 40 : 32, borderRadius: isMobile ? 10 : '50%',
@@ -111,6 +154,11 @@ export default function NotificationBell({ isMobile, onNavigate }: NotificationB
             style={{ position: 'fixed', inset: 0, zIndex: 1190, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(3px)', animation: 'backdropIn 200ms ease both' }}
           />
           <aside
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Notifications"
+            onKeyDown={onPanelKeyDown}
             style={{
               position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 1200,
               width: isMobile ? '100%' : 'clamp(360px, 34vw, 560px)',
@@ -120,8 +168,10 @@ export default function NotificationBell({ isMobile, onNavigate }: NotificationB
               animation: 'aiPanelIn 300ms cubic-bezier(0.22,1,0.36,1) both',
             }}
           >
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 20px 14px', borderBottom: '1px solid var(--color-surface-tint-2)', flexShrink: 0 }}>
+            {/* Header — padding-top adds the safe-area inset on mobile (same
+                pattern as TopBar/Sidebar) so the Close button isn't rendered
+                under the status bar/notch on a full-width mobile/standalone panel. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: isMobile ? 'calc(env(safe-area-inset-top, 0px) + 18px) 20px 14px' : '18px 20px 14px', borderBottom: '1px solid var(--color-surface-tint-2)', flexShrink: 0 }}>
               <div style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon name="notifications" size={18} color="var(--color-primary)" />
               </div>
@@ -131,8 +181,10 @@ export default function NotificationBell({ isMobile, onNavigate }: NotificationB
               )}
               <div style={{ flex: 1 }} />
               <button
+                ref={closeBtnRef}
                 onClick={() => setPanelOpen(false)}
                 title="Close"
+                aria-label="Close notifications"
                 style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
