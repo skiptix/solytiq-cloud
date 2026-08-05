@@ -1050,6 +1050,11 @@ export default function CalendarScreen() {
   // View + workspace filter persist (localStorage) until logout / cache clear.
   const view = useUserPrefsStore(s => s.calendarView);
   const setView = useUserPrefsStore(s => s.setCalendarView);
+  // Month's dense 7-col grid doesn't fit a mobile-width screen — a stored
+  // calendarView of 'month' (set on desktop, shared across devices) renders
+  // as Week here instead, without touching the stored preference so desktop
+  // still sees Month next time.
+  const effectiveView: typeof view = isMobile && view === 'month' ? 'week' : view;
   const hiddenWsArr = useUserPrefsStore(s => s.calendarHiddenWorkspaces);
   const hiddenWs = useMemo(() => new Set(hiddenWsArr), [hiddenWsArr]);
   const setHiddenWs = useCallback((next: Set<string> | ((prev: Set<string>) => Set<string>)) => {
@@ -1083,6 +1088,9 @@ export default function CalendarScreen() {
   const [dayChooser, setDayChooser] = useState<string | null>(null);
   const [addingTaskDate, setAddingTaskDate] = useState<string | null>(null);
   const [dayItemsIso, setDayItemsIso] = useState<string | null>(null);
+  // Week view's all-day row caps task-deadline chips at 1 per day; the rest
+  // are reached through this ("Show more Deadlines") reusing DayItemsModal.
+  const [deadlinesOverflow, setDeadlinesOverflow] = useState<{ iso: string; chips: Chip[] } | null>(null);
 
   // Week view: click-and-drag on the time grid to block out a meeting's time.
   // The live drag state lives in the beginWeekSelect closure; this only mirrors
@@ -1091,20 +1099,20 @@ export default function CalendarScreen() {
 
   const [search, setSearch] = useState('');
   const [dragTaskId, setDragTaskId] = useState<number | null>(null);
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showUnscheduled, setShowUnscheduled] = useState(false);
-  const [mobileScheduleTask, setMobileScheduleTask] = useState<Task | null>(null);
 
   // "New meeting" shortcut — same as the "New Meeting" button.
   useEffect(() => {
-    const onCreateMeeting = () => setCreatingMeeting({ date: view === 'year' ? todayIso : toIso(anchor) });
+    const onCreateMeeting = () => setCreatingMeeting({ date: effectiveView === 'year' ? todayIso : toIso(anchor) });
     window.addEventListener('shortcut:create-meeting', onCreateMeeting);
     return () => window.removeEventListener('shortcut:create-meeting', onCreateMeeting);
-  }, [view, anchor, todayIso]);
+  }, [effectiveView, anchor, todayIso]);
 
   const filterRef = useRef<HTMLDivElement>(null);
   const unschedRef = useRef<HTMLDivElement>(null);
-  const weekScrollRef = useRef<HTMLDivElement>(null);
+  // One time-grid vertical-scroll ref per rendered day-group — desktop always
+  // renders exactly one (all 7 days); mobile renders up to 3 (3-day pages).
+  const weekScrollRefs = useRef<Array<HTMLDivElement | null>>([]);
 
   // ── Data loading ───────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -1173,12 +1181,12 @@ export default function CalendarScreen() {
     return () => document.removeEventListener('mousedown', onClick);
   }, [showUnscheduled]);
 
-  // Auto-scroll the Week time-grid to the morning when it opens.
+  // Auto-scroll every rendered Week time-grid (one on desktop, up to 3 pages
+  // on mobile) to the morning when it opens.
   useEffect(() => {
-    if (view === 'week' && weekScrollRef.current) {
-      weekScrollRef.current.scrollTop = 7 * HOUR_H;
-    }
-  }, [view, anchor]);
+    if (effectiveView !== 'week') return;
+    for (const el of weekScrollRefs.current) { if (el) el.scrollTop = 7 * HOUR_H; }
+  }, [effectiveView, anchor]);
 
   const wsVisible = useCallback((wsId?: string) => !wsId || !hiddenWs.has(wsId), [hiddenWs]);
   const toggleWs = (id: string) => setHiddenWs(prev => {
@@ -1434,15 +1442,15 @@ export default function CalendarScreen() {
   // ── Period navigation ──────────────────────────────────────────
   const go = (dir: number) => setAnchor(a => {
     const d = new Date(a);
-    if (view === 'month') d.setMonth(d.getMonth() + dir);
-    else if (view === 'week') d.setDate(d.getDate() + dir * 7);
+    if (effectiveView === 'month') d.setMonth(d.getMonth() + dir);
+    else if (effectiveView === 'week') d.setDate(d.getDate() + dir * 7);
     else d.setFullYear(d.getFullYear() + dir);
     return d;
   });
 
   const periodLabel = (() => {
-    if (view === 'month') return `${MONTHS[anchor.getMonth()]} ${anchor.getFullYear()}`;
-    if (view === 'year') return String(anchor.getFullYear());
+    if (effectiveView === 'month') return `${MONTHS[anchor.getMonth()]} ${anchor.getFullYear()}`;
+    if (effectiveView === 'year') return String(anchor.getFullYear());
     const ws = startOfWeek(anchor);
     const we = new Date(ws); we.setDate(we.getDate() + 6);
     const sameMonth = ws.getMonth() === we.getMonth();
@@ -1452,8 +1460,9 @@ export default function CalendarScreen() {
   })();
 
   // The unscheduled-tasks panel is task-centric, so hide it when task deadlines
-  // are filtered out (e.g. the meetings-only view).
-  const showPanel = view !== 'year' && kindVisible('task');
+  // are filtered out (e.g. the meetings-only view) — and entirely on mobile,
+  // where it's dropped from the toolbar altogether.
+  const showPanel = effectiveView !== 'year' && kindVisible('task') && !isMobile;
 
   // ════════════════════════════════════════════════════════════════
   // Views
@@ -1518,7 +1527,6 @@ export default function CalendarScreen() {
     const ws = startOfWeek(anchor);
     const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(ws); d.setDate(d.getDate() + i); return d; });
     const gutter = isMobile ? 42 : 56;
-    const gridCols = `${gutter}px repeat(7, minmax(0, 1fr))`;
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
 
@@ -1529,95 +1537,151 @@ export default function CalendarScreen() {
       const untimed = chips.filter(c => c.startMin == null);
       return { d, iso, isToday: iso === todayIso, timed, untimed, layout: layoutDay(timed) };
     });
+    type DayDatum = (typeof dayData)[number];
 
-    return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {/* Day headers */}
-        <div style={{ display: 'grid', gridTemplateColumns: gridCols, borderBottom: '1px solid var(--color-surface-tint-2)', flexShrink: 0 }}>
-          <div />
-          {dayData.map(({ d, iso, isToday }) => (
-            <div key={iso} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 4px', borderLeft: '1px solid var(--color-purple-pale-19)' }}>
-              <span style={{ fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 700, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' }}>{DAYS_SHORT[d.getDay()]}</span>
-              <span style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: isToday ? 'var(--color-white)' : 'var(--color-text-primary)', background: isToday ? 'var(--color-primary)' : 'transparent', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{d.getDate()}</span>
-            </div>
-          ))}
-        </div>
+    // Splits one day's untimed chips into what's shown vs. hidden behind
+    // "Show more Deadlines" — only task-deadline chips are capped (at 1);
+    // meeting/milestone all-day chips are fewer and more load-bearing, so
+    // they're left unlimited.
+    const splitUntimed = (untimed: Chip[]) => {
+      const shown: Chip[] = [];
+      const hiddenTasks: Chip[] = [];
+      let taskCount = 0;
+      for (const c of untimed) {
+        if (c.kind === 'task') {
+          taskCount++;
+          if (taskCount <= 1) shown.push(c); else hiddenTasks.push(c);
+        } else {
+          shown.push(c);
+        }
+      }
+      return { shown, hiddenTasks };
+    };
 
-        {/* All-day / untimed row */}
-        <div style={{ display: 'grid', gridTemplateColumns: gridCols, borderBottom: '1px solid var(--color-border)', flexShrink: 0, maxHeight: 132, overflowY: 'auto' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', padding: '6px 6px 0', fontFamily: 'var(--font-body)', fontSize: 9, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' }}>all-day</div>
-          {dayData.map(({ iso, untimed }) => (
-            <div key={iso}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => handleDayDrop(iso, e)}
-              style={{ borderLeft: '1px solid var(--color-purple-pale-19)', padding: 4, display: 'flex', flexDirection: 'column', gap: 3, minHeight: 30 }}>
-              {untimed.map(c => <ChipCard key={c.key} chip={c} onOpenMenu={openChipMenu} />)}
-            </div>
-          ))}
-        </div>
-
-        {/* Time grid */}
-        <div ref={weekScrollRef} style={{ flex: 1, overflowY: 'auto' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: gridCols }}>
-            {/* Hour gutter */}
-            <div style={{ position: 'relative', height: 24 * HOUR_H }}>
-              {HOURS.map(h => h === 0 ? null : (
-                <div key={h} style={{ position: 'absolute', top: h * HOUR_H - 6, right: 6, fontFamily: 'var(--font-body)', fontSize: 9.5, color: 'var(--color-text-quaternary)' }}>
-                  {String(h).padStart(2, '0')}:00
-                </div>
-              ))}
-            </div>
-            {/* Day columns */}
-            {dayData.map(({ iso, isToday, timed, layout }) => (
-              <div key={iso}
-                onMouseDown={e => beginWeekSelect(iso, e)}
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => handleDayDrop(iso, e)}
-                style={{ position: 'relative', height: 24 * HOUR_H, borderLeft: '1px solid var(--color-purple-pale-19)', background: isToday ? 'var(--color-purple-pale-3)' : 'var(--color-white)', cursor: 'pointer' }}>
-                {HOURS.map(h => (
-                  <div key={h} style={{ position: 'absolute', top: h * HOUR_H, left: 0, right: 0, borderTop: '1px solid var(--color-purple-pale-19)' }} />
-                ))}
-                {weekSel && weekSel.iso === iso && (() => {
-                  const lo = Math.min(weekSel.aMin, weekSel.bMin), hi = Math.max(weekSel.aMin, weekSel.bMin);
-                  return (
-                    <div style={{ position: 'absolute', top: (lo / 60) * HOUR_H, height: Math.max(((hi - lo) / 60) * HOUR_H, 2), left: 2, right: 2, background: 'rgba(var(--color-primary-rgb), 0.16)', border: '1.5px solid var(--color-primary)', borderRadius: 5, zIndex: 4, pointerEvents: 'none', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '2px 0' }}>
-                      <span style={{ fontFamily: 'var(--font-body)', fontSize: 9.5, fontWeight: 600, color: 'var(--color-primary)' }}>{minToStr(lo)} – {minToStr(hi)}</span>
-                    </div>
-                  );
-                })()}
-                {isToday && (
-                  <div style={{ position: 'absolute', top: (nowMin / 60) * HOUR_H, left: 0, right: 0, height: 2, background: 'var(--color-red-mid-2)', zIndex: 3 }}>
-                    <div style={{ position: 'absolute', left: -3, top: -3, width: 7, height: 7, borderRadius: '50%', background: 'var(--color-red-mid-2)' }} />
-                  </div>
-                )}
-                {timed.map(c => {
-                  const lay = layout.get(c) ?? { col: 0, cols: 1 };
-                  const top = (c.startMin! / 60) * HOUR_H;
-                  const height = Math.max(((c.endMin! - c.startMin!) / 60) * HOUR_H, 18);
-                  const wPct = 100 / lay.cols;
-                  return (
-                    <div key={c.key}
-                      data-cal-chip
-                      onMouseDown={e => e.stopPropagation()}
-                      onClick={e => { e.stopPropagation(); c.onClick(); }}
-                      onContextMenu={e => { if (c.contextItems) openChipMenu(e, c.contextItems); }}
-                      draggable={!!c.dragData}
-                      onDragStart={c.dragData ? e => { e.dataTransfer.setData('text/plain', c.dragData!); e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); } : undefined}
-                      title={c.label}
-                      style={{ position: 'absolute', top: top + 1, height: height - 2, left: `calc(${lay.col * wPct}% + 2px)`, width: `calc(${wPct}% - 4px)`, background: c.bg, borderLeft: `3px solid ${c.accent}`, borderRadius: 5, padding: '2px 5px', overflow: 'hidden', cursor: c.dragData ? 'grab' : 'pointer', zIndex: 2 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        {c.priorityColor && <div style={{ width: 5, height: 5, borderRadius: '50%', background: c.priorityColor, flexShrink: 0 }} />}
-                        {c.emoji && <span style={{ fontSize: 10, lineHeight: 1, flexShrink: 0 }}>{c.emoji}</span>}
-                        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: c.accent, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</span>
-                      </div>
-                      {height > 30 && c.time && <div style={{ fontFamily: 'var(--font-body)', fontSize: 9.5, color: 'var(--color-text-tertiary)' }}>{c.time}</div>}
-                    </div>
-                  );
-                })}
+    // Renders one self-contained [day headers / all-day row / time grid]
+    // block for an arbitrary subset of days. Desktop calls this once with
+    // all 7 days (unchanged from before); mobile calls it once per 3-day
+    // page (see below) — each page carries its own hour gutter, so paging
+    // never needs to keep a frozen gutter in sync across scroll regions.
+    const renderDayGroup = (group: DayDatum[], refIdx: number) => {
+      const gridCols = `${gutter}px repeat(${group.length}, minmax(0, 1fr))`;
+      return (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+          {/* Day headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: gridCols, borderBottom: '1px solid var(--color-surface-tint-2)', flexShrink: 0 }}>
+            <div />
+            {group.map(({ d, iso, isToday }) => (
+              <div key={iso} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 4px', borderLeft: '1px solid var(--color-purple-pale-19)' }}>
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 700, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' }}>{DAYS_SHORT[d.getDay()]}</span>
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: isToday ? 'var(--color-white)' : 'var(--color-text-primary)', background: isToday ? 'var(--color-primary)' : 'transparent', borderRadius: '50%', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{d.getDate()}</span>
               </div>
             ))}
           </div>
+
+          {/* All-day / untimed row */}
+          <div style={{ display: 'grid', gridTemplateColumns: gridCols, borderBottom: '1px solid var(--color-border)', flexShrink: 0, maxHeight: 132, overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', padding: '6px 6px 0', fontFamily: 'var(--font-body)', fontSize: 9, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' }}>all-day</div>
+            {group.map(({ iso, untimed }) => {
+              const { shown, hiddenTasks } = splitUntimed(untimed);
+              return (
+                <div key={iso}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => handleDayDrop(iso, e)}
+                  style={{ borderLeft: '1px solid var(--color-purple-pale-19)', padding: 4, display: 'flex', flexDirection: 'column', gap: 3, minHeight: 30 }}>
+                  {shown.map(c => <ChipCard key={c.key} chip={c} onOpenMenu={openChipMenu} />)}
+                  {hiddenTasks.length > 0 && (
+                    <button onClick={e => { e.stopPropagation(); setDeadlinesOverflow({ iso, chips: hiddenTasks }); }}
+                      style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'transparent', border: 'none', textAlign: 'left', padding: '1px 5px', borderRadius: 4, cursor: 'pointer', transition: 'all 120ms' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; e.currentTarget.style.color = 'var(--color-primary)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; }}>
+                      Show more Deadlines (+{hiddenTasks.length})
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Time grid */}
+          <div ref={el => { weekScrollRefs.current[refIdx] = el; }} style={{ flex: 1, overflowY: 'auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: gridCols }}>
+              {/* Hour gutter */}
+              <div style={{ position: 'relative', height: 24 * HOUR_H }}>
+                {HOURS.map(h => h === 0 ? null : (
+                  <div key={h} style={{ position: 'absolute', top: h * HOUR_H - 6, right: 6, fontFamily: 'var(--font-body)', fontSize: 9.5, color: 'var(--color-text-quaternary)' }}>
+                    {String(h).padStart(2, '0')}:00
+                  </div>
+                ))}
+              </div>
+              {/* Day columns */}
+              {group.map(({ iso, isToday, timed, layout }) => (
+                <div key={iso}
+                  onMouseDown={e => beginWeekSelect(iso, e)}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => handleDayDrop(iso, e)}
+                  style={{ position: 'relative', height: 24 * HOUR_H, borderLeft: '1px solid var(--color-purple-pale-19)', background: isToday ? 'var(--color-purple-pale-3)' : 'var(--color-white)', cursor: 'pointer' }}>
+                  {HOURS.map(h => (
+                    <div key={h} style={{ position: 'absolute', top: h * HOUR_H, left: 0, right: 0, borderTop: '1px solid var(--color-purple-pale-19)' }} />
+                  ))}
+                  {weekSel && weekSel.iso === iso && (() => {
+                    const lo = Math.min(weekSel.aMin, weekSel.bMin), hi = Math.max(weekSel.aMin, weekSel.bMin);
+                    return (
+                      <div style={{ position: 'absolute', top: (lo / 60) * HOUR_H, height: Math.max(((hi - lo) / 60) * HOUR_H, 2), left: 2, right: 2, background: 'rgba(var(--color-primary-rgb), 0.16)', border: '1.5px solid var(--color-primary)', borderRadius: 5, zIndex: 4, pointerEvents: 'none', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '2px 0' }}>
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: 9.5, fontWeight: 600, color: 'var(--color-primary)' }}>{minToStr(lo)} – {minToStr(hi)}</span>
+                      </div>
+                    );
+                  })()}
+                  {isToday && (
+                    <div style={{ position: 'absolute', top: (nowMin / 60) * HOUR_H, left: 0, right: 0, height: 2, background: 'var(--color-red-mid-2)', zIndex: 3 }}>
+                      <div style={{ position: 'absolute', left: -3, top: -3, width: 7, height: 7, borderRadius: '50%', background: 'var(--color-red-mid-2)' }} />
+                    </div>
+                  )}
+                  {timed.map(c => {
+                    const lay = layout.get(c) ?? { col: 0, cols: 1 };
+                    const top = (c.startMin! / 60) * HOUR_H;
+                    const height = Math.max(((c.endMin! - c.startMin!) / 60) * HOUR_H, 18);
+                    const wPct = 100 / lay.cols;
+                    return (
+                      <div key={c.key}
+                        data-cal-chip
+                        onMouseDown={e => e.stopPropagation()}
+                        onClick={e => { e.stopPropagation(); c.onClick(); }}
+                        onContextMenu={e => { if (c.contextItems) openChipMenu(e, c.contextItems); }}
+                        draggable={!!c.dragData}
+                        onDragStart={c.dragData ? e => { e.dataTransfer.setData('text/plain', c.dragData!); e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); } : undefined}
+                        title={c.label}
+                        style={{ position: 'absolute', top: top + 1, height: height - 2, left: `calc(${lay.col * wPct}% + 2px)`, width: `calc(${wPct}% - 4px)`, background: c.bg, borderLeft: `3px solid ${c.accent}`, borderRadius: 5, padding: '2px 5px', overflow: 'hidden', cursor: c.dragData ? 'grab' : 'pointer', zIndex: 2 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {c.priorityColor && <div style={{ width: 5, height: 5, borderRadius: '50%', background: c.priorityColor, flexShrink: 0 }} />}
+                          {c.emoji && <span style={{ fontSize: 10, lineHeight: 1, flexShrink: 0 }}>{c.emoji}</span>}
+                          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: c.accent, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</span>
+                        </div>
+                        {height > 30 && c.time && <div style={{ fontFamily: 'var(--font-body)', fontSize: 9.5, color: 'var(--color-text-tertiary)' }}>{c.time}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
+      );
+    };
+
+    if (!isMobile) return renderDayGroup(dayData, 0);
+
+    // Mobile: page through the week 3 days at a time via native horizontal
+    // scroll-snap — each page is its own fully self-contained day-group, so
+    // there's no cross-page scroll position to keep in sync.
+    const pages: DayDatum[][] = [];
+    for (let i = 0; i < dayData.length; i += 3) pages.push(dayData.slice(i, i + 3));
+    return (
+      <div style={{ flex: 1, display: 'flex', overflowX: 'auto', overflowY: 'hidden', scrollSnapType: 'x mandatory' }}>
+        {pages.map((group, gi) => (
+          <div key={gi} style={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'start', display: 'flex' }}>
+            {renderDayGroup(group, gi)}
+          </div>
+        ))}
       </div>
     );
   };
@@ -1671,7 +1735,7 @@ export default function CalendarScreen() {
   // ── View switcher segmented control ────────────────────────────
   const viewBtn = (v: typeof view, label: string) => (
     <button key={v} onClick={() => setView(v)}
-      style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: view === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: view === v ? 'var(--color-white)' : 'transparent', border: 'none', borderRadius: 7, padding: '6px 14px', cursor: 'pointer', boxShadow: view === v ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none', transition: 'all 150ms' }}>
+      style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: effectiveView === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: effectiveView === v ? 'var(--color-white)' : 'transparent', border: 'none', borderRadius: 7, padding: '6px 14px', cursor: 'pointer', boxShadow: effectiveView === v ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none', transition: 'all 150ms' }}>
       {label}
     </button>
   );
@@ -1701,7 +1765,8 @@ export default function CalendarScreen() {
             {/* View switcher */}
             <div style={{ display: 'flex', gap: 2, background: 'var(--color-surface-tint-2)', borderRadius: 9, padding: 3 }}>
               {viewBtn('week', 'Week')}
-              {viewBtn('month', 'Month')}
+              {/* Month's dense 7-col grid doesn't fit a mobile-width screen — dropped there entirely (see effectiveView). */}
+              {!isMobile && viewBtn('month', 'Month')}
               {viewBtn('year', 'Year')}
             </div>
 
@@ -1767,17 +1832,17 @@ export default function CalendarScreen() {
               )}
             </div>
 
-            {/* Unscheduled tasks — lightning popover (desktop) / bottom sheet (mobile) */}
+            {/* Unscheduled tasks — desktop only; dropped from the mobile toolbar (see showPanel) */}
             {showPanel && (
               <div ref={unschedRef} style={{ position: 'relative' }}>
-                <button onClick={() => { if (isMobile) setMobileSidebarOpen(true); else setShowUnscheduled(v => !v); }}
+                <button onClick={() => setShowUnscheduled(v => !v)}
                   title="Unscheduled tasks"
                   style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: showUnscheduled ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: showUnscheduled ? 'var(--color-surface-tint)' : 'transparent', border: `1px solid ${showUnscheduled ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
                   <Icon name="bolt" size={16} color={showUnscheduled ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
-                  {!isMobile && 'Unscheduled'}
+                  Unscheduled
                   {unscheduled.length > 0 && <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, color: 'var(--color-white)', background: 'var(--color-primary)', borderRadius: 9999, padding: '1px 6px' }}>{unscheduled.length}</span>}
                 </button>
-                {!isMobile && showUnscheduled && (
+                {showUnscheduled && (
                   <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 280, maxHeight: '60vh', display: 'flex', flexDirection: 'column', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border-alt)', boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.14)', zIndex: 400, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
                     <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid var(--color-divider)', flexShrink: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -1817,8 +1882,8 @@ export default function CalendarScreen() {
               </div>
             )}
 
-            {/* New meeting */}
-            <button onClick={() => setCreatingMeeting({ date: view === 'year' ? todayIso : toIso(anchor) })}
+            {/* New meeting — sits right next to the filter/unscheduled cluster */}
+            <button onClick={() => setCreatingMeeting({ date: effectiveView === 'year' ? todayIso : toIso(anchor) })}
               style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(var(--color-primary-rgb), 0.25)', transition: 'background 150ms' }}
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-mid-11)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-primary)')}>
@@ -1829,64 +1894,8 @@ export default function CalendarScreen() {
         </div>
 
         {/* Body */}
-        {view === 'month' ? renderMonth() : view === 'week' ? renderWeek() : renderYear()}
+        {effectiveView === 'month' ? renderMonth() : effectiveView === 'week' ? renderWeek() : renderYear()}
       </div>
-
-      {/* Unscheduled tasks — mobile bottom sheet (opened from the ⚡ toolbar button) */}
-      {isMobile && showPanel && mobileSidebarOpen && (
-        <>
-          <div onClick={() => setMobileSidebarOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(2px)', animation: 'backdropIn 180ms ease both' }} />
-          <div className="safe-bottom" style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201, background: 'var(--color-purple-pale-13)', borderRadius: '16px 16px 0 0', maxHeight: '65vh', display: 'flex', flexDirection: 'column', animation: 'slideUp 260ms cubic-bezier(0.22,1,0.36,1) both', boxShadow: '0 -4px 24px rgba(var(--color-black-rgb), 0.12)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 16px 10px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Icon name="bolt" size={15} color="var(--color-primary)" />
-                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-text-quaternary)' }}>Unscheduled</div>
-              </div>
-              <button onClick={() => setMobileSidebarOpen(false)} style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name="close" size={15} color="var(--color-text-secondary)" />
-              </button>
-            </div>
-            <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--color-white)', borderRadius: 8, padding: '6px 10px', border: '1px solid var(--color-border)' }}>
-                <Icon name="search" size={13} color="var(--color-text-tertiary)" />
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…"
-                  style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-primary)', flex: 1 }} />
-              </div>
-              <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', marginTop: 7 }}>Tap a task to schedule it.</div>
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
-              {filteredUnscheduled.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px 8px', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>All tasks scheduled!</div>
-              ) : filteredUnscheduled.map(t => (
-                <div key={`${t._listId}-${t.id}`} onClick={() => setMobileScheduleTask(t)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, background: 'var(--color-white)', border: '1px solid var(--color-border)', marginBottom: 6, cursor: 'pointer' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
-                    {t._listName && t._listName !== 'Dashboard' && <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)' }}>{t._listName}</div>}
-                  </div>
-                  <Icon name="event_available" size={17} color="var(--color-primary)" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Mobile: pick a date to schedule a tapped task — portaled to <body>,
-          see the comment on MeetingModal's return for why. */}
-      {mobileScheduleTask && createPortal(
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
-          onClick={() => setMobileScheduleTask(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-            <div style={{ background: 'var(--color-white)', borderRadius: 12, padding: '10px 16px', boxShadow: '0 4px 16px rgba(var(--color-black-rgb), 0.12)', maxWidth: 280 }}>
-              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Schedule “{mobileScheduleTask.title}”</div>
-            </div>
-            <CalendarPicker value={mobileScheduleTask.deadline}
-              onChange={d => { assignDeadline(mobileScheduleTask.id, d); setMobileScheduleTask(null); }} />
-          </div>
-        </div>,
-        document.body
-      )}
 
       {/* Modals */}
       {chipMenu && (
@@ -1906,6 +1915,9 @@ export default function CalendarScreen() {
       )}
       {dayItemsIso && (
         <DayItemsModal date={dayItemsIso} chips={visibleChipsByDate[dayItemsIso] ?? []} onOpenMenu={openChipMenu} onClose={() => setDayItemsIso(null)} />
+      )}
+      {deadlinesOverflow && (
+        <DayItemsModal date={deadlinesOverflow.iso} chips={deadlinesOverflow.chips} onOpenMenu={openChipMenu} onClose={() => setDeadlinesOverflow(null)} />
       )}
       {editingMeeting && editingMeeting.isOwner === false ? (
         <MeetingViewModal

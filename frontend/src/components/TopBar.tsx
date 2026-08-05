@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import Icon from './Icon';
 import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import useAuthStore from '../store/useAuthStore';
@@ -22,6 +23,7 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const { isAdmin } = useAuthStore();
+  const isCalendarActive = useLocation().pathname === '/calendar';
   const installedApps = useInstalledAppsStore(s => s.installedApps);
   const gpsInstalled = installedApps.includes('gps');
   const filesInstalled = installedApps.includes('files');
@@ -223,15 +225,15 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
             )}
           </div>}
 
-          {/* Calendar button — left of the notification bell */}
+          {/* Calendar button — left of the notification bell; highlighted while on /calendar */}
           <button
             onClick={() => onNavigate('/calendar')}
             title="Calendar"
-            style={{ width: isMobile ? 40 : 32, height: isMobile ? 40 : 32, borderRadius: '50%', background: 'transparent', border: isMobile ? 'none' : '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', flexShrink: 0 }}
-            onMouseEnter={e => { if (!isMobile) { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-soft)'; } }}
-            onMouseLeave={e => { if (!isMobile) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-border)'; } }}
+            style={{ width: isMobile ? 40 : 32, height: isMobile ? 40 : 32, borderRadius: '50%', background: isCalendarActive ? 'var(--color-surface-tint)' : 'transparent', border: isMobile ? 'none' : `1px solid ${isCalendarActive ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', flexShrink: 0 }}
+            onMouseEnter={e => { if (!isCalendarActive && !isMobile) { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-soft)'; } }}
+            onMouseLeave={e => { if (!isCalendarActive && !isMobile) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-border)'; } }}
           >
-            <Icon name="calendar_month" size={isMobile ? 20 : 17} color="var(--color-text-tertiary)" />
+            <Icon name="calendar_month" size={isMobile ? 20 : 17} color={isCalendarActive ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
           </button>
 
           {/* Notification bell */}
