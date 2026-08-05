@@ -291,6 +291,24 @@ export const apiGetMobileConnections = () =>
 export const apiDeleteMobileConnection = (id: string) =>
   apiFetch<{ success: boolean }>(`/auth/mobile-connections/${id}`, { method: 'DELETE' });
 
+// ── iOS Home Screen ("Add to Home Screen") app connections ─────────────────
+export interface HomescreenConnection {
+  id: string;
+  deviceName: string;
+  osVersion: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+}
+
+export const apiPingHomescreenConnection = (installId: string, device: { deviceName?: string; osVersion?: string | null }) =>
+  apiFetch<{ ok: boolean }>('/auth/homescreen-connections/ping', { method: 'POST', body: JSON.stringify({ installId, device }) });
+
+export const apiGetHomescreenConnections = () =>
+  apiFetch<{ connections: HomescreenConnection[] }>('/auth/homescreen-connections');
+
+export const apiDeleteHomescreenConnection = (id: string) =>
+  apiFetch<{ success: boolean }>(`/auth/homescreen-connections/${id}`, { method: 'DELETE' });
+
 export const apiAdminPasswordResetRequest = () =>
   apiFetch<{ ok: boolean }>('/auth/admin-password-reset/request', { method: 'POST' });
 

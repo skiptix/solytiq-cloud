@@ -824,6 +824,99 @@ router.delete('/mobile-connections/:id', authenticate, async (req: Request, res:
   }
 });
 
+// ---------------------------------------------------------------------------
+// iOS Home Screen ("Add to Home Screen") app connections
+//
+// A Home Screen install is just this same web app running in standalone
+// display mode (`display-mode: standalone` / `navigator.standalone`) — there
+// is no separate login flow or JWT `connectionId` to hang a session off, like
+// the native mobile app above. Instead the frontend detects standalone mode
+// on launch and pings this endpoint with a client-generated, locally-
+// persisted `installId` (see `frontend/src/utils/homescreen.ts`), so repeat
+// opens from the same Home Screen icon update one row rather than creating a
+// new one every time.
+// ---------------------------------------------------------------------------
+function sanitizeHomescreenConnection(r: {
+  id: string; device_name: string; os_version: string | null;
+  created_at: string; last_seen_at: string;
+}) {
+  return {
+    id:         r.id,
+    deviceName: r.device_name,
+    osVersion:  r.os_version,
+    createdAt:  r.created_at,
+    lastSeenAt: r.last_seen_at,
+  };
+}
+
+// POST /api/auth/homescreen-connections/ping — record/refresh this device's
+// Home Screen install. Idempotent per (user, installId): a re-ping from the
+// same icon just bumps last_seen_at rather than creating a duplicate row.
+router.post('/homescreen-connections/ping', authenticate, async (req: Request, res: Response) => {
+  try {
+    const installId = trunc(req.body?.installId);
+    if (!installId) {
+      res.status(400).json({ error: 'installId is required' });
+      return;
+    }
+    const device = req.body?.device ?? {};
+    const deviceName = trunc(device.deviceName) ?? 'Home Screen App';
+    const osVersion = trunc(device.osVersion);
+    await query(
+      `INSERT INTO homescreen_connections (user_id, install_id, device_name, os_version)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, install_id) DO UPDATE SET
+         device_name  = EXCLUDED.device_name,
+         os_version   = EXCLUDED.os_version,
+         last_seen_at = NOW()`,
+      [req.userId, installId, deviceName, osVersion]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('homescreen-connections/ping error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/auth/homescreen-connections — list this user's Home Screen installs
+router.get('/homescreen-connections', authenticate, async (req: Request, res: Response) => {
+  try {
+    const result = await query<{
+      id: string; device_name: string; os_version: string | null;
+      created_at: string; last_seen_at: string;
+    }>(
+      `SELECT id, device_name, os_version, created_at, last_seen_at
+       FROM homescreen_connections WHERE user_id = $1 ORDER BY last_seen_at DESC`,
+      [req.userId]
+    );
+    res.json({ connections: result.rows.map(sanitizeHomescreenConnection) });
+  } catch (err) {
+    console.error('homescreen-connections GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/auth/homescreen-connections/:id — forget a tracked Home Screen
+// install. This only removes the tracked record; it can't "sign out" the
+// device since there's no separate session to revoke (it's the same web
+// login) — reopening the app from that Home Screen icon just re-creates it.
+router.delete('/homescreen-connections/:id', authenticate, async (req: Request, res: Response) => {
+  try {
+    const result = await query(
+      `DELETE FROM homescreen_connections WHERE id = $1 AND user_id = $2`,
+      [req.params.id, req.userId]
+    );
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: 'Connection not found' });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('homescreen-connections DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/auth/feature-flags — accessible to any authenticated user
 router.get('/feature-flags', authenticate, async (_req: Request, res: Response) => {
   try {
