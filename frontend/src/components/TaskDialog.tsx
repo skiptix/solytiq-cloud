@@ -14,6 +14,7 @@ import { DeleteConfirmModal } from './TaskItem';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useAuthStore from '../store/useAuthStore';
+import useAIStore from '../store/useAIStore';
 import {
   apiCreateList, apiCreateSection, apiAddListTask, apiUpdateTask, apiUpdateListTask,
   apiGetTaskAttachments, apiUploadTaskAttachment, apiLinkTaskAttachment, apiDeleteTaskAttachment, apiDownloadTaskAttachment,
@@ -352,6 +353,16 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
     return () => document.removeEventListener('keydown', handler);
   }, [onClose, showCal]);
 
+  // On mobile this dialog is a near-full-screen sheet — tell the floating AI
+  // Assistant bubble (fixed, zIndex 9000) to hide itself for as long as we're
+  // open, so it doesn't float on top of the Notes section.
+  useEffect(() => {
+    if (!isMobile) return;
+    const { openBlockingDialog, closeBlockingDialog } = useAIStore.getState();
+    openBlockingDialog();
+    return () => closeBlockingDialog();
+  }, [isMobile]);
+
   // "Delete open item / milestone" shortcut — same as the delete icon button.
   useEffect(() => {
     const onDeleteShortcut = () => setShowDelete(true);
@@ -521,7 +532,12 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
             // own flex centering re-centers the whole card smoothly as this
             // transitions, no extra positioning logic needed.
             maxWidth: isMobile ? undefined : (showChangelog ? 800 + 320 : 800),
-            maxHeight: isMobile ? '94vh' : '92vh',
+            // dvh (not vh) on mobile: iOS Safari/Arc's vh is pegged to the
+            // largest possible viewport (address bar hidden), so a bottom sheet
+            // sized off it can be taller than the viewport actually visible
+            // when the address bar is showing — pushing its top off-screen.
+            // dvh tracks the real, current visible viewport instead.
+            maxHeight: isMobile ? '90dvh' : '92vh',
             overflow: 'hidden',
             display: 'flex',
             flexDirection: isMobile ? 'column' : 'row',
@@ -657,7 +673,11 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
               {/* Tagged users — replaces the old badge chips AND the Owner row.
                   Defaults to the item creator (shown as the "Owner" chip); the
                   owner can tag other workspace members, who get notified. */}
-              <PropRow icon="group" label="Tag">
+              {/* Timeline / In list / Relations are desktop-only — they push the
+                  card too tall for a mobile viewport and aren't essential for
+                  a quick mobile edit; see the change-history panel above and
+                  the Net (/graph) for the full picture. */}
+              <PropRow icon="group" label="Tag" last={isMobile}>
                 <TaggedUsersRow
                   taskId={task.id}
                   workspaceId={taskWorkspaceId}
@@ -668,19 +688,23 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                 />
               </PropRow>
 
-              <PropRow icon="history" label="Timeline">
-                <TaskMiniTimeline createdAt={task.createdAt} completedAt={task.completedAt} checked={task.checked} />
-              </PropRow>
+              {!isMobile && (
+                <PropRow icon="history" label="Timeline">
+                  <TaskMiniTimeline createdAt={task.createdAt} completedAt={task.completedAt} checked={task.checked} />
+                </PropRow>
+              )}
 
-              {task._listName && (
+              {!isMobile && task._listName && (
                 <PropRow icon="format_list_bulleted" label="In list">
                   <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-secondary)' }}>{task._listName}</span>
                 </PropRow>
               )}
 
-              <PropRow icon="hub" label="Relations" last>
-                <RelationsPanel entityType="task" entityId={String(task.id)} workspaceId={taskWorkspaceId ?? undefined} compact />
-              </PropRow>
+              {!isMobile && (
+                <PropRow icon="hub" label="Relations" last>
+                  <RelationsPanel entityType="task" entityId={String(task.id)} workspaceId={taskWorkspaceId ?? undefined} compact />
+                </PropRow>
+              )}
             </div>
 
             {/* Change history — mobile only; desktop gets the side panel instead. */}

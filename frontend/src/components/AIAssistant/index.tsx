@@ -118,6 +118,7 @@ export default function AIAssistant() {
     recentSessions,
     showRecentChats,
     uploadedFiles,
+    blockingDialogCount,
     setOpen,
     setSettings,
     setMessages,
@@ -1173,8 +1174,11 @@ export default function AIAssistant() {
         />
       )}
       {/* On mobile the open chat is a full-screen bottom sheet with its own
-          close button — the floating bubble would just sit uselessly under it. */}
-      {!(isMobile && isOpen) && (
+          close button — the floating bubble would just sit uselessly under it.
+          Same story while a mobile full-screen dialog (e.g. the item detail
+          dialog) is open — the bubble's high z-index would otherwise float on
+          top of it, overlapping its content. */}
+      {!(isMobile && (isOpen || blockingDialogCount > 0)) && (
         <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} size={isMobile ? 44 : 52} />
       )}
     </div>

@@ -35,6 +35,11 @@ interface AIStore {
   recentSessions: AISession[];
   showRecentChats: boolean;
   uploadedFiles: AIFile[];
+  /** Count of currently-open mobile full-screen dialogs (e.g. the item detail
+   *  dialog) that the floating AI bubble would otherwise float on top of.
+   *  A counter, not a boolean, so two overlapping dialogs don't let the first
+   *  one's close prematurely reveal the bubble while the second is still open. */
+  blockingDialogCount: number;
 
   setOpen: (open: boolean) => void;
   toggle: () => void;
@@ -52,6 +57,8 @@ interface AIStore {
   addUploadedFile: (file: AIFile) => void;
   removeUploadedFile: (id: string) => void;
   clearUploadedFiles: () => void;
+  openBlockingDialog: () => void;
+  closeBlockingDialog: () => void;
 }
 
 const useAIStore = create<AIStore>()((set) => ({
@@ -64,6 +71,7 @@ const useAIStore = create<AIStore>()((set) => ({
   recentSessions: [],
   showRecentChats: false,
   uploadedFiles: [],
+  blockingDialogCount: 0,
 
   setOpen: (open) => set({ isOpen: open }),
   toggle: () => set((s) => ({ isOpen: !s.isOpen })),
@@ -83,6 +91,8 @@ const useAIStore = create<AIStore>()((set) => ({
   addUploadedFile: (file) => set((s) => ({ uploadedFiles: [...s.uploadedFiles, file] })),
   removeUploadedFile: (id) => set((s) => ({ uploadedFiles: s.uploadedFiles.filter((f) => f.id !== id) })),
   clearUploadedFiles: () => set({ uploadedFiles: [] }),
+  openBlockingDialog: () => set((s) => ({ blockingDialogCount: s.blockingDialogCount + 1 })),
+  closeBlockingDialog: () => set((s) => ({ blockingDialogCount: Math.max(0, s.blockingDialogCount - 1) })),
 }));
 
 // ── Context building ──────────────────────────────────────────────
