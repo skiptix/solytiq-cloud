@@ -1,11 +1,13 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useMobile } from '../hooks/useBreakpoint';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Task } from '../types';
 import useAppStore from '../store/useAppStore';
 import useSharedItemsStore from '../store/useSharedItemsStore';
 import useAuthStore from '../store/useAuthStore';
+import useWorkspaceStore from '../store/useWorkspaceStore';
 import TaskItem, { QuickAdd } from '../components/TaskItem';
 import TaskDialog from '../components/TaskDialog';
 import TaskTimelineView from '../components/TaskTimelineView';
@@ -15,16 +17,47 @@ import SaveStatusDot from '../components/SaveStatusDot';
 import EmojiSelector from '../components/EmojiSelector';
 import AutomationsButton from '../components/AutomationsButton';
 
+// ── Pull-to-refresh indicator (mobile only) ────────────────────────
+// Purely presentational: height/opacity/rotation driven by usePullToRefresh's
+// live pull distance. Matches the app's existing circular-spinner language for
+// the "refreshing" state; a rotating arrow gives the "pull further" affordance
+// before that, the same way native pull-to-refresh does.
+function PullToRefreshIndicator({ pullDistance, threshold, refreshing }: { pullDistance: number; threshold: number; refreshing: boolean }) {
+  const height = refreshing ? threshold : pullDistance;
+  if (height <= 0) return null;
+  const progress = Math.min(1, pullDistance / threshold);
+  const pastThreshold = pullDistance >= threshold;
+  return (
+    <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: refreshing ? 'height 200ms ease' : undefined }}>
+      {refreshing ? (
+        <div style={{ width: 22, height: 22, border: '2.5px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+      ) : (
+        <div style={{ opacity: 0.4 + progress * 0.6, transform: `rotate(${pastThreshold ? 180 : 0}deg) scale(${0.7 + progress * 0.3})`, transition: 'transform 120ms ease' }}>
+          <Icon name="arrow_downward" size={20} color="var(--color-primary)" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ListScreen() {
   const { listId } = useParams<{ listId: string }>();
   const navigate = useNavigate();
   const { userId: currentUserId } = useAuthStore();
-  const { lists, listsLoading, updateList, updateListTask, deleteListTask, addToTrash, setLists } = useAppStore();
+  const { lists, listsLoading, updateList, updateListTask, deleteListTask, addToTrash, setLists, loadFromApi } = useAppStore();
   const sharedLists = useSharedItemsStore(s => s.lists);
   // Fall back to a list shared with me (from another workspace) when it isn't in
   // the active workspace's data.
   const list = lists.find(l => l.id === listId) ?? sharedLists.find(l => l.id === listId);
   const isMobile = useMobile();
+
+  // Pull-down-to-refresh (mobile only) — re-pulls this workspace's tasks/lists;
+  // the live SSE sync keeps things current already, but a manual refresh is
+  // still the expected mobile gesture (and recovers a dropped connection).
+  const handleRefresh = useCallback(async () => {
+    await loadFromApi(useWorkspaceStore.getState().currentWorkspaceId ?? undefined);
+  }, [loadFromApi]);
+  const { containerRef: scrollRef, pullDistance, refreshing, threshold: pullThreshold } = usePullToRefresh({ onRefresh: handleRefresh, disabled: !isMobile });
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
@@ -61,6 +94,11 @@ export default function ListScreen() {
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
   const viewMode: 'list' | 'kanban' | 'timeline' =
     list?.viewMode === 'kanban' || list?.viewMode === 'timeline' ? list.viewMode : 'list';
+  // Kanban's side-scrolling columns don't work on a mobile-width screen — a
+  // list whose stored view_mode is 'kanban' (set on desktop, shared across
+  // devices) renders as List here instead, without touching the stored value
+  // so desktop still sees Kanban next time.
+  const effectiveViewMode: 'list' | 'kanban' | 'timeline' = isMobile && viewMode === 'kanban' ? 'list' : viewMode;
   const setViewMode = useCallback((v: 'list' | 'kanban' | 'timeline') => {
     if (list && v !== viewMode) updateList(list.id, { viewMode: v });
   }, [list, viewMode, updateList]);
@@ -79,6 +117,13 @@ export default function ListScreen() {
       window.removeEventListener('shortcut:view-timeline', onTimeline);
     };
   }, [setViewMode]);
+
+  // "r" shortcut — the desktop equivalent of the mobile pull-to-refresh gesture.
+  useEffect(() => {
+    const onRefreshShortcut = () => { void handleRefresh(); };
+    window.addEventListener('shortcut:refresh-board', onRefreshShortcut);
+    return () => window.removeEventListener('shortcut:refresh-board', onRefreshShortcut);
+  }, [handleRefresh]);
 
   let pageTitle = 'Loading board...';
   if (!list && !listsLoading) {
@@ -354,25 +399,27 @@ export default function ListScreen() {
   };
 
   return (
-    <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
-      <div style={{ maxWidth: viewMode === 'list' ? 680 : 1400, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
+    <div ref={scrollRef} style={{ flex: 1, height: '100%', overflowY: 'auto', overflowX: 'hidden' }}>
+      {isMobile && <PullToRefreshIndicator pullDistance={pullDistance} threshold={pullThreshold} refreshing={refreshing} />}
+      <div style={{ maxWidth: effectiveViewMode === 'list' ? 680 : 1400, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
 
-        {/* View switcher (top-left) + Automations entry point (top-right) */}
+        {/* View switcher (top-left) + Automations entry point (top-right) —
+            Kanban's side-scrolling columns aren't offered on mobile at all. */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ display: 'inline-flex', background: 'var(--color-surface-tint)', borderRadius: 10, padding: 3, gap: 2, flexWrap: 'wrap', maxWidth: '100%' }}>
-            {(['list', 'kanban', 'timeline'] as const).map(v => (
+            {(['list', 'kanban', 'timeline'] as const).filter(v => !(isMobile && v === 'kanban')).map(v => (
               <button
                 key={v}
                 onClick={() => setViewMode(v)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: isMobile ? 4 : 6,
                   fontFamily: 'var(--font-heading)', fontSize: isMobile ? 11.5 : 12.5, fontWeight: 600,
-                  color: viewMode === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
-                  background: viewMode === v ? 'var(--color-white)' : 'transparent',
-                  boxShadow: viewMode === v ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none',
+                  color: effectiveViewMode === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                  background: effectiveViewMode === v ? 'var(--color-white)' : 'transparent',
+                  boxShadow: effectiveViewMode === v ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none',
                   border: 'none', borderRadius: 8, padding: isMobile ? '6px 9px' : '7px 14px', cursor: 'pointer', transition: 'all 150ms', whiteSpace: 'nowrap',
                 }}>
-                <Icon name={v === 'list' ? 'format_list_bulleted' : v === 'kanban' ? 'view_kanban' : 'view_timeline'} size={15} color={viewMode === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
+                <Icon name={v === 'list' ? 'format_list_bulleted' : v === 'kanban' ? 'view_kanban' : 'view_timeline'} size={15} color={effectiveViewMode === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                 {v === 'list' ? 'List' : v === 'kanban' ? 'Kanban' : 'Timeline'}
               </button>
             ))}
@@ -424,7 +471,7 @@ export default function ListScreen() {
         </div>
 
         {/* Sections — List view (stacked) */}
-        {viewMode === 'list' && <div key="view-list" style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'viewSwitchIn 220ms cubic-bezier(0.16,1,0.3,1) both' }}>
+        {effectiveViewMode === 'list' && <div key="view-list" style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'viewSwitchIn 220ms cubic-bezier(0.16,1,0.3,1) both' }}>
         {list.sections.map(section => {
           const isSectionDropTarget = dragOverSectionId === section.id && draggedSectionId !== null && draggedSectionId !== section.id;
           const isSectionReorderTarget = sectionDragOverId === section.id && sectionDragId !== null && sectionDragId !== section.id;
@@ -613,7 +660,7 @@ export default function ListScreen() {
         </div>}
 
         {/* Sections — Kanban view (columns) */}
-        {viewMode === 'kanban' && (
+        {effectiveViewMode === 'kanban' && (
           <div key="view-kanban" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 12, alignItems: 'flex-start', animation: 'viewSwitchIn 220ms cubic-bezier(0.16,1,0.3,1) both' }}>
             {list.sections.map((section, idx) => {
               const isSectionDropTarget = dragOverSectionId === section.id && draggedSectionId !== null && draggedSectionId !== section.id;
@@ -796,7 +843,7 @@ export default function ListScreen() {
         )}
 
         {/* Timeline view — tasks laid out left-to-right by creation → completion/today */}
-        {viewMode === 'timeline' && (
+        {effectiveViewMode === 'timeline' && (
           <TaskTimelineView
             list={list}
             isMobile={isMobile}
