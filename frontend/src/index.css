@@ -278,6 +278,12 @@ html, body, #root { height: 100%; width: 100%; }
 
   /* Prevent horizontal overflow on mobile */
   body { overflow-x: hidden; }
+
+  /* iOS/WebKit (Safari, Arc, Chrome-on-iOS) auto-zooms the page when a focused
+     input/textarea/select has a computed font-size under 16px. Flooring it
+     here (rather than in each component) fixes it everywhere at once, e.g.
+     the Board's "Add item" field. */
+  input, textarea, select { font-size: 16px !important; }
 }
 
 /* Safe-area padding for iPhone notch / home indicator */
