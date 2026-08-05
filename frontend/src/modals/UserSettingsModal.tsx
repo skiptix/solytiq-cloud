@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from '../components/Icon';
 import { useMobile } from '../hooks/useBreakpoint';
 import useAuthStore from '../store/useAuthStore';
@@ -352,7 +353,15 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
     { id: 'calendar',    label: 'Calendar Sync', icon: 'event_available' },
   ];
 
-  return (
+  // Portaled to <body>: this modal is opened from ProfileCard, deep inside the
+  // fixed-position, z-indexed Sidebar (see Sidebar's own zIndex: 40/60). A
+  // position:fixed + z-index element establishes its own stacking context, so
+  // without the portal this modal's backdrop (zIndex: 1000) only outranks
+  // TopBar (zIndex: 50) *within* Sidebar's stacking context — trapped there,
+  // it loses to TopBar in the global stacking order on desktop (Sidebar's
+  // zIndex 40 < TopBar's 50), leaving TopBar crisp/unblurred above the
+  // backdrop instead of dimmed like the rest of the page.
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
@@ -1008,7 +1017,8 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
 
       {/* 2FA Enable Wizard (nested modal) */}
       {twoFAOpen && <TwoFAWizardInline onClose={() => setTwoFAOpen(false)} onEnabled={() => setTotpEnabled(true)} />}
-    </>
+    </>,
+    document.body
   );
 }
 
