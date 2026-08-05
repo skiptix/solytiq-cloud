@@ -13,7 +13,8 @@ import useMarkdownListsStore from './store/useMarkdownListsStore';
 import useKnowledgeBaseStore from './store/useKnowledgeBaseStore';
 import useNotificationsStore from './store/useNotificationsStore';
 import useSharedItemsStore from './store/useSharedItemsStore';
-import { apiCheckSetupRequired, connectSSE, disconnectSSE, setUnauthorizedHandler } from './api/client';
+import { apiCheckSetupRequired, apiPingHomescreenConnection, connectSSE, disconnectSSE, setUnauthorizedHandler } from './api/client';
+import { isHomeScreenApp, getOrCreateInstallId, detectHomeScreenDevice } from './utils/homescreen';
 
 // Delta-sync engine is on by default; set VITE_SYNC_ENGINE=0 to fall back to the
 // classic full/slice-reload loader (instant rollback without a redeploy).
@@ -535,6 +536,22 @@ export default function App() {
   useEffect(() => {
     if (loggedIn) loadMemory();
   }, [loggedIn, loadMemory]);
+
+  // iOS "Add to Home Screen" tracking — ping once on launch when running in
+  // standalone display mode, then again whenever the tab regains visibility
+  // (covers the Home Screen icon being reopened after being backgrounded), so
+  // Account Settings → Mobile can list these installs alongside native app
+  // devices. A no-op on a regular browser tab.
+  useEffect(() => {
+    if (!loggedIn || !isHomeScreenApp()) return;
+    const installId = getOrCreateInstallId();
+    const device = detectHomeScreenDevice();
+    const ping = () => { apiPingHomescreenConnection(installId, device).catch(() => {}); };
+    ping();
+    const onVisible = () => { if (document.visibilityState === 'visible') ping(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [loggedIn]);
 
   const gpsInstalled = installedApps.includes('gps');
 

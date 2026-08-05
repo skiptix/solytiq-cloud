@@ -18,11 +18,14 @@ import {
   apiDeleteApiToken,
   apiGetMobileConnections,
   apiDeleteMobileConnection,
+  apiGetHomescreenConnections,
+  apiDeleteHomescreenConnection,
   apiGetCaldavStatus,
   apiGenerateCaldavPassword,
   apiRevokeCaldav,
   type ApiAccessToken,
   type MobileConnection,
+  type HomescreenConnection,
   type CaldavStatus,
 } from '../api/client';
 
@@ -847,6 +850,11 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
             <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
               {sectionLabel('Mobile App')}
               <MobileConnectionsSection />
+
+              <div style={{ marginTop: 28 }}>
+                {sectionLabel('iOS Home Screen App')}
+                <HomeScreenConnectionsSection />
+              </div>
             </div>
             )}
 
@@ -1429,6 +1437,98 @@ function MobileConnectionsSection() {
       {!loading && connections.length === 0 && (
         <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', textAlign: 'center', padding: '2px 0' }}>
           No mobile devices connected yet.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HomeScreenConnectionsSection() {
+  const [connections, setConnections] = useState<HomescreenConnection[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGetHomescreenConnections()
+      .then(r => setConnections(r.connections))
+      .catch(() => setConnections([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleRemove = async (id: string) => {
+    setRemovingId(id);
+    try {
+      await apiDeleteHomescreenConnection(id);
+      setConnections(prev => prev.filter(c => c.id !== id));
+    } catch {
+      /* keep it in the list on failure */
+    } finally {
+      setRemovingId(null);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Intro / explainer */}
+      <div style={{ ...card, padding: '14px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="add_to_home_screen" size={19} color="var(--color-primary)" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+              Solytiq Cloud on your Home Screen
+            </div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-tertiary)', lineHeight: 1.5, marginTop: 3 }}>
+              Devices where you've added this site to your iOS Home Screen (Share → Add to Home Screen) and opened it as a standalone app appear here. This isn't a separate login — removing an entry just forgets it; it'll reappear next time you open that icon.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {loading && (
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', textAlign: 'center', padding: '2px 0' }}>
+          Loading Home Screen installs…
+        </div>
+      )}
+
+      {/* Home Screen installs */}
+      {!loading && connections.length > 0 && (
+        <div style={card}>
+          {connections.map((c, i) => (
+            <div key={c.id} style={{ ...rowStyle, borderTop: i === 0 ? 'none' : '1px solid var(--color-surface-tint-2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Icon name="add_to_home_screen" size={16} color="var(--color-primary)" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {c.deviceName}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)', marginTop: 1 }}>
+                    {c.osVersion ? `${c.osVersion}  ·  ` : ''}Added {fmtTokenDate(c.createdAt)}
+                    {'  ·  '}{c.lastSeenAt ? `Last opened ${fmtTokenDate(c.lastSeenAt)}` : 'Never opened'}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => handleRemove(c.id)}
+                disabled={removingId === c.id}
+                title="Remove"
+                style={{ flexShrink: 0, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: '1px solid var(--color-error-bg)', borderRadius: 8, padding: '7px 12px', cursor: removingId === c.id ? 'wait' : 'pointer', transition: 'background 150ms' }}
+                onMouseEnter={e => { if (removingId !== c.id) e.currentTarget.style.background = 'var(--color-red-pale-7)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
+              >
+                {removingId === c.id ? 'Removing…' : 'Remove'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && connections.length === 0 && (
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', textAlign: 'center', padding: '2px 0' }}>
+          No Home Screen installs detected yet.
         </div>
       )}
     </div>

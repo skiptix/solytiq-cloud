@@ -1729,6 +1729,26 @@ async function runMigrations() {
   // Settings → Mobile; disabling wipes all connections and blocks new logins.
   await pool.query(`INSERT INTO app_settings (key, value) VALUES ('mobile_app_enabled', 'true') ON CONFLICT (key) DO NOTHING`);
 
+  // iOS "Add to Home Screen" installs. Unlike mobile_connections, this isn't a
+  // separate login flow — it's the same web session running in standalone
+  // display mode. The frontend detects that (see utils/homescreen.ts) and
+  // pings /api/auth/homescreen-connections/ping with a client-generated,
+  // locally-persisted `install_id` so repeat opens from one Home Screen icon
+  // update a single row instead of creating a new one every launch.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS homescreen_connections (
+      id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      install_id   VARCHAR(100) NOT NULL,
+      device_name  VARCHAR(255) NOT NULL DEFAULT 'Home Screen App',
+      os_version   VARCHAR(255),
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (user_id, install_id)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS homescreen_connections_user_idx ON homescreen_connections(user_id)`);
+
   // ── Templates ────────────────────────────────────────────────────────────
   // User-owned, workspace-agnostic snapshots of a list's or timeline's full
   // structure (sections/tasks incl. nested sublists, or milestones), reusable
