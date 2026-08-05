@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Icon from '../components/Icon';
 import { useMobile } from '../hooks/useBreakpoint';
 import useAuthStore from '../store/useAuthStore';
@@ -342,17 +343,38 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
     }
   };
 
+  // Controls (keyboard shortcuts), Mobile (device connections), and Calendar Sync
+  // (CalDAV) are all about configuring desktop-adjacent workflows that don't
+  // apply from a phone already running the mobile web app — hidden on mobile
+  // to keep the tab bar short enough to not need horizontal scrolling.
   const TABS: { id: SettingsTab; label: string; icon: string }[] = [
     { id: 'profile',     label: 'Profile',     icon: 'person' },
     { id: 'preferences', label: 'Preferences', icon: 'tune' },
-    { id: 'controls',    label: 'Controls',    icon: 'keyboard' },
+    ...(isMobile ? [] : [{ id: 'controls' as SettingsTab, label: 'Controls', icon: 'keyboard' }]),
     { id: 'security',    label: 'Security',    icon: 'shield_lock' },
     ...(mcpVisible ? [{ id: 'connections' as SettingsTab, label: 'Connections', icon: 'smart_toy' }] : []),
-    ...(mobileEnabled ? [{ id: 'mobile' as SettingsTab, label: 'Mobile', icon: 'smartphone' }] : []),
-    { id: 'calendar',    label: 'Calendar Sync', icon: 'event_available' },
+    ...(mobileEnabled && !isMobile ? [{ id: 'mobile' as SettingsTab, label: 'Mobile', icon: 'smartphone' }] : []),
+    ...(isMobile ? [] : [{ id: 'calendar' as SettingsTab, label: 'Calendar Sync', icon: 'event_available' }]),
   ];
 
-  return (
+  // If the viewport crosses into mobile while a now-hidden tab is active
+  // (e.g. rotating/resizing mid-session), fall back to Profile rather than
+  // stranding the panel on a tab with no corresponding pill to reselect.
+  useEffect(() => {
+    if (isMobile && (activeTab === 'controls' || activeTab === 'mobile' || activeTab === 'calendar')) {
+      setActiveTab('profile');
+    }
+  }, [isMobile, activeTab]);
+
+  // Portaled to <body>: this modal is opened from ProfileCard, deep inside the
+  // fixed-position, z-indexed Sidebar (see Sidebar's own zIndex: 40/60). A
+  // position:fixed + z-index element establishes its own stacking context, so
+  // without the portal this modal's backdrop (zIndex: 1000) only outranks
+  // TopBar (zIndex: 50) *within* Sidebar's stacking context — trapped there,
+  // it loses to TopBar in the global stacking order on desktop (Sidebar's
+  // zIndex 40 < TopBar's 50), leaving TopBar crisp/unblurred above the
+  // backdrop instead of dimmed like the rest of the page.
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
@@ -378,26 +400,27 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
 
           {/* Tab bar */}
           <div style={{ padding: '16px 24px 0' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, background: 'var(--color-surface-tint)', borderRadius: 14, padding: 4, overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch', flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexWrap: isMobile ? 'nowrap' : 'wrap', gap: 4, background: 'var(--color-surface-tint)', borderRadius: 14, padding: 4, overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch', flexShrink: 0 }}>
               {TABS.map(tab => {
                 const active = activeTab === tab.id;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
+                    title={isMobile ? tab.label : undefined}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
+                      display: 'flex', alignItems: 'center', gap: isMobile ? 0 : 6,
                       fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600,
                       color: active ? 'var(--color-white)' : 'var(--color-primary)',
                       background: active ? 'var(--color-primary)' : 'transparent',
-                      border: 'none', borderRadius: 10, padding: '9px 16px', cursor: 'pointer',
-                      transition: 'all 150ms', flex: isMobile ? '0 0 auto' : '1 1 auto', justifyContent: 'center',
+                      border: 'none', borderRadius: 10, padding: isMobile ? '9px 14px' : '9px 16px', cursor: 'pointer',
+                      transition: 'all 150ms', flex: isMobile ? '1 1 0' : '1 1 auto', justifyContent: 'center',
                     }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <Icon name={tab.icon} size={15} color={active ? 'var(--color-white)' : 'var(--color-primary)'} />
-                    <span style={{ whiteSpace: 'nowrap' }}>{tab.label}</span>
+                    <Icon name={tab.icon} size={isMobile ? 19 : 15} color={active ? 'var(--color-white)' : 'var(--color-primary)'} />
+                    {!isMobile && <span style={{ whiteSpace: 'nowrap' }}>{tab.label}</span>}
                   </button>
                 );
               })}
@@ -1008,7 +1031,8 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
 
       {/* 2FA Enable Wizard (nested modal) */}
       {twoFAOpen && <TwoFAWizardInline onClose={() => setTwoFAOpen(false)} onEnabled={() => setTotpEnabled(true)} />}
-    </>
+    </>,
+    document.body
   );
 }
 
