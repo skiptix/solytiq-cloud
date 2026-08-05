@@ -1,6 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence } from 'motion/react';
 import { useMobile } from '../hooks/useBreakpoint';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
@@ -1963,15 +1964,20 @@ export default function SettingsScreen() {
       )}
 
       {/* ── AI Skills ── */}
-      {showSkillUploadModal && (
-        <AiSkillUploadModal
-          onClose={() => setShowSkillUploadModal(false)}
-          onCreated={(skill) => setEditingSkillId(skill.id)}
-        />
-      )}
-      {editingSkillId && (
-        <AiSkillEditModal skillId={editingSkillId} onClose={() => setEditingSkillId(null)} />
-      )}
+      <AnimatePresence>
+        {showSkillUploadModal && (
+          <AiSkillUploadModal
+            key="ai-skill-upload"
+            onClose={() => setShowSkillUploadModal(false)}
+            onCreated={(skill) => setEditingSkillId(skill.id)}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {editingSkillId && (
+          <AiSkillEditModal key="ai-skill-edit" skillId={editingSkillId} onClose={() => setEditingSkillId(null)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

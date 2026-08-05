@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import useAppStore, { apiEmptyTrash } from '../store/useAppStore';
 import Icon from './Icon';
+import { listItemVariants, modalVariants, LAYOUT_TRANSITION } from '../utils/motionTokens';
 import type { TrashedTask, TrashedList, TrashedFolder, TrashedTimeline, TrashedMilestone } from '../types';
 
 function friendlyTime(iso: string) {
@@ -153,6 +155,7 @@ export default function TrashPanel() {
           <div style={{ padding: '32px 12px', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', textAlign: 'center' }}>No matching items.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 4 }}>
+            <AnimatePresence initial={false}>
             {visibleItems.map(entry => {
               if (entry.kind === 'task') {
                 const item = entry.item as TrashedTask;
@@ -203,32 +206,41 @@ export default function TrashPanel() {
                   onDelete={() => deleteFolderFromTrash(item.id)} />
               );
             })}
+            </AnimatePresence>
           </div>
         )}
       </div>
 
       {/* Empty confirm overlay — covers just this panel, not the whole settings modal */}
-      {confirmEmpty && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-white-rgb), 0.97)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 10, borderRadius: 12 }}>
-          <div style={{ textAlign: 'center', maxWidth: 300 }}>
-            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-              <Icon name="warning" size={24} color="var(--color-error)" />
+      <AnimatePresence>
+        {confirmEmpty && (
+          <motion.div
+            variants={modalVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-white-rgb), 0.97)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 10, borderRadius: 12 }}
+          >
+            <div style={{ textAlign: 'center', maxWidth: 300 }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+                <Icon name="warning" size={24} color="var(--color-error)" />
+              </div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Empty the trash?</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.6, marginBottom: 20 }}>
+                This will permanently delete all {totalCount} item{totalCount !== 1 ? 's' : ''} in the trash. This cannot be undone.
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                <button onClick={() => setConfirmEmpty(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button onClick={handleEmptyTrash} disabled={emptyLoading} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: emptyLoading ? 'wait' : 'pointer' }}>
+                  {emptyLoading ? 'Deleting…' : 'Empty Trash'}
+                </button>
+              </div>
             </div>
-            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Empty the trash?</div>
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.6, marginBottom: 20 }}>
-              This will permanently delete all {totalCount} item{totalCount !== 1 ? 's' : ''} in the trash. This cannot be undone.
-            </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <button onClick={() => setConfirmEmpty(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer' }}>
-                Cancel
-              </button>
-              <button onClick={handleEmptyTrash} disabled={emptyLoading} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: emptyLoading ? 'wait' : 'pointer' }}>
-                {emptyLoading ? 'Deleting…' : 'Empty Trash'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -261,7 +273,13 @@ function TaskTrashRow({ item, onRestore, onDelete }: { item: TrashedTask; onRest
   const PCOLS: Record<string, string> = { High: 'var(--color-orange)', Medium: 'var(--color-warning-alt)', Low: 'var(--color-text-tertiary)' };
 
   return (
-    <div
+    <motion.div
+      layout
+      variants={listItemVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      transition={LAYOUT_TRANSITION}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: hov ? 'var(--color-error-bg-alt)' : 'var(--color-surface-neutral)', border: `1px solid ${hov ? 'var(--color-error-bg)' : 'var(--color-surface-tint-2)'}`, transition: 'all 150ms' }}>
       <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -281,7 +299,7 @@ function TaskTrashRow({ item, onRestore, onDelete }: { item: TrashedTask; onRest
         </div>
       </div>
       <ActionButtons onRestore={onRestore} onDelete={onDelete} hov={hov} />
-    </div>
+    </motion.div>
   );
 }
 
@@ -290,7 +308,13 @@ function ListTrashRow({ item, onRestore, onDelete }: { item: TrashedList; onRest
   const count = taskCount(item.list);
 
   return (
-    <div
+    <motion.div
+      layout
+      variants={listItemVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      transition={LAYOUT_TRANSITION}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: hov ? 'var(--color-surface-tint)' : 'var(--color-surface-neutral)', border: `1px solid ${hov ? 'var(--color-purple-pale-38)' : 'var(--color-surface-tint-2)'}`, transition: 'all 150ms' }}>
       <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--color-purple-pale-21)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -308,7 +332,7 @@ function ListTrashRow({ item, onRestore, onDelete }: { item: TrashedList; onRest
         </div>
       </div>
       <ActionButtons onRestore={onRestore} onDelete={onDelete} hov={hov} />
-    </div>
+    </motion.div>
   );
 }
 
@@ -317,7 +341,13 @@ function TimelineTrashRow({ item, onRestore, onDelete }: { item: TrashedTimeline
   const count = item.timeline.milestones?.length ?? 0;
 
   return (
-    <div
+    <motion.div
+      layout
+      variants={listItemVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      transition={LAYOUT_TRANSITION}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: hov ? 'var(--color-blue-pale-2)' : 'var(--color-surface-neutral)', border: `1px solid ${hov ? 'var(--color-blue-tint-2)' : 'var(--color-surface-tint-2)'}`, transition: 'all 150ms' }}>
       <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--color-blue-pale-9)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -335,7 +365,7 @@ function TimelineTrashRow({ item, onRestore, onDelete }: { item: TrashedTimeline
         </div>
       </div>
       <ActionButtons onRestore={onRestore} onDelete={onDelete} hov={hov} />
-    </div>
+    </motion.div>
   );
 }
 
@@ -345,7 +375,13 @@ function MilestoneTrashRow({ item, onRestore, onDelete }: { item: TrashedMilesto
   const timelineName = useAppStore(s => s.timelines.find(t => t.id === item.timelineId)?.name);
 
   return (
-    <div
+    <motion.div
+      layout
+      variants={listItemVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      transition={LAYOUT_TRANSITION}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: hov ? 'var(--color-blue-pale-3)' : 'var(--color-surface-neutral)', border: `1px solid ${hov ? 'var(--color-blue-tint-1)' : 'var(--color-surface-tint-2)'}`, transition: 'all 150ms' }}>
       <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--color-blue-pale-7)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -363,7 +399,7 @@ function MilestoneTrashRow({ item, onRestore, onDelete }: { item: TrashedMilesto
         </div>
       </div>
       <ActionButtons onRestore={onRestore} onDelete={onDelete} hov={hov} />
-    </div>
+    </motion.div>
   );
 }
 
@@ -372,7 +408,13 @@ function FolderTrashRow({ item, onRestore, onDelete }: { item: TrashedFolder; on
   const listCount = (item.folder.listIds ?? []).length;
 
   return (
-    <div
+    <motion.div
+      layout
+      variants={listItemVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      transition={LAYOUT_TRANSITION}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: hov ? 'var(--color-yellow-pale-1)' : 'var(--color-surface-neutral)', border: `1px solid ${hov ? 'var(--color-yellow-tint-2)' : 'var(--color-surface-tint-2)'}`, transition: 'all 150ms' }}>
       <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--color-yellow-tint-1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -390,6 +432,6 @@ function FolderTrashRow({ item, onRestore, onDelete }: { item: TrashedFolder; on
         </div>
       </div>
       <ActionButtons onRestore={onRestore} onDelete={onDelete} hov={hov} />
-    </div>
+    </motion.div>
   );
 }

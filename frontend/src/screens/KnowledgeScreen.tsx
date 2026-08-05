@@ -14,6 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { useMobile } from '../hooks/useBreakpoint';
 import useWorkspaceStore from '../store/useWorkspaceStore';
@@ -538,20 +539,23 @@ export default function KnowledgeScreen() {
           </div>
         )}
 
-        {selectedEntry && (
-          <EntryInspector
-            entry={selectedEntry}
-            relations={relations}
-            canWrite={canWrite}
-            isMobile={isMobile}
-            mentionMembers={members}
-            onSaveMeta={handleSaveMeta}
-            onSaveContent={handleSaveContent}
-            onDelete={() => void handleDeleteEntry()}
-            onClose={() => setSelectedId(null)}
-            onOpenRelation={navigate}
-          />
-        )}
+        <AnimatePresence>
+          {selectedEntry && (
+            <EntryInspector
+              key="entry-inspector"
+              entry={selectedEntry}
+              relations={relations}
+              canWrite={canWrite}
+              isMobile={isMobile}
+              mentionMembers={members}
+              onSaveMeta={handleSaveMeta}
+              onSaveContent={handleSaveContent}
+              onDelete={() => void handleDeleteEntry()}
+              onClose={() => setSelectedId(null)}
+              onOpenRelation={navigate}
+            />
+          )}
+        </AnimatePresence>
 
         {showSuggestions && suggestions.length > 0 && (
           <div style={{ position: 'absolute', top: 64, left: 12, width: isMobile ? 'calc(100% - 24px)' : 340, maxHeight: 'calc(100% - 76px)', overflowY: 'auto', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.16)', zIndex: 5, animation: 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>

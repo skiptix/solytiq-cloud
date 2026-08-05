@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import Icon from '../components/Icon';
 import useAiSkillsStore from '../store/useAiSkillsStore';
 import { apiGetAiSkill, apiReplaceAiSkillBundle, ApiError } from '../api/client';
+import { backdropVariants, modalVariants, crossFadeVariants } from '../utils/motionTokens';
 import type { AiSkill, AiSkillFile } from '../types';
 
 interface AiSkillEditModalProps {
@@ -112,12 +114,20 @@ export default function AiSkillEditModal({ skillId, onClose }: AiSkillEditModalP
   };
 
   return createPortal(
-    <div
+    <motion.div
+      variants={backdropVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
       style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div
-        style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 560, maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <motion.div
+        variants={modalVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 560, maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {loading || !skill ? (
@@ -230,48 +240,50 @@ export default function AiSkillEditModal({ skillId, onClose }: AiSkillEditModalP
                 </div>
               )}
 
-              {confirmDelete ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--color-error-bg)', borderRadius: 10 }}>
-                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-error)', lineHeight: 1.4 }}>
-                    Delete "{skill.name}" permanently? This cannot be undone.
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => setConfirmDelete(false)} style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', background: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>Cancel</button>
-                    <button onClick={handleDelete} disabled={deleting} style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', background: 'var(--color-error)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', cursor: deleting ? 'not-allowed' : 'pointer' }}>
-                      {deleting ? 'Deleting…' : 'Delete Skill'}
+              <AnimatePresence mode="wait" initial={false}>
+                {confirmDelete ? (
+                  <motion.div key="confirm" variants={crossFadeVariants} initial="initial" animate="animate" exit="exit" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--color-error-bg)', borderRadius: 10 }}>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-error)', lineHeight: 1.4 }}>
+                      Delete "{skill.name}" permanently? This cannot be undone.
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => setConfirmDelete(false)} style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', background: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>Cancel</button>
+                      <button onClick={handleDelete} disabled={deleting} style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', background: 'var(--color-error)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', cursor: deleting ? 'not-allowed' : 'pointer' }}>
+                        {deleting ? 'Deleting…' : 'Delete Skill'}
+                      </button>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div key="actions" variants={crossFadeVariants} initial="initial" animate="animate" exit="exit" style={{ display: 'flex', gap: 10 }}>
+                    <button onClick={() => setConfirmDelete(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-error)', background: 'transparent', border: 'none', borderRadius: 8, padding: '11px 12px', cursor: 'pointer' }}>
+                      <Icon name="delete" size={14} color="var(--color-error)" />
+                      Delete
                     </button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => setConfirmDelete(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-error)', background: 'transparent', border: 'none', borderRadius: 8, padding: '11px 12px', cursor: 'pointer' }}>
-                    <Icon name="delete" size={14} color="var(--color-error)" />
-                    Delete
-                  </button>
-                  <div style={{ flex: 1 }} />
-                  <button
-                    onClick={handleSave}
-                    disabled={saving || !dirty || !name.trim() || !content.trim()}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600,
-                      color: saved ? 'var(--color-success)' : 'var(--color-white)',
-                      background: saved ? 'rgba(var(--color-success-rgb), 0.12)' : (saving || !dirty) ? 'var(--color-border-strong)' : 'var(--color-primary)',
-                      border: saved ? '1.5px solid rgba(var(--color-success-rgb), 0.3)' : 'none',
-                      borderRadius: 8, padding: '11px 20px',
-                      cursor: (saving || !dirty) ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    <Icon name={saved ? 'check' : 'save'} size={14} color={saved ? 'var(--color-success)' : 'var(--color-white)'} />
-                    {saved ? 'Saved' : saving ? 'Saving…' : 'Save Changes'}
-                  </button>
-                </div>
-              )}
+                    <div style={{ flex: 1 }} />
+                    <button
+                      onClick={handleSave}
+                      disabled={saving || !dirty || !name.trim() || !content.trim()}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600,
+                        color: saved ? 'var(--color-success)' : 'var(--color-white)',
+                        background: saved ? 'rgba(var(--color-success-rgb), 0.12)' : (saving || !dirty) ? 'var(--color-border-strong)' : 'var(--color-primary)',
+                        border: saved ? '1.5px solid rgba(var(--color-success-rgb), 0.3)' : 'none',
+                        borderRadius: 8, padding: '11px 20px',
+                        cursor: (saving || !dirty) ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      <Icon name={saved ? 'check' : 'save'} size={14} color={saved ? 'var(--color-success)' : 'var(--color-white)'} />
+                      {saved ? 'Saved' : saving ? 'Saving…' : 'Save Changes'}
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </>
         )}
-      </div>
-    </div>,
+      </motion.div>
+    </motion.div>,
     document.body
   );
 }

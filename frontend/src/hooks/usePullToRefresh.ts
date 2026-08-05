@@ -18,6 +18,19 @@ export function usePullToRefresh({ onRefresh, disabled = false, threshold = 64 }
   const containerRef = useRef<HTMLDivElement>(null);
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  // True whenever the indicator is snapping back to 0 on its own (released
+  // below threshold, or a refresh just finished) rather than tracking a live
+  // touch — the one case that should ease instead of following the finger 1:1.
+  const [settling, setSettling] = useState(false);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const startSettling = () => {
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    setSettling(true);
+    settleTimer.current = setTimeout(() => setSettling(false), 240);
+  };
+
+  useEffect(() => () => { if (settleTimer.current) clearTimeout(settleTimer.current); }, []);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -28,6 +41,8 @@ export function usePullToRefresh({ onRefresh, disabled = false, threshold = 64 }
     let distance = 0;
 
     const onTouchStart = (e: TouchEvent) => {
+      if (settleTimer.current) clearTimeout(settleTimer.current);
+      setSettling(false);
       if (refreshing || el.scrollTop > 0) { startY = null; pulling = false; return; }
       startY = e.touches[0].clientY;
       pulling = true;
@@ -52,10 +67,12 @@ export function usePullToRefresh({ onRefresh, disabled = false, threshold = 64 }
         setRefreshing(true);
         setPullDistance(threshold);
         Promise.resolve(onRefresh()).finally(() => {
+          startSettling();
           setRefreshing(false);
           setPullDistance(0);
         });
       } else {
+        startSettling();
         setPullDistance(0);
       }
       distance = 0;
@@ -74,5 +91,5 @@ export function usePullToRefresh({ onRefresh, disabled = false, threshold = 64 }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [disabled, threshold, refreshing]);
 
-  return { containerRef, pullDistance, refreshing, threshold };
+  return { containerRef, pullDistance, refreshing, settling, threshold };
 }

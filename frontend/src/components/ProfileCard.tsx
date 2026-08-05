@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import useAuthStore from '../store/useAuthStore';
@@ -7,6 +8,7 @@ import useAccountsStore from '../store/useAccountsStore';
 import { apiUpdateProfile, apiUploadProfileImage } from '../api/client';
 import UserSettingsModal from '../modals/UserSettingsModal';
 import AddAccountModal from '../modals/AddAccountModal';
+import { LAYOUT_TRANSITION } from '../utils/motionTokens';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -355,8 +357,16 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
               <Icon name={switcherOpen ? 'expand_less' : 'expand_more'} size={16} color="var(--color-text-quaternary)" />
             </button>
 
+            <AnimatePresence initial={false}>
             {switcherOpen && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4, animation: 'menuIn 140ms ease both' }}>
+              <motion.div
+                key="switcher-list"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={LAYOUT_TRANSITION}
+                style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4, overflow: 'hidden' }}
+              >
                 {otherAccounts.map(acct => {
                   const busy = switchingId === acct.userId;
                   return (
@@ -405,8 +415,9 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
                   </div>
                   <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)' }}>Add account</span>
                 </button>
-              </div>
+              </motion.div>
             )}
+            </AnimatePresence>
           </div>
 
           {/* Account Settings + Sign Out */}
@@ -437,18 +448,21 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
       {settingsOpen && <UserSettingsModal onClose={() => setSettingsOpen(false)} />}
 
       {/* Add / re-authenticate an account for the switcher */}
-      {addAccountFor && (
-        <AddAccountModal
-          presetUsername={addAccountFor.username}
-          onClose={() => setAddAccountFor(null)}
-          onAdded={() => setAddAccountFor(null)}
-        />
-      )}
+      <AnimatePresence>
+        {addAccountFor && (
+          <AddAccountModal
+            key="add-account-modal"
+            presetUsername={addAccountFor.username}
+            onClose={() => setAddAccountFor(null)}
+            onAdded={() => setAddAccountFor(null)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Profile Image Upload Wizard */}
       {uploadOpen && (
         <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 200ms ease both' }}
           onClick={e => { if (e.target === e.currentTarget) closeUploadWizard(); }}
         >
           <div

@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { motion, useDragControls, type PanInfo } from 'motion/react';
 import type { AIChatMessage, AISession } from '../../store/useAIStore';
 import type { AIFile } from '../../types';
 import Icon from '../Icon';
 import AIRecentChats from './AIRecentChats';
 import { apiUploadAIFile, apiDeleteAIFile } from '../../api/client';
+import { backdropVariants, sheetVariants, desktopWindowVariants, SWIPE_DISMISS_DISTANCE, SWIPE_DISMISS_VELOCITY } from '../../utils/motionTokens';
 
 interface Props {
   messages: AIChatMessage[];
@@ -278,6 +280,13 @@ export default function AIChatWindow({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
+  const sheetDragControls = useDragControls();
+
+  const handleSheetDragEnd = useCallback((_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    if (info.offset.y > SWIPE_DISMISS_DISTANCE || info.velocity.y > SWIPE_DISMISS_VELOCITY) {
+      onClose();
+    }
+  }, [onClose]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -401,7 +410,6 @@ export default function AIChatWindow({
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        animation: 'aiSheetIn 340ms cubic-bezier(0.22,1,0.36,1) both',
         border: `1.5px solid ${isDragOver ? 'rgba(var(--color-purple-mid-8-rgb), 0.5)' : 'rgba(var(--color-primary-rgb), 0.12)'}`,
         borderBottom: 'none',
         transition: 'border-color 200ms ease',
@@ -420,7 +428,7 @@ export default function AIChatWindow({
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        animation: 'aiWindowIn 300ms cubic-bezier(0.34,1.56,0.64,1) both',
+        transformOrigin: 'bottom right',
         border: `1.5px solid ${isDragOver ? 'rgba(var(--color-purple-mid-8-rgb), 0.5)' : 'rgba(var(--color-primary-rgb), 0.12)'}`,
         transition: 'border-color 200ms ease',
       };
@@ -428,29 +436,45 @@ export default function AIChatWindow({
   return (
     <>
       {isMobile && (
-        <div
+        <motion.div
           onClick={onClose}
+          variants={backdropVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
           style={{
             position: 'fixed',
             inset: 0,
             background: 'rgba(var(--color-black-rgb), 0.4)',
             backdropFilter: 'blur(2px)',
             zIndex: 9000,
-            animation: 'backdropIn 220ms ease both',
           }}
         />
       )}
-      <div
+      <motion.div
         style={sheetStyle}
+        variants={isMobile ? sheetVariants : desktopWindowVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        drag={isMobile ? 'y' : false}
+        dragListener={false}
+        dragControls={sheetDragControls}
+        dragConstraints={isMobile ? { top: 0, bottom: 0 } : undefined}
+        dragElastic={isMobile ? { top: 0, bottom: 0.5 } : undefined}
+        onDragEnd={isMobile ? handleSheetDragEnd : undefined}
         onClick={(e) => e.stopPropagation()}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
-        {/* Drag handle — mobile bottom sheet only */}
+        {/* Drag handle — mobile bottom sheet only; swipe down past a distance/velocity threshold dismisses */}
         {isMobile && (
-          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8, paddingBottom: 4, flexShrink: 0 }}>
+          <div
+            onPointerDown={(e) => sheetDragControls.start(e)}
+            style={{ display: 'flex', justifyContent: 'center', paddingTop: 8, paddingBottom: 4, flexShrink: 0, touchAction: 'none', cursor: 'grab' }}
+          >
             <div style={{ width: 36, height: 4, borderRadius: 9999, background: 'var(--color-border-strong)' }} />
           </div>
         )}
@@ -998,7 +1022,7 @@ export default function AIChatWindow({
           </div>
         </div>
       )}
-      </div>
+      </motion.div>
     </>
   );
 }

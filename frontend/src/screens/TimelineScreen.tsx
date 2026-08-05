@@ -2,6 +2,7 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useMobile } from '../hooks/useBreakpoint';
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence } from 'motion/react';
 import type { ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Milestone, MilestoneStatus, TimelineLayout, MilestoneAttachment, SharedFile, WorkspaceMember } from '../types';
@@ -487,7 +488,9 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
         </div>
       </div>
     </div>
-    {showFilePicker && <FilePicker onSelect={handleLinkFile} onClose={() => setShowFilePicker(false)} />}
+    <AnimatePresence>
+      {showFilePicker && <FilePicker key="file-picker" onSelect={handleLinkFile} onClose={() => setShowFilePicker(false)} />}
+    </AnimatePresence>
     {showDelete && onDelete && (
       <DeleteConfirmModal
         name={title.trim() || initial?.title || 'this milestone'}

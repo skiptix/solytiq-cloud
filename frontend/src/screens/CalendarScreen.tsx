@@ -1,6 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import type { Task, List, Timeline, Meeting, MeetingRecurrenceRule } from '../types';
 import {
@@ -1894,16 +1895,20 @@ export default function CalendarScreen() {
         </div>
 
         {/* Body */}
-        {effectiveView === 'month' ? renderMonth() : effectiveView === 'week' ? renderWeek() : renderYear()}
+        <div key={effectiveView} style={{ animation: 'viewSwitchIn 220ms cubic-bezier(0.16,1,0.3,1) both' }}>
+          {effectiveView === 'month' ? renderMonth() : effectiveView === 'week' ? renderWeek() : renderYear()}
+        </div>
       </div>
 
       {/* Modals */}
       {chipMenu && (
         <ContextMenu x={chipMenu.x} y={chipMenu.y} items={chipMenu.items} onClose={() => setChipMenu(null)} />
       )}
-      {selectedTask && (
-        <TaskDialog task={selectedTask} onUpdate={saveTask} onDelete={deleteTask} onClose={() => setSelectedTask(null)} />
-      )}
+      <AnimatePresence>
+        {selectedTask && (
+          <TaskDialog key="task-dialog" task={selectedTask} onUpdate={saveTask} onDelete={deleteTask} onClose={() => setSelectedTask(null)} />
+        )}
+      </AnimatePresence>
       {dayChooser && (
         <DayAddChooser date={dayChooser}
           onTask={() => { setAddingTaskDate(dayChooser); setDayChooser(null); }}

@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
+import { AnimatePresence } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMobile } from '../../hooks/useBreakpoint';
 import useAIStore, {
@@ -1152,27 +1153,30 @@ export default function AIAssistant() {
         alignItems: 'flex-end',
       }}
     >
-      {isOpen && (
-        <AIChatWindow
-          messages={messages}
-          isThinking={isThinking}
-          contextView={ctx.view}
-          onSend={handleSend}
-          onClose={() => setOpen(false)}
-          onClearHistory={handleClearHistory}
-          onShowRecentChats={handleShowRecentChats}
-          showRecentChats={showRecentChats}
-          recentSessions={recentSessions}
-          onSelectSession={handleSelectSession}
-          onDeleteSession={handleDeleteSession}
-          onCloseRecentChats={() => setShowRecentChats(false)}
-          uploadedFiles={uploadedFiles}
-          onAddFile={addUploadedFile}
-          onRemoveFile={removeUploadedFile}
-          sessionId={useAIStore.getState().currentSessionId}
-          isMobile={isMobile}
-        />
-      )}
+      <AnimatePresence>
+        {isOpen && (
+          <AIChatWindow
+            key="ai-chat-window"
+            messages={messages}
+            isThinking={isThinking}
+            contextView={ctx.view}
+            onSend={handleSend}
+            onClose={() => setOpen(false)}
+            onClearHistory={handleClearHistory}
+            onShowRecentChats={handleShowRecentChats}
+            showRecentChats={showRecentChats}
+            recentSessions={recentSessions}
+            onSelectSession={handleSelectSession}
+            onDeleteSession={handleDeleteSession}
+            onCloseRecentChats={() => setShowRecentChats(false)}
+            uploadedFiles={uploadedFiles}
+            onAddFile={addUploadedFile}
+            onRemoveFile={removeUploadedFile}
+            sessionId={useAIStore.getState().currentSessionId}
+            isMobile={isMobile}
+          />
+        )}
+      </AnimatePresence>
       {/* On mobile the open chat is a full-screen bottom sheet with its own
           close button — the floating bubble would just sit uselessly under it.
           Same story while a mobile full-screen dialog (e.g. the item detail
