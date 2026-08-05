@@ -644,11 +644,10 @@ export default function DashboardScreen() {
     else apiDeleteTask(id).catch(() => void refresh());
   }, [tasks, resolve, refresh]);
 
-  // Desktop: three equal-height columns that fill the viewport, so every box
-  // reads as full-height even with little content. Mobile: a simple stack.
-  const gridStyle: React.CSSProperties = isMobile
-    ? { display: 'flex', flexDirection: 'column', gap: 16 }
-    : { display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1.3fr) minmax(0, 0.95fr)', gridTemplateRows: 'minmax(0, 1fr)', gap: 16, alignItems: 'stretch', flex: 1, minHeight: 0 };
+  // Desktop only — three equal-height columns that fill the viewport, so every
+  // box reads as full-height even with little content. Mobile renders its own
+  // simplified, reordered stack below instead of reusing this grid.
+  const gridStyle: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1.3fr) minmax(0, 0.95fr)', gridTemplateRows: 'minmax(0, 1fr)', gap: 16, alignItems: 'stretch', flex: 1, minHeight: 0 };
 
   const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
@@ -656,49 +655,77 @@ export default function DashboardScreen() {
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
       <div style={{ maxWidth: 1440, margin: '0 auto', padding: isMobile ? '20px 16px 90px' : '28px 28px 48px', display: 'flex', flexDirection: 'column', gap: 20, width: '100%', minHeight: '100%', height: isMobile ? undefined : '100%', boxSizing: 'border-box' }}>
 
-        <header style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-accent-purple-light)', marginBottom: 4 }}>{dateStr}</div>
-            <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 27, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.02em', lineHeight: 1.15 }}>Dashboard</h1>
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
-              {loading ? 'Gathering everything across your workspaces…'
-                : todayTasks.length > 0 ? <>You have <strong style={{ color: 'var(--color-primary)' }}>{todayTasks.length} task{todayTasks.length === 1 ? '' : 's'}</strong> on your plate today across {workspaces.length} workspace{workspaces.length === 1 ? '' : 's'}.</>
-                : <>Nothing due today. <strong style={{ color: 'var(--color-text-primary)' }}>{weekTasks.length}</strong> ahead in the next 7 days.</>}
+        {isMobile ? (
+          // Mobile: just the page name, centered under the TopBar — the date,
+          // the "tasks left" summary line, and the overdue pill are all
+          // desktop-only context that doesn't earn its space on a small screen.
+          <header style={{ textAlign: 'center' }}>
+            <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.02em' }}>Dashboard</h1>
+          </header>
+        ) : (
+          <header style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-accent-purple-light)', marginBottom: 4 }}>{dateStr}</div>
+              <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 27, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.02em', lineHeight: 1.15 }}>Dashboard</h1>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
+                {loading ? 'Gathering everything across your workspaces…'
+                  : todayTasks.length > 0 ? <>You have <strong style={{ color: 'var(--color-primary)' }}>{todayTasks.length} task{todayTasks.length === 1 ? '' : 's'}</strong> on your plate today across {workspaces.length} workspace{workspaces.length === 1 ? '' : 's'}.</>
+                  : <>Nothing due today. <strong style={{ color: 'var(--color-text-primary)' }}>{weekTasks.length}</strong> ahead in the next 7 days.</>}
+              </div>
             </div>
-          </div>
-          {overdueCount > 0 && (
-            <div style={{ background: 'var(--color-error-bg-alt)', border: '1px solid var(--color-error-bg)', borderRadius: 9999, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Icon name="warning" size={14} color="var(--color-error)" />
-              <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)' }}>{overdueCount} overdue</span>
-            </div>
-          )}
-        </header>
+            {overdueCount > 0 && (
+              <div style={{ background: 'var(--color-error-bg-alt)', border: '1px solid var(--color-error-bg)', borderRadius: 9999, padding: '6px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon name="warning" size={14} color="var(--color-error)" />
+                <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)' }}>{overdueCount} overdue</span>
+              </div>
+            )}
+          </header>
+        )}
 
-        <div style={gridStyle}>
-          {/* Left — My Tasks */}
-          <MyTasksBox todayTasks={todayTasks} weekTasks={weekTasks} resolve={resolve} wsById={wsById} todayIso={todayIso}
-            onToggle={toggle} onOpen={setSelectedTask} onSeeAll={() => setShowAll(true)} />
-
-          {/* Middle — charts + dynamic timeline */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+        {isMobile ? (
+          // Mobile: charts first, then My Tasks — Notifications/Meetings and
+          // the Net mini-map are desktop-only (see RightColumn/GraphMiniMap).
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-              <div style={{ ...CARD, ...enterAnim(100), flex: '1 1 220px', minWidth: 0, padding: '16px 16px' }}>
+              <div style={{ ...CARD, ...enterAnim(40), flex: '1 1 45%', minWidth: 0, padding: '16px 16px' }}>
                 <DonutChart title="All tasks" subtitle={`${allCounts.total} total`} completed={allCounts.completed} open={allCounts.open} />
               </div>
-              <div style={{ ...CARD, ...enterAnim(140), flex: '1 1 220px', minWidth: 0, padding: '16px 16px' }}>
+              <div style={{ ...CARD, ...enterAnim(80), flex: '1 1 45%', minWidth: 0, padding: '16px 16px' }}>
                 <DonutChart title="Next 7 days" subtitle={`${weekCounts.total} due`} completed={weekCounts.completed} open={weekCounts.open} />
               </div>
             </div>
+            <MyTasksBox todayTasks={todayTasks} weekTasks={weekTasks} resolve={resolve} wsById={wsById} todayIso={todayIso}
+              onToggle={toggle} onOpen={setSelectedTask} onSeeAll={() => setShowAll(true)} />
             <DynamicBox mode={dynamicMode} setMode={setDynamicMode} milestoneItems={milestoneItems} taskItems={taskItems} />
-          </div>
-
-          {/* Right — notifications + meetings; "See all" deep-links to a meetings-only Calendar */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, minHeight: 0, overflowY: 'auto' }}>
-            <RightColumn meetings={meetings} currentUserId={currentUserId} onSeeCalendar={() => navigate('/calendar?show=meetings')} />
             {activeWorkspaceId && <AgentInbox workspaceId={activeWorkspaceId} />}
-            {activeWorkspaceId && <GraphMiniMap workspaceId={activeWorkspaceId} />}
           </div>
-        </div>
+        ) : (
+          <div style={gridStyle}>
+            {/* Left — My Tasks */}
+            <MyTasksBox todayTasks={todayTasks} weekTasks={weekTasks} resolve={resolve} wsById={wsById} todayIso={todayIso}
+              onToggle={toggle} onOpen={setSelectedTask} onSeeAll={() => setShowAll(true)} />
+
+            {/* Middle — charts + dynamic timeline */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ ...CARD, ...enterAnim(100), flex: '1 1 220px', minWidth: 0, padding: '16px 16px' }}>
+                  <DonutChart title="All tasks" subtitle={`${allCounts.total} total`} completed={allCounts.completed} open={allCounts.open} />
+                </div>
+                <div style={{ ...CARD, ...enterAnim(140), flex: '1 1 220px', minWidth: 0, padding: '16px 16px' }}>
+                  <DonutChart title="Next 7 days" subtitle={`${weekCounts.total} due`} completed={weekCounts.completed} open={weekCounts.open} />
+                </div>
+              </div>
+              <DynamicBox mode={dynamicMode} setMode={setDynamicMode} milestoneItems={milestoneItems} taskItems={taskItems} />
+            </div>
+
+            {/* Right — notifications + meetings; "See all" deep-links to a meetings-only Calendar */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, minHeight: 0, overflowY: 'auto' }}>
+              <RightColumn meetings={meetings} currentUserId={currentUserId} onSeeCalendar={() => navigate('/calendar?show=meetings')} />
+              {activeWorkspaceId && <AgentInbox workspaceId={activeWorkspaceId} />}
+              {activeWorkspaceId && <GraphMiniMap workspaceId={activeWorkspaceId} />}
+            </div>
+          </div>
+        )}
       </div>
 
       {showAll && (

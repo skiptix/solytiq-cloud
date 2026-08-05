@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "Solytiq Cloud",
+  "short_name": "Solytiq",
+  "description": "Task lists, timelines, file sharing, and an AI assistant — self-hosted.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fdf8ff",
+  "theme_color": "#5e4dbb",
+  "orientation": "any",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
