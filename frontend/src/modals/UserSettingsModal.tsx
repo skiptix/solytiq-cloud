@@ -400,26 +400,27 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
 
           {/* Tab bar */}
           <div style={{ padding: '16px 24px 0' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, background: 'var(--color-surface-tint)', borderRadius: 14, padding: 4, overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch', flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexWrap: isMobile ? 'nowrap' : 'wrap', gap: 4, background: 'var(--color-surface-tint)', borderRadius: 14, padding: 4, overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch', flexShrink: 0 }}>
               {TABS.map(tab => {
                 const active = activeTab === tab.id;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
+                    title={isMobile ? tab.label : undefined}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
+                      display: 'flex', alignItems: 'center', gap: isMobile ? 0 : 6,
                       fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600,
                       color: active ? 'var(--color-white)' : 'var(--color-primary)',
                       background: active ? 'var(--color-primary)' : 'transparent',
-                      border: 'none', borderRadius: 10, padding: '9px 16px', cursor: 'pointer',
-                      transition: 'all 150ms', flex: isMobile ? '0 0 auto' : '1 1 auto', justifyContent: 'center',
+                      border: 'none', borderRadius: 10, padding: isMobile ? '9px 14px' : '9px 16px', cursor: 'pointer',
+                      transition: 'all 150ms', flex: isMobile ? '1 1 0' : '1 1 auto', justifyContent: 'center',
                     }}
                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <Icon name={tab.icon} size={15} color={active ? 'var(--color-white)' : 'var(--color-primary)'} />
-                    <span style={{ whiteSpace: 'nowrap' }}>{tab.label}</span>
+                    <Icon name={tab.icon} size={isMobile ? 19 : 15} color={active ? 'var(--color-white)' : 'var(--color-primary)'} />
+                    {!isMobile && <span style={{ whiteSpace: 'nowrap' }}>{tab.label}</span>}
                   </button>
                 );
               })}
