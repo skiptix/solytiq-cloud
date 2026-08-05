@@ -1177,8 +1177,10 @@ export default function AIAssistant() {
           close button — the floating bubble would just sit uselessly under it.
           Same story while a mobile full-screen dialog (e.g. the item detail
           dialog) is open — the bubble's high z-index would otherwise float on
-          top of it, overlapping its content. */}
-      {!(isMobile && (isOpen || blockingDialogCount > 0)) && (
+          top of it, overlapping its content. The Calendar page is dense
+          enough on mobile (see CalendarScreen) that the bubble is dropped
+          there entirely rather than just repositioned. */}
+      {!(isMobile && (isOpen || blockingDialogCount > 0 || location.pathname.startsWith('/calendar'))) && (
         <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} size={isMobile ? 44 : 52} />
       )}
     </div>
