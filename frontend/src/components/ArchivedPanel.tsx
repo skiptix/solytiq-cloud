@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import type { List } from '../types';
 import { apiGetArchivedLists, apiUnarchiveList } from '../api/client';
 import Icon from './Icon';
+import { listItemVariants, crossFadeVariants, LAYOUT_TRANSITION } from '../utils/motionTokens';
 
 function friendlyTime(iso: string) {
   const d = new Date(iso);
@@ -73,36 +75,41 @@ export default function ArchivedPanel({ workspaceId }: ArchivedPanelProps) {
       </div>
 
       <div style={{ maxHeight: 420, overflowY: 'auto' }}>
-        {loading ? (
-          <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '40px 0', textAlign: 'center' }}>Loading…</div>
-        ) : filtered.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '40px 20px', color: 'var(--color-text-quaternary)' }}>
-            <Icon name="archive" size={32} color="var(--color-purple-tint-3)" />
-            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>
-              {lists.length === 0 ? 'No archived lists' : 'No matches'}
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {filtered.map((list) => (
-              <div key={list.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 10px', borderRadius: 10 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-surface-tint-3)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
-                <div style={{ width: 32, height: 32, borderRadius: 9, background: list.colorBg ?? 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>
-                  {list.emoji ?? '📋'}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</div>
-                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)' }}>Archived {list.archivedAt ? friendlyTime(list.archivedAt) : ''}</div>
-                </div>
-                <button onClick={() => handleUnarchive(list)} disabled={unarchivingId === list.id}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: unarchivingId === list.id ? 'default' : 'pointer', flexShrink: 0 }}>
-                  <Icon name="unarchive" size={13} color="var(--color-primary)" />
-                  {unarchivingId === list.id ? 'Unarchiving…' : 'Unarchive'}
-                </button>
+        <AnimatePresence mode="wait" initial={false}>
+          {loading ? (
+            <motion.div key="loading" variants={crossFadeVariants} initial="initial" animate="animate" exit="exit" style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '40px 0', textAlign: 'center' }}>Loading…</motion.div>
+          ) : filtered.length === 0 ? (
+            <motion.div key="empty" variants={crossFadeVariants} initial="initial" animate="animate" exit="exit" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '40px 20px', color: 'var(--color-text-quaternary)' }}>
+              <Icon name="archive" size={32} color="var(--color-purple-tint-3)" />
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>
+                {lists.length === 0 ? 'No archived lists' : 'No matches'}
               </div>
-            ))}
-          </div>
-        )}
+            </motion.div>
+          ) : (
+            <motion.div key="list" variants={crossFadeVariants} initial="initial" animate="animate" exit="exit" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <AnimatePresence initial={false}>
+                {filtered.map((list) => (
+                  <motion.div key={list.id} layout variants={listItemVariants} initial="initial" animate="animate" exit="exit" transition={LAYOUT_TRANSITION}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 10px', borderRadius: 10 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-surface-tint-3)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+                    <div style={{ width: 32, height: 32, borderRadius: 9, background: list.colorBg ?? 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 15 }}>
+                      {list.emoji ?? '📋'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)' }}>Archived {list.archivedAt ? friendlyTime(list.archivedAt) : ''}</div>
+                    </div>
+                    <button onClick={() => handleUnarchive(list)} disabled={unarchivingId === list.id}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: unarchivingId === list.id ? 'default' : 'pointer', flexShrink: 0 }}>
+                      <Icon name="unarchive" size={13} color="var(--color-primary)" />
+                      {unarchivingId === list.id ? 'Unarchiving…' : 'Unarchive'}
+                    </button>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

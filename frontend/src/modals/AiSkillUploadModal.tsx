@@ -1,8 +1,10 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import Icon from '../components/Icon';
 import useAiSkillsStore from '../store/useAiSkillsStore';
 import { apiUploadAiSkill, ApiError } from '../api/client';
+import { backdropVariants, modalVariants, crossFadeVariants } from '../utils/motionTokens';
 import type { AiSkill } from '../types';
 
 interface AiSkillUploadModalProps {
@@ -92,12 +94,20 @@ export default function AiSkillUploadModal({ onClose, onCreated }: AiSkillUpload
   };
 
   return createPortal(
-    <div
+    <motion.div
+      variants={backdropVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
       style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
       onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}
     >
-      <div
-        style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 480, maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <motion.div
+        variants={modalVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 480, maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 24px 0' }}>
@@ -137,8 +147,9 @@ export default function AiSkillUploadModal({ onClose, onCreated }: AiSkillUpload
             })}
           </div>
 
+          <AnimatePresence mode="wait" initial={false}>
           {mode === 'upload' ? (
-            <>
+            <motion.div key="upload" variants={crossFadeVariants} initial="initial" animate="animate" exit="exit">
               <div
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={handleDragOver}
@@ -178,9 +189,9 @@ export default function AiSkillUploadModal({ onClose, onCreated }: AiSkillUpload
                   <div style={{ width: `${progress}%`, height: '100%', background: 'var(--color-primary)', borderRadius: 99, transition: 'width 150ms' }} />
                 </div>
               )}
-            </>
+            </motion.div>
           ) : (
-            <>
+            <motion.div key="manual" variants={crossFadeVariants} initial="initial" animate="animate" exit="exit">
               <div style={fieldWrap}>
                 <div style={fieldLabel}>Name <span style={{ color: 'var(--color-error)' }}>*</span></div>
                 <input value={manualName} onChange={(e) => setManualName(e.target.value)} placeholder="e.g. Weekly Report Formatting" style={fi} />
@@ -198,8 +209,9 @@ export default function AiSkillUploadModal({ onClose, onCreated }: AiSkillUpload
                   style={{ ...fi, resize: 'vertical' as const, fontFamily: 'var(--font-mono, monospace)', fontSize: 13, lineHeight: 1.5, border: '1px solid var(--color-border)', borderRadius: 8, padding: 10 }}
                 />
               </div>
-            </>
+            </motion.div>
           )}
+          </AnimatePresence>
 
           {notice && (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 16, padding: '10px 14px', background: 'var(--color-yellow-tint-1)', borderRadius: 8 }}>
@@ -233,8 +245,8 @@ export default function AiSkillUploadModal({ onClose, onCreated }: AiSkillUpload
             )}
           </div>
         </div>
-      </div>
-    </div>,
+      </motion.div>
+    </motion.div>,
     document.body
   );
 }

@@ -12,6 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import type { KnowledgeEntry, MarkdownBlock, ResolvedLink } from '../../types';
 import Icon from '../Icon';
 import BlockEditor from '../markdown/BlockEditor';
@@ -20,6 +21,7 @@ import EntityChip from '../EntityChip';
 import { makeEmptyBlock } from '../../utils/markdownBlocks';
 import { ENTRY_TYPE_OPTIONS } from '../../utils/knowledgeEntryTypes';
 import { knowledgeEntryImageUrl, apiUploadKnowledgeEntryImage } from '../../api/client';
+import { panelVariantsRight, crossFadeVariants } from '../../utils/motionTokens';
 import type { MentionMember } from '../../utils/mention';
 
 const ORIGIN_LABEL: Record<string, string> = {
@@ -132,13 +134,17 @@ export default function EntryInspector({
   };
 
   return (
-    <aside style={{
+    <motion.aside
+      variants={panelVariantsRight}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      style={{
       position: 'absolute', top: 12, right: 12, bottom: 12,
       width: isMobile ? 'calc(100% - 24px)' : 400, maxWidth: 'calc(100% - 24px)',
       background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)',
       boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.16)', zIndex: 6,
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
-      animation: 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both',
     }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '14px 14px 10px', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
@@ -299,22 +305,24 @@ export default function EntryInspector({
       {/* Footer */}
       {canWrite && (
         <div style={{ padding: '10px 14px', borderTop: '1px solid var(--color-surface-tint-2)', display: 'flex', justifyContent: 'flex-end' }}>
-          {confirmDelete ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-              <span style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>Delete "{entry.term}"?</span>
-              <button onClick={() => setConfirmDelete(false)}
-                style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid var(--color-border-alt)', background: 'transparent', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={onDelete}
-                style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--color-error)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
-            </div>
-          ) : (
-            <button onClick={() => setConfirmDelete(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7, border: 'none', background: 'transparent', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 500, color: 'var(--color-error)', cursor: 'pointer' }}>
-              <Icon name="delete" size={14} color="var(--color-error)" /> Delete entry
-            </button>
-          )}
+          <AnimatePresence mode="wait" initial={false}>
+            {confirmDelete ? (
+              <motion.div key="confirm" variants={crossFadeVariants} initial="initial" animate="animate" exit="exit" style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                <span style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>Delete "{entry.term}"?</span>
+                <button onClick={() => setConfirmDelete(false)}
+                  style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid var(--color-border-alt)', background: 'transparent', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 500, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>Cancel</button>
+                <button onClick={onDelete}
+                  style={{ padding: '6px 12px', borderRadius: 7, border: 'none', background: 'var(--color-error)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+              </motion.div>
+            ) : (
+              <motion.button key="trigger" onClick={() => setConfirmDelete(true)} variants={crossFadeVariants} initial="initial" animate="animate" exit="exit"
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 7, border: 'none', background: 'transparent', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 500, color: 'var(--color-error)', cursor: 'pointer' }}>
+                <Icon name="delete" size={14} color="var(--color-error)" /> Delete entry
+              </motion.button>
+            )}
+          </AnimatePresence>
         </div>
       )}
-    </aside>
+    </motion.aside>
   );
 }

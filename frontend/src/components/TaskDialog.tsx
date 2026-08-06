@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import type { Task, TaskAttachment, SharedFile } from '../types';
 import Icon from './Icon';
 import { useMobile } from '../hooks/useBreakpoint';
@@ -10,6 +11,7 @@ import TaggedUsersRow from './TaggedUsersRow';
 import RelationsPanel from './graph/RelationsPanel';
 import AttachmentPreviewModal from './AttachmentPreview';
 import { isPreviewable } from '../utils/attachmentPreview';
+import { backdropVariants, modalVariants, sheetVariants } from '../utils/motionTokens';
 import { DeleteConfirmModal } from './TaskItem';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
@@ -96,17 +98,25 @@ export function useAttachmentDrop(onFiles: (files: File[]) => void, enabled = tr
 }
 
 export function AttachDropOverlay({ visible, subtitle }: { visible: boolean; subtitle: string }) {
-  if (!visible) return null;
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(var(--color-surface-tint-3-rgb), 0.94)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', animation: 'backdropIn 160ms ease both', padding: 24 }}>
-      <div style={{ border: '2px dashed var(--color-primary)', borderRadius: 16, background: 'var(--color-surface-tint)', padding: '30px 46px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.10)', maxWidth: '100%' }}>
-        <div style={{ width: 50, height: 50, borderRadius: 14, background: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Icon name="upload_file" size={26} color="var(--color-white)" />
-        </div>
-        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'center' }}>Drop files to attach</div>
-        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', textAlign: 'center' }}>{subtitle}</div>
-      </div>
-    </div>
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          variants={backdropVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(var(--color-surface-tint-3-rgb), 0.94)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', padding: 24 }}>
+          <div style={{ border: '2px dashed var(--color-primary)', borderRadius: 16, background: 'var(--color-surface-tint)', padding: '30px 46px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.10)', maxWidth: '100%' }}>
+            <div style={{ width: 50, height: 50, borderRadius: 14, background: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Icon name="upload_file" size={26} color="var(--color-white)" />
+            </div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'center' }}>Drop files to attach</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', textAlign: 'center' }}>{subtitle}</div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -127,11 +137,20 @@ export function FilePicker({ onSelect, onClose }: { onSelect: (file: SharedFile)
   );
 
   return (
-    <div
+    <motion.div
+      variants={backdropVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
       style={{ position: 'fixed', inset: 0, zIndex: 1500, background: 'rgba(var(--color-black-rgb), 0.32)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 480, maxHeight: '70vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(var(--color-black-rgb), 0.22)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+      <motion.div
+        variants={modalVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 480, maxHeight: '70vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(var(--color-black-rgb), 0.22)', overflow: 'hidden' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 18px 14px', borderBottom: '1px solid var(--color-purple-pale-23)', flexShrink: 0 }}>
           <Icon name="folder_open" size={18} color="var(--color-primary)" />
@@ -186,8 +205,8 @@ export function FilePicker({ onSelect, onClose }: { onSelect: (file: SharedFile)
             ))
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -509,8 +528,12 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
   // no matter how high its z-index is set.
   return createPortal(
     <>
-      <div
+      <motion.div
         ref={backdropRef}
+        variants={backdropVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
         onClick={e => { if (e.target === backdropRef.current) onClose(); }}
         style={{
           position: 'fixed', inset: 0, zIndex: 1200,
@@ -521,9 +544,13 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
           padding: isMobile ? 0 : '24px 20px',
         }}>
 
-        <div
+        <motion.div
           onClick={e => e.stopPropagation()}
           {...dropHandlers}
+          variants={isMobile ? sheetVariants : modalVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
           style={{
             background: 'var(--color-white)',
             borderRadius: isMobile ? '16px 16px 0 0' : 18,
@@ -543,7 +570,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
             flexDirection: isMobile ? 'column' : 'row',
             position: 'relative',
             boxShadow: '0 32px 80px rgba(var(--color-black-rgb), 0.22), 0 2px 8px rgba(var(--color-black-rgb), 0.08)',
-            animation: isMobile ? 'slideUp 280ms cubic-bezier(0.22,1,0.36,1) both' : 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both',
             transition: isMobile ? undefined : 'max-width 320ms cubic-bezier(0.4,0,0.2,1)',
           }}>
 
@@ -944,16 +970,19 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
               </div>
             </div>
           )}
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* File picker modal */}
-      {showFilePicker && (
-        <FilePicker
-          onSelect={handleLinkFile}
-          onClose={() => setShowFilePicker(false)}
-        />
-      )}
+      <AnimatePresence>
+        {showFilePicker && (
+          <FilePicker
+            key="file-picker"
+            onSelect={handleLinkFile}
+            onClose={() => setShowFilePicker(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Calendar portaled to <body> so position:fixed is relative to the
           viewport, not the transformed modal card — keeps it under the button. */}

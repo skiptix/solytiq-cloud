@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import Icon from '../components/Icon';
 import useAuthStore from '../store/useAuthStore';
 import useAccountsStore from '../store/useAccountsStore';
 import { apiLoginAdditional, api2FAVerifyAdditional } from '../api/client';
+import { backdropVariants, modalVariants, crossFadeVariants } from '../utils/motionTokens';
 import type { AuthUser } from '../types';
 
 interface AddAccountModalProps {
@@ -140,13 +142,21 @@ export default function AddAccountModal({ presetUsername, onClose, onAdded }: Ad
   };
 
   return createPortal(
-    <div
+    <motion.div
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 200ms ease both' }}
+      variants={backdropVariants}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
     >
-      <div
+      <motion.div
         onClick={(e) => e.stopPropagation()}
-        style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+        variants={modalVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 24px 0' }}>
@@ -172,45 +182,47 @@ export default function AddAccountModal({ presetUsername, onClose, onAdded }: Ad
 
         {/* Body */}
         <form onSubmit={step === 'otp' ? handleOtp : handleCreds} style={{ padding: '18px 24px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {step === 'creds' ? (
-            <>
-              <div>
-                <label style={labelStyle}>Username or email</label>
+          <AnimatePresence mode="wait" initial={false}>
+            {step === 'creds' ? (
+              <motion.div key="creds" variants={crossFadeVariants} initial="initial" animate="animate" exit="exit" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={labelStyle}>Username or email</label>
+                  <input
+                    ref={userInputRef}
+                    value={username}
+                    onChange={(e) => { setUsername(e.target.value); setError(''); }}
+                    readOnly={!!presetUsername}
+                    autoComplete="username"
+                    style={{ ...inputStyle, opacity: presetUsername ? 0.7 : 1, cursor: presetUsername ? 'default' : 'text' }}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Password</label>
+                  <input
+                    ref={pwInputRef}
+                    type="password"
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                    autoComplete="current-password"
+                    style={inputStyle}
+                  />
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div key="otp" variants={crossFadeVariants} initial="initial" animate="animate" exit="exit">
+                <label style={labelStyle}>Authentication code</label>
                 <input
-                  ref={userInputRef}
-                  value={username}
-                  onChange={(e) => { setUsername(e.target.value); setError(''); }}
-                  readOnly={!!presetUsername}
-                  autoComplete="username"
-                  style={{ ...inputStyle, opacity: presetUsername ? 0.7 : 1, cursor: presetUsername ? 'default' : 'text' }}
+                  ref={otpInputRef}
+                  value={code}
+                  onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="000000"
+                  style={{ ...inputStyle, letterSpacing: '0.4em', fontSize: 18, textAlign: 'center', fontFamily: 'var(--font-heading)', fontWeight: 700 }}
                 />
-              </div>
-              <div>
-                <label style={labelStyle}>Password</label>
-                <input
-                  ref={pwInputRef}
-                  type="password"
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                  autoComplete="current-password"
-                  style={inputStyle}
-                />
-              </div>
-            </>
-          ) : (
-            <div>
-              <label style={labelStyle}>Authentication code</label>
-              <input
-                ref={otpInputRef}
-                value={code}
-                onChange={(e) => { setCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder="000000"
-                style={{ ...inputStyle, letterSpacing: '0.4em', fontSize: 18, textAlign: 'center', fontFamily: 'var(--font-heading)', fontWeight: 700 }}
-              />
-            </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {error && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', background: 'var(--color-error-bg-alt)', borderRadius: 8, border: '1px solid var(--color-error-bg)' }}>
@@ -236,8 +248,8 @@ export default function AddAccountModal({ presetUsername, onClose, onAdded }: Ad
             </button>
           </div>
         </form>
-      </div>
-    </div>,
+      </motion.div>
+    </motion.div>,
     document.body
   );
 }

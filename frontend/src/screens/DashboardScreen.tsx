@@ -1,6 +1,7 @@
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { useMobile } from '../hooks/useBreakpoint';
 import type { Task, List, MarkdownList, Timeline, Meeting, Workspace, MilestoneStatus } from '../types';
@@ -732,9 +733,11 @@ export default function DashboardScreen() {
         <AllTasksDialog tasks={sortByDeadline(tasks)} resolve={resolve} wsById={wsById} todayIso={todayIso}
           onClose={() => setShowAll(false)} onToggle={toggle} onOpen={t => { setShowAll(false); setSelectedTask(t); }} />
       )}
-      {selectedTask && (
-        <TaskDialog task={selectedTask} onUpdate={updateTask} onDelete={deleteTask} onClose={() => setSelectedTask(null)} />
-      )}
+      <AnimatePresence>
+        {selectedTask && (
+          <TaskDialog key="task-dialog" task={selectedTask} onUpdate={updateTask} onDelete={deleteTask} onClose={() => setSelectedTask(null)} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import Icon from './Icon';
 import NotificationItem from './NotificationItem';
 import useNotificationsStore from '../store/useNotificationsStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import { notificationTarget } from '../utils/notifications';
+import { backdropVariants, panelVariantsRight } from '../utils/motionTokens';
 import type { AppNotification } from '../api/client';
 
 // ── TopBar notification bell + right slide-in panel ───────────────────────────
@@ -147,25 +149,36 @@ export default function NotificationBell({ isMobile, onNavigate }: NotificationB
       </div>
 
       {/* Slide-in panel */}
-      {panelOpen && createPortal(
-        <>
-          <div
+      {createPortal(
+        <AnimatePresence>
+          {panelOpen && (
+          <>
+          <motion.div
+            key="notif-backdrop"
             onClick={() => setPanelOpen(false)}
-            style={{ position: 'fixed', inset: 0, zIndex: 1190, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(3px)', animation: 'backdropIn 200ms ease both' }}
+            variants={backdropVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            style={{ position: 'fixed', inset: 0, zIndex: 1190, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(3px)' }}
           />
-          <aside
+          <motion.aside
+            key="notif-panel"
             ref={panelRef}
             role="dialog"
             aria-modal="true"
             aria-label="Notifications"
             onKeyDown={onPanelKeyDown}
+            variants={panelVariantsRight}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             style={{
               position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 1200,
               width: isMobile ? '100%' : 'clamp(360px, 34vw, 560px)',
               background: 'var(--color-white)',
               boxShadow: '-12px 0 48px rgba(var(--color-black-rgb), 0.16)',
               display: 'flex', flexDirection: 'column',
-              animation: 'aiPanelIn 300ms cubic-bezier(0.22,1,0.36,1) both',
             }}
           >
             {/* Header — padding-top adds the safe-area inset on mobile (same
@@ -248,8 +261,10 @@ export default function NotificationBell({ isMobile, onNavigate }: NotificationB
                 </div>
               )}
             </div>
-          </aside>
-        </>,
+          </motion.aside>
+          </>
+          )}
+        </AnimatePresence>,
         document.body
       )}
     </>

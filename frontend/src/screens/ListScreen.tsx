@@ -1,5 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { listItemVariants, LAYOUT_TRANSITION } from '../utils/motionTokens';
 import { useMobile } from '../hooks/useBreakpoint';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -22,13 +24,13 @@ import AutomationsButton from '../components/AutomationsButton';
 // live pull distance. Matches the app's existing circular-spinner language for
 // the "refreshing" state; a rotating arrow gives the "pull further" affordance
 // before that, the same way native pull-to-refresh does.
-function PullToRefreshIndicator({ pullDistance, threshold, refreshing }: { pullDistance: number; threshold: number; refreshing: boolean }) {
+function PullToRefreshIndicator({ pullDistance, threshold, refreshing, settling }: { pullDistance: number; threshold: number; refreshing: boolean; settling: boolean }) {
   const height = refreshing ? threshold : pullDistance;
-  if (height <= 0) return null;
+  if (height <= 0 && !settling) return null;
   const progress = Math.min(1, pullDistance / threshold);
   const pastThreshold = pullDistance >= threshold;
   return (
-    <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: refreshing ? 'height 200ms ease' : undefined }}>
+    <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: (refreshing || settling) ? 'height 200ms ease' : undefined }}>
       {refreshing ? (
         <div style={{ width: 22, height: 22, border: '2.5px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
       ) : (
@@ -57,7 +59,7 @@ export default function ListScreen() {
   const handleRefresh = useCallback(async () => {
     await loadFromApi(useWorkspaceStore.getState().currentWorkspaceId ?? undefined);
   }, [loadFromApi]);
-  const { containerRef: scrollRef, pullDistance, refreshing, threshold: pullThreshold } = usePullToRefresh({ onRefresh: handleRefresh, disabled: !isMobile });
+  const { containerRef: scrollRef, pullDistance, refreshing, settling: pullSettling, threshold: pullThreshold } = usePullToRefresh({ onRefresh: handleRefresh, disabled: !isMobile });
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [draggedId, setDraggedId] = useState<number | null>(null);
@@ -400,7 +402,7 @@ export default function ListScreen() {
 
   return (
     <div ref={scrollRef} style={{ flex: 1, height: '100%', overflowY: 'auto', overflowX: 'hidden' }}>
-      {isMobile && <PullToRefreshIndicator pullDistance={pullDistance} threshold={pullThreshold} refreshing={refreshing} />}
+      {isMobile && <PullToRefreshIndicator pullDistance={pullDistance} threshold={pullThreshold} refreshing={refreshing} settling={pullSettling} />}
       <div style={{ maxWidth: effectiveViewMode === 'list' ? 680 : 1400, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
 
         {/* View switcher (top-left) + Automations entry point (top-right) —
@@ -477,8 +479,10 @@ export default function ListScreen() {
           const isSectionReorderTarget = sectionDragOverId === section.id && sectionDragId !== null && sectionDragId !== section.id;
           const isBeingDraggedSection = sectionDragId === section.id;
           return (
-          <div
+          <motion.div
             key={section.id}
+            layout="position"
+            transition={LAYOUT_TRANSITION}
             style={{
               display: 'flex', flexDirection: 'column', gap: 8,
               opacity: isBeingDraggedSection ? 0.4 : 1,
@@ -591,31 +595,35 @@ export default function ListScreen() {
                 </div>
               ) : (
                 <div style={{ padding: '4px' }}>
+                  <AnimatePresence initial={false}>
                   {section.tasks.map(task => {
                     const enrichedTask = { ...task, _source: 'list' as const, _listId: listId, _listName: list.name };
                     return (
-                      <TaskItem key={task.id} task={enrichedTask}
-                        onToggle={toggle} onDelete={deleteTask}
-                        onUpdate={(id, upd) => updateListTask(listId!, id, upd)}
-                        onRowClick={t => setSelectedTask(t)}
-                        onDragStart={id => { setDraggedId(id); setDraggedSectionId(section.id); }}
-                        onDragOver={id => setDragOverId(id)}
-                        onDrop={id => handleDrop(section.id, id)}
-                        onDragEnd={clearDragState}
-                        isDragging={draggedId === task.id}
-                        isDragOver={dragOverId === task.id && draggedId !== task.id}
-                        hideListBadge
-                        availableLists={lists}
-                        currentListId={listId} />
+                      <motion.div key={task.id} layout="position" variants={listItemVariants} initial="initial" animate="animate" exit="exit" transition={LAYOUT_TRANSITION}>
+                        <TaskItem task={enrichedTask}
+                          onToggle={toggle} onDelete={deleteTask}
+                          onUpdate={(id, upd) => updateListTask(listId!, id, upd)}
+                          onRowClick={t => setSelectedTask(t)}
+                          onDragStart={id => { setDraggedId(id); setDraggedSectionId(section.id); }}
+                          onDragOver={id => setDragOverId(id)}
+                          onDrop={id => handleDrop(section.id, id)}
+                          onDragEnd={clearDragState}
+                          isDragging={draggedId === task.id}
+                          isDragOver={dragOverId === task.id && draggedId !== task.id}
+                          hideListBadge
+                          availableLists={lists}
+                          currentListId={listId} />
+                      </motion.div>
                     );
                   })}
+                  </AnimatePresence>
                 </div>
               )}
               <div data-quickadd-root style={{ borderTop: section.tasks.length > 0 ? '1px solid var(--color-surface-tint-2)' : 'none' }}>
                 <QuickAdd placeholder="Add new item… (type / for commands)" onAdd={data => handleAddTask(section.id, data)} availableLists={lists} currentListId={listId} />
               </div>
             </div>
-          </div>
+          </motion.div>
           );
         })}
 
@@ -667,8 +675,10 @@ export default function ListScreen() {
               const isSectionReorderTarget = sectionDragOverId === section.id && sectionDragId !== null && sectionDragId !== section.id;
               const isBeingDraggedSection = sectionDragId === section.id;
               return (
-                <div
+                <motion.div
                   key={section.id}
+                  layout="position"
+                  transition={LAYOUT_TRANSITION}
                   style={{
                     display: 'flex', flexDirection: 'column', gap: 8, width: 280, flexShrink: 0,
                     opacity: isBeingDraggedSection ? 0.4 : 1,
@@ -774,31 +784,35 @@ export default function ListScreen() {
                       </div>
                     ) : (
                       <div style={{ padding: '4px' }}>
+                        <AnimatePresence initial={false}>
                         {section.tasks.map(task => {
                           const enrichedTask = { ...task, _source: 'list' as const, _listId: listId, _listName: list.name };
                           return (
-                            <TaskItem key={task.id} task={enrichedTask}
-                              onToggle={toggle} onDelete={deleteTask}
-                              onUpdate={(id, upd) => updateListTask(listId!, id, upd)}
-                              onRowClick={t => setSelectedTask(t)}
-                              onDragStart={id => { setDraggedId(id); setDraggedSectionId(section.id); }}
-                              onDragOver={id => setDragOverId(id)}
-                              onDrop={id => handleDrop(section.id, id)}
-                              onDragEnd={clearDragState}
-                              isDragging={draggedId === task.id}
-                              isDragOver={dragOverId === task.id && draggedId !== task.id}
-                              hideListBadge
-                              availableLists={lists}
-                              currentListId={listId} />
+                            <motion.div key={task.id} layout="position" variants={listItemVariants} initial="initial" animate="animate" exit="exit" transition={LAYOUT_TRANSITION}>
+                              <TaskItem task={enrichedTask}
+                                onToggle={toggle} onDelete={deleteTask}
+                                onUpdate={(id, upd) => updateListTask(listId!, id, upd)}
+                                onRowClick={t => setSelectedTask(t)}
+                                onDragStart={id => { setDraggedId(id); setDraggedSectionId(section.id); }}
+                                onDragOver={id => setDragOverId(id)}
+                                onDrop={id => handleDrop(section.id, id)}
+                                onDragEnd={clearDragState}
+                                isDragging={draggedId === task.id}
+                                isDragOver={dragOverId === task.id && draggedId !== task.id}
+                                hideListBadge
+                                availableLists={lists}
+                                currentListId={listId} />
+                            </motion.div>
                           );
                         })}
+                        </AnimatePresence>
                       </div>
                     )}
                     <div data-quickadd-root style={{ borderTop: section.tasks.length > 0 ? '1px solid var(--color-surface-tint-2)' : 'none' }}>
                       <QuickAdd placeholder="Add task…" onAdd={data => handleAddTask(section.id, data)} availableLists={lists} currentListId={listId} />
                     </div>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
 
@@ -853,15 +867,18 @@ export default function ListScreen() {
         )}
       </div>
 
-      {selectedTask && (
-        <TaskDialog
-          task={selectedTask}
-          onUpdate={(id, upd) => updateListTask(listId!, id, upd)}
-          onDelete={deleteTask}
-          onClose={() => setSelectedTask(null)}
-          isPublic={list.isPublic}
-        />
-      )}
+      <AnimatePresence>
+        {selectedTask && (
+          <TaskDialog
+            key="task-dialog"
+            task={selectedTask}
+            onUpdate={(id, upd) => updateListTask(listId!, id, upd)}
+            onDelete={deleteTask}
+            onClose={() => setSelectedTask(null)}
+            isPublic={list.isPublic}
+          />
+        )}
+      </AnimatePresence>
 
     </div>
   );

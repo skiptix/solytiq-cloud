@@ -18,6 +18,8 @@
 
 import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { createPortal, flushSync } from 'react-dom';
+import { motion } from 'motion/react';
+import { LAYOUT_TRANSITION } from '../../utils/motionTokens';
 import type {
   MarkdownBlock, MarkdownBlockType, MarkdownTodoBlock, MarkdownImageBlock, MarkdownLinkBlock,
   MarkdownHeadingBlock, MarkdownDividerBlock,
@@ -661,7 +663,9 @@ export default function BlockEditor({
     const hovered = hoveredBlockId === block.id;
     const lineCenter = firstLineCenter(block);
     return (
-      <div key={block.id}
+      <motion.div key={block.id}
+        layout="position"
+        transition={LAYOUT_TRANSITION}
         onMouseEnter={() => setHoveredBlockId(block.id)}
         onMouseLeave={() => setHoveredBlockId(prev => prev === block.id ? null : prev)}
         onContextMenu={e => openContextMenu(block, e)}
@@ -801,7 +805,7 @@ export default function BlockEditor({
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
           <Icon name="close" size={13} color="var(--color-text-quaternary)" />
         </button>
-      </div>
+      </motion.div>
     );
   };
 
