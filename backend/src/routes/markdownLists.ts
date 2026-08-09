@@ -18,7 +18,9 @@ import type { MutationActor } from '../automationEngine';
 import { notifyNewMentions } from '../mentions';
 import { itemShareExists, isItemSharedWith, deleteItemShares } from '../itemShares';
 import { syncInlineLinksForBlocks } from '../graph/inlineLinks';
+import { consumeAssetTicket } from '../assetTickets';
 import { enqueueEmbedding } from '../knowledge/queue';
+import { MARKDOWN_IMAGE_MAX_BYTES } from '../uploadLimits';
 
 /** Flatten every text-bearing block into one string for @-mention diffing. */
 function collectBlockText(blocks: MarkdownBlockLike[]): string {
@@ -52,7 +54,7 @@ const imageStorage = multer.diskStorage({
 });
 const uploadImage = multer({
   storage: imageStorage,
-  limits: { fileSize: 15 * 1024 * 1024 },
+  limits: { fileSize: MARKDOWN_IMAGE_MAX_BYTES },
   fileFilter: (_req, file, cb) => cb(null, IMAGE_MIME_TYPES.has(file.mimetype)),
 });
 
@@ -843,25 +845,39 @@ router.post('/:id/images', authenticate, (req: Request, res: Response) => {
 });
 
 // GET /api/markdown-lists/:id/images/:imageId — inline auth-gated serve.
-// `<img>` tags can't set an Authorization header, so — matching the existing
-// SSE endpoint's convention (`/api/events?token=`) — this route additionally
-// accepts the JWT as a `?token=` query param.
+//
+// SECURITY (S4): `<img>` tags can't set an Authorization header, so this
+// route used to also accept the caller's full, long-lived (30-day) session
+// JWT as a `?token=` query param — a real secret sitting in the URL, and
+// therefore in browser history and this server's own access logs. It now
+// accepts a short-lived `?ticket=` instead (assetTickets.ts, minted via
+// POST /api/auth/asset-ticket, scoped to `mdimg:<listId>:<imageId>` — tied
+// to this EXACT image, not reusable for any other one). The Authorization
+// header path is unchanged for any non-browser caller that can set one.
 router.get('/:id/images/:imageId', async (req: Request, res: Response) => {
   try {
+    const { id, imageId } = req.params;
     const authHeader = req.headers.authorization;
     const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    const queryToken = typeof req.query.token === 'string' ? req.query.token : null;
-    const token = headerToken ?? queryToken;
-    if (!token) { res.status(401).json({ error: 'Missing token' }); return; }
+    const ticketParam = typeof req.query.ticket === 'string' ? req.query.ticket : null;
+
     let userId: string;
-    try {
-      ({ userId } = verifyToken(token));
-    } catch {
-      res.status(401).json({ error: 'Invalid or expired token' });
+    if (headerToken) {
+      try {
+        ({ userId } = verifyToken(headerToken));
+      } catch {
+        res.status(401).json({ error: 'Invalid or expired token' });
+        return;
+      }
+    } else if (ticketParam) {
+      const consumed = consumeAssetTicket(ticketParam, `mdimg:${id}`);
+      if (!consumed) { res.status(401).json({ error: 'Invalid or expired ticket' }); return; }
+      userId = consumed.userId;
+    } else {
+      res.status(401).json({ error: 'Missing credentials' });
       return;
     }
 
-    const { id, imageId } = req.params;
     const access = await query<{ user_id: string; is_public: boolean; workspace_id: string | null }>(
       `SELECT m.user_id, m.is_public, m.workspace_id FROM markdown_lists m WHERE m.id = $1`, [id]
     );

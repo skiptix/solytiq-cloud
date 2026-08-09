@@ -8,6 +8,9 @@ import { authenticate } from '../middleware';
 import { ensurePersonalWorkspace, wlog } from '../workspaceUtil';
 import { logSetupToken, clearSetupToken } from '../setupToken';
 import { getInstalledAppIds } from '../appsRegistry';
+import { validatePassword } from '../passwordPolicy';
+import { encryptTotpSecret, decryptTotpSecret } from '../totpCrypto';
+import { mintAssetTicket, isValidAssetTicketScope } from '../assetTickets';
 
 // ---------------------------------------------------------------------------
 // Admin password reset — in-memory, single active code, 15-min TTL
@@ -148,6 +151,14 @@ router.post('/register', async (req: Request, res: Response) => {
 
     if (!username || !email || !password) {
       res.status(400).json({ error: 'username, email and password are required' });
+      return;
+    }
+    // SECURITY (S3): this creates the FIRST (admin) account — a one-character
+    // password here was previously accepted outright. Same shared policy as
+    // every other password entry point (passwordPolicy.ts).
+    const pwCheck = validatePassword(password);
+    if (!pwCheck.ok) {
+      res.status(400).json({ error: pwCheck.error });
       return;
     }
 
@@ -539,14 +550,29 @@ router.get('/members/:id/avatar', authenticate, async (req: Request, res: Respon
 // ---------------------------------------------------------------------------
 
 // POST /api/auth/2fa/setup  — generate secret + QR code (does NOT enable yet)
+//
+// SECURITY (S3 step-up): requires the account's CURRENT PASSWORD, not just a
+// valid session. Before this check, any valid-but-stolen bearer token (e.g.
+// leaked via an XSS payload, or simply not yet revoked) could silently call
+// this endpoint and overwrite `totp_secret` — for an account with 2FA
+// already enabled, that locks the real owner out on their next login
+// (their authenticator app still holds the OLD secret) while the attacker,
+// who already saw the new secret in this response, controls the new one.
+// A fresh password re-entry is what a "stolen but not yet revoked session"
+// specifically cannot produce.
 router.post('/2fa/setup', authenticate, async (req: Request, res: Response) => {
   try {
-    const userRes = await query<UserRow>('SELECT username FROM users WHERE id = $1', [req.userId]);
+    const { currentPassword } = req.body as { currentPassword?: string };
+    if (!currentPassword) { res.status(400).json({ error: 'currentPassword is required' }); return; }
+
+    const userRes = await query<UserRow>('SELECT username, password_hash FROM users WHERE id = $1', [req.userId]);
     if (!userRes.rows[0]) { res.status(404).json({ error: 'User not found' }); return; }
+    const valid = await comparePassword(currentPassword, userRes.rows[0].password_hash);
+    if (!valid) { res.status(401).json({ error: 'Current password is incorrect' }); return; }
 
     const secret = authenticator.generateSecret();
     const otpauth = authenticator.keyuri(userRes.rows[0].username, 'Solytiq Cloud', secret);
-    await query('UPDATE users SET totp_secret = $1 WHERE id = $2', [secret, req.userId]);
+    await query('UPDATE users SET totp_secret = $1 WHERE id = $2', [encryptTotpSecret(secret), req.userId]);
     const qrCode = await QRCode.toDataURL(otpauth, { margin: 2, color: { dark: '#1c1b22', light: '#ffffff' } });
 
     res.json({ secret, qrCode });
@@ -569,7 +595,7 @@ router.post('/2fa/enable', authenticate, async (req: Request, res: Response) => 
     const user = userRes.rows[0];
     if (!user?.totp_secret) { res.status(400).json({ error: 'Run /2fa/setup first' }); return; }
 
-    if (!authenticator.verify({ token: code, secret: user.totp_secret })) {
+    if (!authenticator.verify({ token: code, secret: decryptTotpSecret(user.totp_secret) })) {
       res.status(400).json({ error: 'Invalid code — please try again' }); return;
     }
 
@@ -582,21 +608,28 @@ router.post('/2fa/enable', authenticate, async (req: Request, res: Response) => 
   }
 });
 
-// POST /api/auth/2fa/disable  — verify a code then remove 2FA
+// POST /api/auth/2fa/disable  — step-up (current password) + a valid code,
+// then remove 2FA. See the /2fa/setup comment above for why a stolen-but-
+// unrevoked session alone must not be enough to turn off an account's
+// second factor.
 router.post('/2fa/disable', authenticate, async (req: Request, res: Response) => {
   try {
-    const { code } = req.body as { code?: string };
+    const { code, currentPassword } = req.body as { code?: string; currentPassword?: string };
     if (!code) { res.status(400).json({ error: 'code is required' }); return; }
+    if (!currentPassword) { res.status(400).json({ error: 'currentPassword is required' }); return; }
 
-    const userRes = await query<{ totp_secret: string | null; totp_enabled: boolean }>(
-      'SELECT totp_secret, totp_enabled FROM users WHERE id = $1',
+    const userRes = await query<{ totp_secret: string | null; totp_enabled: boolean; password_hash: string }>(
+      'SELECT totp_secret, totp_enabled, password_hash FROM users WHERE id = $1',
       [req.userId]
     );
     const user = userRes.rows[0];
     if (!user?.totp_enabled) { res.status(400).json({ error: '2FA is not enabled' }); return; }
     if (!user.totp_secret) { res.status(400).json({ error: 'No 2FA secret found' }); return; }
 
-    if (!authenticator.verify({ token: code, secret: user.totp_secret })) {
+    const validPassword = await comparePassword(currentPassword, user.password_hash);
+    if (!validPassword) { res.status(401).json({ error: 'Current password is incorrect' }); return; }
+
+    if (!authenticator.verify({ token: code, secret: decryptTotpSecret(user.totp_secret) })) {
       res.status(400).json({ error: 'Invalid code — please try again' }); return;
     }
 
@@ -638,7 +671,7 @@ router.post('/2fa/verify', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'Invalid session' }); return;
     }
 
-    if (!authenticator.verify({ token: code, secret: user.totp_secret })) {
+    if (!authenticator.verify({ token: code, secret: decryptTotpSecret(user.totp_secret) })) {
       res.status(401).json({ error: 'Invalid code — please try again' }); return;
     }
 
@@ -664,9 +697,8 @@ router.put('/password', authenticate, async (req: Request, res: Response) => {
     if (!currentPassword || !newPassword) {
       res.status(400).json({ error: 'currentPassword and newPassword are required' }); return;
     }
-    if (newPassword.length < 8) {
-      res.status(400).json({ error: 'New password must be at least 8 characters' }); return;
-    }
+    const pwCheck = validatePassword(newPassword);
+    if (!pwCheck.ok) { res.status(400).json({ error: pwCheck.error }); return; }
     const userRes = await query<UserRow>('SELECT * FROM users WHERE id = $1', [req.userId]);
     const user = userRes.rows[0];
     if (!user) { res.status(404).json({ error: 'User not found' }); return; }
@@ -740,10 +772,8 @@ router.post('/admin-password-reset/confirm', async (req: Request, res: Response)
       res.status(400).json({ error: 'code and newPassword are required' });
       return;
     }
-    if (newPassword.length < 8) {
-      res.status(400).json({ error: 'Password must be at least 8 characters' });
-      return;
-    }
+    const pwCheck = validatePassword(newPassword);
+    if (!pwCheck.ok) { res.status(400).json({ error: pwCheck.error }); return; }
 
     if (!activeReset) {
       res.status(400).json({ error: 'No reset code is active — request one first' });
@@ -913,6 +943,26 @@ router.delete('/homescreen-connections/:id', authenticate, async (req: Request, 
     res.json({ success: true });
   } catch (err) {
     console.error('homescreen-connections DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/auth/asset-ticket — mint a short-lived, narrowly-scoped ticket
+// (assetTickets.ts) for the SSE stream or an inline image `<img>` tag,
+// neither of which can attach an Authorization header. Requires the caller
+// to already be authenticated the normal way; the minted ticket itself
+// carries no ability to call anything else and expires in minutes.
+router.post('/asset-ticket', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { scope } = req.body as { scope?: string };
+    if (!scope || !isValidAssetTicketScope(scope)) {
+      res.status(400).json({ error: 'Invalid or missing scope' });
+      return;
+    }
+    const { ticket, expiresAt } = mintAssetTicket(req.userId!, scope);
+    res.json({ ticket, expiresAt });
+  } catch (err) {
+    console.error('asset-ticket error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

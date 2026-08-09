@@ -7,6 +7,9 @@ import { query } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
 import { UPLOAD_DIR } from './files';
+import { objectAccessCondition, workspaceMembersJoin } from '../objectPolicy';
+import { withQuotaReservation } from '../storageQuota';
+import { TASK_ATTACHMENT_MAX_BYTES } from '../uploadLimits';
 
 const storage = multer.diskStorage({
   destination: UPLOAD_DIR,
@@ -15,7 +18,7 @@ const storage = multer.diskStorage({
     cb(null, `ta_${crypto.randomUUID()}${ext}`);
   },
 });
-const upload = multer({ storage, limits: { fileSize: 200 * 1024 * 1024 } });
+const upload = multer({ storage, limits: { fileSize: TASK_ATTACHMENT_MAX_BYTES } });
 
 const router = Router({ mergeParams: true });
 router.use(authenticate);
@@ -54,16 +57,20 @@ async function ownsTask(taskId: string, userId: string): Promise<boolean> {
   return r.rows.length > 0;
 }
 
-// Broader access check: owner OR task is in a list this user can see (workspace-
-// public, owned, or invited to via item_shares).
-async function canAccessTask(taskId: string, userId: string): Promise<boolean> {
+// Broader access check: owner OR task is in a list this user can see — the
+// SAME central policy (objectPolicy.ts) that gates the list itself. A bare
+// `l.is_public = true` (the pre-fix version of this check) grants access
+// without verifying workspace membership, leaking every attachment on every
+// task in every public list across the WHOLE instance — see S2 in CLAUDE.md's
+// security notes and objectPolicy.test.ts's cross-tenant regression coverage.
+export async function canAccessTask(taskId: string, userId: string): Promise<boolean> {
   const r = await query<{ id: string }>(
     `SELECT t.id FROM tasks t
      LEFT JOIN lists l ON t.list_id = l.id
+     ${workspaceMembersJoin('l', '$2')}
      WHERE t.id = $1
        AND (t.user_id = $2
-            OR (t.source = 'list' AND (l.is_public = true OR l.user_id = $2
-                 OR EXISTS (SELECT 1 FROM item_shares s WHERE s.item_type = 'list' AND s.item_id = l.id AND s.user_id = $2))))`,
+            OR (t.source = 'list' AND ${objectAccessCondition('l', 'list', '$2')}))`,
     [taskId, userId]
   );
   return r.rows.length > 0;
@@ -110,14 +117,25 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
     }
     if (!req.file) { res.status(400).json({ error: 'No file provided' }); return; }
 
+    // SECURITY (S6): this endpoint previously had NO storage-quota check at
+    // all — a user could attach unlimited 200MB files to tasks, completely
+    // bypassing the 15GB-per-user cap the Files screen enforces. Reused the
+    // same race-safe reservation (storageQuota.ts) that guards files.ts.
     const id = crypto.randomUUID();
-    const result = await query<AttachmentRow>(
-      `INSERT INTO task_attachments
-         (id, task_id, user_id, attachment_type, original_name, mime_type, file_size, file_path)
-       VALUES ($1,$2,$3,'upload',$4,$5,$6,$7) RETURNING *`,
-      [id, taskId, req.userId, req.file.originalname, req.file.mimetype, req.file.size, req.file.filename]
+    const reservation = await withQuotaReservation(req.userId!, req.file.size, req.user?.isAdmin ?? false, (client) =>
+      client.query<AttachmentRow>(
+        `INSERT INTO task_attachments
+           (id, task_id, user_id, attachment_type, original_name, mime_type, file_size, file_path)
+         VALUES ($1,$2,$3,'upload',$4,$5,$6,$7) RETURNING *`,
+        [id, taskId, req.userId, req.file!.originalname, req.file!.mimetype, req.file!.size, req.file!.filename]
+      )
     );
-    res.status(201).json({ attachment: sanitize(result.rows[0]) });
+    if (!reservation.ok) {
+      fs.unlinkSync(path.join(UPLOAD_DIR, req.file.filename));
+      res.status(413).json({ error: 'Storage quota exceeded. Please delete some files to free up space.' });
+      return;
+    }
+    res.status(201).json({ attachment: sanitize(reservation.result.rows[0]) });
     broadcastToUser(req.userId!, 'tasks');
   } catch (err) {
     if (req.file) {
@@ -197,6 +215,11 @@ router.delete('/:attachmentId', async (req: Request, res: Response) => {
 router.get('/:attachmentId/download', async (req: Request, res: Response) => {
   try {
     const { taskId, attachmentId } = req.params;
+    // `canAccessTask` gates on the task's own (now-fixed) central object
+    // policy; the inner query's attachment_type condition is a SEPARATE,
+    // intentionally-unrelated restriction (shared_files.is_public governs
+    // that file's own independent share-link privacy, not workspace
+    // membership) — unchanged here, only the outer task-access check was leaky.
     if (!await canAccessTask(taskId, req.userId!)) {
       res.status(404).json({ error: 'Task not found' }); return;
     }

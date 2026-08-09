@@ -6,6 +6,7 @@ import MarkdownTable from '../components/MarkdownTable';
 import { renderInline } from '../components/MarkdownView';
 import { useMobile } from '../hooks/useBreakpoint';
 import type { MarkdownTableBlock } from '../types';
+import { verifySharePassword, ShareSessionError } from '../utils/shareSession';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -64,12 +65,16 @@ export default function SharedMarkdownListPage() {
   const [password, setPassword] = useState('');
   const [pwError, setPwError] = useState(false);
   const [loadingContent, setLoadingContent] = useState(false);
+  // S4: the short-lived session ticket obtained by verifying the password
+  // (utils/shareSession.ts) — passed to SharedBlockView so its <img> tags
+  // never carry the plaintext password.
+  const [sessionTicket, setSessionTicket] = useState<string | undefined>(undefined);
 
-  const fetchContent = useCallback(async (pw: string | undefined) => {
+  const fetchContent = useCallback(async (sessionParam: string | undefined) => {
     setLoadingContent(true);
     setPwError(false);
     try {
-      const url = `${BASE_URL}/share/markdown-list/${token}/content${pw ? `?password=${encodeURIComponent(pw)}` : ''}`;
+      const url = `${BASE_URL}/share/markdown-list/${token}/content${sessionParam ? `?session=${encodeURIComponent(sessionParam)}` : ''}`;
       const res = await fetch(url);
       if (res.status === 401) { setPwError(true); setState('password'); return; }
       if (res.status === 410) { setState('expired'); return; }
@@ -85,11 +90,28 @@ export default function SharedMarkdownListPage() {
     }
   }, [token]);
 
+  const submitPassword = useCallback(async (pw: string) => {
+    if (!token || !pw) return;
+    setLoadingContent(true);
+    setPwError(false);
+    try {
+      const session = await verifySharePassword('markdownList', token, pw);
+      setSessionTicket(session);
+      await fetchContent(session);
+    } catch (err) {
+      if (err instanceof ShareSessionError && err.status === 401) { setPwError(true); setState('password'); }
+      else setState('error');
+    } finally {
+      setLoadingContent(false);
+    }
+  }, [token, fetchContent]);
+
   useEffect(() => {
     if (!token) { setState('notfound'); return; }
     setState('loading');
     setContent(null);
     setPassword('');
+    setSessionTicket(undefined);
     setPwError(false);
     fetch(`${BASE_URL}/share/markdown-list/${token}`)
       .then(async res => {
@@ -156,7 +178,7 @@ export default function SharedMarkdownListPage() {
             {[sectionBlocks, nextSection].map((sideBlocks, colIdx) => (
               <div key={colIdx} style={{ minWidth: 0, border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {sideBlocks.map(block => (
-                  <SharedBlockView key={block.id} block={block} accent={accent} number={numberByBlockId[block.id]} token={token} password={password} />
+                  <SharedBlockView key={block.id} block={block} accent={accent} number={numberByBlockId[block.id]} token={token} session={sessionTicket} />
                 ))}
               </div>
             ))}
@@ -169,12 +191,12 @@ export default function SharedMarkdownListPage() {
         rows.push(
           <div key={`section-${i}`} style={{ border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
             {sectionBlocks.map(block => (
-              <SharedBlockView key={block.id} block={block} accent={accent} number={numberByBlockId[block.id]} token={token} password={password} />
+              <SharedBlockView key={block.id} block={block} accent={accent} number={numberByBlockId[block.id]} token={token} session={sessionTicket} />
             ))}
           </div>
         );
       }
-      if (divider) rows.push(<SharedBlockView key={divider.id} block={divider} accent={accent} token={token} password={password} />);
+      if (divider) rows.push(<SharedBlockView key={divider.id} block={divider} accent={accent} token={token} session={sessionTicket} />);
       i += 1;
     }
   }
@@ -244,7 +266,7 @@ export default function SharedMarkdownListPage() {
                 type="password"
                 value={password}
                 onChange={e => { setPassword(e.target.value); setPwError(false); }}
-                onKeyDown={e => { if (e.key === 'Enter') fetchContent(password); }}
+                onKeyDown={e => { if (e.key === 'Enter') void submitPassword(password); }}
                 placeholder="Enter password to view"
                 style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'var(--color-surface-gray)', border: `1.5px solid ${pwError ? 'var(--color-error)' : 'var(--color-border-alt)'}`, borderRadius: 10, padding: '11px 14px', outline: 'none', boxSizing: 'border-box' }}
                 autoFocus
@@ -252,7 +274,7 @@ export default function SharedMarkdownListPage() {
               {pwError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: 5 }}>Incorrect password, please try again.</div>}
             </div>
             <button
-              onClick={() => fetchContent(password)}
+              onClick={() => void submitPassword(password)}
               disabled={loadingContent || !password}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-white)', background: loadingContent || !password ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', border: 'none', borderRadius: 12, padding: '13px', cursor: loadingContent || !password ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}>
               {loadingContent ? <div style={{ width: 16, height: 16, border: '2px solid rgba(var(--color-white-rgb), 0.4)', borderTopColor: 'var(--color-white)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> : <Icon name="visibility" size={18} color="var(--color-white)" />}
@@ -301,7 +323,7 @@ export default function SharedMarkdownListPage() {
 // outline (see MarkdownListScreen.tsx), split wherever a `/divider` block
 // appears, and this component just renders the block's own content with no
 // interactivity beyond the outbound link.
-function SharedBlockView({ block, accent, number, token, password }: { block: SharedBlock; accent: string; number?: number; token?: string; password: string }) {
+function SharedBlockView({ block, accent, number, token, session }: { block: SharedBlock; accent: string; number?: number; token?: string; session: string | undefined }) {
   const cardStyle: React.CSSProperties = {
     borderRadius: block.type === 'image' ? 8 : 0,
     padding: block.type === 'divider' ? '4px 14px' : block.type === 'image' ? 8 : '6px 4px',
@@ -314,7 +336,7 @@ function SharedBlockView({ block, accent, number, token, password }: { block: Sh
   if (block.type === 'image') {
     return (
       <div style={cardStyle}>
-        <img src={`${BASE_URL}/share/markdown-list/${token}/images/${block.imageId}${password ? `?password=${encodeURIComponent(password)}` : ''}`} alt={block.caption ?? ''} style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }} />
+        <img src={`${BASE_URL}/share/markdown-list/${token}/images/${block.imageId}${session ? `?session=${encodeURIComponent(session)}` : ''}`} alt={block.caption ?? ''} style={{ maxWidth: '100%', borderRadius: 8, display: 'block' }} />
         {block.caption && <div style={{ marginTop: 6, padding: '0 4px 4px', fontFamily: 'var(--font-body)', fontSize: 12.5, fontStyle: 'italic', color: 'var(--color-text-tertiary)' }}>{block.caption}</div>}
       </div>
     );

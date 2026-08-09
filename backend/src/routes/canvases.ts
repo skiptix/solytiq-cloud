@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { query } from '../db';
 import { authenticate } from '../middleware';
 import { userCanAccessWorkspace, werr } from '../workspaceUtil';
+import { isObjectVisible } from '../objectPolicy';
 
 const router = Router();
 router.use(authenticate);
@@ -49,7 +50,19 @@ router.get('/:id', async (req: Request, res: Response) => {
     const r = await query<CanvasRow>(`SELECT * FROM graph_canvases WHERE id = $1`, [req.params.id]);
     const row = r.rows[0];
     if (!row) { res.status(404).json({ error: 'Canvas not found' }); return; }
-    if (!row.is_public && row.user_id !== userId && !(await userCanAccessWorkspace(userId, row.workspace_id))) {
+    // SECURITY (S2): workspace access is a NECESSARY precondition, not an
+    // alternative to `is_public` — the pre-fix version of this check let
+    // `is_public` alone short-circuit it, so ANY signed-in user (not just
+    // members of the canvas's own workspace) could fetch a "public" canvas
+    // straight out of someone else's private workspace by id. `is_public`
+    // only decides visibility WITHIN an already-accessible workspace
+    // (creator-only vs. shared to every member), exactly like GET / already
+    // enforces via its `workspaceId` param. Shares `isObjectVisible` with the
+    // list/timeline policy (objectPolicy.ts) — a canvas's `workspace_id` is
+    // NOT NULL, so that helper's null-workspace branch never applies here,
+    // but item_shares doesn't apply to canvases either, hence `false`.
+    const canAccessWorkspace = await userCanAccessWorkspace(userId, row.workspace_id);
+    if (!isObjectVisible(row, userId, canAccessWorkspace, false)) {
       res.status(404).json({ error: 'Canvas not found' });
       return;
     }

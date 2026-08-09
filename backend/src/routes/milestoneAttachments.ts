@@ -7,6 +7,9 @@ import { query } from '../db';
 import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
 import { UPLOAD_DIR } from './files';
+import { objectAccessCondition, workspaceMembersJoin } from '../objectPolicy';
+import { withQuotaReservation } from '../storageQuota';
+import { MILESTONE_ATTACHMENT_MAX_BYTES } from '../uploadLimits';
 
 const storage = multer.diskStorage({
   destination: UPLOAD_DIR,
@@ -15,7 +18,7 @@ const storage = multer.diskStorage({
     cb(null, `ma_${crypto.randomUUID()}${ext}`);
   },
 });
-const upload = multer({ storage, limits: { fileSize: 200 * 1024 * 1024 } });
+const upload = multer({ storage, limits: { fileSize: MILESTONE_ATTACHMENT_MAX_BYTES } });
 
 const router = Router({ mergeParams: true });
 router.use(authenticate);
@@ -56,11 +59,18 @@ async function ownsMilestone(milestoneId: string, userId: string): Promise<boole
   return r.rows.length > 0;
 }
 
-// Broader access: owner OR the milestone's timeline is workspace-public.
-async function canAccessMilestone(milestoneId: string, userId: string): Promise<boolean> {
+// Broader access: owner OR the milestone's timeline is visible under the SAME
+// central policy (objectPolicy.ts) that gates the timeline itself. The
+// pre-fix version of this check (`t.is_public = true` alone, with no
+// workspace-membership or item_shares check at all) leaked every milestone
+// attachment on every public timeline across the WHOLE instance — see S2 in
+// CLAUDE.md's security notes and objectPolicy.test.ts's regression coverage.
+export async function canAccessMilestone(milestoneId: string, userId: string): Promise<boolean> {
   const r = await query<{ id: string }>(
-    `SELECT m.id FROM milestones m JOIN timelines t ON m.timeline_id = t.id
-     WHERE m.id = $1 AND (t.user_id = $2 OR t.is_public = true)`,
+    `SELECT m.id FROM milestones m
+     JOIN timelines t ON m.timeline_id = t.id
+     ${workspaceMembersJoin('t', '$2')}
+     WHERE m.id = $1 AND ${objectAccessCondition('t', 'timeline', '$2')}`,
     [milestoneId, userId]
   );
   return r.rows.length > 0;
@@ -107,14 +117,26 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
     }
     if (!req.file) { res.status(400).json({ error: 'No file provided' }); return; }
 
+    // SECURITY (S6): this endpoint previously had NO storage-quota check at
+    // all — a user could attach unlimited 200MB files to milestones,
+    // completely bypassing the 15GB-per-user cap the Files screen enforces.
+    // Reused the same race-safe reservation (storageQuota.ts) that guards
+    // files.ts / taskAttachments.ts.
     const id = crypto.randomUUID();
-    const result = await query<AttachmentRow>(
-      `INSERT INTO milestone_attachments
-         (id, milestone_id, user_id, attachment_type, original_name, mime_type, file_size, file_path)
-       VALUES ($1,$2,$3,'upload',$4,$5,$6,$7) RETURNING *`,
-      [id, milestoneId, req.userId, req.file.originalname, req.file.mimetype, req.file.size, req.file.filename]
+    const reservation = await withQuotaReservation(req.userId!, req.file.size, req.user?.isAdmin ?? false, (client) =>
+      client.query<AttachmentRow>(
+        `INSERT INTO milestone_attachments
+           (id, milestone_id, user_id, attachment_type, original_name, mime_type, file_size, file_path)
+         VALUES ($1,$2,$3,'upload',$4,$5,$6,$7) RETURNING *`,
+        [id, milestoneId, req.userId, req.file!.originalname, req.file!.mimetype, req.file!.size, req.file!.filename]
+      )
     );
-    res.status(201).json({ attachment: sanitize(result.rows[0]) });
+    if (!reservation.ok) {
+      fs.unlinkSync(path.join(UPLOAD_DIR, req.file.filename));
+      res.status(413).json({ error: 'Storage quota exceeded. Please delete some files to free up space.' });
+      return;
+    }
+    res.status(201).json({ attachment: sanitize(reservation.result.rows[0]) });
     broadcastToUser(req.userId!, 'timelines');
   } catch (err) {
     if (req.file) {

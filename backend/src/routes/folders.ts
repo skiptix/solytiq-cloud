@@ -169,16 +169,20 @@ router.put('/:id', async (req: Request, res: Response) => {
     const folder = existing.rows[0];
     const isOwner = folder.user_id === req.userId;
     const isAdmin = req.user?.isAdmin === true;
-    const canAccess = isOwner || isAdmin || folder.is_public === true;
-    const wantsPrivacyChange = typeof isPublic === 'boolean';
+    // WRITE access to a folder's own metadata (name/emoji/color/position/
+    // collapsed/privacy) requires ownership or admin, same as every other
+    // object's write endpoint in this codebase (see canvases.ts's PUT/DELETE,
+    // lists.ts's PUT/rename/etc.) — `is_public` is a READ-visibility grant to
+    // workspace members ONLY (see objectPolicy.ts's header comment and
+    // CLAUDE.md's "Two distinct notions of public"), never a write grant, and
+    // never a grant to every signed-in instance user regardless of workspace
+    // membership. The previous `|| folder.is_public === true` here let any
+    // authenticated user rename/recolor/move any public folder instance-wide,
+    // including one inside another user's private workspace.
+    const canAccess = isOwner || isAdmin;
 
     if (!canAccess) {
       res.status(404).json({ error: 'Folder not found' });
-      return;
-    }
-
-    if (wantsPrivacyChange && !isOwner && !isAdmin) {
-      res.status(403).json({ error: 'Only the owner or admin can change folder privacy' });
       return;
     }
 

@@ -8,6 +8,7 @@ import {
   fmtDate, SharedTaskRow, SharedKanbanView, SharedTaskTimelineView,
   type SharedTask, type SharedSection,
 } from '../components/SharedListViews';
+import { verifySharePassword, ShareSessionError } from '../utils/shareSession';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -48,11 +49,13 @@ export default function SharedListPage() {
   const [loadingContent, setLoadingContent] = useState(false);
   const [previewTask, setPreviewTask] = useState<SharedTask | null>(null);
 
-  const fetchContent = useCallback(async (pw: string | undefined) => {
+  // `sessionTicket` (S4) replaces the plaintext password on every content
+  // fetch after the initial verify — see utils/shareSession.ts.
+  const fetchContent = useCallback(async (sessionTicket: string | undefined) => {
     setLoadingContent(true);
     setPwError(false);
     try {
-      const url = `${BASE_URL}/share/list/${token}/content${pw ? `?password=${encodeURIComponent(pw)}` : ''}`;
+      const url = `${BASE_URL}/share/list/${token}/content${sessionTicket ? `?session=${encodeURIComponent(sessionTicket)}` : ''}`;
       const res = await fetch(url);
       if (res.status === 401) { setPwError(true); setState('password'); return; }
       if (res.status === 410) { setState('expired'); return; }
@@ -67,6 +70,21 @@ export default function SharedListPage() {
       setLoadingContent(false);
     }
   }, [token]);
+
+  const submitPassword = useCallback(async (pw: string) => {
+    if (!token || !pw) return;
+    setLoadingContent(true);
+    setPwError(false);
+    try {
+      const session = await verifySharePassword('list', token, pw);
+      await fetchContent(session);
+    } catch (err) {
+      if (err instanceof ShareSessionError && err.status === 401) { setPwError(true); setState('password'); }
+      else setState('error');
+    } finally {
+      setLoadingContent(false);
+    }
+  }, [token, fetchContent]);
 
   useEffect(() => {
     if (!token) { setState('notfound'); return; }
@@ -177,7 +195,7 @@ export default function SharedListPage() {
                 type="password"
                 value={password}
                 onChange={e => { setPassword(e.target.value); setPwError(false); }}
-                onKeyDown={e => { if (e.key === 'Enter') fetchContent(password); }}
+                onKeyDown={e => { if (e.key === 'Enter') void submitPassword(password); }}
                 placeholder="Enter password to view"
                 style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'var(--color-surface-gray)', border: `1.5px solid ${pwError ? 'var(--color-error)' : 'var(--color-border-alt)'}`, borderRadius: 10, padding: '11px 14px', outline: 'none', boxSizing: 'border-box' }}
                 autoFocus
@@ -185,7 +203,7 @@ export default function SharedListPage() {
               {pwError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: 5 }}>Incorrect password, please try again.</div>}
             </div>
             <button
-              onClick={() => fetchContent(password)}
+              onClick={() => void submitPassword(password)}
               disabled={loadingContent || !password}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-white)', background: loadingContent || !password ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', border: 'none', borderRadius: 12, padding: '13px', cursor: loadingContent || !password ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}>
               {loadingContent ? <div style={{ width: 16, height: 16, border: '2px solid rgba(var(--color-white-rgb), 0.4)', borderTopColor: 'var(--color-white)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> : <Icon name="visibility" size={18} color="var(--color-white)" />}

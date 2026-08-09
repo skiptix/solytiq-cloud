@@ -8,6 +8,8 @@ import { authenticate } from '../middleware';
 import { requireAppInstalled } from '../appsRegistry';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
+import { getUserQuota as getUserQuotaShared, withQuotaReservation } from '../storageQuota';
+import { FILE_UPLOAD_MAX_BYTES } from '../uploadLimits';
 
 export const UPLOAD_DIR = process.env.UPLOAD_DIR ?? '/app/uploads';
 
@@ -23,9 +25,10 @@ const storage = multer.diskStorage({
   },
 });
 
-// No per-file size limit — a single upload is bounded only by the uploading
-// user's remaining storage quota (checked below), not an arbitrary file cap.
-const upload = multer({ storage });
+// No per-file size limit by default — a single upload is bounded only by the
+// uploading user's remaining storage quota (checked below), not an arbitrary
+// file cap. See uploadLimits.ts — an operator can still set FILE_UPLOAD_MAX_BYTES.
+const upload = multer({ storage, limits: { fileSize: FILE_UPLOAD_MAX_BYTES } });
 
 const router = Router();
 
@@ -76,14 +79,12 @@ function sanitizeFile(f: FileRow, baseUrl: string) {
   };
 }
 
-const DEFAULT_QUOTA = 15 * 1024 * 1024 * 1024; // 15 GB
-
-async function getUserQuota(): Promise<number> {
-  const r = await query<{ value: string }>(
-    "SELECT value FROM app_settings WHERE key = 'storage_quota_per_user'"
-  );
-  return r.rows[0] ? parseInt(r.rows[0].value, 10) : DEFAULT_QUOTA;
-}
+// SECURITY (S6): quota reads/checks now live in storageQuota.ts, shared with
+// every other upload endpoint (taskAttachments.ts, milestoneAttachments.ts,
+// gps.ts) so the SAME race-safe reservation logic backs all of them, not a
+// second hand-rolled copy per file. getUserQuota is re-exported under its
+// original local name purely so GET /storage below didn't need to change.
+const getUserQuota = getUserQuotaShared;
 
 // ── Authenticated routes ──────────────────────────────────────────
 router.use(authenticate);
@@ -149,16 +150,6 @@ router.post('/bundle', upload.array('files', 50), async (req: Request, res: Resp
     const { isPublic, password, expiresAt, title } = req.body as { isPublic?: string; password?: string; expiresAt?: string; title?: string };
     const totalSize = uploaded.reduce((sum, file) => sum + file.size, 0);
     const isAdmin = (req as Request & { user?: { isAdmin: boolean } }).user?.isAdmin ?? false;
-    if (!isAdmin) {
-      const quota = await getUserQuota();
-      const usageRes = await query<{ used: string }>('SELECT COALESCE(SUM(file_size), 0) AS used FROM shared_files WHERE user_id = $1', [req.userId]);
-      const used = parseInt(usageRes.rows[0].used, 10);
-      if (used + totalSize > quota) {
-        uploaded.forEach(file => fs.unlinkSync(path.join(UPLOAD_DIR, file.filename)));
-        res.status(413).json({ error: 'Storage quota exceeded. Please delete some files to free up space.' });
-        return;
-      }
-    }
 
     const shareToken = crypto.randomBytes(24).toString('hex');
     const bundleId = crypto.randomUUID();
@@ -167,18 +158,32 @@ router.post('/bundle', upload.array('files', 50), async (req: Request, res: Resp
     const pub = isPublic === 'true';
     const expiry = expiresAt || null;
 
-    const rows: FileRow[] = [];
-    for (const file of uploaded) {
-      const result = await query<FileRow>(
-        `INSERT INTO shared_files
-           (id, user_id, original_name, title, mime_type, file_size, file_path, is_public, password_hash, expires_at, share_token, bundle_id, bundle_name)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-         RETURNING *`,
-        [crypto.randomUUID(), req.userId, file.originalname, title || null, file.mimetype, file.size, file.filename, pub, pwHash, expiry, shareToken, bundleId, bundleName]
-      );
-      rows.push({ ...result.rows[0], bundle_count: uploaded.length });
+    // SECURITY (S6): the quota check AND every one of these inserts run
+    // inside ONE advisory-locked transaction (withQuotaReservation) — see
+    // storageQuota.ts. This is what closes the check-then-act race a
+    // separate SELECT-then-INSERT pair had before.
+    const reservation = await withQuotaReservation(req.userId!, totalSize, isAdmin, async (client) => {
+      const inserted: FileRow[] = [];
+      for (const file of uploaded) {
+        const result = await client.query<FileRow>(
+          `INSERT INTO shared_files
+             (id, user_id, original_name, title, mime_type, file_size, file_path, is_public, password_hash, expires_at, share_token, bundle_id, bundle_name)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+           RETURNING *`,
+          [crypto.randomUUID(), req.userId, file.originalname, title || null, file.mimetype, file.size, file.filename, pub, pwHash, expiry, shareToken, bundleId, bundleName]
+        );
+        inserted.push({ ...result.rows[0], bundle_count: uploaded.length });
+      }
+      return inserted;
+    });
+
+    if (!reservation.ok) {
+      uploaded.forEach(file => fs.unlinkSync(path.join(UPLOAD_DIR, file.filename)));
+      res.status(413).json({ error: 'Storage quota exceeded. Please delete some files to free up space.' });
+      return;
     }
 
+    const rows = reservation.result;
     const base = getBaseUrl(req);
     res.status(201).json({ file: sanitizeFile(rows[0], base), files: rows.map(row => sanitizeFile(row, base)) });
     broadcastToUser(req.userId!, 'files');
@@ -207,21 +212,9 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
       title?: string;
     };
 
-    // Enforce per-user storage quota (admins are exempt)
+    // SECURITY (S6): quota check + insert are atomic together — see
+    // storageQuota.ts and the bundle route above for the full rationale.
     const isAdmin = (req as Request & { user?: { isAdmin: boolean } }).user?.isAdmin ?? false;
-    if (!isAdmin) {
-      const quota = await getUserQuota();
-      const usageRes = await query<{ used: string }>(
-        'SELECT COALESCE(SUM(file_size), 0) AS used FROM shared_files WHERE user_id = $1',
-        [req.userId]
-      );
-      const used = parseInt(usageRes.rows[0].used, 10);
-      if (used + req.file!.size > quota) {
-        fs.unlinkSync(path.join(UPLOAD_DIR, req.file!.filename));
-        res.status(413).json({ error: 'Storage quota exceeded. Please delete some files to free up space.' });
-        return;
-      }
-    }
 
     const id          = crypto.randomUUID();
     const shareToken  = crypto.randomBytes(24).toString('hex');
@@ -229,16 +222,24 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
     const pub         = isPublic === 'true';
     const expiry      = expiresAt || null;
 
-    const result = await query<FileRow>(
-      `INSERT INTO shared_files
-         (id, user_id, original_name, title, mime_type, file_size, file_path, is_public, password_hash, expires_at, share_token)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       RETURNING *`,
-      [id, req.userId, req.file.originalname, title ?? null, req.file.mimetype, req.file.size, req.file.filename, pub, pwHash, expiry, shareToken]
+    const reservation = await withQuotaReservation(req.userId!, req.file.size, isAdmin, (client) =>
+      client.query<FileRow>(
+        `INSERT INTO shared_files
+           (id, user_id, original_name, title, mime_type, file_size, file_path, is_public, password_hash, expires_at, share_token)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         RETURNING *`,
+        [id, req.userId, req.file!.originalname, title ?? null, req.file!.mimetype, req.file!.size, req.file!.filename, pub, pwHash, expiry, shareToken]
+      )
     );
 
+    if (!reservation.ok) {
+      fs.unlinkSync(path.join(UPLOAD_DIR, req.file.filename));
+      res.status(413).json({ error: 'Storage quota exceeded. Please delete some files to free up space.' });
+      return;
+    }
+
     const base = getBaseUrl(req);
-    res.status(201).json({ file: sanitizeFile(result.rows[0], base) });
+    res.status(201).json({ file: sanitizeFile(reservation.result.rows[0], base) });
     broadcastToUser(req.userId!, 'files');
   } catch (err) {
     if (req.file) {

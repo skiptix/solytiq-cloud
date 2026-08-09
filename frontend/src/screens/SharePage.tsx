@@ -2,6 +2,7 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import Icon from '../components/Icon';
+import { verifySharePassword, ShareSessionError } from '../utils/shareSession';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -101,6 +102,13 @@ export default function SharePage() {
   const [password, setPassword] = useState('');
   const [pwError, setPwError] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  // S4: the short-lived session ticket obtained by verifying the password
+  // (utils/shareSession.ts) — replaces `?password=` on every download/preview
+  // request after the first successful verify. Reset whenever `password`
+  // changes so a re-typed password re-verifies rather than reusing a stale
+  // (possibly now-invalid, e.g. after this share's password was rotated)
+  // ticket for a DIFFERENT password value.
+  const [sessionTicket, setSessionTicket] = useState<string | undefined>(undefined);
 
   const [previewKind, setPreviewKind] = useState<PreviewKind>('none');
   const [previewMediaUrl, setPreviewMediaUrl] = useState<string | null>(null);
@@ -143,12 +151,31 @@ export default function SharePage() {
     };
   }, []);
 
-  const downloadUrl = (pw?: string, fileId?: string) => {
+  const downloadUrl = (session?: string, fileId?: string) => {
     const url = `${BASE_URL}/share/${token}/download${fileId ? `/${fileId}` : ''}`;
-    return pw ? `${url}?password=${encodeURIComponent(pw)}` : url;
+    return session ? `${url}?session=${encodeURIComponent(session)}` : url;
   };
 
-  const triggerPreviewLoad = async (kind: PreviewKind, pw: string | undefined) => {
+  /** Resolve a usable session ticket for this share: the cached one if we
+   *  already verified successfully, otherwise verify `password` now (POST,
+   *  never a URL — see utils/shareSession.ts). Returns undefined (and sets
+   *  pwError) on a wrong password; undefined is also the correct "no
+   *  password needed" value for a share that isn't protected at all. */
+  const ensureSession = async (): Promise<string | undefined> => {
+    if (!info?.hasPassword) return undefined;
+    if (sessionTicket) return sessionTicket;
+    if (!token || !password) { setPwError(true); return undefined; }
+    try {
+      const session = await verifySharePassword('file', token, password);
+      setSessionTicket(session);
+      return session;
+    } catch (err) {
+      if (err instanceof ShareSessionError && err.status === 401) setPwError(true);
+      return undefined;
+    }
+  };
+
+  const triggerPreviewLoad = async (kind: PreviewKind, session: string | undefined) => {
     setPreviewLoading(true);
     setPreviewError(false);
     setPreviewVisible(false);
@@ -156,7 +183,7 @@ export default function SharePage() {
     setPreviewText(null);
     setPreviewFontFamily(null);
 
-    const url = downloadUrl(pw);
+    const url = downloadUrl(session);
 
     try {
       if (kind === 'text') {
@@ -195,19 +222,21 @@ export default function SharePage() {
 
   const handlePreview = async () => {
     if (!info) return;
-    if (info.hasPassword && !password) { setPwError(true); return; }
+    const session = await ensureSession();
+    if (info.hasPassword && !session) return; // ensureSession already set pwError
     const kind = getPreviewKind(info.mimeType);
     if (kind === 'none') return;
     setPreviewKind(kind);
-    await triggerPreviewLoad(kind, info.hasPassword ? password : undefined);
+    await triggerPreviewLoad(kind, session);
   };
 
   const handleDownload = async (file?: SharedBundleFile) => {
     if (!info) return;
-    if (info.hasPassword && !password) { setPwError(true); return; }
+    const session = await ensureSession();
+    if (info.hasPassword && !session) return; // ensureSession already set pwError
     setDownloading(true);
     try {
-      const url = downloadUrl(info.hasPassword ? password : undefined, file?.id);
+      const url = downloadUrl(session, file?.id);
       const res = await fetch(url);
       if (res.status === 401) {
         setPwError(true);
@@ -460,7 +489,7 @@ export default function SharePage() {
                 <input
                   type="password"
                   value={password}
-                  onChange={e => { setPassword(e.target.value); setPwError(false); }}
+                  onChange={e => { setPassword(e.target.value); setPwError(false); setSessionTicket(undefined); }}
                   onKeyDown={e => { if (e.key === 'Enter') handleDownload(); }}
                   placeholder="Enter password to access"
                   style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'var(--color-surface-gray)', border: `1.5px solid ${pwError ? 'var(--color-error)' : 'var(--color-border-alt)'}`, borderRadius: 10, padding: '11px 14px', outline: 'none', boxSizing: 'border-box' }}

@@ -6,7 +6,7 @@ import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
 import { collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
 import { notifyNewMentions } from '../mentions';
-import { itemShareExists } from '../itemShares';
+import { objectAccessCondition, workspaceMembersJoin } from '../objectPolicy';
 import { startAgentRun } from '../agent/runtime';
 import { runJson, type AgentRunRow } from './agent';
 
@@ -79,13 +79,21 @@ export async function buildTasksForUser(userId: string, workspaceId?: string) {
     : '';
   if (workspaceId) params.push(workspaceId);
 
+  // SECURITY (S2): a list-sourced task's visibility must mirror the SAME
+  // policy that gates the list itself (objectPolicy.ts) — `l.is_public = true`
+  // alone is NEVER sufficient; it only grants access to workspace members (or
+  // a legacy no-workspace list, or a list inside a public workspace). Checking
+  // bare `is_public` here would leak every list-task in every public list
+  // across the WHOLE instance to any signed-in user, regardless of workspace
+  // membership — see objectPolicy.test.ts's cross-tenant regression coverage.
   const result = await query<TaskRow>(
     `SELECT t.*,
             (SELECT COUNT(*) FROM task_attachments ta WHERE ta.task_id = t.id) AS attachment_count
      FROM tasks t
      LEFT JOIN lists l ON t.list_id = l.id
+     ${workspaceMembersJoin('l')}
      WHERE ((t.user_id = $1 AND t.source = 'dash')
-        OR (t.source = 'list' AND (l.user_id = $1 OR l.is_public = true OR ${itemShareExists('l', 'list')})))
+        OR (t.source = 'list' AND ${objectAccessCondition('l', 'list')}))
      ${wsClause}
      ORDER BY t.position ASC, t.created_at ASC`,
     params

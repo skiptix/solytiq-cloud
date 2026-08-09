@@ -12,7 +12,8 @@ import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestr
 import type { MutationActor } from '../automationEngine';
 import { recordTaskChanges } from '../taskChangeLog';
 import { notifyNewMentions } from '../mentions';
-import { itemShareExists, isItemSharedWith } from '../itemShares';
+import { isItemSharedWith } from '../itemShares';
+import { objectAccessCondition, workspaceMembersJoin } from '../objectPolicy';
 import { syncInlineLinksForText } from '../graph/inlineLinks';
 import { enqueueEmbedding } from '../knowledge/queue';
 
@@ -180,15 +181,8 @@ export async function buildListsForUser(userId: string, workspaceId?: string, in
     : '';
   if (workspaceId) params.push(workspaceId);
 
-  const accessCondition = `(
-    l.user_id = $1
-    OR (l.is_public = true AND (
-      wm.user_id = $1
-      OR l.workspace_id IS NULL
-      OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public')
-    ))
-    OR ${itemShareExists('l', 'list')}
-  )`;
+  const accessCondition = objectAccessCondition('l', 'list');
+  const wmJoin = workspaceMembersJoin('l');
   // Archived lists are hidden from the normal workspace view (sidebar, dashboards,
   // etc.) — surfaced only via the dedicated Archived modal (GET /?archived=true).
   const archivedFilter = includeArchived ? 'AND l.is_archived = true' : 'AND l.is_archived = false';
@@ -196,7 +190,7 @@ export async function buildListsForUser(userId: string, workspaceId?: string, in
   const [listsResult, sectionsResult, tasksResult] = await Promise.all([
     query<ListRow>(
       `SELECT l.* FROM lists l
-       LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
+       ${wmJoin}
        WHERE ${accessCondition}
        ${wsFilter}
        ${archivedFilter}
@@ -206,7 +200,7 @@ export async function buildListsForUser(userId: string, workspaceId?: string, in
     query<SectionRow>(
       `SELECT s.* FROM sections s
        JOIN lists l ON s.list_id = l.id
-       LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
+       ${wmJoin}
        WHERE ${accessCondition}
        ${wsFilter}
        ORDER BY s.position ASC`,
@@ -217,7 +211,7 @@ export async function buildListsForUser(userId: string, workspaceId?: string, in
               (SELECT COUNT(*) FROM task_attachments ta WHERE ta.task_id = t.id) AS attachment_count
        FROM tasks t
        JOIN lists l ON t.list_id = l.id
-       LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
+       ${wmJoin}
        WHERE ${accessCondition}
        AND t.source = 'list'
        ${wsFilter}
@@ -269,18 +263,10 @@ export async function buildListsForUser(userId: string, workspaceId?: string, in
  * when the list is gone or no longer visible → the client removes it.
  */
 export async function getListForUser(userId: string, listId: string) {
-  const accessCondition = `(
-    l.user_id = $1
-    OR (l.is_public = true AND (
-      wm.user_id = $1
-      OR l.workspace_id IS NULL
-      OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public')
-    ))
-    OR ${itemShareExists('l', 'list')}
-  )`;
+  const accessCondition = objectAccessCondition('l', 'list');
   const listRes = await query<ListRow>(
     `SELECT l.* FROM lists l
-     LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
+     ${workspaceMembersJoin('l')}
      WHERE l.id = $2 AND ${accessCondition}`,
     [userId, listId]
   );

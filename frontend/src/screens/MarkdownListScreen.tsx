@@ -8,7 +8,7 @@ import Icon from '../components/Icon';
 import BlockEditor from '../components/markdown/BlockEditor';
 import { makeEmptyBlock } from '../utils/markdownBlocks';
 import { type MentionMember } from '../utils/mention';
-import { apiUploadMarkdownImage, markdownImageUrl, apiGetWorkspaceMembers, apiGetItemMembers, type ShareInfo } from '../api/client';
+import { apiUploadMarkdownImage, markdownImageUrl, apiGetWorkspaceMembers, apiGetItemMembers, ensureAssetTicket, type ShareInfo } from '../api/client';
 import type { WorkspaceMember } from '../types';
 import useAuthStore from '../store/useAuthStore';
 import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSettingsModal';
@@ -84,7 +84,15 @@ export default function MarkdownListScreen() {
     let cancelled = false;
     setLoading(true);
     setNotFound(false);
-    getDetail(id).then(md => {
+    // Mint (or reuse a still-fresh cached) per-document image ticket ALONGSIDE
+    // loading the document itself, and wait for both — every <img src> this
+    // page renders (via markdownImageUrl) reads the ticket synchronously from
+    // the client cache, so it must already be in place before BlockEditor's
+    // first paint (see client.ts's "Asset tickets" section), not just started.
+    // A ticket-mint failure is swallowed (best-effort: a page with no images
+    // yet doesn't need one) rather than blocking the document from loading.
+    const ticketReady = ensureAssetTicket(`mdimg:${id}`).catch(() => { /* best-effort */ });
+    Promise.all([getDetail(id), ticketReady]).then(([md]) => {
       if (cancelled) return;
       setMdId(md.id);
       setMdWorkspaceId(md.workspaceId ?? null);

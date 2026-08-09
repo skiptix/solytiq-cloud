@@ -11,6 +11,7 @@ import useGpsStore from '../store/useGpsStore';
 import Icon from '../components/Icon';
 import { searchNominatim, parseCoordInput } from '../utils/nominatim';
 import { POI_CATEGORY_CONFIG, createPoiDivIcon, createPinDivIcon } from '../utils/poiCategories';
+import { buildSafeTooltipElement } from '../utils/poiPopup';
 import {
   WAYPOINT_ATTACH_TOLERANCE_M, findNearestPointWithinMeters, haversineM,
   poiMarkerToNamedPin, buildRouteStateFromEditor, diffPoiMarkers,
@@ -2042,7 +2043,10 @@ export default function GPSEditScreen() {
     if (!map) return;
     searchPinRef.current?.remove();
     const icon = L.divIcon({ className: '', html: `<div style="background:var(--color-primary);border:2px solid var(--color-white);border-radius:50%;width:14px;height:14px;box-shadow:0 2px 8px rgba(var(--color-primary-rgb), 0.4);"></div>`, iconSize: [14, 14], iconAnchor: [7, 7] });
-    searchPinRef.current = L.marker([lat, lon], { icon }).bindTooltip(label, { permanent: false, direction: 'top' }).addTo(map);
+    // `label` is untrusted third-party search-result text (Nominatim
+    // `display_name`) — pass a DOM node, never the raw string, so Leaflet's
+    // tooltip doesn't fall into its innerHTML-assignment path (see poiPopup.ts).
+    searchPinRef.current = L.marker([lat, lon], { icon }).bindTooltip(buildSafeTooltipElement(label), { permanent: false, direction: 'top' }).addTo(map);
   }
 
   function handleSearchChangeEdit(q: string) {

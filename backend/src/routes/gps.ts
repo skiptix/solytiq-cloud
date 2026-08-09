@@ -7,6 +7,8 @@ import { LRUCache } from 'lru-cache';
 import { query } from '../db';
 import { authenticate } from '../middleware';
 import { requireAppInstalled } from '../appsRegistry';
+import { withQuotaReservation } from '../storageQuota';
+import { GPS_UPLOAD_MAX_BYTES } from '../uploadLimits';
 import {
   GpsPoint, WaypointInput, GpsRouteStateV1, ParsedGpxData,
   computeMetadata, buildElevationProfile,
@@ -45,7 +47,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: GPS_UPLOAD_MAX_BYTES },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (ext === '.gpx' || ext === '.fit') cb(null, true);
@@ -166,10 +168,24 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     const metadata = computeMetadata(points);
     const id = crypto.randomUUID();
     const relPath = path.basename(file.path);
-    await query(
-      'INSERT INTO gps_files (id, user_id, original_name, file_type, file_path, file_size, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-      [id, userId, file.originalname, fileType, relPath, file.size, metadata ? JSON.stringify(metadata) : null],
+    // SECURITY (S6): this endpoint previously had NO storage-quota check at
+    // all — a user could upload unlimited 50MB GPX/FIT files, completely
+    // bypassing the 15GB-per-user cap the Files screen enforces. Reused the
+    // same race-safe reservation (storageQuota.ts) that guards
+    // files.ts / taskAttachments.ts / milestoneAttachments.ts.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const isAdmin = (req as any).user?.isAdmin ?? false;
+    const reservation = await withQuotaReservation(userId, file.size, isAdmin, (client) =>
+      client.query(
+        'INSERT INTO gps_files (id, user_id, original_name, file_type, file_path, file_size, metadata) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [id, userId, file.originalname, fileType, relPath, file.size, metadata ? JSON.stringify(metadata) : null],
+      )
     );
+    if (!reservation.ok) {
+      fs.unlink(file.path, () => {});
+      res.status(413).json({ error: 'Storage quota exceeded. Please delete some files to free up space.' });
+      return;
+    }
     res.json({ file: { id, userId, name: file.originalname, fileType, size: file.size, metadata, createdAt: new Date().toISOString() } });
   } catch (err) {
     fs.unlink(file.path, () => {});

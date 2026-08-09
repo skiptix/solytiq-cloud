@@ -180,14 +180,17 @@ export const apiLogin = (username: string, password: string) =>
     pendingToken?: string;
   }>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
 
-export const api2FASetup = () =>
-  apiFetch<{ secret: string; qrCode: string }>('/auth/2fa/setup', { method: 'POST', body: JSON.stringify({}) });
+// Both /2fa/setup and /2fa/disable now require a fresh `currentPassword`
+// step-up (S3) — a valid-but-stolen session token alone is no longer enough
+// to overwrite or remove a user's second factor.
+export const api2FASetup = (currentPassword: string) =>
+  apiFetch<{ secret: string; qrCode: string }>('/auth/2fa/setup', { method: 'POST', body: JSON.stringify({ currentPassword }) });
 
 export const api2FAEnable = (code: string) =>
   apiFetch<{ success: boolean }>('/auth/2fa/enable', { method: 'POST', body: JSON.stringify({ code }) });
 
-export const api2FADisable = (code: string) =>
-  apiFetch<{ success: boolean }>('/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ code }) });
+export const api2FADisable = (code: string, currentPassword: string) =>
+  apiFetch<{ success: boolean }>('/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ code, currentPassword }) });
 
 export const api2FAVerify = (pendingToken: string, code: string) =>
   apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>; lastRoute?: string | null } }>(
@@ -927,6 +930,17 @@ export const apiOAuthApprove = (params: OAuthApproveParams) =>
     body: JSON.stringify(params),
   });
 
+export interface OAuthClientInfo {
+  clientName: string;
+  redirectHost: string;
+  /** Server-computed — true only when redirectHost is on the operator's
+   *  trusted-host allowlist. Never trust the client's own claimed name. */
+  trusted: boolean;
+}
+
+export const apiOAuthClientInfo = (clientId: string, redirectUri: string) =>
+  apiFetch<OAuthClientInfo>(`/oauth/client-info?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}`);
+
 // AI File Attachments
 export function apiUploadAIFile(
   file: File,
@@ -1229,17 +1243,43 @@ let sseSource: EventSource | null = null;
 let sseReconnectDelay = 2000;
 const SSE_RECONNECT_MAX = 30000;
 
+// A connect-in-flight guard so overlapping calls (e.g. a rapid reconnect
+// while the previous ticket mint is still pending) can't open two streams.
+let sseConnecting = false;
+
 /**
  * Open the SSE stream. `onFrame` fires for every realtime frame; `onOpen` fires
  * on each successful (re)connection so the caller can pull deltas and catch up
  * on anything missed while disconnected. Reconnect uses exponential backoff with
  * jitter to avoid a thundering herd after a deploy.
+ *
+ * SECURITY (S4): the stream authenticates with a short-lived, single-use
+ * ticket (assetTickets.ts) minted just-in-time from the caller's normal
+ * session, rather than the long-lived session JWT itself riding in the URL.
  */
 export function connectSSE(onFrame: (frame: SseFrame) => void, onOpen?: () => void): void {
-  if (sseSource) return;
+  if (sseSource || sseConnecting) return;
   const token = getToken();
   if (!token) return;
-  const url = `${BASE_URL}/events?token=${encodeURIComponent(token)}`;
+  sseConnecting = true;
+  void openSseWithTicket(onFrame, onOpen).finally(() => { sseConnecting = false; });
+}
+
+async function openSseWithTicket(onFrame: (frame: SseFrame) => void, onOpen?: () => void): Promise<void> {
+  let ticket: string;
+  try {
+    ticket = (await mintAssetTicket('sse')).ticket;
+  } catch {
+    // Couldn't even mint a ticket (e.g. offline, or the session just expired)
+    // — fall back to the same backoff-and-retry loop a stream error uses,
+    // rather than silently never reconnecting.
+    const delay = sseReconnectDelay * (0.5 + Math.random() * 0.5);
+    sseReconnectDelay = Math.min(sseReconnectDelay * 2, SSE_RECONNECT_MAX);
+    setTimeout(() => connectSSE(onFrame, onOpen), delay);
+    return;
+  }
+  if (sseSource) return; // a concurrent call already won
+  const url = `${BASE_URL}/events?ticket=${encodeURIComponent(ticket)}`;
   sseSource = new EventSource(url);
   sseSource.onopen = () => {
     sseReconnectDelay = 2000; // reset backoff on successful connection
@@ -1273,6 +1313,51 @@ export function disconnectSSE(): void {
   sseSource?.close();
   sseSource = null;
   sseReconnectDelay = 2000;
+}
+
+// ─── Asset tickets (S4 — no long-lived JWTs in URLs) ───────────────────────
+//
+// SSE and inline `<img>` tags can't attach an Authorization header, so both
+// used to carry the caller's full, long-lived session JWT as a `?token=`
+// query param instead — a real secret in the URL (browser history, this
+// app's own access logs). They now use short-lived, narrowly-scoped tickets
+// minted from an already-authenticated POST (assetTickets.ts on the
+// backend). Image tickets are scoped per-DOCUMENT (`mdimg:<listId>` /
+// `kbimg:<entryId>`, not per-image) and cached here for a few minutes so a
+// page with many images only needs ONE mint round trip, and every
+// `markdownImageUrl`/`knowledgeEntryImageUrl` call stays synchronous by
+// reading whatever is currently cached.
+interface CachedTicket { ticket: string; expiresAt: number }
+const ticketCache = new Map<string, CachedTicket>();
+const TICKET_REFRESH_SKEW_MS = 15 * 1000; // remint slightly before the server-side expiry
+
+async function mintAssetTicket(scope: string): Promise<CachedTicket> {
+  const data = await apiFetch<{ ticket: string; expiresAt: number }>('/auth/asset-ticket', {
+    method: 'POST',
+    body: JSON.stringify({ scope }),
+  });
+  const cached: CachedTicket = { ticket: data.ticket, expiresAt: data.expiresAt };
+  ticketCache.set(scope, cached);
+  return cached;
+}
+
+/** Ensure a valid ticket for `scope` is cached, minting/refreshing one if
+ *  needed. Call this BEFORE rendering anything that reads `cachedTicket()`
+ *  synchronously (e.g. once when a markdown page / Knowledge Base entry
+ *  finishes loading, alongside its own data fetch). */
+export async function ensureAssetTicket(scope: string): Promise<void> {
+  const existing = ticketCache.get(scope);
+  if (existing && existing.expiresAt - TICKET_REFRESH_SKEW_MS > Date.now()) return;
+  await mintAssetTicket(scope);
+}
+
+/** Synchronous read of whatever ticket is currently cached for `scope`, or
+ *  null if none has been minted yet (caller should have awaited
+ *  ensureAssetTicket first) or the cached one has expired. */
+function cachedTicket(scope: string): string | null {
+  const existing = ticketCache.get(scope);
+  if (!existing || existing.expiresAt <= Date.now()) return null;
+  return existing.ticket;
 }
 
 // ─── GPS API ─────────────────────────────────────────────────────────────────
@@ -1604,14 +1689,19 @@ export const apiMoveMarkdownListWorkspace = (id: string, workspaceId: string, ca
 export const apiDeleteMarkdownList = (id: string) =>
   apiFetch<{ success: boolean }>(`/markdown-lists/${id}`, { method: 'DELETE' });
 
-/** Resolves an `/image` block's `imageId` to a fetchable URL, with the auth
- *  token attached as a query param — `<img>` tags can't set an Authorization
- *  header, so the server accepts `?token=` on this one route (see
- *  routes/markdownLists.ts). */
+/** Resolves an `/image` block's `imageId` to a fetchable URL, with a
+ *  short-lived per-document ticket attached as a query param (S4 —
+ *  `<img>` tags can't set an Authorization header, and this replaces what
+ *  used to be the caller's own long-lived session JWT in the URL). The
+ *  screen that owns this document must call
+ *  `ensureAssetTicket('mdimg:' + markdownListId)` once (in parallel with
+ *  loading the document itself — see MarkdownListScreen.tsx) before
+ *  rendering any block that calls this; without a cached ticket yet, this
+ *  returns a URL with no ticket, which 401s until one is minted. */
 export const markdownImageUrl = (markdownListId: string, imageId: string): string => {
-  const token = getToken();
   const base = `${BASE_URL}/markdown-lists/${markdownListId}/images/${imageId}`;
-  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  const ticket = cachedTicket(`mdimg:${markdownListId}`);
+  return ticket ? `${base}?ticket=${encodeURIComponent(ticket)}` : base;
 };
 
 export function apiUploadMarkdownImage(
@@ -1824,13 +1914,14 @@ export const apiGetKnowledgeSuggestions = (kbId: string) =>
 export const apiDecideKnowledgeSuggestion = (suggestionId: string, accept: boolean) =>
   apiFetch<{ entry: KnowledgeEntry | null }>(`/knowledge-base/suggestions/${suggestionId}`, { method: 'POST', body: JSON.stringify({ accept }) });
 
-/** Resolves a Knowledge Base entry image to a fetchable URL — `<img>` can't set
- *  an Authorization header, so the token rides as a query param (same
- *  accommodation markdownImageUrl makes). */
+/** Resolves a Knowledge Base entry image to a fetchable URL via a short-lived
+ *  per-entry ticket (same S4 mechanism as markdownImageUrl — see its
+ *  comment). The caller must have already called
+ *  `ensureAssetTicket('kbimg:' + entryId)` (see EntryInspector.tsx). */
 export const knowledgeEntryImageUrl = (entryId: string, imageId: string): string => {
-  const token = getToken();
   const base = `${BASE_URL}/knowledge-base/entries/${entryId}/images/${imageId}`;
-  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  const ticket = cachedTicket(`kbimg:${entryId}`);
+  return ticket ? `${base}?ticket=${encodeURIComponent(ticket)}` : base;
 };
 
 export function apiUploadKnowledgeEntryImage(

@@ -10,7 +10,8 @@ import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, werr } from '../
 import { snapshotTimelineToTrash } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestrictConflict } from '../visibility';
 import { notifyNewMentions } from '../mentions';
-import { itemShareExists, isItemSharedWith, deleteItemShares } from '../itemShares';
+import { isItemSharedWith, deleteItemShares } from '../itemShares';
+import { objectAccessCondition, workspaceMembersJoin } from '../objectPolicy';
 import { syncInlineLinksForText } from '../graph/inlineLinks';
 import { enqueueEmbedding } from '../knowledge/queue';
 
@@ -123,22 +124,16 @@ export async function buildTimelinesForUser(userId: string, workspaceId?: string
     : '';
   if (workspaceId) params.push(workspaceId);
 
-  // Mirrors the lists access model: owner always; public timelines visible to
-  // workspace members, to legacy NULL-workspace timelines, or in public workspaces.
-  const accessCondition = `(
-    t.user_id = $1
-    OR (t.is_public = true AND (
-      wm.user_id = $1
-      OR t.workspace_id IS NULL
-      OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = t.workspace_id AND w.visibility = 'public')
-    ))
-    OR ${itemShareExists('t', 'timeline')}
-  )`;
+  // Mirrors the lists access model (see objectPolicy.ts): owner always; public
+  // timelines visible to workspace members, to legacy NULL-workspace
+  // timelines, or in public workspaces.
+  const accessCondition = objectAccessCondition('t', 'timeline');
+  const wmJoin = workspaceMembersJoin('t');
 
   const [timelinesResult, milestonesResult] = await Promise.all([
     query<TimelineRow>(
       `SELECT t.* FROM timelines t
-       LEFT JOIN workspace_members wm ON wm.workspace_id = t.workspace_id AND wm.user_id = $1
+       ${wmJoin}
        WHERE ${accessCondition}
        ${wsFilter}
        ORDER BY t.position ASC, t.created_at ASC`,
@@ -148,7 +143,7 @@ export async function buildTimelinesForUser(userId: string, workspaceId?: string
       `SELECT m.*, (SELECT COUNT(*) FROM milestone_attachments ma WHERE ma.milestone_id = m.id) AS attachment_count
        FROM milestones m
        JOIN timelines t ON m.timeline_id = t.id
-       LEFT JOIN workspace_members wm ON wm.workspace_id = t.workspace_id AND wm.user_id = $1
+       ${wmJoin}
        WHERE ${accessCondition}
        ${wsFilter}
        ORDER BY m.position ASC, m.milestone_date ASC NULLS LAST, m.created_at ASC`,
@@ -179,18 +174,10 @@ export async function buildTimelinesForUser(userId: string, workspaceId?: string
  * re-serialization, scoped to the requesting user (IDOR-safe).
  */
 export async function getTimelineForUser(userId: string, timelineId: string) {
-  const accessCondition = `(
-    t.user_id = $1
-    OR (t.is_public = true AND (
-      wm.user_id = $1
-      OR t.workspace_id IS NULL
-      OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = t.workspace_id AND w.visibility = 'public')
-    ))
-    OR ${itemShareExists('t', 'timeline')}
-  )`;
+  const accessCondition = objectAccessCondition('t', 'timeline');
   const tRes = await query<TimelineRow>(
     `SELECT t.* FROM timelines t
-     LEFT JOIN workspace_members wm ON wm.workspace_id = t.workspace_id AND wm.user_id = $1
+     ${workspaceMembersJoin('t')}
      WHERE t.id = $2 AND ${accessCondition}`,
     [userId, timelineId]
   );
@@ -232,15 +219,7 @@ router.get('/upcoming', async (req: Request, res: Response) => {
     const limit = Math.min(Math.max(Number.isNaN(rawLimit) ? 3 : rawLimit, 1), 20);
 
     const params: unknown[] = [req.userId];
-    const accessCondition = `(
-      t.user_id = $1
-      OR (t.is_public = true AND (
-        wm.user_id = $1
-        OR t.workspace_id IS NULL
-        OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = t.workspace_id AND w.visibility = 'public')
-      ))
-      OR ${itemShareExists('t', 'timeline')}
-    )`;
+    const accessCondition = objectAccessCondition('t', 'timeline');
 
     let wsFilter = '';
     if (workspaceId) {

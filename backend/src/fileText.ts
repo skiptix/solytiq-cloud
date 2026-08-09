@@ -9,11 +9,10 @@
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require('pdf-parse');
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const XLSX: {
-  read: (buf: Buffer, opts: { type: string }) => { SheetNames: string[]; Sheets: Record<string, unknown> };
-  utils: { sheet_to_csv: (sheet: unknown) => string };
-} = require('xlsx');
+// SECURITY (S6): `xlsx` has unpatched prototype-pollution/ReDoS advisories
+// (see xlsxSandbox.ts's header) — it is deliberately NOT require()'d here.
+// Every XLSX/XLS parse runs inside a sandboxed worker thread instead.
+import { parseXlsxInWorker } from './xlsxSandbox';
 
 // Cap on extracted text length, mirroring the internal AI file limit. Raised
 // from the original 50,000 so a full-length contract or report (tens of
@@ -77,11 +76,7 @@ export async function extractTextFromBuffer(
 
   if (isXlsx) {
     try {
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
-      const sheets = workbook.SheetNames.map((name) => {
-        const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[name]);
-        return `Sheet: ${name}\n${csv}`;
-      }).join('\n\n');
+      const sheets = await parseXlsxInWorker(buffer);
       return { contentText: capWithNotice(sheets, maxChars), isImage: false };
     } catch {
       return { contentText: '[XLSX could not be parsed]', isImage: false };

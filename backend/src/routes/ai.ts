@@ -6,14 +6,16 @@ import { extractTextFromBuffer, MAX_TEXT_CHARS } from '../fileText';
 import { getOpenRouterToolDefs, executeAiTool } from '../aiTools';
 import { listSkills } from '../aiSkills/skills';
 import { listMemory, removeMemory, clearMemory } from '../aiMemory';
+import { AI_FILE_UPLOAD_MAX_BYTES } from '../uploadLimits';
 
 const router = Router();
 
-// Multer: in-memory, 25 MB limit for AI file uploads — large enough for a
-// full-length contract or report PDF while keeping in-memory buffering sane.
+// Multer: in-memory, 25 MB limit by default for AI file uploads — large
+// enough for a full-length contract or report PDF while keeping in-memory
+// buffering sane. See uploadLimits.ts.
 const aiUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 },
+  limits: { fileSize: AI_FILE_UPLOAD_MAX_BYTES },
 });
 
 // GET /api/ai/settings — readable by any authenticated user

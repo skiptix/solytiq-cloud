@@ -12,6 +12,11 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
   const [qrCode, setQrCode] = useState('');
   const [secret, setSecret] = useState('');
   const [loadingSetup, setLoadingSetup] = useState(false);
+  // Step-up (S3): the account password, collected on the intro step and sent
+  // once to POST /2fa/setup — a valid-but-stolen session token alone must not
+  // be enough to silently (re)generate a user's TOTP secret.
+  const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [copied, setCopied] = useState(false);
   const [otp, setOtp] = useState(Array(6).fill(''));
   const [otpError, setOtpError] = useState('');
@@ -32,11 +37,11 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
   useEffect(() => {
     if (step !== 'scan' || qrCode) return;
     setLoadingSetup(true);
-    api2FASetup()
+    api2FASetup(password)
       .then(data => { setQrCode(data.qrCode); setSecret(data.secret); })
       .catch(() => setOtpError('Failed to generate QR code. Please try again.'))
       .finally(() => setLoadingSetup(false));
-  }, [step]);
+  }, [step, password, qrCode]);
 
   // Auto-close after success
   useEffect(() => {
@@ -152,11 +157,30 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
               ))}
             </div>
 
+            <div style={{ position: 'relative', marginBottom: 16 }}>
+              <input
+                type={passwordVisible ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && password) setStep('scan'); }}
+                placeholder="Confirm your password to continue"
+                style={{ width: '100%', boxSizing: 'border-box' as const, padding: '11px 32px 11px 12px', borderRadius: 10, border: '1.5px solid var(--color-border-alt)', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'var(--color-surface-gray)', outline: 'none' }}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setPasswordVisible(v => !v)}
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex' }}
+              >
+                <Icon name={passwordVisible ? 'visibility_off' : 'visibility'} size={16} color="var(--color-text-quaternary)" />
+              </button>
+            </div>
             <button
               onClick={() => setStep('scan')}
-              style={{ width: '100%', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '13px 0', borderRadius: 12, border: 'none', cursor: 'pointer', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-mid-10)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-primary)'; }}
+              disabled={!password}
+              style={{ width: '100%', background: password ? 'var(--color-primary)' : 'var(--color-border-strong)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '13px 0', borderRadius: 12, border: 'none', cursor: password ? 'pointer' : 'not-allowed', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              onMouseEnter={e => { if (password) e.currentTarget.style.background = 'var(--color-purple-mid-10)'; }}
+              onMouseLeave={e => { if (password) e.currentTarget.style.background = 'var(--color-primary)'; }}
             >
               Get Started
               <Icon name="arrow_forward" size={16} color="var(--color-white)" />
