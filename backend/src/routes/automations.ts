@@ -15,7 +15,7 @@ import { authenticate } from '../middleware';
 import { broadcastToUser } from '../sse';
 import { requireAppInstalled } from '../appsRegistry';
 import { userCanAccessWorkspace, werr, wlog } from '../workspaceUtil';
-import { checkVersionConflict } from '../concurrency';
+import { versionGuardSql, resolveVersionedUpdateFailure } from '../concurrency';
 import { normalizeAutomationGraph, assertGraphRefsInWorkspace, assertGraphWorkspaceRefsAccessible, type AutomationEdge } from '../automationGraph';
 import { getAutomationNodeTypeDefs, type TriggerContext } from '../automationTypes';
 import { computeNextFireAt, runAutomation } from '../automationEngine';
@@ -398,9 +398,9 @@ router.put('/:id', async (req: Request, res: Response) => {
       expectedVersion?: number;
     };
 
-    const conflict = await checkVersionConflict('automations', id, expectedVersion);
-    if (conflict !== null) { res.status(409).json({ error: 'Version conflict', currentVersion: conflict }); return; }
-
+    // Optimistic concurrency (B4): folded into the UPDATE's own WHERE clause
+    // below (versionGuardSql) instead of a standalone pre-check SELECT — see
+    // concurrency.ts's header for why the old check-then-act pattern raced.
     let graphSql = '';
     const params: unknown[] = [];
     if (graph !== undefined) {
@@ -417,16 +417,24 @@ router.put('/:id', async (req: Request, res: Response) => {
     }
 
     params.push(name?.trim() || null, 'description' in req.body, description ?? null, id);
+    const idParamIndex = params.length;
+    const versionClause = versionGuardSql(params, expectedVersion);
     const result = await query<AutomationRow>(
       `UPDATE automations
        SET ${graphSql}
-           name        = COALESCE($${params.length - 3}, name),
-           description = CASE WHEN $${params.length - 2} THEN $${params.length - 1} ELSE description END,
+           name        = COALESCE($${idParamIndex - 3}, name),
+           description = CASE WHEN $${idParamIndex - 2} THEN $${idParamIndex - 1} ELSE description END,
            updated_at  = NOW()
-       WHERE id = $${params.length}
+       WHERE id = $${idParamIndex}${versionClause}
        RETURNING *`,
       params
     );
+
+    if (result.rows.length === 0) {
+      const failure = await resolveVersionedUpdateFailure('automations', id);
+      if (failure.notFound) { res.status(404).json({ error: 'Automation not found' }); return; }
+      res.status(409).json({ error: 'Version conflict', currentVersion: failure.currentVersion }); return;
+    }
 
     res.json({ automation: sanitize(result.rows[0], req.userId!) });
     broadcastToUser(req.userId!, 'automations');

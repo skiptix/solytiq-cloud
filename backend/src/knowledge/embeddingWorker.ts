@@ -19,6 +19,8 @@ import { chunkText, flattenMarkdownBlocks, planEmbeddingWork, estimateTokens, ty
 import { claimQueueBatch, markQueueItem, type EmbeddingQueueRow } from './queue';
 import { isPgvectorAvailable } from './state';
 import { getEmbeddingConfig, embedTexts, toVectorLiteral, type KnowledgeAppSettings } from './embedProvider';
+import { releaseOwnedLeases } from '../jobLease';
+import { WORKER_ID } from '../workerId';
 
 const BATCH_SIZE = 5;
 
@@ -160,10 +162,38 @@ async function processQueueItem(item: EmbeddingQueueRow, exec: QueryExec): Promi
   }
 }
 
+// B8 — mirrors automationEngine.ts's `currentlyExecutingScheduleAutomationId`
+// (see that module's own comment for the full rationale): the embedding_
+// queue item id (if any) THIS process is actively processing right now,
+// within sweepEmbeddingQueue()'s own sequential loop below. A plain
+// module-level variable is sufficient — this loop is strictly sequential,
+// never more than one item in flight per process.
+let currentlyProcessingQueueItemId: string | null = null;
+
+/**
+ * B8 — releases the lease on every `embedding_queue` row THIS process
+ * currently holds, EXCEPT whichever one (if any) is actively mid-
+ * `processQueueItem()` right now. See automationEngine.ts's
+ * `releaseUnstartedScheduleLeases()` for the identical pattern applied to
+ * the OTHER lease-based sweep, and jobLease.ts's `releaseOwnedLeases()` for
+ * why excluding the in-flight one is essential.
+ */
+export async function releaseUnstartedEmbeddingLeases(): Promise<number> {
+  const exclude = currentlyProcessingQueueItemId ? [currentlyProcessingQueueItemId] : [];
+  return releaseOwnedLeases('embedding_queue', WORKER_ID, exclude);
+}
+
 export async function sweepEmbeddingQueue(exec: QueryExec = query): Promise<void> {
   try {
     const batch = await claimQueueBatch(BATCH_SIZE, exec);
-    for (const item of batch) await processQueueItem(item, exec);
+    for (const item of batch) {
+      currentlyProcessingQueueItemId = item.id;
+      try {
+        await processQueueItem(item, exec);
+      } finally {
+        currentlyProcessingQueueItemId = null;
+      }
+    }
   } catch (err) {
     console.error('📚 ✗ sweepEmbeddingQueue failed:', err);
   }

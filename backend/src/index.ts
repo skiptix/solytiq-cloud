@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import path from 'path';
 import dns from 'dns';
-import { pool } from './db';
+import { pool, getPoolStats } from './db';
 
 // Containers often advertise IPv6 without working outbound IPv6 routing, which
 // makes undici hang on AAAA records until timeout (seen with Overpass/Valhalla
@@ -18,6 +18,10 @@ import trashRouter      from './routes/trash';
 import adminRouter      from './routes/admin';
 import foldersRouter    from './routes/folders';
 import filesRouter, { UPLOAD_DIR } from './routes/files';
+import { getStorageAdapter } from './storage/storageAdapterFactory';
+import { streamStorageObject } from './storage/streamHelper';
+import { sweepExpiredPendingFiles, sweepOrphanLocalFiles } from './storage/orphanJanitor';
+import { resolveStorageBackend } from './storage/StorageAdapter';
 import aiRouter         from './routes/ai';
 import workspacesRouter from './routes/workspaces';
 import timelinesRouter  from './routes/timelines';
@@ -46,26 +50,38 @@ import canvasesRouter from './routes/canvases';
 import knowledgeRouter from './routes/knowledge';
 import knowledgeBaseRouter from './routes/knowledgeBase';
 import aiSkillsRouter from './routes/aiSkills';
-import { sweepEmbeddingQueue } from './knowledge/embeddingWorker';
+import { sweepEmbeddingQueue, releaseUnstartedEmbeddingLeases } from './knowledge/embeddingWorker';
 import agentRouter from './routes/agent';
 import { sweepExpiredProposals } from './agent/runtime';
 import { sweepMigrationVerification } from './graph/verifyMigration';
 import { sweepGraphMetrics } from './graph/metrics';
 import { isAppInstalled } from './appsRegistry';
-import { startSyncDispatcher, SYNC_CHANNEL } from './syncLog';
-import { sweepScheduledAutomations } from './automationEngine';
+import { startSyncDispatcher, stopSyncDispatcher, SYNC_CHANNEL } from './syncLog';
+import { sweepScheduledAutomations, releaseUnstartedScheduleLeases } from './automationEngine';
 import { sweepOverdueDeadlines } from './notifications';
 import { getPublicBaseUrl } from './publicUrl';
 import { comparePassword } from './auth';
 import { mintShareSession, isValidShareSession, sweepExpiredShareSessions, type ShareKind } from './shareSessions';
 import { query as dbQuery } from './db';
-import { handleSseEventsRequest, sweepStaleSseConnections } from './sse';
+import { handleSseEventsRequest, sweepStaleSseConnections, closeAllSseConnectionsForShutdown } from './sse';
 import { sweepExpiredAssetTickets } from './assetTickets';
+import {
+  resolveProcessRole, roleRunsWorkerTimers, roleRunsHttpApi, roleRunsHealthOnlyApi,
+  roleRunsSse, roleRunsMigrations, roleExitsAfterMigration,
+} from './processRoles';
+import { checkReadiness } from './readiness';
+import { resolveReadyzTimeoutMillis } from './dbConfig';
+import { runGracefulShutdown, isShuttingDown } from './shutdown';
 import { isCfConnectingIpTrusted, resolveClientIp, resolveTrustProxyHops } from './proxyTrust';
 import { mcpTokenKey, acquireMcpSlot, releaseMcpSlot } from './mcpLimits';
 import { accountLoginLimiter, accountTwoFaLimiter } from './loginRateLimit';
 import { verifyToken } from './auth';
 import { ensureSetupTokenLogged } from './setupToken';
+import { requestLoggingMiddleware } from './requestLogging';
+import { globalRequestMetrics } from './requestMetrics';
+import { getSseConnectionStats } from './sse';
+import { getAutomationConcurrencyStats } from './automationEngine';
+import { getQueueStats as getEmbeddingQueueStats } from './knowledge/queue';
 
 const app = express();
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
@@ -84,6 +100,14 @@ app.set('trust proxy', resolveTrustProxyHops());
 // frontend loaders to treat successful sidebar refreshes as failed requests
 // and leave lists/folders/timelines empty after workspace switches.
 app.set('etag', false);
+
+// B9 — structured (JSON) request logging + request-id correlation + latency
+// metrics. Mounted as the VERY FIRST middleware (before even CalDAV) so it
+// wraps literally every request this process serves, regardless of which
+// handler further down the chain eventually calls `res.end()` — see
+// requestLogging.ts's own header comment for the full rationale. Additive:
+// the existing `wlog`/`wwarn`/`werr` human-readable logs are untouched.
+app.use(requestLoggingMiddleware);
 
 // ---------------------------------------------------------------------------
 // CalDAV server (Apple Calendar / Thunderbird / …) — mounted FIRST, before the
@@ -576,13 +600,14 @@ app.get('/api/share/:token/download/:fileId', async (req, res) => {
     const result = await dbQuery<ShareFileRow>('SELECT * FROM shared_files WHERE share_token = $1 AND id = $2', [token, fileId]);
     const target = result.rows[0];
     if (!target) { res.status(404).json({ error: 'File not found' }); return; }
-    const filePath = path.join(path.resolve(UPLOAD_DIR), path.basename(target.file_path));
-    if (!require('fs').existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
     const sanitizedName = target.original_name.replace(/[^\w\s\-_.]/g, '_');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(sanitizedName)}"`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Type', 'application/octet-stream');
-    res.sendFile(filePath);
+    // B2: streams through the configured StorageAdapter (local or S3) —
+    // never assumes a local filesystem path the way res.sendFile() did.
+    const found = await streamStorageObject(getStorageAdapter(), path.basename(target.file_path), res);
+    if (!found) { res.status(404).json({ error: 'File not found on disk' }); return; }
   } catch (err) {
     console.error('share bundled download error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -599,14 +624,13 @@ app.get('/api/share/:token/download', async (req, res) => {
     if (!file.is_public) { res.status(403).json({ error: 'This file is private' }); return; }
     if (file.expires_at && new Date(file.expires_at) < new Date()) { res.status(410).json({ error: 'Share link has expired' }); return; }
     if (!checkSharePasswordGate(req, res, 'file', token, file.password_hash)) return;
-    const filePath = path.join(path.resolve(UPLOAD_DIR), path.basename(file.file_path));
-    if (!require('fs').existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
 
     const sanitizedName = file.original_name.replace(/[^\w\s\-_.]/g, '_');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(sanitizedName)}"`);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Type', 'application/octet-stream');
-    res.sendFile(filePath);
+    const found = await streamStorageObject(getStorageAdapter(), path.basename(file.file_path), res);
+    if (!found) { res.status(404).json({ error: 'File not found on disk' }); return; }
   } catch (err) {
     console.error('share download error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -1083,19 +1107,90 @@ app.get('/api/share/folder/:token/content', async (req, res) => {
 // function for why.
 app.get('/api/events', handleSseEventsRequest);
 
-// Health check
+// Liveness — process-only, no dependency checks (B8). Kept cheap and
+// dependency-free on purpose: an orchestrator's liveness probe restarts the
+// container on failure, which must never trigger just because the DB is
+// briefly unreachable (that is /readyz's job, and restarting the process
+// wouldn't fix a downstream DB outage anyway).
+app.get('/livez', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
+// Back-compat alias — docker-compose.yml's existing healthcheck (and any
+// other external caller) already polls `/health`; keep it wired to the exact
+// same liveness semantics as /livez rather than repointing it at readiness
+// (which would make Docker restart a perfectly-alive container just because
+// the DB had a momentary blip — a liveness probe restarting on a readiness
+// failure is the wrong failure mode for a container orchestrator).
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// SECURITY/CORRECTNESS (S7): a separate, DB-touching readiness surface — kept
-// OUT of /health above on purpose, since /health is polled frequently by
-// Docker/orchestrators as a pure liveness check and must stay cheap and
-// dependency-free. This one is for a deploy pipeline or admin tooling that
-// wants to confirm which versioned migrations have actually landed on THIS
-// database, not just that the process is up. No secrets in the response —
-// migration ids/descriptions are code, not data — so it's safe unauthenticated,
-// same posture as /health itself.
+// B8 — real dependency-aware readiness: DB reachable, schema migrated, and
+// not already draining (SIGTERM/SIGINT received — see shutdown.ts). Bounded
+// by READYZ_TIMEOUT_MS so a wedged DB connection can't make this endpoint
+// itself hang past the "readiness goes red within 5s" gate. See readiness.ts
+// for the actual (unit-tested, dependency-injected) decision logic this
+// wraps.
+app.get('/readyz', async (_req, res) => {
+  const result = await checkReadiness({
+    pingDb: async () => { await pool.query('SELECT 1'); },
+    getSchemaVersion: async () => {
+      const v = await getSchemaVersion();
+      return { legacyMigrationsApplied: v.legacyMigrationsApplied, appliedVersionedMigrations: v.appliedVersionedMigrations };
+    },
+    isShuttingDown,
+    timeoutMillis: resolveReadyzTimeoutMillis(),
+  });
+  if (result.ready) {
+    res.json({ status: 'ready', schemaVersionCount: result.schemaVersionCount });
+  } else {
+    res.status(503).json({ status: 'not_ready', reason: result.reason });
+  }
+});
+
+// B9 — process-local metrics snapshot: HTTP latency percentiles (over the
+// last ~2000 requests — see requestMetrics.ts), DB pool saturation, SSE
+// connection/backpressure counts, the embedding queue's depth (incl.
+// dead_letter — B3), and the automation-run concurrency budget's current
+// usage (B7). Deliberately NOT a Prometheus text-format endpoint (no new
+// dependency for a single-instance floor — see requestMetrics.ts's header
+// comment) and deliberately unauthenticated, matching every other
+// operational endpoint in this file (/health, /livez, /readyz,
+// /health/schema) — every field here is an AGGREGATE COUNT, never a
+// per-user/per-workspace identifier (see getSseConnectionStats()'s and
+// getAutomationConcurrencyStats()'s own comments on why that boundary is
+// deliberate), so exposing it without auth carries the same risk profile as
+// the schema-version endpoint two lines below: operationally useful, not a
+// data leak. A `worker`-role process's health-only app (buildHealthOnlyApp
+// below) does NOT get this route — a worker's own metrics are its DB-visible
+// side effects (lease claims, queue drain rate), not an HTTP surface.
+app.get('/metrics', async (_req, res) => {
+  try {
+    const [sseStats, automationStats, embeddingQueueStats] = await Promise.all([
+      Promise.resolve(getSseConnectionStats()),
+      Promise.resolve(getAutomationConcurrencyStats()),
+      getEmbeddingQueueStats().catch(() => null), // best-effort — a DB hiccup here shouldn't 500 the whole snapshot
+    ]);
+    res.json({
+      uptimeSeconds: Math.round(process.uptime()),
+      http: globalRequestMetrics.snapshot(),
+      dbPool: getPoolStats(),
+      sse: sseStats,
+      automations: automationStats,
+      embeddingQueue: embeddingQueueStats,
+    });
+  } catch (err) {
+    console.error('metrics snapshot error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// SECURITY/CORRECTNESS (S7): a separate, DB-touching schema-detail surface —
+// distinct from /readyz's pass/fail gate, this one is for a deploy pipeline
+// or admin tooling that wants to see WHICH versioned migrations have landed.
+// No secrets in the response — migration ids/descriptions are code, not
+// data — so it's safe unauthenticated, same posture as /livez itself.
 app.get('/health/schema', async (_req, res) => {
   try {
     const version = await getSchemaVersion();
@@ -1124,7 +1219,39 @@ async function pruneSyncLog(): Promise<void> {
   }
 }
 
+// B8: a minimal health-only app for the `worker` role (see processRoles.ts)
+// — a worker process never serves the business API, only /livez + /readyz,
+// so a misdirected load-balancer target or a security scan against it can't
+// reach any authenticated route at all.
+function buildHealthOnlyApp(): express.Express {
+  const healthApp = express();
+  healthApp.get('/livez', (_req, res) => res.json({ status: 'ok' }));
+  healthApp.get('/health', (_req, res) => res.json({ status: 'ok' }));
+  healthApp.get('/readyz', async (_req, res) => {
+    const result = await checkReadiness({
+      pingDb: async () => { await pool.query('SELECT 1'); },
+      getSchemaVersion: async () => {
+        const v = await getSchemaVersion();
+        return { legacyMigrationsApplied: v.legacyMigrationsApplied, appliedVersionedMigrations: v.appliedVersionedMigrations };
+      },
+      isShuttingDown,
+      timeoutMillis: resolveReadyzTimeoutMillis(),
+    });
+    if (result.ready) res.json({ status: 'ready', schemaVersionCount: result.schemaVersionCount });
+    else res.status(503).json({ status: 'not_ready', reason: result.reason });
+  });
+  return healthApp;
+}
+
 async function start() {
+  // B1: PROCESS_ROLE gates which of the sections below actually run — see
+  // processRoles.ts's own header for the full rationale. Every predicate is
+  // a pure function of `role`, so which timers/HTTP surface/migrations this
+  // particular process runs is fully determined by ONE env var, unit-tested
+  // in isolation (processRoles.test.ts) with zero dependency on this file.
+  const role = resolveProcessRole();
+  console.log(`process role: ${role}`);
+
   try {
     await pool.query('SELECT 1');
     console.log('Database connection verified.');
@@ -1133,97 +1260,191 @@ async function start() {
     process.exit(1);
   }
 
-  try {
-    // SECURITY/CORRECTNESS (S7): runAllMigrations() wraps the legacy
-    // migrations.ts monolith AND the new versioned-migration runner
-    // (versionedMigrations.ts) in one advisory lock, so a concurrently
-    // starting second process (rolling deploy, restart racing a fresh
-    // replica) waits instead of racing DDL statements — see migrations.ts's
-    // own header comment on runAllMigrations() for the full rationale.
-    await runAllMigrations();
-  } catch (err) {
-    console.error('Failed to apply database migrations:', err);
-    process.exit(1);
-  }
-
-  // Show setup token in logs if no users are registered yet.
-  try {
-    const { rows } = await pool.query<{ count: string }>('SELECT COUNT(*) AS count FROM users');
-    if (parseInt(rows[0].count, 10) === 0) {
-      await ensureSetupTokenLogged();
-    }
-  } catch (err) {
-    console.error('Failed to check setup token:', err);
-  }
-
-  // Cleanup expired AI chat files (run once on start, then every 6 hours)
-  const cleanupAiFiles = async () => {
+  if (roleRunsMigrations(role)) {
     try {
-      const result = await pool.query(`DELETE FROM ai_chat_files WHERE expires_at < NOW()`);
-      if (result.rowCount && result.rowCount > 0) {
-        console.log(`Cleaned up ${result.rowCount} expired AI chat file(s).`);
+      // SECURITY/CORRECTNESS (S7): runAllMigrations() wraps the legacy
+      // migrations.ts monolith AND the new versioned-migration runner
+      // (versionedMigrations.ts) in one advisory lock, so a concurrently
+      // starting second process (rolling deploy, restart racing a fresh
+      // replica) waits instead of racing DDL statements — see migrations.ts's
+      // own header comment on runAllMigrations() for the full rationale.
+      await runAllMigrations();
+    } catch (err) {
+      console.error('Failed to apply database migrations:', err);
+      process.exit(1);
+    }
+    if (roleExitsAfterMigration(role)) {
+      console.log('migrator role: migrations applied — exiting (one-shot init job).');
+      process.exit(0);
+      return;
+    }
+  }
+
+  // Show setup token in logs if no users are registered yet. Only meaningful
+  // for a process actually serving the API — a `worker` has nowhere for an
+  // operator to act on this from.
+  if (roleRunsHttpApi(role)) {
+    try {
+      const { rows } = await pool.query<{ count: string }>('SELECT COUNT(*) AS count FROM users');
+      if (parseInt(rows[0].count, 10) === 0) {
+        await ensureSetupTokenLogged();
       }
     } catch (err) {
-      console.error('AI file cleanup error:', err);
+      console.error('Failed to check setup token:', err);
     }
+  }
+
+  // Every setInterval handle registered below is collected here so graceful
+  // shutdown (B8) can clear ALL of them deterministically — see shutdown.ts.
+  const timers: ReturnType<typeof setInterval>[] = [];
+
+  // B1: the periodic domain sweeps below are registered ONLY for a role that
+  // owns them fleet-wide (`all` or `worker` — see roleRunsWorkerTimers). An
+  // `api`-role replica registers ZERO of these, so running N api replicas
+  // can never multiply a sweep's side effects by N — the literal B1 gate.
+  if (roleRunsWorkerTimers(role)) {
+    // Cleanup expired AI chat files (run once on start, then every 6 hours)
+    const cleanupAiFiles = async () => {
+      try {
+        const result = await pool.query(`DELETE FROM ai_chat_files WHERE expires_at < NOW()`);
+        if (result.rowCount && result.rowCount > 0) {
+          console.log(`Cleaned up ${result.rowCount} expired AI chat file(s).`);
+        }
+      } catch (err) {
+        console.error('AI file cleanup error:', err);
+      }
+    };
+    cleanupAiFiles();
+    timers.push(setInterval(cleanupAiFiles, 6 * 60 * 60 * 1000));
+
+    // B2: storage janitor — reclaims shared_files rows whose upload never
+    // finished (pending -> ready) past their TTL, releasing the quota they
+    // reserved, plus a best-effort local-disk orphan reconciliation (see
+    // storage/orphanJanitor.ts for why the latter is local-adapter-only).
+    // 10-minute cadence: frequent enough that a crashed upload's reserved
+    // quota isn't unavailable for long, cheap enough not to matter at that
+    // interval.
+    const sweepStorageJanitor = async () => {
+      try {
+        const adapter = getStorageAdapter();
+        const pendingResult = await sweepExpiredPendingFiles(adapter);
+        if (pendingResult.reclaimedPendingRows > 0) {
+          console.log(`🧹 storage janitor: reclaimed ${pendingResult.reclaimedPendingRows} expired-pending shared_files row(s)`);
+        }
+        if (resolveStorageBackend() === 'local') {
+          const orphanResult = await sweepOrphanLocalFiles(UPLOAD_DIR);
+          if (orphanResult.deleted > 0) {
+            console.log(`🧹 storage janitor: deleted ${orphanResult.deleted} orphaned local file(s) with no referencing DB row`);
+          }
+        }
+      } catch (err) {
+        console.error('storage janitor sweep error:', err);
+      }
+    };
+    timers.push(setInterval(() => { void sweepStorageJanitor(); }, 10 * 60 * 1000));
+
+    // Automation Hub: fire any due 'schedule'-trigger automations. 5-minute
+    // granularity is plenty for daily/weekly schedules; event-driven triggers
+    // (task_completed/task_created/list_all_completed) fire inline from
+    // routes/lists.ts and don't go through this sweep.
+    sweepScheduledAutomations();
+    timers.push(setInterval(sweepScheduledAutomations, 5 * 60 * 1000));
+
+    // Notifications: alert task owners + tagged users about overdue deadlines,
+    // once per (task, deadline). Hourly is plenty — deadlines have day precision.
+    sweepOverdueDeadlines();
+    timers.push(setInterval(sweepOverdueDeadlines, 60 * 60 * 1000));
+
+    // Agent Runtime: expire stale pending proposals (7-day TTL). Hourly is
+    // plenty — approvals are a human-timescale action, not a hot path.
+    sweepExpiredProposals();
+    timers.push(setInterval(sweepExpiredProposals, 60 * 60 * 1000));
+
+    // Graph Layer: nightly drift check between the legacy hard-link columns and
+    // their mirrored entity_links edges, feeding the gated column-drop
+    // migration's 7-consecutive-clean-days streak (see graph/verifyMigration.ts
+    // and runMigrations()'s gated drop block).
+    sweepMigrationVerification();
+    timers.push(setInterval(sweepMigrationVerification, 24 * 60 * 60 * 1000));
+
+    // Delta-sync outbox retention — daily prune (distinct from the realtime
+    // dispatcher itself, which is per-process/per-SSE-connection — see below).
+    pruneSyncLog();
+    timers.push(setInterval(pruneSyncLog, 24 * 60 * 60 * 1000));
+
+    // Graph Layer: recompute pagerank for any workspace touched since the last
+    // sweep (see graph/metrics.ts) — 5-minute cadence, same pattern as the
+    // Automation Hub's schedule sweep.
+    timers.push(setInterval(() => { void sweepGraphMetrics(); }, 5 * 60 * 1000));
+
+    // Knowledge Layer: (re-)chunk and embed anything content-save endpoints
+    // queued (see knowledge/queue.ts's enqueueEmbedding call sites). A 2-minute
+    // cadence keeps freshly-saved content searchable soon without hammering the
+    // embedding provider; every step degrades gracefully when pgvector or a
+    // provider key isn't configured (see knowledge/embeddingWorker.ts).
+    timers.push(setInterval(() => { void sweepEmbeddingQueue(); }, 2 * 60 * 1000));
+
+    timers.push(setInterval(sweepExpiredAssetTickets, 5 * 60 * 1000));
+    timers.push(setInterval(sweepExpiredShareSessions, 5 * 60 * 1000));
+  }
+
+  // B1: the sync dispatcher (LISTEN) and the stale-SSE sweep are PER-PROCESS
+  // concerns (each replica owns only the SSE clients it personally accepted)
+  // — registered for every replica that serves SSE (`all`/`api`), not just
+  // the singleton worker. See roleRunsSse's own header comment.
+  if (roleRunsSse(role)) {
+    await startSyncDispatcher();
+    // SECURITY (S4): re-check every OPEN SSE stream against the same
+    // revocation state a normal API request already re-checks on every call —
+    // see sse.ts's sweepStaleSseConnections(). A 30s cadence bounds how long a
+    // password change / forced logout / 2FA toggle can take to actually close
+    // an already-open stream, independent of asset-ticket TTLs.
+    timers.push(setInterval(() => { void sweepStaleSseConnections(); }, 30 * 1000));
+  }
+
+  let server: import('http').Server;
+  if (roleRunsHttpApi(role)) {
+    server = app.listen(PORT, () => {
+      console.log(`Solytiq Cloud API listening on port ${PORT} (role=${role})`);
+    });
+  } else if (roleRunsHealthOnlyApi(role)) {
+    server = buildHealthOnlyApp().listen(PORT, () => {
+      console.log(`Solytiq Cloud worker health endpoint listening on port ${PORT} (role=${role})`);
+    });
+  } else {
+    // migrator already exited above; nothing else reaches here.
+    return;
+  }
+
+  // B8 — graceful shutdown: SIGTERM (orchestrator-initiated) and SIGINT
+  // (Ctrl-C in a dev shell) both drain the same way. See shutdown.ts's own
+  // header for the exact sequence and why the ordering matters.
+  const shutdownHandler = (signal: string) => {
+    void runGracefulShutdown(signal, {
+      server,
+      pool,
+      timers,
+      closeSse: roleRunsSse(role) ? closeAllSseConnectionsForShutdown : undefined,
+      stopSyncDispatcher: roleRunsSse(role) ? stopSyncDispatcher : undefined,
+      // B8: only a role that actually runs the periodic sweeps
+      // (roleRunsWorkerTimers — `all`/`worker`) ever holds either lease
+      // table's rows in the first place; an `api`-role process never
+      // claims them, so there is nothing for it to release.
+      releaseOwnedLeases: roleRunsWorkerTimers(role)
+        ? async () => {
+            const [automationsReleased, embeddingReleased] = await Promise.all([
+              releaseUnstartedScheduleLeases(),
+              releaseUnstartedEmbeddingLeases(),
+            ]);
+            if (automationsReleased > 0 || embeddingReleased > 0) {
+              console.log(`shutdown: released ${automationsReleased} automation lease(s) + ${embeddingReleased} embedding-queue lease(s) held by this process`);
+            }
+          }
+        : undefined,
+    });
   };
-  cleanupAiFiles();
-  setInterval(cleanupAiFiles, 6 * 60 * 60 * 1000);
-
-  // Automation Hub: fire any due 'schedule'-trigger automations. 5-minute
-  // granularity is plenty for daily/weekly schedules; event-driven triggers
-  // (task_completed/task_created/list_all_completed) fire inline from
-  // routes/lists.ts and don't go through this sweep.
-  sweepScheduledAutomations();
-  setInterval(sweepScheduledAutomations, 5 * 60 * 1000);
-
-  // Notifications: alert task owners + tagged users about overdue deadlines,
-  // once per (task, deadline). Hourly is plenty — deadlines have day precision.
-  sweepOverdueDeadlines();
-  setInterval(sweepOverdueDeadlines, 60 * 60 * 1000);
-
-  // Agent Runtime: expire stale pending proposals (7-day TTL). Hourly is
-  // plenty — approvals are a human-timescale action, not a hot path.
-  sweepExpiredProposals();
-  setInterval(sweepExpiredProposals, 60 * 60 * 1000);
-
-  // Graph Layer: nightly drift check between the legacy hard-link columns and
-  // their mirrored entity_links edges, feeding the gated column-drop
-  // migration's 7-consecutive-clean-days streak (see graph/verifyMigration.ts
-  // and runMigrations()'s gated drop block).
-  sweepMigrationVerification();
-  setInterval(sweepMigrationVerification, 24 * 60 * 60 * 1000);
-
-  // Delta-sync: prune the outbox daily, and start the realtime dispatcher that
-  // fans committed changes out to every affected user's devices.
-  pruneSyncLog();
-  setInterval(pruneSyncLog, 24 * 60 * 60 * 1000);
-  await startSyncDispatcher();
-
-  // Graph Layer: recompute pagerank for any workspace touched since the last
-  // sweep (see graph/metrics.ts) — 5-minute cadence, same pattern as the
-  // Automation Hub's schedule sweep.
-  setInterval(() => { void sweepGraphMetrics(); }, 5 * 60 * 1000);
-
-  // Knowledge Layer: (re-)chunk and embed anything content-save endpoints
-  // queued (see knowledge/queue.ts's enqueueEmbedding call sites). A 2-minute
-  // cadence keeps freshly-saved content searchable soon without hammering the
-  // embedding provider; every step degrades gracefully when pgvector or a
-  // provider key isn't configured (see knowledge/embeddingWorker.ts).
-  setInterval(() => { void sweepEmbeddingQueue(); }, 2 * 60 * 1000);
-
-  // SECURITY (S4): re-check every OPEN SSE stream against the same
-  // revocation state a normal API request already re-checks on every call —
-  // see sse.ts's sweepStaleSseConnections(). A 30s cadence bounds how long a
-  // password change / forced logout / 2FA toggle can take to actually close
-  // an already-open stream, independent of asset-ticket TTLs.
-  setInterval(() => { void sweepStaleSseConnections(); }, 30 * 1000);
-  setInterval(sweepExpiredAssetTickets, 5 * 60 * 1000);
-  setInterval(sweepExpiredShareSessions, 5 * 60 * 1000);
-
-  app.listen(PORT, () => {
-    console.log(`Solytiq Cloud API listening on port ${PORT}`);
-  });
+  process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
+  process.on('SIGINT', () => shutdownHandler('SIGINT'));
 }
 
 start();

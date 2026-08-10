@@ -10,6 +10,7 @@ import { query } from '../db';
 import { authenticate } from '../middleware';
 import { userCanAccessWorkspace, werr } from '../workspaceUtil';
 import { isObjectVisible } from '../objectPolicy';
+import { versionGuardSql, resolveVersionedUpdateFailure } from '../concurrency';
 
 const router = Router();
 router.use(authenticate);
@@ -105,11 +106,11 @@ router.put('/:id', async (req: Request, res: Response) => {
 
     const body = req.body as { name?: string; emoji?: string; layout?: unknown; isPublic?: boolean; version: number };
     if (typeof body.version !== 'number') { res.status(400).json({ error: 'version is required' }); return; }
-    if (body.version !== row.version) {
-      res.status(409).json({ error: 'This canvas was changed elsewhere — reload and retry.', currentVersion: row.version });
-      return;
-    }
 
+    // B4: the version check used to be a standalone `row.version` compare
+    // against the SELECT already run above (a check-then-act race — see
+    // concurrency.ts). It's now folded into the UPDATE's own WHERE clause,
+    // so the check and the write are the same atomic statement.
     const sets: string[] = ['updated_at = NOW()'];
     const params: unknown[] = [];
     if (body.name !== undefined) { params.push(body.name); sets.push(`name = $${params.length}`); }
@@ -117,10 +118,18 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (body.layout !== undefined) { params.push(JSON.stringify(body.layout)); sets.push(`layout = $${params.length}`); }
     if (body.isPublic !== undefined) { params.push(body.isPublic); sets.push(`is_public = $${params.length}`); }
     params.push(req.params.id);
+    const idParamIndex = params.length;
+    const versionClause = versionGuardSql(params, body.version);
     const r = await query<CanvasRow>(
-      `UPDATE graph_canvases SET ${sets.join(', ')} WHERE id = $${params.length} RETURNING *`,
+      `UPDATE graph_canvases SET ${sets.join(', ')} WHERE id = $${idParamIndex}${versionClause} RETURNING *`,
       params
     );
+    if (r.rows.length === 0) {
+      const failure = await resolveVersionedUpdateFailure('graph_canvases', req.params.id);
+      if (failure.notFound) { res.status(404).json({ error: 'Canvas not found' }); return; }
+      res.status(409).json({ error: 'This canvas was changed elsewhere — reload and retry.', currentVersion: failure.currentVersion });
+      return;
+    }
     res.json({ canvas: toJson(r.rows[0]) });
   } catch (err) {
     werr('canvases PUT /:id error:', err);

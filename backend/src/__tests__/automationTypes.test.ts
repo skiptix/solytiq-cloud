@@ -65,6 +65,7 @@ function baseCtx(exec: QueryExec, overrides: Partial<ActionContext> = {}): Actio
     automationId: 'automation_1',
     automationOwnerId: 'owner_1',
     runId: 'run_1',
+    nodeId: 'node_1',
     actor,
     trigger: { workspaceId: 'ws_1' },
     scope: { trigger: null, $json: null, nodes: {} },
@@ -374,10 +375,14 @@ describe('http_request action', () => {
     });
     expect(result.ok).toBe(true);
     expect(result.output).toEqual({ status: 200, statusText: 'OK', headers: {}, body: { hello: 'world' } });
+    // B3 (Phase 2): an Idempotency-Key derived from ctx.runId + ctx.nodeId
+    // is appended automatically (see the dedicated describe block below for
+    // the full behavior) — normalized params still come through unchanged
+    // otherwise.
     expect(httpNodeMock.performHttpRequest).toHaveBeenCalledWith({
       url: 'https://example.com/api',
       method: 'POST',
-      headers: [{ key: 'X-Test', value: '1' }],
+      headers: [{ key: 'X-Test', value: '1' }, { key: 'Idempotency-Key', value: 'run_1:node_1' }],
       queryParams: [],
       bodyType: 'json',
       body: '{"a":1}',
@@ -392,6 +397,72 @@ describe('http_request action', () => {
     const result = await def.execute(baseCtx(exec), { url: 'http://169.254.169.254/', method: 'GET', bodyType: 'none' });
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/private\/internal/);
+  });
+
+  // B3 (Phase 2) — stable Idempotency-Key for external actions.
+  describe('Idempotency-Key header', () => {
+    it('appends an Idempotency-Key derived from ctx.runId + ctx.nodeId when the caller sets no headers at all', async () => {
+      httpNodeMock.performHttpRequest.mockResolvedValueOnce({ ok: true, output: { status: 200, statusText: 'OK', headers: {}, body: null } });
+      const { exec } = makeExec();
+      const def = getActionDef('http_request')!;
+      await def.execute(baseCtx(exec, { runId: 'run_XYZ', nodeId: 'node_abc' }), { url: 'https://example.com', method: 'GET', bodyType: 'none' });
+      const sent = httpNodeMock.performHttpRequest.mock.calls[0][0];
+      expect(sent.headers).toContainEqual({ key: 'Idempotency-Key', value: 'run_XYZ:node_abc' });
+    });
+
+    it('two calls of the SAME node in the SAME run carry the SAME idempotency key (deterministic per node-execution, not per call — a genuine retry of the same node must dedupe)', async () => {
+      httpNodeMock.performHttpRequest.mockResolvedValue({ ok: true, output: { status: 200, statusText: 'OK', headers: {}, body: null } });
+      const { exec } = makeExec();
+      const def = getActionDef('http_request')!;
+      await def.execute(baseCtx(exec, { runId: 'run_same', nodeId: 'node_same' }), { url: 'https://example.com/a', method: 'GET', bodyType: 'none' });
+      await def.execute(baseCtx(exec, { runId: 'run_same', nodeId: 'node_same' }), { url: 'https://example.com/b', method: 'GET', bodyType: 'none' });
+      const key1 = httpNodeMock.performHttpRequest.mock.calls[0][0].headers.find((h: { key: string }) => h.key === 'Idempotency-Key').value;
+      const key2 = httpNodeMock.performHttpRequest.mock.calls[1][0].headers.find((h: { key: string }) => h.key === 'Idempotency-Key').value;
+      expect(key1).toBe(key2);
+    });
+
+    // Reviewed finding, fixed: an earlier pass keyed SOLELY on ctx.runId, so
+    // two DIFFERENT http_request nodes chained in the SAME linear
+    // automation run (e.g. "notify Slack" then "notify a second webhook")
+    // sent the IDENTICAL Idempotency-Key for two logically distinct calls —
+    // a receiver honoring the header could silently swallow the second one
+    // as "just a retry of the first."
+    it('two DIFFERENT http_request NODES in the SAME run carry DIFFERENT idempotency keys — the actual bug this fix closes', async () => {
+      httpNodeMock.performHttpRequest.mockResolvedValue({ ok: true, output: { status: 200, statusText: 'OK', headers: {}, body: null } });
+      const { exec } = makeExec();
+      const def = getActionDef('http_request')!;
+      await def.execute(baseCtx(exec, { runId: 'run_shared', nodeId: 'node_first' }), { url: 'https://example.com/first', method: 'GET', bodyType: 'none' });
+      await def.execute(baseCtx(exec, { runId: 'run_shared', nodeId: 'node_second' }), { url: 'https://example.com/second', method: 'GET', bodyType: 'none' });
+      const key1 = httpNodeMock.performHttpRequest.mock.calls[0][0].headers.find((h: { key: string }) => h.key === 'Idempotency-Key').value;
+      const key2 = httpNodeMock.performHttpRequest.mock.calls[1][0].headers.find((h: { key: string }) => h.key === 'Idempotency-Key').value;
+      expect(key1).not.toBe(key2);
+      expect(key1).toBe('run_shared:node_first');
+      expect(key2).toBe('run_shared:node_second');
+    });
+
+    it('never overrides an Idempotency-Key the automation author explicitly set', async () => {
+      httpNodeMock.performHttpRequest.mockResolvedValueOnce({ ok: true, output: { status: 200, statusText: 'OK', headers: {}, body: null } });
+      const { exec } = makeExec();
+      const def = getActionDef('http_request')!;
+      await def.execute(baseCtx(exec), {
+        url: 'https://example.com', method: 'GET', bodyType: 'none',
+        headers: [{ key: 'Idempotency-Key', value: 'my-own-key' }],
+      });
+      const sent = httpNodeMock.performHttpRequest.mock.calls[0][0];
+      expect(sent.headers).toEqual([{ key: 'Idempotency-Key', value: 'my-own-key' }]);
+    });
+
+    it('is case-insensitive when detecting an already-set header (idempotency-key, IDEMPOTENCY-KEY, …)', async () => {
+      httpNodeMock.performHttpRequest.mockResolvedValueOnce({ ok: true, output: { status: 200, statusText: 'OK', headers: {}, body: null } });
+      const { exec } = makeExec();
+      const def = getActionDef('http_request')!;
+      await def.execute(baseCtx(exec), {
+        url: 'https://example.com', method: 'GET', bodyType: 'none',
+        headers: [{ key: 'IDEMPOTENCY-KEY', value: 'already-set' }],
+      });
+      const sent = httpNodeMock.performHttpRequest.mock.calls[0][0];
+      expect(sent.headers).toEqual([{ key: 'IDEMPOTENCY-KEY', value: 'already-set' }]);
+    });
   });
 });
 

@@ -32,16 +32,37 @@
 //      transaction — a step can never appear "applied" without its own
 //      writes having actually landed, or vice versa.
 //
-// `VERSIONED_MIGRATIONS` starts EMPTY. This is deliberate, not a stub: no
+// `VERSIONED_MIGRATIONS` started EMPTY through Phase 1 (S1-S7) — no
 // fabricated no-op migration was added just to exercise the mechanism at
-// boot — that would inflate this diff with pointless production code. The
-// mechanism itself is fully exercised by versionedMigrations.test.ts and
-// versionedMigrations.integration.test.ts against synthetic step lists.
+// boot. The mechanism itself is fully exercised by versionedMigrations.test.ts
+// and versionedMigrations.integration.test.ts against synthetic step lists.
+//
+// Phase 2 (B6) is the first REAL content: `B6_INDEX_MIGRATIONS`
+// (b6IndexMigrations.ts) — measured, evidence-backed hot-path indexes, each
+// built `CONCURRENTLY` (see this module's own `concurrent: true` support
+// above, added specifically because these steps need it).
 // ---------------------------------------------------------------------------
 
 import crypto from 'crypto';
 import type { PoolClient } from 'pg';
 import { pool, withTransaction } from './db';
+
+// ---------------------------------------------------------------------------
+// B6 (Phase 2) addition — CONCURRENTLY-built index steps.
+//
+// Postgres flatly refuses `CREATE INDEX CONCURRENTLY` inside a transaction
+// block ("CREATE INDEX CONCURRENTLY cannot run inside a transaction block") —
+// verified directly against this exact schema. Every step above runs inside
+// `withTransaction(...)`, so a step that needs CONCURRENTLY (any index build
+// large enough to matter for a production table — the entire point of using
+// CONCURRENTLY at all, since it avoids taking the ACCESS EXCLUSIVE lock a
+// plain CREATE INDEX holds for the build's full duration) could never use
+// this mechanism as originally written. `concurrent: true` is the escape
+// hatch: such a step's `up()` runs OUTSIDE any transaction, on the pool
+// directly (autocommit), and its ledger row is inserted in a SEPARATE, tiny
+// transaction immediately after — see `runVersionedMigrations` below for the
+// exact sequencing and its crash-recovery properties.
+// ---------------------------------------------------------------------------
 
 interface Queryable {
   query<T extends Record<string, unknown> = Record<string, unknown>>(text: string, params?: unknown[]): Promise<{ rows: T[] }>;
@@ -53,13 +74,36 @@ export interface VersionedMigration {
   id: string;
   /** Human-readable one-liner shown in logs/getSchemaVersion(). */
   description: string;
-  /** Runs inside a transaction shared with this step's own ledger insert.
-   *  Must be genuinely idempotent-safe to retry ONCE if the process crashes
-   *  between the effect committing and... it can't — see the module header:
+  /** Runs inside a transaction shared with this step's own ledger insert
+   *  (UNLESS `concurrent: true` — see below). Must be genuinely idempotent-
+   *  safe to retry ONCE if the process crashes between the effect committing
+   *  and... it can't, for a transactional step — see the module header:
    *  effect + ledger row commit atomically, so there is no partial-applied
    *  state to retry into. Still, prefer IF NOT EXISTS-style DDL as a second
    *  line of defense, matching the rest of this codebase's convention. */
   up: (client: PoolClient) => Promise<void>;
+  /**
+   * Set for a step whose `up()` issues `CREATE INDEX CONCURRENTLY` (or any
+   * other statement Postgres refuses inside a transaction block) — such a
+   * step runs on a plain pool connection with autocommit, NOT inside
+   * `withTransaction`, and its ledger row is inserted separately right after
+   * it succeeds. Unlike a transactional step, a crash between the DDL
+   * succeeding and the ledger insert IS possible here — see
+   * `runVersionedMigrations`'s handling: `up()` must use
+   * `CREATE INDEX CONCURRENTLY IF NOT EXISTS` so a retried run (ledger row
+   * still missing) is a cheap no-op rather than a duplicate-index error, and
+   * the FIRST thing `runVersionedMigrations` does for a concurrent step is
+   * check `pg_index.indisvalid` for the index by name — a previous attempt
+   * that crashed mid-build leaves an INVALID index Postgres will never
+   * re-attempt on its own (a known CONCURRENTLY gotcha: IF NOT EXISTS treats
+   * an invalid index as "already exists" and skips it), so an invalid index
+   * is dropped and rebuilt before the ledger row is written.
+   */
+  concurrent?: boolean;
+  /** Required when `concurrent` is true — the exact index name `up()`
+   *  creates, used for the pre-flight invalid-index check described above.
+   *  Not used for a transactional step. */
+  indexName?: string;
 }
 
 /** SHA-256 of a step's own description + up.toString() — a coarse but real
@@ -129,6 +173,11 @@ export async function runVersionedMigrations(steps: VersionedMigration[]): Promi
       continue; // already applied — never re-run a step, only verify it.
     }
 
+    if (step.concurrent) {
+      await applyConcurrentStep(step, checksum);
+      continue;
+    }
+
     await withTransaction(async (client) => {
       await step.up(client);
       await client.query(
@@ -137,6 +186,49 @@ export async function runVersionedMigrations(steps: VersionedMigration[]): Promi
       );
     });
   }
+}
+
+/**
+ * Applies a `concurrent: true` step: a real dedicated pool connection (NOT
+ * inside a transaction — `CREATE INDEX CONCURRENTLY` is rejected otherwise,
+ * verified against this exact schema), a pre-flight check that drops a
+ * left-behind INVALID index from a previously-crashed attempt (see
+ * VersionedMigration's own doc comment for why that's necessary — plain
+ * `IF NOT EXISTS` alone would treat an invalid index as "done"), then a
+ * SEPARATE small transaction for the ledger row once the build succeeds.
+ */
+async function applyConcurrentStep(step: VersionedMigration, checksum: string): Promise<void> {
+  if (!step.indexName) {
+    throw new Error(`Versioned migration "${step.id}" is marked concurrent but has no indexName set.`);
+  }
+  const client = await pool.connect();
+  try {
+    const invalid = await client.query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM pg_class c
+         JOIN pg_index i ON i.indexrelid = c.oid
+         WHERE c.relname = $1 AND i.indisvalid = false
+       ) AS exists`,
+      [step.indexName]
+    );
+    if (invalid.rows[0]?.exists) {
+      console.warn(`⚠️  migration "${step.id}": found an INVALID leftover index "${step.indexName}" (from a previously-interrupted CONCURRENTLY build) — dropping and rebuilding.`);
+      await client.query(`DROP INDEX CONCURRENTLY IF EXISTS ${step.indexName}`);
+    }
+    await step.up(client);
+  } finally {
+    client.release();
+  }
+  // Ledger insert as its own tiny statement, deliberately AFTER releasing the
+  // dedicated connection above — a crash here leaves the index built but the
+  // ledger row missing, which is safe-to-retry: the next boot re-enters this
+  // function, finds the (now valid) index, and `up()`'s own
+  // `CREATE INDEX CONCURRENTLY IF NOT EXISTS` is a cheap no-op before the
+  // ledger row is (re-)written.
+  await pool.query(
+    `INSERT INTO schema_migrations (id, description, checksum) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`,
+    [step.id, step.description, checksum]
+  );
 }
 
 export interface SchemaVersionInfo {
@@ -179,5 +271,20 @@ export async function getSchemaVersion(exec: Queryable = pool): Promise<SchemaVe
   return { legacyMigrationsApplied, appliedVersionedMigrations, latestVersionedMigrationAt };
 }
 
-/** No real migrations yet — see the module header for why this starts empty. */
-export const VERSIONED_MIGRATIONS: VersionedMigration[] = [];
+/** See the module header — Phase 2's B6 index migrations are the first real
+ *  content in this ledger. Import is deliberately placed at the bottom of
+ *  this file (rather than the top) so `b6IndexMigrations.ts`'s own
+ *  `import type { VersionedMigration } from './versionedMigrations'` (a
+ *  type-only, compile-time-erased import) can never form a real runtime
+ *  circular dependency with this module. */
+import { B6_INDEX_MIGRATIONS } from './b6IndexMigrations';
+import { B3_LEASE_MIGRATIONS } from './b3LeaseMigrations';
+import { B2_STORAGE_MIGRATIONS } from './b2StorageMigrations';
+export const VERSIONED_MIGRATIONS: VersionedMigration[] = [
+  // Every group here is independent of the others (own tables/columns) —
+  // ordering is by sprint number purely for readability, not a functional
+  // dependency between them.
+  ...B2_STORAGE_MIGRATIONS,
+  ...B3_LEASE_MIGRATIONS,
+  ...B6_INDEX_MIGRATIONS,
+];

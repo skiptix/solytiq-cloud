@@ -204,4 +204,90 @@ describe.skipIf(!dbAvailable)('S7 versioned migrations — live DB', () => {
   it('runAllMigrations() completes successfully end-to-end against an already-migrated database (idempotent re-run)', async () => {
     await expect(runAllMigrations()).resolves.not.toThrow();
   });
+
+  // ---------------------------------------------------------------------------
+  // B6 (Phase 2) — `concurrent: true` steps (CREATE INDEX CONCURRENTLY, which
+  // Postgres refuses inside a transaction block — verified directly above).
+  // ---------------------------------------------------------------------------
+  describe('concurrent: true steps', () => {
+    const IDX = 'test_concurrent_marker_idx';
+
+    afterEach(async () => {
+      await pool.query(`DROP INDEX CONCURRENTLY IF EXISTS ${IDX}`);
+      await pool.query(`DELETE FROM schema_migrations WHERE id LIKE 'test_concurrent_%'`);
+    });
+
+    it('builds a real index via CREATE INDEX CONCURRENTLY, outside any transaction, and records it in the ledger', async () => {
+      const step = {
+        id: 'test_concurrent_step',
+        description: 'concurrent index build',
+        concurrent: true,
+        indexName: IDX,
+        up: async () => {
+          // Deliberately NOT using the passed client — a concurrent step runs
+          // on a plain autocommit connection, proven by this succeeding at all
+          // (the same statement inside withTransaction throws — see the
+          // module header's own verified claim).
+          await pool.query(`CREATE INDEX CONCURRENTLY IF NOT EXISTS ${IDX} ON tasks(list_id)`);
+        },
+      };
+      await runVersionedMigrations([step]);
+
+      const idx = await pool.query(`SELECT indisvalid FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid WHERE c.relname = $1`, [IDX]);
+      expect(idx.rows.length).toBe(1);
+      expect(idx.rows[0].indisvalid).toBe(true);
+
+      const ledger = await pool.query(`SELECT id FROM schema_migrations WHERE id = $1`, [step.id]);
+      expect(ledger.rows.length).toBe(1);
+    });
+
+    it('is idempotent-safe on a second run (no duplicate-index error, no second ledger row)', async () => {
+      const step = {
+        id: 'test_concurrent_step',
+        description: 'concurrent index build',
+        concurrent: true,
+        indexName: IDX,
+        up: async () => { await pool.query(`CREATE INDEX CONCURRENTLY IF NOT EXISTS ${IDX} ON tasks(list_id)`); },
+      };
+      await runVersionedMigrations([step]);
+      await expect(runVersionedMigrations([step])).resolves.not.toThrow();
+      const ledger = await pool.query(`SELECT id FROM schema_migrations WHERE id = $1`, [step.id]);
+      expect(ledger.rows.length).toBe(1);
+    });
+
+    it('detects and rebuilds a leftover INVALID index from a previously-interrupted build', async () => {
+      // Simulate an interrupted CONCURRENTLY build: Postgres leaves an
+      // invalid index behind when one is cancelled mid-build. We can't
+      // easily cancel one mid-flight in a test, but we CAN reproduce the
+      // exact end state (an invalid index by that name, no ledger row) by
+      // building on an empty/immediate-fail path: CONCURRENTLY on a unique
+      // index over a column with a pre-existing duplicate leaves it invalid.
+      await pool.query(`CREATE TABLE IF NOT EXISTS test_concurrent_dupes (v INT)`);
+      await pool.query(`INSERT INTO test_concurrent_dupes (v) VALUES (1), (1)`); // duplicate — breaks a UNIQUE build
+      await pool.query(`CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS ${IDX} ON test_concurrent_dupes(v)`).catch(() => {
+        /* expected to fail and leave an invalid index behind */
+      });
+
+      const preCheck = await pool.query(`SELECT indisvalid FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid WHERE c.relname = $1`, [IDX]);
+      expect(preCheck.rows[0]?.indisvalid).toBe(false); // confirms the simulated pre-condition
+
+      // Now the real migration step, targeting the SAME index name but a
+      // non-unique definition (as production code would after fixing the
+      // underlying issue) — it must detect the invalid leftover and rebuild.
+      const step = {
+        id: 'test_concurrent_rebuild',
+        description: 'rebuild after invalid leftover',
+        concurrent: true,
+        indexName: IDX,
+        up: async () => { await pool.query(`CREATE INDEX CONCURRENTLY IF NOT EXISTS ${IDX} ON tasks(list_id)`); },
+      };
+      await runVersionedMigrations([step]);
+
+      const postCheck = await pool.query(`SELECT indisvalid FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid WHERE c.relname = $1`, [IDX]);
+      expect(postCheck.rows[0]?.indisvalid).toBe(true);
+
+      await pool.query(`DELETE FROM schema_migrations WHERE id = 'test_concurrent_rebuild'`);
+      await pool.query(`DROP TABLE IF EXISTS test_concurrent_dupes`);
+    });
+  });
 });

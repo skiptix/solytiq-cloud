@@ -9,7 +9,7 @@ import { authenticate } from '../middleware';
 import { verifyToken, hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, werr, QueryExec } from '../workspaceUtil';
-import { checkVersionConflict } from '../concurrency';
+import { validateReorderIds, bulkSetPositions } from '../reorderUtil';
 import { buildRestrictConflict } from '../visibility';
 import { softDeleteListTreeExec } from '../trashUtil';
 import { createListTask, updateListTaskFields, deleteTaskRow } from './lists';
@@ -448,17 +448,22 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
 // so the client passes every markdown page in the desired order.
 router.put('/reorder', authenticate, async (req: Request, res: Response) => {
   try {
-    const { ids } = req.body as { ids?: string[] };
-    if (!Array.isArray(ids)) {
-      res.status(400).json({ error: 'ids must be an array' });
+    const validation = validateReorderIds((req.body as { ids?: unknown }).ids, 'string');
+    if (!validation.ok) { res.status(validation.status).json({ error: validation.error }); return; }
+    const ids = validation.ids as string[];
+    if (ids.length === 0) { res.json({ success: true }); return; }
+
+    const owned = await query<{ id: string }>(
+      `SELECT id FROM markdown_lists WHERE id = ANY($1::varchar[]) AND user_id = $2`,
+      [ids, req.userId]
+    );
+    if (owned.rows.length !== ids.length) {
+      res.status(400).json({ error: 'One or more ids do not belong to a markdown page you own' });
       return;
     }
 
-    await Promise.all(
-      ids.map((markdownListId, index) =>
-        query('UPDATE markdown_lists SET position = $1 WHERE id = $2 AND user_id = $3', [index, markdownListId, req.userId])
-      )
-    );
+    // ONE bulk statement — atomically all-or-nothing (B4).
+    await bulkSetPositions('markdown_lists', 'varchar', ids, 't.user_id = $3', [req.userId]);
 
     res.json({ success: true });
     broadcastToUser(req.userId!, 'markdownLists');
@@ -492,12 +497,6 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
     const canEdit = canManage || await isItemSharedWith('markdownList', id, req.userId!);
     if (!canEdit) { res.status(403).json({ error: 'Permission denied' }); return; }
 
-    const conflict = await checkVersionConflict('markdown_lists', id, expectedVersion);
-    if (conflict !== null) {
-      res.status(409).json({ error: 'version_conflict', markdownList: await getMarkdownListForUser(req.userId!, id) });
-      return;
-    }
-
     // Metadata fields only take effect for an owner/admin; a collaborator's PUT
     // is content-only (the rest fall through COALESCE unchanged).
     const mName = canManage ? name : undefined;
@@ -517,12 +516,34 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
     // todo_list_id, independently decide to lazily create a new Todo list,
     // and then each overwrite the other's write — silently orphaning
     // whichever Todo list lost the race instead of reusing it.
+    //
+    // B4: the optimistic-concurrency version check is performed HERE, AFTER
+    // acquiring the FOR UPDATE lock — not as a separate pre-check SELECT
+    // before the transaction (the old `checkVersionConflict` call this
+    // replaced). Two concurrent PUTs with the same `expectedVersion`: the
+    // first to acquire the lock proceeds and commits, bumping `version` via
+    // the `bump_version()` trigger; the second, once unblocked, re-reads the
+    // row through the SAME `FOR UPDATE` and sees the ALREADY-bumped version,
+    // so it correctly detects the mismatch and aborts with a 409 — a
+    // pre-transaction check would have already passed for both before
+    // either committed, exactly the race concurrency.ts's header documents.
     let mentionBefore = '';
     let mentionAfter = '';
+    let versionConflict: number | null = null;
     const { result, newTodoListId, priorTodoListId } = await withTransaction(async (client) => {
       const exec: QueryExec = (text, params) => client.query(text, params);
       const lockedRes = await exec('SELECT * FROM markdown_lists WHERE id = $1 FOR UPDATE', [id]);
       const locked = lockedRes.rows[0] as unknown as MarkdownListRow;
+
+      if (typeof expectedVersion === 'number' && locked.version !== expectedVersion) {
+        versionConflict = locked.version;
+        // Sentinel result — signals the outer code to respond 409 instead of
+        // committing any write. Throwing here would also work (withTransaction
+        // rolls back on any throw) but a sentinel avoids classifying a benign
+        // version mismatch as an unexpected 500-worthy error in logs.
+        const emptyResult = { rows: [] } as unknown as Awaited<ReturnType<typeof exec>>;
+        return { result: emptyResult, newTodoListId: locked.todo_list_id, priorTodoListId: locked.todo_list_id };
+      }
 
       let todoListId = locked.todo_list_id;
       let contentJson: string | null = null;
@@ -562,6 +583,11 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
       );
       return { result: updateRes, newTodoListId: todoListId, priorTodoListId: locked.todo_list_id };
     });
+
+    if (versionConflict !== null) {
+      res.status(409).json({ error: 'version_conflict', currentVersion: versionConflict, markdownList: await getMarkdownListForUser(req.userId!, id) });
+      return;
+    }
 
     const [hydrated] = await hydrateTodoChecked([result.rows[0] as unknown as MarkdownListRow]);
     res.json({ markdownList: hydrated });
