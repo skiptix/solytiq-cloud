@@ -37,6 +37,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
+      # B1: PROCESS_ROLE defaults to 'all' (today's exact single-container
+      # behavior — see processRoles.ts). Uncomment/override to split into
+      # separate api/worker/migrator containers for horizontal scaling; see
+      # the Phase 2 handoff's "Rolloutreihenfolge" for the safe sequence.
+      PROCESS_ROLE: ${PROCESS_ROLE:-all}
       PGHOST: postgres
       PGPORT: 5432
       PGDATABASE: ${POSTGRES_DB:-solytiq}
@@ -49,14 +54,44 @@ services:
       EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      # B8: pool sizing/timeouts — see dbConfig.ts for defaults if unset.
+      DB_POOL_MAX: ${DB_POOL_MAX:-20}
+      DB_POOL_ACQUIRE_TIMEOUT_MS: ${DB_POOL_ACQUIRE_TIMEOUT_MS:-10000}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-120000}
+      DB_LOCK_TIMEOUT_MS: ${DB_LOCK_TIMEOUT_MS:-15000}
     volumes:
       - gps_uploads:/app/uploads
+    # B8 — container hardening: the runtime image already runs as the
+    # non-root `node` user (see backend/Dockerfile). `read_only: true` means
+    # the ONLY paths this container can write to at all are the two mounts
+    # below (the uploads volume + a tmpfs /tmp for any dependency's scratch
+    # files — nothing in this codebase's own src/ writes to /tmp, but this
+    # is cheap insurance). `cap_drop: [ALL]` removes every Linux capability
+    # this process doesn't need (it binds a port >1024 and does nothing
+    # privileged); `no-new-privileges` blocks setuid-style privilege
+    # escalation even if a dependency's binary were setuid. `pids_limit`
+    # bounds fork-bomb-style resource exhaustion; `mem_limit`/`cpus` bound
+    # a single container's blast radius on a shared host.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 1g
+    cpus: 2.0
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - solytiq-net
     healthcheck:
+      # Liveness-style check (matches /livez's "process-only" semantics —
+      # see index.ts). A momentary DB blip must not make Docker restart an
+      # otherwise-healthy process; that is /readyz's job for a real
+      # orchestrator's readiness gate, not this container-restart trigger.
       test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
       interval: 15s
       timeout: 5s

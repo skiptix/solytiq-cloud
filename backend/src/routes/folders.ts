@@ -12,6 +12,7 @@ import {
   getPublicDescendants, buildRestrictConflict, restrictDescendants,
   type ConflictDescendant,
 } from '../visibility';
+import { decodeKeysetCursor, encodeKeysetCursor, parsePageLimit, paginateRows, type KeysetCursor } from '../pagination';
 
 const router = Router();
 router.use(authenticate);
@@ -95,10 +96,85 @@ export async function getFolderForUser(userId: string, folderId: string) {
   return r.rows[0] ? sanitizeFolder(r.rows[0]) : null;
 }
 
+/**
+ * B5: batch-hydrate MANY folders in ONE query instead of the N round-trips
+ * `getFolderForUser` called in a loop would cost — used by
+ * `/api/sync/delta`'s re-serialization of a batch of changed folder ids.
+ * A requested id the caller can't see is simply absent from the returned Map
+ * — same access boundary as `getFolderForUser`, just batched.
+ */
+export async function getFoldersForUserBatch(userId: string, folderIds: string[]): Promise<Map<string, ReturnType<typeof sanitizeFolder>>> {
+  const map = new Map<string, ReturnType<typeof sanitizeFolder>>();
+  if (folderIds.length === 0) return map;
+  const r = await query<FolderRow>(
+    `SELECT f.* FROM folders f
+     LEFT JOIN workspace_members wm ON wm.workspace_id = f.workspace_id AND wm.user_id = $1
+     WHERE f.id = ANY($2::varchar[]) AND ${FOLDER_ACCESS}`,
+    [userId, folderIds]
+  );
+  for (const row of r.rows) map.set(row.id, sanitizeFolder(row));
+  return map;
+}
+
+// B5 (Phase 2 follow-up): keyset-paginated variant of buildFoldersForUser —
+// SAME access condition/filters, bounded + resumable via an opaque cursor.
+// Folders are a flat row (no nested sections/tasks the way lists are), so
+// this is the same simple shape as tasks.ts's/files.ts's own cursor
+// pagination, no batch-hydration step needed.
+export async function buildFoldersPageForUser(
+  userId: string,
+  workspaceId: string | undefined,
+  opts: { cursor: KeysetCursor | null; limit: number }
+): Promise<{ folders: ReturnType<typeof sanitizeFolder>[]; nextCursor: string | null }> {
+  const params: unknown[] = [userId];
+  const wsClause = workspaceId ? `AND (f.workspace_id = $2 OR f.workspace_id IS NULL)` : '';
+  if (workspaceId) params.push(workspaceId);
+
+  let cursorClause = '';
+  if (opts.cursor) {
+    params.push(opts.cursor.position, opts.cursor.createdAt, opts.cursor.id);
+    const n = params.length;
+    cursorClause = `AND (f.position, EXTRACT(EPOCH FROM f.created_at)::double precision, f.id) > ($${n - 2}, $${n - 1}::double precision, $${n})`;
+  }
+
+  params.push(opts.limit + 1);
+  const limitParamIndex = params.length;
+
+  const rows = await query<FolderRow & { created_at_epoch: number }>(
+    `SELECT f.*, EXTRACT(EPOCH FROM f.created_at)::double precision AS created_at_epoch
+     FROM folders f
+     LEFT JOIN workspace_members wm ON wm.workspace_id = f.workspace_id AND wm.user_id = $1
+     WHERE ${FOLDER_ACCESS}
+     ${wsClause}
+     ${cursorClause}
+     ORDER BY f.position ASC, f.created_at ASC, f.id ASC
+     LIMIT $${limitParamIndex}`,
+    params
+  );
+
+  const { page, nextCursor } = paginateRows(rows.rows, opts.limit, (row) => ({
+    position: row.position,
+    createdAt: row.created_at_epoch,
+    id: row.id,
+  }), encodeKeysetCursor);
+  return { folders: page.map(sanitizeFolder), nextCursor };
+}
+
 // GET /api/folders
+// Backward-compatible: no cursor/limit → identical unbounded {folders}
+// response as before. Either param → paginated {folders, nextCursor} shape.
 router.get('/', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
+    const wantsPage = req.query.cursor !== undefined || req.query.limit !== undefined;
+    if (wantsPage) {
+      const cursor = decodeKeysetCursor(req.query.cursor);
+      const limit = parsePageLimit(req.query.limit);
+      const { folders, nextCursor } = await buildFoldersPageForUser(req.userId!, workspaceId, { cursor, limit });
+      wlog(`folders GET(paged) user=${req.userId} workspace=${workspaceId ?? 'ALL'} limit=${limit} → ${folders.length} folder(s), nextCursor=${nextCursor ? 'yes' : 'no'}`);
+      res.json({ folders, nextCursor });
+      return;
+    }
     const folders = await buildFoldersForUser(req.userId!, workspaceId);
     res.json({ folders });
   } catch (err) {
@@ -169,16 +245,20 @@ router.put('/:id', async (req: Request, res: Response) => {
     const folder = existing.rows[0];
     const isOwner = folder.user_id === req.userId;
     const isAdmin = req.user?.isAdmin === true;
-    const canAccess = isOwner || isAdmin || folder.is_public === true;
-    const wantsPrivacyChange = typeof isPublic === 'boolean';
+    // WRITE access to a folder's own metadata (name/emoji/color/position/
+    // collapsed/privacy) requires ownership or admin, same as every other
+    // object's write endpoint in this codebase (see canvases.ts's PUT/DELETE,
+    // lists.ts's PUT/rename/etc.) — `is_public` is a READ-visibility grant to
+    // workspace members ONLY (see objectPolicy.ts's header comment and
+    // CLAUDE.md's "Two distinct notions of public"), never a write grant, and
+    // never a grant to every signed-in instance user regardless of workspace
+    // membership. The previous `|| folder.is_public === true` here let any
+    // authenticated user rename/recolor/move any public folder instance-wide,
+    // including one inside another user's private workspace.
+    const canAccess = isOwner || isAdmin;
 
     if (!canAccess) {
       res.status(404).json({ error: 'Folder not found' });
-      return;
-    }
-
-    if (wantsPrivacyChange && !isOwner && !isAdmin) {
-      res.status(403).json({ error: 'Only the owner or admin can change folder privacy' });
       return;
     }
 

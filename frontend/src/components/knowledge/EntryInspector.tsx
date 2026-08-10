@@ -20,7 +20,7 @@ import SaveStatusDot from '../SaveStatusDot';
 import EntityChip from '../EntityChip';
 import { makeEmptyBlock } from '../../utils/markdownBlocks';
 import { ENTRY_TYPE_OPTIONS } from '../../utils/knowledgeEntryTypes';
-import { knowledgeEntryImageUrl, apiUploadKnowledgeEntryImage } from '../../api/client';
+import { knowledgeEntryImageUrl, apiUploadKnowledgeEntryImage, ensureAssetTicket } from '../../api/client';
 import { panelVariantsRight, crossFadeVariants } from '../../utils/motionTokens';
 import type { MentionMember } from '../../utils/mention';
 
@@ -59,6 +59,10 @@ export default function EntryInspector({
   const [error, setError] = useState('');
   const [reorderMode, setReorderMode] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // S4: a short-lived per-entry image ticket (client.ts's asset-ticket
+  // cache) must be minted before any `/image` block in this entry can render
+  // — see knowledgeEntryImageUrl. Reset per entry.id, same as the buffer below.
+  const [imagesReady, setImagesReady] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Switching to a different entry rebuilds the buffer. Keyed on id rather than
@@ -74,6 +78,12 @@ export default function EntryInspector({
     setMetaDirty(false);
     setError('');
     setConfirmDelete(false);
+    setImagesReady(false);
+    let cancelled = false;
+    ensureAssetTicket(`kbimg:${entry.id}`)
+      .catch(() => { /* best-effort — an entry with no images doesn't need one */ })
+      .finally(() => { if (!cancelled) setImagesReady(true); });
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry.id]);
 
@@ -269,17 +279,21 @@ export default function EntryInspector({
               </button>
             )}
           </div>
-          <BlockEditor
-            blocks={blocks}
-            onChange={handleBlocksChange}
-            onChangeImmediate={handleBlocksChangeImmediate}
-            imageUrl={imageId => knowledgeEntryImageUrl(entry.id, imageId)}
-            uploadImage={(file, onProgress) => apiUploadKnowledgeEntryImage(entry.id, file, onProgress)}
-            isMobile={isMobile}
-            reorderMode={reorderMode}
-            mentionMembers={mentionMembers}
-            placeholder="Define this term. Type '/' for blocks, or '[[' to link a board, page or task."
-          />
+          {imagesReady ? (
+            <BlockEditor
+              blocks={blocks}
+              onChange={handleBlocksChange}
+              onChangeImmediate={handleBlocksChangeImmediate}
+              imageUrl={imageId => knowledgeEntryImageUrl(entry.id, imageId)}
+              uploadImage={(file, onProgress) => apiUploadKnowledgeEntryImage(entry.id, file, onProgress)}
+              isMobile={isMobile}
+              reorderMode={reorderMode}
+              mentionMembers={mentionMembers}
+              placeholder="Define this term. Type '/' for blocks, or '[[' to link a board, page or task."
+            />
+          ) : (
+            <div style={{ padding: '24px 0', textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Loading…</div>
+          )}
         </div>
 
         <div>

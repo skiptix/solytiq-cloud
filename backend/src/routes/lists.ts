@@ -5,16 +5,19 @@ import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
-import { checkVersionConflict } from '../concurrency';
+import { versionGuardSql, resolveVersionedUpdateFailure } from '../concurrency';
+import { validateReorderIds, bulkSetPositions } from '../reorderUtil';
 import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, wwarn, werr, QueryExec } from '../workspaceUtil';
 import { softDeleteListTree, collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestrictConflict } from '../visibility';
 import type { MutationActor } from '../automationEngine';
 import { recordTaskChanges } from '../taskChangeLog';
 import { notifyNewMentions } from '../mentions';
-import { itemShareExists, isItemSharedWith } from '../itemShares';
+import { isItemSharedWith } from '../itemShares';
+import { objectAccessCondition, workspaceMembersJoin } from '../objectPolicy';
 import { syncInlineLinksForText } from '../graph/inlineLinks';
 import { enqueueEmbedding } from '../knowledge/queue';
+import { decodeKeysetCursor, encodeKeysetCursor, parsePageLimit, paginateRows, type KeysetCursor } from '../pagination';
 
 const router = Router();
 router.use(authenticate);
@@ -180,15 +183,8 @@ export async function buildListsForUser(userId: string, workspaceId?: string, in
     : '';
   if (workspaceId) params.push(workspaceId);
 
-  const accessCondition = `(
-    l.user_id = $1
-    OR (l.is_public = true AND (
-      wm.user_id = $1
-      OR l.workspace_id IS NULL
-      OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public')
-    ))
-    OR ${itemShareExists('l', 'list')}
-  )`;
+  const accessCondition = objectAccessCondition('l', 'list');
+  const wmJoin = workspaceMembersJoin('l');
   // Archived lists are hidden from the normal workspace view (sidebar, dashboards,
   // etc.) — surfaced only via the dedicated Archived modal (GET /?archived=true).
   const archivedFilter = includeArchived ? 'AND l.is_archived = true' : 'AND l.is_archived = false';
@@ -196,7 +192,7 @@ export async function buildListsForUser(userId: string, workspaceId?: string, in
   const [listsResult, sectionsResult, tasksResult] = await Promise.all([
     query<ListRow>(
       `SELECT l.* FROM lists l
-       LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
+       ${wmJoin}
        WHERE ${accessCondition}
        ${wsFilter}
        ${archivedFilter}
@@ -206,7 +202,7 @@ export async function buildListsForUser(userId: string, workspaceId?: string, in
     query<SectionRow>(
       `SELECT s.* FROM sections s
        JOIN lists l ON s.list_id = l.id
-       LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
+       ${wmJoin}
        WHERE ${accessCondition}
        ${wsFilter}
        ORDER BY s.position ASC`,
@@ -217,7 +213,7 @@ export async function buildListsForUser(userId: string, workspaceId?: string, in
               (SELECT COUNT(*) FROM task_attachments ta WHERE ta.task_id = t.id) AS attachment_count
        FROM tasks t
        JOIN lists l ON t.list_id = l.id
-       LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
+       ${wmJoin}
        WHERE ${accessCondition}
        AND t.source = 'list'
        ${wsFilter}
@@ -261,6 +257,92 @@ export async function buildListsForUser(userId: string, workspaceId?: string, in
   );
 }
 
+// B5 (Phase 2 follow-up): keyset-paginated variant of buildListsForUser.
+// Lists are NOT a flat row like tasks/files/folders — each one nests its own
+// sections+tasks — so this can't just add a LIMIT to buildListsForUser's own
+// query. Instead: cursor-bound the TOP-LEVEL `lists` rows first (same keyset
+// predicate as tasks.ts's buildTasksPageForUser), then hydrate sections/tasks
+// scoped to ONLY that page's list ids (`list_id = ANY($ids)`) rather than the
+// full access-condition scan buildListsForUser uses — this is what keeps a
+// page's cost bounded by the page size, not by the workspace's total list
+// count, and avoids re-deriving sections/tasks for lists outside this page.
+export async function buildListsPageForUser(
+  userId: string,
+  workspaceId: string | undefined,
+  opts: { cursor: KeysetCursor | null; limit: number; includeArchived?: boolean }
+): Promise<{ lists: ReturnType<typeof sanitizeList>[]; nextCursor: string | null }> {
+  const params: unknown[] = [userId];
+  const wsClause = workspaceId ? `AND (l.workspace_id = $2 OR l.workspace_id IS NULL)` : '';
+  if (workspaceId) params.push(workspaceId);
+  const archivedFilter = opts.includeArchived ? 'AND l.is_archived = true' : 'AND l.is_archived = false';
+
+  let cursorClause = '';
+  if (opts.cursor) {
+    params.push(opts.cursor.position, opts.cursor.createdAt, opts.cursor.id);
+    const n = params.length;
+    cursorClause = `AND (l.position, EXTRACT(EPOCH FROM l.created_at)::double precision, l.id) > ($${n - 2}, $${n - 1}::double precision, $${n})`;
+  }
+
+  params.push(opts.limit + 1);
+  const limitParamIndex = params.length;
+
+  const listsResult = await query<ListRow & { created_at_epoch: number }>(
+    `SELECT l.*, EXTRACT(EPOCH FROM l.created_at)::double precision AS created_at_epoch
+     FROM lists l
+     ${workspaceMembersJoin('l')}
+     WHERE ${objectAccessCondition('l', 'list')}
+     ${wsClause}
+     ${archivedFilter}
+     ${cursorClause}
+     ORDER BY l.position ASC, l.created_at ASC, l.id ASC
+     LIMIT $${limitParamIndex}`,
+    params
+  );
+
+  const { page, nextCursor } = paginateRows(listsResult.rows, opts.limit, (row) => ({
+    position: row.position,
+    createdAt: row.created_at_epoch,
+    id: row.id,
+  }), encodeKeysetCursor);
+
+  if (page.length === 0) return { lists: [], nextCursor };
+
+  const listIds = page.map((l) => l.id);
+  const [sectionsResult, tasksResult] = await Promise.all([
+    query<SectionRow>(`SELECT * FROM sections WHERE list_id = ANY($1::varchar[]) ORDER BY position ASC`, [listIds]),
+    query<TaskRow>(
+      `SELECT t.*, (SELECT COUNT(*) FROM task_attachments ta WHERE ta.task_id = t.id) AS attachment_count
+       FROM tasks t WHERE t.list_id = ANY($1::varchar[]) AND t.source = 'list'
+       ORDER BY t.position ASC, t.created_at ASC`,
+      [listIds]
+    ),
+  ]);
+
+  const tasksBySection: Record<string, ReturnType<typeof sanitizeTask>[]> = {};
+  for (const task of tasksResult.rows) {
+    const key = task.section_id ?? '__none__';
+    if (!tasksBySection[key]) tasksBySection[key] = [];
+    tasksBySection[key].push(sanitizeTask(task));
+  }
+  const sectionsByList: Record<string, ReturnType<typeof sanitizeSection>[]> = {};
+  for (const section of sectionsResult.rows) {
+    if (!sectionsByList[section.list_id]) sectionsByList[section.list_id] = [];
+    sectionsByList[section.list_id].push(sanitizeSection(section, tasksBySection[section.id] ?? []));
+  }
+  const taskCountByList: Record<string, { total: number; completed: number }> = {};
+  for (const task of tasksResult.rows) {
+    if (!task.list_id) continue;
+    if (!taskCountByList[task.list_id]) taskCountByList[task.list_id] = { total: 0, completed: 0 };
+    taskCountByList[task.list_id].total++;
+    if (task.checked) taskCountByList[task.list_id].completed++;
+  }
+
+  const lists = page.map((list) =>
+    sanitizeList(list, sectionsByList[list.id] ?? [], taskCountByList[list.id] ?? { total: 0, completed: 0 })
+  );
+  return { lists, nextCursor };
+}
+
 /**
  * Build a single fully-hydrated list (sections → tasks → progress) if the user
  * can see it, else null. Same shape as one element of `buildListsForUser`, so
@@ -269,18 +351,10 @@ export async function buildListsForUser(userId: string, workspaceId?: string, in
  * when the list is gone or no longer visible → the client removes it.
  */
 export async function getListForUser(userId: string, listId: string) {
-  const accessCondition = `(
-    l.user_id = $1
-    OR (l.is_public = true AND (
-      wm.user_id = $1
-      OR l.workspace_id IS NULL
-      OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = l.workspace_id AND w.visibility = 'public')
-    ))
-    OR ${itemShareExists('l', 'list')}
-  )`;
+  const accessCondition = objectAccessCondition('l', 'list');
   const listRes = await query<ListRow>(
     `SELECT l.* FROM lists l
-     LEFT JOIN workspace_members wm ON wm.workspace_id = l.workspace_id AND wm.user_id = $1
+     ${workspaceMembersJoin('l')}
      WHERE l.id = $2 AND ${accessCondition}`,
     [userId, listId]
   );
@@ -309,6 +383,69 @@ export async function getListForUser(userId: string, listId: string) {
     completed: tasksRes.rows.filter((t) => t.checked).length,
   };
   return sanitizeList(list, sections, progress);
+}
+
+/**
+ * B5: batch-hydrate MANY lists in a bounded, small, fixed number of queries
+ * (3, regardless of how many list ids are requested) instead of the N
+ * round-trips `getListForUser` would need called in a loop — used by
+ * `/api/sync/delta`'s re-serialization of a batch of changed list ids in one
+ * pass. SAME per-row access boundary as `getListForUser`/`buildListsForUser`
+ * (a requested id the caller can't see is silently absent from the returned
+ * Map, exactly like `getListForUser` returning null for it) — batching never
+ * widens what's visible, it only changes how many round trips it costs to
+ * find out.
+ */
+export async function getListsForUserBatch(userId: string, listIds: string[]): Promise<Map<string, ReturnType<typeof sanitizeList>>> {
+  const map = new Map<string, ReturnType<typeof sanitizeList>>();
+  if (listIds.length === 0) return map;
+
+  const accessCondition = objectAccessCondition('l', 'list');
+  const listsRes = await query<ListRow>(
+    `SELECT l.* FROM lists l
+     ${workspaceMembersJoin('l')}
+     WHERE l.id = ANY($2::varchar[]) AND ${accessCondition}`,
+    [userId, listIds]
+  );
+  if (listsRes.rows.length === 0) return map;
+  const visibleIds = listsRes.rows.map((l) => l.id);
+
+  const [sectionsRes, tasksRes] = await Promise.all([
+    query<SectionRow>(`SELECT * FROM sections WHERE list_id = ANY($1::varchar[]) ORDER BY position ASC`, [visibleIds]),
+    query<TaskRow>(
+      `SELECT t.*, (SELECT COUNT(*) FROM task_attachments ta WHERE ta.task_id = t.id) AS attachment_count
+       FROM tasks t WHERE t.list_id = ANY($1::varchar[]) AND t.source = 'list'
+       ORDER BY t.position ASC, t.created_at ASC`,
+      [visibleIds]
+    ),
+  ]);
+
+  const tasksBySection: Record<string, ReturnType<typeof sanitizeTask>[]> = {};
+  for (const task of tasksRes.rows) {
+    const key = task.section_id ?? '__none__';
+    if (!tasksBySection[key]) tasksBySection[key] = [];
+    tasksBySection[key].push(sanitizeTask(task));
+  }
+  const sectionsByList: Record<string, ReturnType<typeof sanitizeSection>[]> = {};
+  for (const section of sectionsRes.rows) {
+    if (!sectionsByList[section.list_id]) sectionsByList[section.list_id] = [];
+    sectionsByList[section.list_id].push(sanitizeSection(section, tasksBySection[section.id] ?? []));
+  }
+  const progressByList: Record<string, { total: number; completed: number }> = {};
+  for (const task of tasksRes.rows) {
+    if (!task.list_id) continue;
+    if (!progressByList[task.list_id]) progressByList[task.list_id] = { total: 0, completed: 0 };
+    progressByList[task.list_id].total++;
+    if (task.checked) progressByList[task.list_id].completed++;
+  }
+
+  for (const list of listsRes.rows) {
+    map.set(
+      list.id,
+      sanitizeList(list, sectionsByList[list.id] ?? [], progressByList[list.id] ?? { total: 0, completed: 0 })
+    );
+  }
+  return map;
 }
 
 /**
@@ -341,10 +478,21 @@ async function userCanViewListRow(
 // ---------------------------------------------------------------------------
 
 // GET /api/lists
+// Backward-compatible: no cursor/limit → identical unbounded {lists}
+// response as before. Either param → paginated {lists, nextCursor} shape.
 router.get('/', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
     const includeArchived = req.query.archived === 'true';
+    const wantsPage = req.query.cursor !== undefined || req.query.limit !== undefined;
+    if (wantsPage) {
+      const cursor = decodeKeysetCursor(req.query.cursor);
+      const limit = parsePageLimit(req.query.limit);
+      const { lists, nextCursor } = await buildListsPageForUser(req.userId!, workspaceId, { cursor, limit, includeArchived });
+      wlog(`lists GET(paged) user=${req.userId} workspace=${workspaceId ?? 'ALL'} limit=${limit} → ${lists.length} list(s), nextCursor=${nextCursor ? 'yes' : 'no'}`);
+      res.json({ lists, nextCursor });
+      return;
+    }
     wlog(`lists GET ⇢ user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} archived=${includeArchived} rawQuery=${JSON.stringify(req.query)}`);
     const lists = await buildListsForUser(req.userId!, workspaceId, includeArchived);
     wlog(`lists GET ⇠ user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} returned=${lists.length} ids=[${lists.slice(0, 25).map(l => `${l.id}{ws=${l.workspaceId ?? 'NULL'},folder=${l.folderId ?? 'root'}}`).join(', ')}${lists.length > 25 ? `, … +${lists.length - 25} more` : ''}]`);
@@ -461,23 +609,32 @@ router.post('/', async (req: Request, res: Response) => {
 });
 
 // PUT /api/lists/:listId/reorder
+//
+// NOTE: despite the `:listId` path segment, this reorders the caller's
+// TOP-LEVEL lists globally (the param is unused in the query below) — kept
+// exactly as the pre-existing route shape/behavior; only the write itself
+// is now atomic + validated (B4).
 router.put('/:listId/reorder', async (req: Request, res: Response) => {
   try {
-    const { ids } = req.body as { ids?: string[] };
+    const validation = validateReorderIds((req.body as { ids?: unknown }).ids, 'string');
+    if (!validation.ok) { res.status(validation.status).json({ error: validation.error }); return; }
+    const { ids } = validation;
+    if (ids.length === 0) { res.json({ success: true }); return; }
 
-    if (!Array.isArray(ids)) {
-      res.status(400).json({ error: 'ids must be an array' });
+    // Prove every id belongs to a list THIS user owns before mutating
+    // anything — a foreign id is rejected wholesale, not silently skipped.
+    const owned = await query<{ id: string }>(
+      `SELECT id FROM lists WHERE id = ANY($1::varchar[]) AND user_id = $2`,
+      [ids, req.userId]
+    );
+    if (owned.rows.length !== ids.length) {
+      res.status(400).json({ error: 'One or more ids do not belong to a list you own' });
       return;
     }
 
-    await Promise.all(
-      ids.map((listId, index) =>
-        query(
-          'UPDATE lists SET position = $1 WHERE id = $2 AND user_id = $3',
-          [index, listId, req.userId]
-        )
-      )
-    );
+    // ONE bulk statement — atomically all-or-nothing, closing the partial-
+    // reorder failure mode the previous N-separate-UPDATEs implementation had.
+    await bulkSetPositions('lists', 'varchar', ids, 't.user_id = $3', [req.userId]);
 
     res.json({ success: true });
     broadcastToUser(req.userId!, 'lists');
@@ -633,14 +790,13 @@ router.put('/:listId', async (req: Request, res: Response) => {
       return;
     }
 
-    // Optimistic concurrency: if the client sent the version it edited and the
-    // row has since moved on, reject with 409 + the current list so the loser
-    // reconciles to the winner instead of silently clobbering it.
-    const conflict = await checkVersionConflict('lists', listId, (req.body as { expectedVersion?: number }).expectedVersion);
-    if (conflict !== null) {
-      res.status(409).json({ error: 'version_conflict', list: await getListForUser(req.userId!, listId) });
-      return;
-    }
+    // Optimistic concurrency (B4): the version check is folded directly into
+    // the UPDATE's own WHERE clause below (versionGuardSql) rather than run
+    // as a separate SELECT beforehand — see concurrency.ts's header for why
+    // a standalone pre-check is a genuine check-then-act race under
+    // concurrent writers, and why embedding it in the write statement itself
+    // closes that race atomically.
+    const expectedVersion = (req.body as { expectedVersion?: number }).expectedVersion;
 
     const updateFolderId = 'folderId' in req.body;
 
@@ -661,6 +817,9 @@ router.put('/:listId', async (req: Request, res: Response) => {
       }
     }
 
+    const updateParams: unknown[] = [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, isPublic ?? null, listId,
+      updateFolderId, folderId ?? null, validViewMode];
+    const versionClause = versionGuardSql(updateParams, expectedVersion);
     const updateSql =
       `UPDATE lists
        SET name      = COALESCE($1, name),
@@ -672,10 +831,8 @@ router.put('/:listId', async (req: Request, res: Response) => {
            is_public = COALESCE($7, is_public),
            folder_id = CASE WHEN $9 THEN $10 ELSE folder_id END,
            view_mode = COALESCE($11, view_mode)
-       WHERE id = $8
+       WHERE id = $8${versionClause}
        RETURNING *`;
-    const updateParams = [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, isPublic ?? null, listId,
-      updateFolderId, folderId ?? null, validViewMode];
 
     let result;
     if (promote.length > 0) {
@@ -685,6 +842,16 @@ router.put('/:listId', async (req: Request, res: Response) => {
       });
     } else {
       result = await query<ListRow>(updateSql, updateParams);
+    }
+
+    if (result.rows.length === 0) {
+      // The WHERE clause matched nothing — either the row is gone (404) or
+      // (when expectedVersion was sent) another writer already moved the
+      // version past what this request expected (409). See concurrency.ts.
+      const failure = await resolveVersionedUpdateFailure('lists', listId);
+      if (failure.notFound) { res.status(404).json({ error: 'List not found' }); return; }
+      res.status(409).json({ error: 'version_conflict', currentVersion: failure.currentVersion, list: await getListForUser(req.userId!, listId) });
+      return;
     }
 
     res.json({ list: sanitizeList(result.rows[0], []) });
@@ -925,12 +1092,9 @@ router.put('/sections/:sectionId', async (req: Request, res: Response) => {
 router.put('/:listId/sections/reorder', async (req: Request, res: Response) => {
   try {
     const { listId } = req.params;
-    const { section_ids } = req.body as { section_ids?: string[] };
-
-    if (!Array.isArray(section_ids)) {
-      res.status(400).json({ error: 'section_ids must be an array' });
-      return;
-    }
+    const validation = validateReorderIds((req.body as { section_ids?: unknown }).section_ids, 'string');
+    if (!validation.ok) { res.status(validation.status).json({ error: validation.error.replace('ids', 'section_ids') }); return; }
+    const section_ids = validation.ids as string[];
 
     const listCheck = await query<{ user_id: string }>(
       'SELECT user_id FROM lists WHERE id = $1',
@@ -945,11 +1109,19 @@ router.put('/:listId/sections/reorder', async (req: Request, res: Response) => {
       return;
     }
 
-    await Promise.all(
-      section_ids.map((sectionId, index) =>
-        query('UPDATE sections SET position = $1 WHERE id = $2 AND list_id = $3', [index, sectionId, listId])
-      )
-    );
+    if (section_ids.length > 0) {
+      // Prove every section belongs to THIS list before mutating anything.
+      const owned = await query<{ id: string }>(
+        `SELECT id FROM sections WHERE id = ANY($1::varchar[]) AND list_id = $2`,
+        [section_ids, listId]
+      );
+      if (owned.rows.length !== section_ids.length) {
+        res.status(400).json({ error: 'One or more section_ids do not belong to this list' });
+        return;
+      }
+      // ONE bulk statement — atomically all-or-nothing (B4).
+      await bulkSetPositions('sections', 'varchar', section_ids, 't.list_id = $3', [listId]);
+    }
 
     res.json({ success: true });
     broadcastToUser(req.userId!, 'lists');
@@ -963,12 +1135,9 @@ router.put('/:listId/sections/reorder', async (req: Request, res: Response) => {
 router.put('/:listId/sections/:sectionId/tasks/reorder', async (req: Request, res: Response) => {
   try {
     const { listId, sectionId } = req.params;
-    const { task_ids } = req.body as { task_ids?: number[] };
-
-    if (!Array.isArray(task_ids)) {
-      res.status(400).json({ error: 'task_ids must be an array' });
-      return;
-    }
+    const validation = validateReorderIds((req.body as { task_ids?: unknown }).task_ids, 'number');
+    if (!validation.ok) { res.status(validation.status).json({ error: validation.error.replace('ids', 'task_ids') }); return; }
+    const task_ids = validation.ids as number[];
 
     const ownerCheck = await query<{ user_id: string }>(
       `SELECT l.user_id FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
@@ -983,11 +1152,19 @@ router.put('/:listId/sections/:sectionId/tasks/reorder', async (req: Request, re
       return;
     }
 
-    await Promise.all(
-      task_ids.map((taskId, index) =>
-        query('UPDATE tasks SET position = $1 WHERE id = $2 AND section_id = $3', [index, taskId, sectionId])
-      )
-    );
+    if (task_ids.length > 0) {
+      // Prove every task belongs to THIS section before mutating anything.
+      const owned = await query<{ id: string }>(
+        `SELECT id FROM tasks WHERE id = ANY($1::bigint[]) AND section_id = $2`,
+        [task_ids, sectionId]
+      );
+      if (owned.rows.length !== task_ids.length) {
+        res.status(400).json({ error: 'One or more task_ids do not belong to this section' });
+        return;
+      }
+      // ONE bulk statement — atomically all-or-nothing (B4).
+      await bulkSetPositions('tasks', 'bigint', task_ids, 't.section_id = $3', [sectionId]);
+    }
 
     res.json({ success: true });
     broadcastToUser(req.userId!, 'lists');

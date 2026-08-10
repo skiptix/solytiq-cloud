@@ -118,6 +118,13 @@ export interface ActionContext {
   automationId: string;
   automationOwnerId: string;
   runId: string;
+  /** This action node's own id within the graph — e.g. distinguishes two
+   *  separate `http_request` nodes in the SAME linear chain/run from each
+   *  other (see http_request's Idempotency-Key derivation below, which
+   *  folds this in rather than keying on `runId` alone — a single run with
+   *  two http_request nodes hitting the same endpoint must never send the
+   *  identical key for two logically distinct calls). */
+  nodeId: string;
   actor: MutationActor;
   trigger: TriggerContext;
   /** {trigger, $json, nodes} — every node output visible to this node, same shape used for {{...}} resolution. */
@@ -931,7 +938,7 @@ export const ACTION_REGISTRY: ActionDef[] = [
       if (!isKeyValueArray(params.queryParams)) return 'queryParams must be a list of {key, value} pairs';
       return null;
     },
-    execute: async (_ctx, params) => {
+    execute: async (ctx, params) => {
       const url = str(params.url);
       if (!url) return fail('url is required');
       const method = typeof params.method === 'string' ? params.method : 'GET';
@@ -941,7 +948,30 @@ export const ACTION_REGISTRY: ActionDef[] = [
       const body = typeof params.body === 'string' ? params.body : undefined;
       const timeoutMs = clampTimeoutMs(params.timeoutMs);
 
-      const result = await performHttpRequest({ url, method, headers, queryParams, bodyType, body, timeoutMs });
+      // B3 (Phase 2): a stable Idempotency-Key for this run's http_request
+      // call, so a well-behaved receiving endpoint can dedupe a retried
+      // delivery of the SAME call. Deterministic (`runId:nodeId` — unique
+      // per NODE EXECUTION, not re-derived from the request body, since a
+      // retry of the same node within the same run should always carry the
+      // same key even if {{...}}-resolved params happen to differ slightly
+      // on re-evaluation) — folding in `nodeId`, not `runId` alone, matters
+      // for real correctness: a single linear automation with TWO separate
+      // `http_request` action nodes calling the same endpoint are two
+      // logically distinct calls, and a receiver honoring this header must
+      // be able to tell them apart, not have the second silently swallowed
+      // as "the same request retried" (caught in review — an earlier pass
+      // keyed on `runId` alone). Never overrides a header the automation
+      // author explicitly set. Documented honestly (see automationTypes.ts's
+      // own module conventions): this is an at-least-once send with a
+      // deduplication hint, not a guaranteed-exactly-once delivery — this
+      // codebase does not control whether the receiving endpoint honors it,
+      // and (see httpNode.ts) has no way to verify that it does.
+      const hasIdempotencyHeader = headers.some((h) => h.key.toLowerCase() === 'idempotency-key');
+      const effectiveHeaders = hasIdempotencyHeader
+        ? headers
+        : [...headers, { key: 'Idempotency-Key', value: `${ctx.runId}:${ctx.nodeId}` }];
+
+      const result = await performHttpRequest({ url, method, headers: effectiveHeaders, queryParams, bodyType, body, timeoutMs });
       if (!result.ok) return fail(result.error);
       return ok(`HTTP ${method} ${url} → ${result.output.status}`, result.output);
     },

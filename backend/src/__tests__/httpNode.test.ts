@@ -199,4 +199,167 @@ describe('performHttpRequest', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/timed out/i);
   });
+
+  // -------------------------------------------------------------------------
+  // S5 — redirect-SSRF: the ORIGINAL URL passing assertPublicUrl must not be
+  // enough. A server that's publicly reachable itself can still respond
+  // with a redirect to a private/internal target; before this fix, fetch's
+  // default `redirect: 'follow'` transparently followed it, bypassing the
+  // SSRF guard entirely for every hop after the first.
+  // -------------------------------------------------------------------------
+  it('rejects a redirect from a public URL to a private/internal target (169.254.169.254 metadata address)', async () => {
+    // Hop 1: the original URL resolves to a public address and returns a
+    // redirect to the cloud-metadata address.
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }]);
+    const redirectResponse = new Response(null, {
+      status: 302,
+      headers: { Location: 'http://169.254.169.254/latest/meta-data/' },
+    });
+    const fetchMock = vi.fn().mockResolvedValueOnce(redirectResponse);
+    global.fetch = fetchMock as unknown as typeof fetch;
+    // Hop 2 (the redirect target) resolves to the metadata address — must be
+    // rejected by assertPublicUrl before a second fetch call is ever made.
+    lookupMock.mockResolvedValueOnce([{ address: '169.254.169.254', family: 4 }]);
+
+    const result = await performHttpRequest({
+      url: 'https://public-looking.example/redirects-to-metadata',
+      method: 'GET',
+      headers: [],
+      queryParams: [],
+      bodyType: 'none',
+      timeoutMs: 5000,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/private|internal/i);
+    // Only the FIRST hop was ever actually requested — the redirect target
+    // was never fetched.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a redirect to a private RFC1918 address', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }]);
+    const redirectResponse = new Response(null, { status: 301, headers: { Location: 'http://internal-service.local/admin' } });
+    const fetchMock = vi.fn().mockResolvedValueOnce(redirectResponse);
+    global.fetch = fetchMock as unknown as typeof fetch;
+    lookupMock.mockResolvedValueOnce([{ address: '10.0.0.5', family: 4 }]);
+
+    const result = await performHttpRequest({
+      url: 'https://public-looking.example/redirects-internally',
+      method: 'GET',
+      headers: [],
+      queryParams: [],
+      bodyType: 'none',
+      timeoutMs: 5000,
+    });
+    expect(result.ok).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('follows a redirect chain where every hop is genuinely public, and re-resolves DNS for the FINAL hop (a DNS change between hops is re-checked, not cached from hop 1)', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }]); // hop 1 (original)
+    lookupMock.mockResolvedValueOnce([{ address: '1.1.1.1', family: 4 }]);       // hop 2 (redirect target) — a DIFFERENT public IP
+    const redirectResponse = new Response(null, { status: 302, headers: { Location: 'https://public-2.example/final' } });
+    const finalResponse = new Response('ok', { status: 200 });
+    const fetchMock = vi.fn().mockResolvedValueOnce(redirectResponse).mockResolvedValueOnce(finalResponse);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await performHttpRequest({
+      url: 'https://public-1.example/start',
+      method: 'GET',
+      headers: [],
+      queryParams: [],
+      bodyType: 'none',
+      timeoutMs: 5000,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.output.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(lookupMock).toHaveBeenCalledTimes(2); // proves hop 2's host was independently re-resolved
+  });
+
+  it('caps a redirect chain at MAX_REDIRECTS rather than following indefinitely', async () => {
+    // Every hop resolves publicly and redirects to the next — an endless chain.
+    lookupMock.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    let call = 0;
+    const fetchMock = vi.fn().mockImplementation(() => {
+      call += 1;
+      return Promise.resolve(new Response(null, { status: 302, headers: { Location: `https://public.example/hop-${call}` } }));
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await performHttpRequest({
+      url: 'https://public.example/start',
+      method: 'GET',
+      headers: [],
+      queryParams: [],
+      bodyType: 'none',
+      timeoutMs: 5000,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/redirect/i);
+    // Bounded, not unbounded — proves the loop actually terminates.
+    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(6);
+  });
+
+  // -------------------------------------------------------------------------
+  // S5 — unbounded response buffering: the response body must be STREAMED
+  // and abandoned once the size cap is hit, not read into memory in full
+  // (`await response.text()`) before any truncation is ever applied.
+  // -------------------------------------------------------------------------
+  it('streams and truncates a response body larger than the cap, WITHOUT reading it to completion', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }]);
+
+    const CHUNK = new Uint8Array(200_000).fill(65); // 200,000 'A' bytes per chunk
+    let chunksServed = 0;
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (cancelled) { controller.close(); return; }
+        chunksServed += 1;
+        controller.enqueue(CHUNK);
+        // A well-behaved infinite/huge stream keeps producing chunks forever
+        // until told to stop — exactly the shape a malicious/misbehaving
+        // upstream could exploit if nothing ever cancels the read.
+        if (chunksServed > 100) controller.close(); // safety valve for the test itself
+      },
+      cancel() { cancelled = true; },
+    });
+    const response = new Response(stream, { status: 200, headers: { 'content-type': 'text/plain' } });
+    global.fetch = vi.fn().mockResolvedValueOnce(response) as unknown as typeof fetch;
+
+    const result = await performHttpRequest({
+      url: 'https://public.example/huge',
+      method: 'GET',
+      headers: [],
+      queryParams: [],
+      bodyType: 'none',
+      timeoutMs: 5000,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(typeof result.output.body).toBe('string');
+    expect((result.output.body as string).length).toBeLessThan(1_100_000); // ~1MB cap + truncation notice
+    expect((result.output.body as string)).toContain('truncated');
+    // The critical assertion: far fewer than 100 chunks (20MB) were ever
+    // pulled from the stream — it was abandoned once the ~1MB cap was hit,
+    // not drained to completion first.
+    expect(chunksServed).toBeLessThan(10);
+    expect(cancelled).toBe(true);
+  });
+
+  it('does not truncate a response body under the cap', async () => {
+    lookupMock.mockResolvedValueOnce([{ address: '93.184.216.34', family: 4 }]);
+    global.fetch = vi.fn().mockResolvedValueOnce(new Response('a small response', { status: 200 })) as unknown as typeof fetch;
+
+    const result = await performHttpRequest({
+      url: 'https://public.example/small',
+      method: 'GET',
+      headers: [],
+      queryParams: [],
+      bodyType: 'none',
+      timeoutMs: 5000,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.output.body).toBe('a small response');
+  });
 });

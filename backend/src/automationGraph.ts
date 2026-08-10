@@ -11,6 +11,7 @@
 
 import { getTriggerDef, getActionDef, resolveRequirement } from './automationTypes';
 import { QueryExec } from './workspaceUtil';
+import { AUTOMATION_MAX_NODES } from './automationBudget';
 
 export interface AutomationNode {
   id: string;
@@ -52,6 +53,12 @@ export function normalizeAutomationGraph(raw: unknown): NormalizeResult {
   const nodes = g.nodes as AutomationNode[];
   const edges = g.edges as AutomationEdge[];
   if (nodes.length === 0) return { ok: false, error: 'graph must contain a trigger node' };
+  // B7: server-side node-count budget — checked here, on every save,
+  // regardless of what the client sends (the editor's own UI never lets a
+  // user build past this, but that is only a courtesy, not the guarantee).
+  if (nodes.length > AUTOMATION_MAX_NODES) {
+    return { ok: false, error: `graph has ${nodes.length} nodes, exceeding the maximum of ${AUTOMATION_MAX_NODES}` };
+  }
 
   const seenIds = new Set<string>();
   for (const n of nodes) {

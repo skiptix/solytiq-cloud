@@ -8,6 +8,12 @@ import { authenticate } from '../middleware';
 import { requireAppInstalled } from '../appsRegistry';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
+import { getUserQuota as getUserQuotaShared, withQuotaReservation } from '../storageQuota';
+import { FILE_UPLOAD_MAX_BYTES } from '../uploadLimits';
+import { getStorageAdapter } from '../storage/storageAdapterFactory';
+import { createAdapterStorageEngine } from '../storage/multerStorageEngine';
+import { streamStorageObject } from '../storage/streamHelper';
+import { decodeCreatedAtCursor, encodeCreatedAtCursor, paginateRows, parsePageLimit, type CreatedAtCursor } from '../pagination';
 
 export const UPLOAD_DIR = process.env.UPLOAD_DIR ?? '/app/uploads';
 
@@ -23,9 +29,22 @@ const storage = multer.diskStorage({
   },
 });
 
-// No per-file size limit — a single upload is bounded only by the uploading
-// user's remaining storage quota (checked below), not an arbitrary file cap.
-const upload = multer({ storage });
+// No per-file size limit by default — a single upload is bounded only by the
+// uploading user's remaining storage quota (checked below), not an arbitrary
+// file cap. See uploadLimits.ts — an operator can still set FILE_UPLOAD_MAX_BYTES.
+const upload = multer({ storage, limits: { fileSize: FILE_UPLOAD_MAX_BYTES } });
+
+// B2 (Phase 2): the single-file upload route below streams through the
+// configured StorageAdapter (local or S3) instead of always writing
+// straight to this process's local disk — see multerStorageEngine.ts's own
+// header for why this is a streaming engine, not multer's memoryStorage()
+// (which would buffer the whole file in RAM, a real regression against the
+// "no unbounded upload in memory" invariant). `/bundle` below still uses
+// the disk-only `upload` instance above — not yet migrated in this pass,
+// see the Phase 2 handoff for the honest scope note.
+// (`adapterUpload` itself is constructed further below, once
+// `reservePendingFile` — its genuine pending-row-reservation callback — is
+// defined; see that section's own header comment for the full design.)
 
 const router = Router();
 
@@ -76,14 +95,12 @@ function sanitizeFile(f: FileRow, baseUrl: string) {
   };
 }
 
-const DEFAULT_QUOTA = 15 * 1024 * 1024 * 1024; // 15 GB
-
-async function getUserQuota(): Promise<number> {
-  const r = await query<{ value: string }>(
-    "SELECT value FROM app_settings WHERE key = 'storage_quota_per_user'"
-  );
-  return r.rows[0] ? parseInt(r.rows[0].value, 10) : DEFAULT_QUOTA;
-}
+// SECURITY (S6): quota reads/checks now live in storageQuota.ts, shared with
+// every other upload endpoint (taskAttachments.ts, milestoneAttachments.ts,
+// gps.ts) so the SAME race-safe reservation logic backs all of them, not a
+// second hand-rolled copy per file. getUserQuota is re-exported under its
+// original local name purely so GET /storage below didn't need to change.
+const getUserQuota = getUserQuotaShared;
 
 // ── Authenticated routes ──────────────────────────────────────────
 router.use(authenticate);
@@ -110,9 +127,87 @@ router.get('/storage', async (req: Request, res: Response) => {
   }
 });
 
+// B5 (Phase 2) — keyset-paginated variant of the classic GET /api/files
+// query below. "Dateien" (Files) is one of the entities the Phase 2 spec
+// explicitly names for pagination. Same `pagination.ts` primitive used for
+// tasks, but with `CreatedAtCursor` (no `position` column on `shared_files`
+// — files are only ever listed newest-first, never manually reordered) and
+// a DESCENDING keyset comparison (`<` instead of `>` — the next page needs
+// rows STRICTLY OLDER than the cursor's boundary row, since we're walking
+// backwards through time). The bundle-collapsing CTE (one row per
+// bundle_id/id group, via ROW_NUMBER()) is unchanged — the keyset predicate
+// applies to the CTE's already-collapsed output, so a bundle is still
+// treated as exactly one paginated "row" regardless of how many files it
+// contains.
+async function getFilesPageForUser(
+  userId: string,
+  opts: { cursor: CreatedAtCursor | null; limit: number }
+): Promise<{ rows: FileRow[]; nextCursor: string | null }> {
+  const params: unknown[] = [userId];
+  let cursorClause = '';
+  if (opts.cursor) {
+    params.push(opts.cursor.createdAt, opts.cursor.id);
+    const n = params.length;
+    // `EXTRACT(EPOCH FROM created_at)::double precision` on both sides —
+    // NOT the raw `timestamptz` column — for the exact same reason
+    // routes/tasks.ts's buildTasksPageForUser does: comparing against a
+    // JS-Date-derived value truncates below millisecond precision and can
+    // re-include the cursor's own boundary row on the next page; Postgres's
+    // `numeric` return type from bare EXTRACT() also comes back from `pg`
+    // as a STRING unless explicitly cast to `double precision` — see
+    // pagination.ts's `KeysetCursor.createdAt` doc comment for the full
+    // story (a real bug caught by this suite's own integration tests
+    // before it shipped).
+    cursorClause = `AND (EXTRACT(EPOCH FROM created_at)::double precision, id) < ($${n - 1}::double precision, $${n})`;
+  }
+  params.push(opts.limit + 1);
+  const limitParamIndex = params.length;
+
+  const result = await query<FileRow & { created_at_epoch: number }>(
+    `WITH grouped AS (
+       SELECT sf.*,
+              COUNT(*) OVER (PARTITION BY COALESCE(bundle_id, id)) AS bundle_count,
+              SUM(file_size) OVER (PARTITION BY COALESCE(bundle_id, id)) AS bundle_size,
+              ROW_NUMBER() OVER (PARTITION BY COALESCE(bundle_id, id) ORDER BY created_at DESC) AS rn
+       FROM shared_files sf
+       WHERE user_id = $1
+     )
+     SELECT id, user_id, original_name, title, note, mime_type, bundle_size AS file_size, file_path, is_public, password_hash, expires_at, share_token, created_at, bundle_id, bundle_name, bundle_count,
+            EXTRACT(EPOCH FROM created_at)::double precision AS created_at_epoch
+     FROM grouped
+     WHERE rn = 1
+     ${cursorClause}
+     ORDER BY created_at DESC, id DESC
+     LIMIT $${limitParamIndex}`,
+    params
+  );
+
+  const { page, nextCursor } = paginateRows(
+    result.rows,
+    opts.limit,
+    (row) => ({ createdAt: row.created_at_epoch, id: row.id }),
+    encodeCreatedAtCursor
+  );
+  return { rows: page, nextCursor };
+}
+
 // GET /api/files
+// Backward-compatible: with no `cursor`/`limit` query param, behaves exactly
+// as before (the full, unbounded set in one `{ files }` response) — every
+// existing caller keeps working unmodified. Passing either param opts into
+// the paginated shape (`{ files, nextCursor }`) instead — additive, not a
+// breaking change, mirroring GET /api/tasks's own convention.
 router.get('/', async (req: Request, res: Response) => {
   try {
+    const base = getBaseUrl(req);
+    const wantsPage = req.query.cursor !== undefined || req.query.limit !== undefined;
+    if (wantsPage) {
+      const cursor = decodeCreatedAtCursor(req.query.cursor);
+      const limit = parsePageLimit(req.query.limit);
+      const { rows, nextCursor } = await getFilesPageForUser(req.userId!, { cursor, limit });
+      res.json({ files: rows.map(f => sanitizeFile(f, base)), nextCursor });
+      return;
+    }
     const result = await query<FileRow>(
       `WITH grouped AS (
          SELECT sf.*,
@@ -128,7 +223,6 @@ router.get('/', async (req: Request, res: Response) => {
        ORDER BY created_at DESC`,
       [req.userId]
     );
-    const base = getBaseUrl(req);
     res.json({ files: result.rows.map(f => sanitizeFile(f, base)) });
   } catch (err) {
     console.error('files GET error:', err);
@@ -149,16 +243,6 @@ router.post('/bundle', upload.array('files', 50), async (req: Request, res: Resp
     const { isPublic, password, expiresAt, title } = req.body as { isPublic?: string; password?: string; expiresAt?: string; title?: string };
     const totalSize = uploaded.reduce((sum, file) => sum + file.size, 0);
     const isAdmin = (req as Request & { user?: { isAdmin: boolean } }).user?.isAdmin ?? false;
-    if (!isAdmin) {
-      const quota = await getUserQuota();
-      const usageRes = await query<{ used: string }>('SELECT COALESCE(SUM(file_size), 0) AS used FROM shared_files WHERE user_id = $1', [req.userId]);
-      const used = parseInt(usageRes.rows[0].used, 10);
-      if (used + totalSize > quota) {
-        uploaded.forEach(file => fs.unlinkSync(path.join(UPLOAD_DIR, file.filename)));
-        res.status(413).json({ error: 'Storage quota exceeded. Please delete some files to free up space.' });
-        return;
-      }
-    }
 
     const shareToken = crypto.randomBytes(24).toString('hex');
     const bundleId = crypto.randomUUID();
@@ -167,18 +251,32 @@ router.post('/bundle', upload.array('files', 50), async (req: Request, res: Resp
     const pub = isPublic === 'true';
     const expiry = expiresAt || null;
 
-    const rows: FileRow[] = [];
-    for (const file of uploaded) {
-      const result = await query<FileRow>(
-        `INSERT INTO shared_files
-           (id, user_id, original_name, title, mime_type, file_size, file_path, is_public, password_hash, expires_at, share_token, bundle_id, bundle_name)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-         RETURNING *`,
-        [crypto.randomUUID(), req.userId, file.originalname, title || null, file.mimetype, file.size, file.filename, pub, pwHash, expiry, shareToken, bundleId, bundleName]
-      );
-      rows.push({ ...result.rows[0], bundle_count: uploaded.length });
+    // SECURITY (S6): the quota check AND every one of these inserts run
+    // inside ONE advisory-locked transaction (withQuotaReservation) — see
+    // storageQuota.ts. This is what closes the check-then-act race a
+    // separate SELECT-then-INSERT pair had before.
+    const reservation = await withQuotaReservation(req.userId!, totalSize, isAdmin, async (client) => {
+      const inserted: FileRow[] = [];
+      for (const file of uploaded) {
+        const result = await client.query<FileRow>(
+          `INSERT INTO shared_files
+             (id, user_id, original_name, title, mime_type, file_size, file_path, is_public, password_hash, expires_at, share_token, bundle_id, bundle_name)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+           RETURNING *`,
+          [crypto.randomUUID(), req.userId, file.originalname, title || null, file.mimetype, file.size, file.filename, pub, pwHash, expiry, shareToken, bundleId, bundleName]
+        );
+        inserted.push({ ...result.rows[0], bundle_count: uploaded.length });
+      }
+      return inserted;
+    });
+
+    if (!reservation.ok) {
+      uploaded.forEach(file => fs.unlinkSync(path.join(UPLOAD_DIR, file.filename)));
+      res.status(413).json({ error: 'Storage quota exceeded. Please delete some files to free up space.' });
+      return;
     }
 
+    const rows = reservation.result;
     const base = getBaseUrl(req);
     res.status(201).json({ file: sanitizeFile(rows[0], base), files: rows.map(row => sanitizeFile(row, base)) });
     broadcastToUser(req.userId!, 'files');
@@ -192,11 +290,68 @@ router.post('/bundle', upload.array('files', 50), async (req: Request, res: Resp
   }
 });
 
+// How long a 'pending' row is allowed to sit unfinished before
+// storage/orphanJanitor.ts's sweep reclaims it (deletes the row, releasing
+// its quota reservation, and best-effort deletes whatever object bytes did
+// or didn't make it to storage). Generous enough for a genuinely large file
+// over a slow connection, bounded enough that a crashed upload doesn't tie
+// up a quota reservation indefinitely.
+const PENDING_UPLOAD_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+// B2 (Phase 2) — genuinely reserves a 'pending' `shared_files` row BEFORE
+// any object bytes are transferred (called from
+// storage/multerStorageEngine.ts's `_handleFile`, which awaits this and
+// only then starts streaming to the adapter). This is the real reservation
+// window the crash-safety story depends on — see multerStorageEngine.ts's
+// header comment for the full design rationale, including why `file_size`
+// is 0 here rather than reserved upfront (multipart's own size-unknown-
+// until-received constraint).
+async function reservePendingFile(opts: { userId: string; storageKey: string; originalName: string; mimeType: string }): Promise<{ id: string }> {
+  const id = crypto.randomUUID();
+  const shareToken = crypto.randomBytes(24).toString('hex');
+  await query(
+    `INSERT INTO shared_files
+       (id, user_id, original_name, mime_type, file_size, file_path, share_token, object_status, pending_expires_at)
+     VALUES ($1, $2, $3, $4, 0, $5, $6, 'pending', NOW() + ($7 || ' milliseconds')::interval)`,
+    [id, opts.userId, opts.originalName, opts.mimeType, opts.storageKey, shareToken, PENDING_UPLOAD_TTL_MS]
+  );
+  return { id };
+}
+
+const adapterUpload = multer({ storage: createAdapterStorageEngine(getStorageAdapter(), reservePendingFile), limits: { fileSize: FILE_UPLOAD_MAX_BYTES } });
+
 // POST /api/files  (multipart/form-data)
-router.post('/', upload.single('file'), async (req: Request, res: Response) => {
+//
+// B2 (Phase 2): by the time THIS handler runs, `adapterUpload`'s storage
+// engine has already (a) reserved a genuine 'pending' `shared_files` row
+// referencing this exact storage key — BEFORE any bytes were transferred —
+// and (b) fully and durably written the object to the configured
+// StorageAdapter. This handler's job is purely to FINALIZE that same row:
+// an UPDATE (never an INSERT — the row already exists) that fills in the
+// real, now-known file size and the user-supplied metadata, atomically
+// quota-checked via the same per-user-locked `withQuotaReservation` as
+// before, and flips `object_status` from 'pending' to 'ready'. A crash at
+// ANY point up to and including this UPDATE leaves a genuine, reclaimable
+// 'pending' row for storage/orphanJanitor.ts's sweep to find — for both the
+// local adapter and S3 (see that module's header for why this is
+// backend-agnostic).
+router.post('/', adapterUpload.single('file'), async (req: Request, res: Response) => {
   try {
     if (!req.file) {
       res.status(400).json({ error: 'No file provided' });
+      return;
+    }
+    const storageKey = req.file.filename; // the key createAdapterStorageEngine wrote it under
+    const pendingId = (req.file as unknown as { pendingId?: string }).pendingId;
+    if (!pendingId) {
+      // Defensive fail-closed guard — this engine always attaches
+      // `pendingId` on success (see multerStorageEngine.ts); its absence
+      // here would mean the reservation step was silently skipped, which
+      // should never happen but must never be treated as "proceed anyway"
+      // if it somehow did.
+      await getStorageAdapter().delete(storageKey).catch(() => {});
+      console.error('files POST error: uploaded file has no pendingId — reservation step did not run as expected');
+      res.status(500).json({ error: 'Internal server error' });
       return;
     }
 
@@ -207,43 +362,59 @@ router.post('/', upload.single('file'), async (req: Request, res: Response) => {
       title?: string;
     };
 
-    // Enforce per-user storage quota (admins are exempt)
+    // SECURITY (S6): quota check + finalizing UPDATE are atomic together —
+    // see storageQuota.ts and the bundle route above for the full
+    // rationale. The reservation row's placeholder `file_size = 0` never
+    // counted toward quota, so this is exactly as race-safe against OTHER
+    // concurrent uploads from the same user as the pre-B2-fix INSERT path
+    // was — the atomic check-and-commit moment (this UPDATE) is unchanged,
+    // only WHEN the row started existing moved earlier.
     const isAdmin = (req as Request & { user?: { isAdmin: boolean } }).user?.isAdmin ?? false;
-    if (!isAdmin) {
-      const quota = await getUserQuota();
-      const usageRes = await query<{ used: string }>(
-        'SELECT COALESCE(SUM(file_size), 0) AS used FROM shared_files WHERE user_id = $1',
-        [req.userId]
-      );
-      const used = parseInt(usageRes.rows[0].used, 10);
-      if (used + req.file!.size > quota) {
-        fs.unlinkSync(path.join(UPLOAD_DIR, req.file!.filename));
-        res.status(413).json({ error: 'Storage quota exceeded. Please delete some files to free up space.' });
-        return;
-      }
-    }
 
-    const id          = crypto.randomUUID();
-    const shareToken  = crypto.randomBytes(24).toString('hex');
-    const pwHash      = password ? await hashPassword(password) : null;
-    const pub         = isPublic === 'true';
-    const expiry      = expiresAt || null;
+    const pwHash = password ? await hashPassword(password) : null;
+    const pub    = isPublic === 'true';
+    const expiry = expiresAt || null;
 
-    const result = await query<FileRow>(
-      `INSERT INTO shared_files
-         (id, user_id, original_name, title, mime_type, file_size, file_path, is_public, password_hash, expires_at, share_token)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       RETURNING *`,
-      [id, req.userId, req.file.originalname, title ?? null, req.file.mimetype, req.file.size, req.file.filename, pub, pwHash, expiry, shareToken]
+    const reservation = await withQuotaReservation(req.userId!, req.file.size, isAdmin, (client) =>
+      client.query<FileRow>(
+        `UPDATE shared_files
+         SET title = $1, mime_type = $2, file_size = $3, is_public = $4, password_hash = $5, expires_at = $6,
+             object_status = 'ready', pending_expires_at = NULL
+         WHERE id = $7 AND user_id = $8 AND object_status = 'pending'
+         RETURNING *`,
+        [title ?? null, req.file!.mimetype, req.file!.size, pub, pwHash, expiry, pendingId, req.userId]
+      )
     );
 
+    if (!reservation.ok) {
+      await getStorageAdapter().delete(storageKey).catch(() => {});
+      // Immediate cleanup of the now-dead reservation row — the janitor's
+      // TTL sweep would eventually reclaim it too, but there is no reason
+      // to leave a row around a KNOWN-failed request already told the
+      // client about synchronously.
+      await query(`DELETE FROM shared_files WHERE id = $1 AND object_status = 'pending'`, [pendingId]).catch(() => {});
+      res.status(413).json({ error: 'Storage quota exceeded. Please delete some files to free up space.' });
+      return;
+    }
+    if (reservation.result.rows.length === 0) {
+      // The reservation row vanished between multer finishing and this
+      // UPDATE running (e.g. the janitor's TTL swept it out from under an
+      // unusually slow request) — fail cleanly rather than silently
+      // reporting success for a row that no longer exists.
+      await getStorageAdapter().delete(storageKey).catch(() => {});
+      res.status(500).json({ error: 'Upload reservation expired before it could be finalized — please retry.' });
+      return;
+    }
+
     const base = getBaseUrl(req);
-    res.status(201).json({ file: sanitizeFile(result.rows[0], base) });
+    res.status(201).json({ file: sanitizeFile(reservation.result.rows[0], base) });
     broadcastToUser(req.userId!, 'files');
   } catch (err) {
     if (req.file) {
-      const p = path.join(UPLOAD_DIR, req.file.filename);
-      if (fs.existsSync(p)) fs.unlinkSync(p);
+      const key = req.file.filename;
+      const pid = (req.file as unknown as { pendingId?: string }).pendingId;
+      await getStorageAdapter().delete(key).catch(() => {});
+      if (pid) await query(`DELETE FROM shared_files WHERE id = $1 AND object_status = 'pending'`, [pid]).catch(() => {});
     }
     console.error('files POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -326,10 +497,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
       [id, req.userId]
     );
 
-    deleteRows.rows.forEach(row => {
-      const filePath = path.join(UPLOAD_DIR, path.basename(row.file_path));
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    });
+    const adapter = getStorageAdapter();
+    await Promise.all(deleteRows.rows.map((row) => adapter.delete(path.basename(row.file_path)).catch(() => {})));
 
     res.json({ success: true });
     broadcastToUser(req.userId!, 'files');
@@ -349,8 +518,7 @@ router.get('/:id/preview', async (req: Request, res: Response) => {
     );
     if (result.rows.length === 0) { res.status(404).json({ error: 'File not found' }); return; }
     const { file_path, mime_type: untrustedMime, original_name } = result.rows[0];
-    const filePath = path.join(path.resolve(UPLOAD_DIR), path.basename(file_path));
-    if (!fs.existsSync(filePath)) { res.status(404).json({ error: 'File not found on disk' }); return; }
+    const storageKey = path.basename(file_path);
 
     // FIND-02: Secure file preview. Only allow safe types inline.
     const safeMimeTypes = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'text/plain'];
@@ -374,7 +542,8 @@ router.get('/:id/preview', async (req: Request, res: Response) => {
       res.setHeader('Content-Type', 'application/octet-stream');
     }
 
-    res.sendFile(filePath);
+    const found = await streamStorageObject(getStorageAdapter(), storageKey, res);
+    if (!found) { res.status(404).json({ error: 'File not found on disk' }); return; }
   } catch (err) {
     console.error('files preview error:', err);
     res.status(500).json({ error: 'Internal server error' });

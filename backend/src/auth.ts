@@ -2,9 +2,33 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
 const JWT_SECRET_ENV = process.env.JWT_SECRET;
+// SECURITY (S3): the placeholder-string check alone doesn't stop a weak
+// secret — `JWT_SECRET=x` or `JWT_SECRET=12345` passes it outright and is
+// then brute-forceable offline against any captured token, forging a session
+// for any user. A minimum length is a coarse but real entropy floor; 32
+// bytes (256 bits) as a MINIMUM CHARACTER count is deliberately generous —
+// even a low-entropy 32-character string (e.g. all lowercase) still clears
+// ~150 bits of keyspace, and `.env.example` documents generating this with
+// `openssl rand -hex 32` (64 hex chars), comfortably above the floor.
+const MIN_JWT_SECRET_LENGTH = 32;
+const KNOWN_PLACEHOLDER_SECRETS = new Set([
+  'changeme-secret',
+  'change_this_secret_in_production',
+  'solytiq_secret',
+]);
 if (process.env.NODE_ENV === 'production') {
-  if (!JWT_SECRET_ENV || JWT_SECRET_ENV === 'changeme-secret' || JWT_SECRET_ENV === 'change_this_secret_in_production' || JWT_SECRET_ENV === 'solytiq_secret') {
+  if (!JWT_SECRET_ENV || KNOWN_PLACEHOLDER_SECRETS.has(JWT_SECRET_ENV)) {
     throw new Error('JWT_SECRET must be set to a secure, non-default value in production!');
+  }
+  if (JWT_SECRET_ENV.length < MIN_JWT_SECRET_LENGTH) {
+    throw new Error(`JWT_SECRET must be at least ${MIN_JWT_SECRET_LENGTH} characters in production (got ${JWT_SECRET_ENV.length}) — a short secret is brute-forceable offline against any captured token.`);
+  }
+  // A trivially low-entropy secret (e.g. "aaaaaaaa...a" or "01010101...")
+  // clears the length floor but not a real entropy bar. Count distinct
+  // characters as a cheap, dependency-free approximation — genuine random
+  // hex/base64 secrets clear this easily; a repeated/patterned string does not.
+  if (new Set(JWT_SECRET_ENV).size < 8) {
+    throw new Error('JWT_SECRET has too little character variety to be a real secret — generate one with `openssl rand -hex 32`.');
   }
 }
 const JWT_SECRET = JWT_SECRET_ENV || 'changeme-secret';

@@ -209,3 +209,32 @@ export async function startSyncDispatcher(): Promise<void> {
   stopped = false;
   await connectListener();
 }
+
+/**
+ * B8 — graceful shutdown: stops the LISTEN loop and closes its dedicated
+ * connection, WITHOUT scheduling a reconnect (the `stopped` flag short-
+ * circuits `scheduleReconnect`/`connectListener` — see their own guards
+ * above). Also flushes any coalesced-but-not-yet-dispatched frame so a
+ * client mid-drain doesn't lose a nudge it would otherwise never receive
+ * (best-effort — the delta-sync engine's `/api/sync/delta` cursor pull
+ * remains the authoritative source, so a dropped nudge here is not a
+ * correctness bug, only a slightly later refresh for the client).
+ */
+export async function stopSyncDispatcher(): Promise<void> {
+  stopped = true;
+  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; flush(); }
+  const client = listenClient;
+  listenClient = null;
+  if (client) {
+    try { await client.end(); } catch { /* already gone */ }
+  }
+}
+
+/** Test-only: reset module state between test files. */
+export function __resetSyncDispatcherStateForTests(): void {
+  stopped = false;
+  reconnecting = false;
+  listenClient = null;
+  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+  pending.clear();
+}

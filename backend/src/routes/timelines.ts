@@ -5,14 +5,17 @@ import { query, withTransaction } from '../db';
 import { authenticate } from '../middleware';
 import { hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
-import { checkVersionConflict } from '../concurrency';
+import { versionGuardSql, resolveVersionedUpdateFailure } from '../concurrency';
+import { validateReorderIds, bulkSetPositions } from '../reorderUtil';
 import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, werr } from '../workspaceUtil';
 import { snapshotTimelineToTrash } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestrictConflict } from '../visibility';
 import { notifyNewMentions } from '../mentions';
-import { itemShareExists, isItemSharedWith, deleteItemShares } from '../itemShares';
+import { isItemSharedWith, deleteItemShares } from '../itemShares';
+import { objectAccessCondition, workspaceMembersJoin } from '../objectPolicy';
 import { syncInlineLinksForText } from '../graph/inlineLinks';
 import { enqueueEmbedding } from '../knowledge/queue';
+import { decodeKeysetCursor, encodeKeysetCursor, parsePageLimit, paginateRows, type KeysetCursor } from '../pagination';
 
 const router = Router();
 router.use(authenticate);
@@ -123,22 +126,16 @@ export async function buildTimelinesForUser(userId: string, workspaceId?: string
     : '';
   if (workspaceId) params.push(workspaceId);
 
-  // Mirrors the lists access model: owner always; public timelines visible to
-  // workspace members, to legacy NULL-workspace timelines, or in public workspaces.
-  const accessCondition = `(
-    t.user_id = $1
-    OR (t.is_public = true AND (
-      wm.user_id = $1
-      OR t.workspace_id IS NULL
-      OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = t.workspace_id AND w.visibility = 'public')
-    ))
-    OR ${itemShareExists('t', 'timeline')}
-  )`;
+  // Mirrors the lists access model (see objectPolicy.ts): owner always; public
+  // timelines visible to workspace members, to legacy NULL-workspace
+  // timelines, or in public workspaces.
+  const accessCondition = objectAccessCondition('t', 'timeline');
+  const wmJoin = workspaceMembersJoin('t');
 
   const [timelinesResult, milestonesResult] = await Promise.all([
     query<TimelineRow>(
       `SELECT t.* FROM timelines t
-       LEFT JOIN workspace_members wm ON wm.workspace_id = t.workspace_id AND wm.user_id = $1
+       ${wmJoin}
        WHERE ${accessCondition}
        ${wsFilter}
        ORDER BY t.position ASC, t.created_at ASC`,
@@ -148,7 +145,7 @@ export async function buildTimelinesForUser(userId: string, workspaceId?: string
       `SELECT m.*, (SELECT COUNT(*) FROM milestone_attachments ma WHERE ma.milestone_id = m.id) AS attachment_count
        FROM milestones m
        JOIN timelines t ON m.timeline_id = t.id
-       LEFT JOIN workspace_members wm ON wm.workspace_id = t.workspace_id AND wm.user_id = $1
+       ${wmJoin}
        WHERE ${accessCondition}
        ${wsFilter}
        ORDER BY m.position ASC, m.milestone_date ASC NULLS LAST, m.created_at ASC`,
@@ -173,24 +170,76 @@ export async function buildTimelinesForUser(userId: string, workspaceId?: string
   );
 }
 
+// B5 (Phase 2 follow-up): keyset-paginated variant of buildTimelinesForUser —
+// same rationale as lists.ts's buildListsPageForUser: cursor-bound the
+// TOP-LEVEL `timelines` rows first, then hydrate milestones scoped to ONLY
+// that page's timeline ids, rather than the full access-condition scan.
+export async function buildTimelinesPageForUser(
+  userId: string,
+  workspaceId: string | undefined,
+  opts: { cursor: KeysetCursor | null; limit: number }
+): Promise<{ timelines: ReturnType<typeof sanitizeTimeline>[]; nextCursor: string | null }> {
+  const params: unknown[] = [userId];
+  const wsClause = workspaceId ? `AND (t.workspace_id = $2 OR t.workspace_id IS NULL)` : '';
+  if (workspaceId) params.push(workspaceId);
+
+  let cursorClause = '';
+  if (opts.cursor) {
+    params.push(opts.cursor.position, opts.cursor.createdAt, opts.cursor.id);
+    const n = params.length;
+    cursorClause = `AND (t.position, EXTRACT(EPOCH FROM t.created_at)::double precision, t.id) > ($${n - 2}, $${n - 1}::double precision, $${n})`;
+  }
+
+  params.push(opts.limit + 1);
+  const limitParamIndex = params.length;
+
+  const timelinesResult = await query<TimelineRow & { created_at_epoch: number }>(
+    `SELECT t.*, EXTRACT(EPOCH FROM t.created_at)::double precision AS created_at_epoch
+     FROM timelines t
+     ${workspaceMembersJoin('t')}
+     WHERE ${objectAccessCondition('t', 'timeline')}
+     ${wsClause}
+     ${cursorClause}
+     ORDER BY t.position ASC, t.created_at ASC, t.id ASC
+     LIMIT $${limitParamIndex}`,
+    params
+  );
+
+  const { page, nextCursor } = paginateRows(timelinesResult.rows, opts.limit, (row) => ({
+    position: row.position,
+    createdAt: row.created_at_epoch,
+    id: row.id,
+  }), encodeKeysetCursor);
+
+  if (page.length === 0) return { timelines: [], nextCursor };
+
+  const timelineIds = page.map((t) => t.id);
+  const milestonesResult = await query<MilestoneRow>(
+    `SELECT m.*, (SELECT COUNT(*) FROM milestone_attachments ma WHERE ma.milestone_id = m.id) AS attachment_count
+     FROM milestones m WHERE m.timeline_id = ANY($1::varchar[])
+     ORDER BY m.position ASC, m.milestone_date ASC NULLS LAST, m.created_at ASC`,
+    [timelineIds]
+  );
+  const milestonesByTimeline: Record<string, ReturnType<typeof sanitizeMilestone>[]> = {};
+  for (const m of milestonesResult.rows) {
+    if (!milestonesByTimeline[m.timeline_id]) milestonesByTimeline[m.timeline_id] = [];
+    milestonesByTimeline[m.timeline_id].push(sanitizeMilestone(m));
+  }
+
+  const timelines = page.map((t) => sanitizeTimeline(t, milestonesByTimeline[t.id] ?? []));
+  return { timelines, nextCursor };
+}
+
 /**
  * A single fully-hydrated timeline (with milestones) if the user can see it,
  * else null. Same shape as one element of `buildTimelinesForUser`. For delta
  * re-serialization, scoped to the requesting user (IDOR-safe).
  */
 export async function getTimelineForUser(userId: string, timelineId: string) {
-  const accessCondition = `(
-    t.user_id = $1
-    OR (t.is_public = true AND (
-      wm.user_id = $1
-      OR t.workspace_id IS NULL
-      OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = t.workspace_id AND w.visibility = 'public')
-    ))
-    OR ${itemShareExists('t', 'timeline')}
-  )`;
+  const accessCondition = objectAccessCondition('t', 'timeline');
   const tRes = await query<TimelineRow>(
     `SELECT t.* FROM timelines t
-     LEFT JOIN workspace_members wm ON wm.workspace_id = t.workspace_id AND wm.user_id = $1
+     ${workspaceMembersJoin('t')}
      WHERE t.id = $2 AND ${accessCondition}`,
     [userId, timelineId]
   );
@@ -204,14 +253,65 @@ export async function getTimelineForUser(userId: string, timelineId: string) {
   return sanitizeTimeline(tRes.rows[0], mRes.rows.map(sanitizeMilestone));
 }
 
+/**
+ * B5: batch-hydrate MANY timelines (with their milestones) in a bounded,
+ * fixed number of queries (2, regardless of how many timeline ids are
+ * requested) instead of the N round-trips `getTimelineForUser` called in a
+ * loop would cost — used by `/api/sync/delta`'s re-serialization of a batch
+ * of changed timeline ids. Same per-row access boundary as
+ * `getTimelineForUser`/`buildTimelinesForUser` — a requested id the caller
+ * can't see is simply absent from the returned Map.
+ */
+export async function getTimelinesForUserBatch(userId: string, timelineIds: string[]): Promise<Map<string, ReturnType<typeof sanitizeTimeline>>> {
+  const map = new Map<string, ReturnType<typeof sanitizeTimeline>>();
+  if (timelineIds.length === 0) return map;
+
+  const accessCondition = objectAccessCondition('t', 'timeline');
+  const tRes = await query<TimelineRow>(
+    `SELECT t.* FROM timelines t
+     ${workspaceMembersJoin('t')}
+     WHERE t.id = ANY($2::varchar[]) AND ${accessCondition}`,
+    [userId, timelineIds]
+  );
+  if (tRes.rows.length === 0) return map;
+  const visibleIds = tRes.rows.map((t) => t.id);
+
+  const mRes = await query<MilestoneRow>(
+    `SELECT m.*, (SELECT COUNT(*) FROM milestone_attachments ma WHERE ma.milestone_id = m.id) AS attachment_count
+     FROM milestones m WHERE m.timeline_id = ANY($1::varchar[])
+     ORDER BY m.position ASC, m.milestone_date ASC NULLS LAST, m.created_at ASC`,
+    [visibleIds]
+  );
+  const milestonesByTimeline: Record<string, ReturnType<typeof sanitizeMilestone>[]> = {};
+  for (const m of mRes.rows) {
+    if (!milestonesByTimeline[m.timeline_id]) milestonesByTimeline[m.timeline_id] = [];
+    milestonesByTimeline[m.timeline_id].push(sanitizeMilestone(m));
+  }
+  for (const t of tRes.rows) {
+    map.set(t.id, sanitizeTimeline(t, milestonesByTimeline[t.id] ?? []));
+  }
+  return map;
+}
+
 // ---------------------------------------------------------------------------
 // Timelines CRUD
 // ---------------------------------------------------------------------------
 
 // GET /api/timelines
+// Backward-compatible: no cursor/limit → identical unbounded {timelines}
+// response as before. Either param → paginated {timelines, nextCursor} shape.
 router.get('/', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
+    const wantsPage = req.query.cursor !== undefined || req.query.limit !== undefined;
+    if (wantsPage) {
+      const cursor = decodeKeysetCursor(req.query.cursor);
+      const limit = parsePageLimit(req.query.limit);
+      const { timelines, nextCursor } = await buildTimelinesPageForUser(req.userId!, workspaceId, { cursor, limit });
+      wlog(`timelines GET(paged) user=${req.userId} workspace=${workspaceId ?? 'ALL'} limit=${limit} → ${timelines.length} timeline(s), nextCursor=${nextCursor ? 'yes' : 'no'}`);
+      res.json({ timelines, nextCursor });
+      return;
+    }
     wlog(`timelines GET ⇢ user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} rawQuery=${JSON.stringify(req.query)}`);
     const timelines = await buildTimelinesForUser(req.userId!, workspaceId);
     wlog(`timelines GET ⇠ user=${req.userId} requestedWorkspace=${workspaceId ?? 'ALL'} returned=${timelines.length} ids=[${timelines.slice(0, 25).map(t => `${t.id}{ws=${t.workspaceId ?? 'NULL'},folder=${t.folderId ?? 'root'}}`).join(', ')}${timelines.length > 25 ? `, … +${timelines.length - 25} more` : ''}]`);
@@ -232,15 +332,7 @@ router.get('/upcoming', async (req: Request, res: Response) => {
     const limit = Math.min(Math.max(Number.isNaN(rawLimit) ? 3 : rawLimit, 1), 20);
 
     const params: unknown[] = [req.userId];
-    const accessCondition = `(
-      t.user_id = $1
-      OR (t.is_public = true AND (
-        wm.user_id = $1
-        OR t.workspace_id IS NULL
-        OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = t.workspace_id AND w.visibility = 'public')
-      ))
-      OR ${itemShareExists('t', 'timeline')}
-    )`;
+    const accessCondition = objectAccessCondition('t', 'timeline');
 
     let wsFilter = '';
     if (workspaceId) {
@@ -336,21 +428,27 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /api/timelines/reorder — persist the order of timelines by id.
-// Declared before the `/:timelineId` routes so "reorder" isn't captured as an id.
-router.put('/reorder', async (req: Request, res: Response) => {
+// PUT /api/timelines/reorder — persist the order of the caller's own
+// top-level timelines by id. Declared before the `/:timelineId` routes so
+// "reorder" isn't captured as an id.
+async function reorderTimelinesHandler(req: Request, res: Response): Promise<void> {
   try {
-    const { ids } = req.body as { ids?: string[] };
-    if (!Array.isArray(ids)) {
-      res.status(400).json({ error: 'ids must be an array' });
+    const validation = validateReorderIds((req.body as { ids?: unknown }).ids, 'string');
+    if (!validation.ok) { res.status(validation.status).json({ error: validation.error }); return; }
+    const ids = validation.ids as string[];
+    if (ids.length === 0) { res.json({ success: true }); return; }
+
+    const owned = await query<{ id: string }>(
+      `SELECT id FROM timelines WHERE id = ANY($1::varchar[]) AND user_id = $2`,
+      [ids, req.userId]
+    );
+    if (owned.rows.length !== ids.length) {
+      res.status(400).json({ error: 'One or more ids do not belong to a timeline you own' });
       return;
     }
 
-    await Promise.all(
-      ids.map((timelineId, index) =>
-        query('UPDATE timelines SET position = $1 WHERE id = $2 AND user_id = $3', [index, timelineId, req.userId])
-      )
-    );
+    // ONE bulk statement — atomically all-or-nothing (B4).
+    await bulkSetPositions('timelines', 'varchar', ids, 't.user_id = $3', [req.userId]);
 
     res.json({ success: true });
     broadcastToUser(req.userId!, 'timelines');
@@ -358,30 +456,13 @@ router.put('/reorder', async (req: Request, res: Response) => {
     werr('timelines reorder error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
-});
-
-// PUT /api/timelines/:timelineId/reorder
-router.put('/:timelineId/reorder', async (req: Request, res: Response) => {
-  try {
-    const { ids } = req.body as { ids?: string[] };
-    if (!Array.isArray(ids)) {
-      res.status(400).json({ error: 'ids must be an array' });
-      return;
-    }
-
-    await Promise.all(
-      ids.map((timelineId, index) =>
-        query('UPDATE timelines SET position = $1 WHERE id = $2 AND user_id = $3', [index, timelineId, req.userId])
-      )
-    );
-
-    res.json({ success: true });
-    broadcastToUser(req.userId!, 'timelines');
-  } catch (err) {
-    werr('timelines reorder error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+}
+router.put('/reorder', reorderTimelinesHandler);
+// PUT /api/timelines/:timelineId/reorder — kept as an alias of the route
+// above (the `:timelineId` param is unused; this mirrors the pre-existing
+// duplicate-route shape verbatim, not a B4 change) so no existing client
+// contract breaks.
+router.put('/:timelineId/reorder', reorderTimelinesHandler);
 
 // PUT /api/timelines/:timelineId/share — manage the public read-only share link.
 router.put('/:timelineId/share', async (req: Request, res: Response) => {
@@ -471,13 +552,10 @@ router.put('/:timelineId', async (req: Request, res: Response) => {
       return;
     }
 
-    // Optimistic concurrency (see lists.ts): reject a stale-based write with 409
-    // + the current timeline so the loser reconciles instead of clobbering.
-    const conflict = await checkVersionConflict('timelines', timelineId, (req.body as { expectedVersion?: number }).expectedVersion);
-    if (conflict !== null) {
-      res.status(409).json({ error: 'version_conflict', timeline: await getTimelineForUser(req.userId!, timelineId) });
-      return;
-    }
+    // Optimistic concurrency (B4): folded directly into the UPDATE's WHERE
+    // clause below (versionGuardSql) — see concurrency.ts and lists.ts's
+    // identical pattern for why a standalone pre-check SELECT is a race.
+    const expectedVersion = (req.body as { expectedVersion?: number }).expectedVersion;
 
     const validLayout = layout !== undefined && ['vertical', 'compact', 'detailed'].includes(layout) ? layout : null;
     const updateFolderId = 'folderId' in req.body;
@@ -498,6 +576,9 @@ router.put('/:timelineId', async (req: Request, res: Response) => {
       }
     }
 
+    const updateParams: unknown[] = [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, validLayout, position ?? null, isPublic ?? null, timelineId,
+      updateFolderId, folderId ?? null];
+    const versionClause = versionGuardSql(updateParams, expectedVersion);
     const updateSql =
       `UPDATE timelines
        SET name      = COALESCE($1, name),
@@ -509,10 +590,8 @@ router.put('/:timelineId', async (req: Request, res: Response) => {
            position  = COALESCE($7, position),
            is_public = COALESCE($8, is_public),
            folder_id = CASE WHEN $10 THEN $11 ELSE folder_id END
-       WHERE id = $9
+       WHERE id = $9${versionClause}
        RETURNING *`;
-    const updateParams = [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, validLayout, position ?? null, isPublic ?? null, timelineId,
-      updateFolderId, folderId ?? null];
 
     let result;
     if (promote.length > 0) {
@@ -522,6 +601,13 @@ router.put('/:timelineId', async (req: Request, res: Response) => {
       });
     } else {
       result = await query<TimelineRow>(updateSql, updateParams);
+    }
+
+    if (result.rows.length === 0) {
+      const failure = await resolveVersionedUpdateFailure('timelines', timelineId);
+      if (failure.notFound) { res.status(404).json({ error: 'Timeline not found' }); return; }
+      res.status(409).json({ error: 'version_conflict', currentVersion: failure.currentVersion, timeline: await getTimelineForUser(req.userId!, timelineId) });
+      return;
     }
 
     // Re-attach milestones so the client gets a complete object back.
@@ -826,22 +912,26 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
 router.put('/:timelineId/milestones/reorder', async (req: Request, res: Response) => {
   try {
     const { timelineId } = req.params;
-    const { milestone_ids } = req.body as { milestone_ids?: string[] };
-
-    if (!Array.isArray(milestone_ids)) {
-      res.status(400).json({ error: 'milestone_ids must be an array' });
-      return;
-    }
+    const validation = validateReorderIds((req.body as { milestone_ids?: unknown }).milestone_ids, 'string');
+    if (!validation.ok) { res.status(validation.status).json({ error: validation.error.replace('ids', 'milestone_ids') }); return; }
+    const milestone_ids = validation.ids as string[];
 
     const perm = await assertTimelineOwner(timelineId, req);
     if (perm === 404) { res.status(404).json({ error: 'Timeline not found' }); return; }
     if (perm === 403) { res.status(403).json({ error: 'Permission denied' }); return; }
 
-    await Promise.all(
-      milestone_ids.map((milestoneId, index) =>
-        query('UPDATE milestones SET position = $1 WHERE id = $2 AND timeline_id = $3', [index, milestoneId, timelineId])
-      )
-    );
+    if (milestone_ids.length > 0) {
+      const owned = await query<{ id: string }>(
+        `SELECT id FROM milestones WHERE id = ANY($1::varchar[]) AND timeline_id = $2`,
+        [milestone_ids, timelineId]
+      );
+      if (owned.rows.length !== milestone_ids.length) {
+        res.status(400).json({ error: 'One or more milestone_ids do not belong to this timeline' });
+        return;
+      }
+      // ONE bulk statement — atomically all-or-nothing (B4).
+      await bulkSetPositions('milestones', 'varchar', milestone_ids, 't.timeline_id = $3', [timelineId]);
+    }
 
     res.json({ success: true });
     broadcastToUser(req.userId!, 'timelines');

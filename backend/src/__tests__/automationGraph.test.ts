@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { normalizeAutomationGraph, assertGraphRefsInWorkspace, assertGraphWorkspaceRefsAccessible, type AutomationGraph, type AutomationNode } from '../automationGraph';
+import { AUTOMATION_MAX_NODES } from '../automationBudget';
 import type { QueryExec } from '../workspaceUtil';
 
 function trigger(type: string, params: Record<string, unknown> = {}): AutomationNode {
@@ -46,6 +47,32 @@ describe('normalizeAutomationGraph', () => {
     const result = normalizeAutomationGraph(graph);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/exactly one trigger/);
+  });
+
+  // B7 (Phase 2) — server-side node-count budget.
+  it(`accepts a graph at EXACTLY the node-count maximum (${AUTOMATION_MAX_NODES})`, () => {
+    const nodes: AutomationNode[] = [trigger('task_completed', { listId: 'list_1' })];
+    const edges = [];
+    for (let i = 1; i < AUTOMATION_MAX_NODES; i++) {
+      nodes.push(action(`a${i}`, 'delete_task'));
+      edges.push(edge(`e${i}`, i === 1 ? 't1' : `a${i - 1}`, `a${i}`));
+    }
+    expect(nodes.length).toBe(AUTOMATION_MAX_NODES);
+    const result = normalizeAutomationGraph({ version: 1, nodes, edges });
+    expect(result.ok).toBe(true);
+  });
+
+  it(`rejects a graph with ONE MORE node than the maximum (${AUTOMATION_MAX_NODES + 1}), regardless of what the client sends`, () => {
+    const nodes: AutomationNode[] = [trigger('task_completed', { listId: 'list_1' })];
+    const edges = [];
+    for (let i = 1; i <= AUTOMATION_MAX_NODES; i++) {
+      nodes.push(action(`a${i}`, 'delete_task'));
+      edges.push(edge(`e${i}`, i === 1 ? 't1' : `a${i - 1}`, `a${i}`));
+    }
+    expect(nodes.length).toBe(AUTOMATION_MAX_NODES + 1);
+    const result = normalizeAutomationGraph({ version: 1, nodes, edges });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/exceeding the maximum/);
   });
 
   it('rejects a graph with two trigger nodes', () => {

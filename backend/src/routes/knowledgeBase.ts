@@ -23,11 +23,13 @@ import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { query } from '../db';
 import { authenticate } from '../middleware';
+import { verifyToken } from '../auth';
 import { userCanAccessWorkspace, werr } from '../workspaceUtil';
 import { broadcastToUser } from '../sse';
 import { MARKDOWN_IMAGE_DIR } from './markdownLists';
 import { enqueueEmbedding } from '../knowledge/queue';
 import { upsertLink, deleteLinksBetween } from '../graph/links';
+import { consumeAssetTicket } from '../assetTickets';
 import {
   getBaseForWorkspace, getBaseById, createBase, updateBase, deleteBase,
   listEntries, getEntry, createEntry, updateEntry, deleteEntry,
@@ -486,17 +488,48 @@ router.post('/entries/:id/images', authenticate, uploadImage.single('image'), as
 });
 
 // GET /api/knowledge-base/entries/:id/images/:imageId
-// `<img>` can't send an Authorization header, so `authenticate` here also
-// accepts a `?token=` query param (same accommodation the Markdown Page image
-// route makes — see routes/markdownLists.ts).
-router.get('/entries/:id/images/:imageId', authenticate, async (req: Request, res: Response) => {
+//
+// SECURITY (S4) / BUGFIX: an `<img>` tag cannot send an Authorization
+// header, so this route needs an alternative — but the generic `authenticate`
+// middleware it used to run behind ONLY reads the Authorization header (see
+// middleware.ts); it never reads a query param at all, despite this file's
+// old comment claiming otherwise. The practical effect: every image embedded
+// in a Knowledge Base entry 401'd unconditionally, since nothing could ever
+// supply a header from an `<img src>`. Fixed the same way as the Markdown
+// Page image route (routes/markdownLists.ts): accept a short-lived
+// `?ticket=` scoped to this EXACT image (`kbimg:<entryId>:<imageId>`,
+// assetTickets.ts) instead of either a raw long-lived JWT or a silently
+// broken header-only check.
+router.get('/entries/:id/images/:imageId', async (req: Request, res: Response) => {
   try {
-    const found = await resolveEntryAccess(req.userId!, req.params.id);
+    const { id, imageId } = req.params;
+    const authHeader = req.headers.authorization;
+    const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const ticketParam = typeof req.query.ticket === 'string' ? req.query.ticket : null;
+
+    let userId: string;
+    if (headerToken) {
+      try {
+        ({ userId } = verifyToken(headerToken));
+      } catch {
+        res.status(401).json({ error: 'Invalid or expired token' });
+        return;
+      }
+    } else if (ticketParam) {
+      const consumed = consumeAssetTicket(ticketParam, `kbimg:${id}`);
+      if (!consumed) { res.status(401).json({ error: 'Invalid or expired ticket' }); return; }
+      userId = consumed.userId;
+    } else {
+      res.status(401).json({ error: 'Missing credentials' });
+      return;
+    }
+
+    const found = await resolveEntryAccess(userId, id);
     if (!found) { res.status(404).json({ error: 'Not found' }); return; }
     const r = await query(
       `SELECT file_path, mime_type FROM markdown_list_images
         WHERE id = $1 AND owner_type = 'knowledgeEntry' AND owner_id = $2`,
-      [req.params.imageId, req.params.id]
+      [imageId, id]
     );
     const img = r.rows[0] as { file_path: string; mime_type: string } | undefined;
     if (!img) { res.status(404).json({ error: 'Not found' }); return; }
@@ -504,6 +537,8 @@ router.get('/entries/:id/images/:imageId', authenticate, async (req: Request, re
     const filePath = path.join(path.resolve(MARKDOWN_IMAGE_DIR), path.basename(img.file_path));
     if (!fs.existsSync(filePath)) { res.status(404).json({ error: 'Not found' }); return; }
     res.setHeader('Content-Type', img.mime_type);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.sendFile(filePath);
   } catch (err) {
     werr('knowledge-base image serve error:', err);

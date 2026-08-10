@@ -262,9 +262,14 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   // 2FA — enable flow (uses TwoFAWizard inline)
   const [twoFAOpen, setTwoFAOpen] = useState(false);
 
-  // 2FA — disable flow
+  // 2FA — disable flow. `disablePassword` is a fresh step-up re-check (S3) —
+  // a valid-but-stolen session token alone must not be enough to turn off a
+  // user's second factor, so the account password is required in addition
+  // to a valid TOTP code.
   const [disableOpen, setDisableOpen] = useState(false);
   const [disableOtp, setDisableOtp] = useState(Array(6).fill(''));
+  const [disablePassword, setDisablePassword] = useState('');
+  const [disablePasswordVisible, setDisablePasswordVisible] = useState(false);
   const [disableError, setDisableError] = useState('');
   const [disableLoading, setDisableLoading] = useState(false);
   const [disableShake, setDisableShake] = useState(false);
@@ -299,17 +304,22 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
 
   const handleDisable2FA = async () => {
     const code = disableOtp.join('');
-    if (code.length !== 6) return;
+    if (code.length !== 6 || !disablePassword) return;
     setDisableLoading(true);
     setDisableError('');
     try {
-      await api2FADisable(code);
+      await api2FADisable(code, disablePassword);
       setTotpEnabled(false);
       setDisableOpen(false);
       setDisableOtp(Array(6).fill(''));
+      setDisablePassword('');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';
-      setDisableError(msg.includes('Invalid') ? 'Invalid code — please try again.' : 'Something went wrong.');
+      setDisableError(
+        msg.includes('password') ? 'Incorrect password.'
+        : msg.includes('Invalid') ? 'Invalid code — please try again.'
+        : 'Something went wrong.'
+      );
       setDisableOtp(Array(6).fill(''));
       setDisableShake(true);
       setTimeout(() => setDisableShake(false), 500);
@@ -789,7 +799,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                       <div style={{ flexShrink: 0 }}>
                         {totpEnabled ? (
                           <button
-                            onClick={() => { setDisableOpen(true); setDisableOtp(Array(6).fill('')); setDisableError(''); }}
+                            onClick={() => { setDisableOpen(true); setDisableOtp(Array(6).fill('')); setDisablePassword(''); setDisableError(''); }}
                             style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', transition: 'background 150ms' }}
                             onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-error-bg)'; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
@@ -805,11 +815,29 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                       </div>
                     </div>
 
-                    {/* Disable 2FA OTP entry */}
+                    {/* Disable 2FA — password step-up + OTP entry */}
                     {disableOpen && (
                       <div style={{ padding: '0 18px 18px', borderTop: '1px solid var(--color-surface-tint-2)' }}>
                         <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-secondary)', margin: '14px 0 12px' }}>
-                          Enter the 6-digit code from your authenticator app to disable 2FA.
+                          Confirm your password and enter the 6-digit code from your authenticator app to disable 2FA.
+                        </div>
+                        <div style={{ position: 'relative', marginBottom: 10 }}>
+                          <input
+                            type={disablePasswordVisible ? 'text' : 'password'}
+                            value={disablePassword}
+                            onChange={e => { setDisablePassword(e.target.value); setDisableError(''); }}
+                            onKeyDown={e => { if (e.key === 'Enter' && disablePassword && disableOtp.every(d => d)) handleDisable2FA(); }}
+                            placeholder="Current password"
+                            style={{ ...inputStyle(false), paddingRight: 32 }}
+                            autoComplete="current-password"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setDisablePasswordVisible(v => !v)}
+                            style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex' }}
+                          >
+                            <Icon name={disablePasswordVisible ? 'visibility_off' : 'visibility'} size={16} color="var(--color-text-quaternary)" />
+                          </button>
                         </div>
                         <div style={{ display: 'flex', gap: 7, justifyContent: 'center', marginBottom: 8, animation: disableShake ? 'shake 400ms ease-in-out' : undefined }}>
                           {disableOtp.map((digit, i) => (
@@ -837,17 +865,17 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                         {disableError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', textAlign: 'center', marginBottom: 10 }}>{disableError}</div>}
                         <div style={{ display: 'flex', gap: 8, marginTop: disableError ? 0 : 10 }}>
                           <button
-                            onClick={() => { setDisableOpen(false); setDisableOtp(Array(6).fill('')); setDisableError(''); }}
+                            onClick={() => { setDisableOpen(false); setDisableOtp(Array(6).fill('')); setDisablePassword(''); setDisableError(''); }}
                             style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '9px 0', cursor: 'pointer' }}
                             onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
                           >Cancel</button>
                           <button
                             onClick={handleDisable2FA}
-                            disabled={disableLoading || !disableOtp.every(d => d)}
-                            style={{ flex: 2, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: disableLoading || !disableOtp.every(d => d) ? 'var(--color-border-strong)' : 'var(--color-error)', border: 'none', borderRadius: 8, padding: '9px 0', cursor: disableLoading || !disableOtp.every(d => d) ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}
-                            onMouseEnter={e => { if (!disableLoading && disableOtp.every(d => d)) e.currentTarget.style.background = 'var(--color-red-deep-1)'; }}
-                            onMouseLeave={e => { if (!disableLoading && disableOtp.every(d => d)) e.currentTarget.style.background = 'var(--color-error)'; }}
+                            disabled={disableLoading || !disablePassword || !disableOtp.every(d => d)}
+                            style={{ flex: 2, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: disableLoading || !disablePassword || !disableOtp.every(d => d) ? 'var(--color-border-strong)' : 'var(--color-error)', border: 'none', borderRadius: 8, padding: '9px 0', cursor: disableLoading || !disablePassword || !disableOtp.every(d => d) ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}
+                            onMouseEnter={e => { if (!disableLoading && disablePassword && disableOtp.every(d => d)) e.currentTarget.style.background = 'var(--color-red-deep-1)'; }}
+                            onMouseLeave={e => { if (!disableLoading && disablePassword && disableOtp.every(d => d)) e.currentTarget.style.background = 'var(--color-error)'; }}
                           >
                             {disableLoading ? 'Disabling…' : 'Confirm Disable'}
                           </button>
@@ -1856,6 +1884,11 @@ function TwoFAWizardInline({ onClose, onEnabled }: TwoFAWizardInlineProps) {
   const [qrCode, setQrCode] = useState('');
   const [secret, setSecret] = useState('');
   const [loadingSetup, setLoadingSetup] = useState(false);
+  // Step-up (S3): see TwoFAWizard.tsx's matching comment — a valid-but-stolen
+  // session token alone must not be enough to silently (re)generate a user's
+  // TOTP secret, so the account password is required before /2fa/setup.
+  const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [copied, setCopied] = useState(false);
   const [otp, setOtp] = useState(Array(6).fill(''));
   const [otpError, setOtpError] = useState('');
@@ -1874,11 +1907,11 @@ function TwoFAWizardInline({ onClose, onEnabled }: TwoFAWizardInlineProps) {
   useEffect(() => {
     if (step !== 'scan' || qrCode) return;
     setLoadingSetup(true);
-    api2FASetup()
+    api2FASetup(password)
       .then(data => { setQrCode(data.qrCode); setSecret(data.secret); })
       .catch(() => setOtpError('Failed to generate QR code. Please try again.'))
       .finally(() => setLoadingSetup(false));
-  }, [step]);
+  }, [step, password, qrCode]);
 
   useEffect(() => {
     if (step !== 'done') return;
@@ -1963,9 +1996,27 @@ function TwoFAWizardInline({ onClose, onEnabled }: TwoFAWizardInlineProps) {
                 </div>
               ))}
             </div>
-            <button onClick={() => setStep('scan')}
-              style={{ width: '100%', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '13px 0', borderRadius: 12, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background 150ms' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-mid-10)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-primary)'; }}>
+            <div style={{ position: 'relative', marginBottom: 16 }}>
+              <input
+                type={passwordVisible ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && password) setStep('scan'); }}
+                placeholder="Confirm your password to continue"
+                style={{ width: '100%', boxSizing: 'border-box' as const, padding: '11px 32px 11px 12px', borderRadius: 10, border: '1.5px solid var(--color-border-alt)', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'var(--color-surface-gray)', outline: 'none' }}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setPasswordVisible(v => !v)}
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex' }}
+              >
+                <Icon name={passwordVisible ? 'visibility_off' : 'visibility'} size={16} color="var(--color-text-quaternary)" />
+              </button>
+            </div>
+            <button onClick={() => setStep('scan')} disabled={!password}
+              style={{ width: '100%', background: password ? 'var(--color-primary)' : 'var(--color-border-strong)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '13px 0', borderRadius: 12, border: 'none', cursor: password ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'background 150ms' }}
+              onMouseEnter={e => { if (password) e.currentTarget.style.background = 'var(--color-purple-mid-10)'; }} onMouseLeave={e => { if (password) e.currentTarget.style.background = 'var(--color-primary)'; }}>
               Get Started <Icon name="arrow_forward" size={16} color="var(--color-white)" />
             </button>
           </div>

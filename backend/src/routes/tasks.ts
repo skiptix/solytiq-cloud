@@ -6,9 +6,11 @@ import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, wlog, werr } from '../workspaceUtil';
 import { collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
 import { notifyNewMentions } from '../mentions';
-import { itemShareExists } from '../itemShares';
+import { objectAccessCondition, workspaceMembersJoin } from '../objectPolicy';
 import { startAgentRun } from '../agent/runtime';
 import { runJson, type AgentRunRow } from './agent';
+import { validateReorderIds, bulkSetPositions } from '../reorderUtil';
+import { decodeKeysetCursor, encodeKeysetCursor, parsePageLimit, paginateRows, type KeysetCursor } from '../pagination';
 
 const router = Router();
 router.use(authenticate);
@@ -79,13 +81,21 @@ export async function buildTasksForUser(userId: string, workspaceId?: string) {
     : '';
   if (workspaceId) params.push(workspaceId);
 
+  // SECURITY (S2): a list-sourced task's visibility must mirror the SAME
+  // policy that gates the list itself (objectPolicy.ts) — `l.is_public = true`
+  // alone is NEVER sufficient; it only grants access to workspace members (or
+  // a legacy no-workspace list, or a list inside a public workspace). Checking
+  // bare `is_public` here would leak every list-task in every public list
+  // across the WHOLE instance to any signed-in user, regardless of workspace
+  // membership — see objectPolicy.test.ts's cross-tenant regression coverage.
   const result = await query<TaskRow>(
     `SELECT t.*,
             (SELECT COUNT(*) FROM task_attachments ta WHERE ta.task_id = t.id) AS attachment_count
      FROM tasks t
      LEFT JOIN lists l ON t.list_id = l.id
+     ${workspaceMembersJoin('l')}
      WHERE ((t.user_id = $1 AND t.source = 'dash')
-        OR (t.source = 'list' AND (l.user_id = $1 OR l.is_public = true OR ${itemShareExists('l', 'list')})))
+        OR (t.source = 'list' AND ${objectAccessCondition('l', 'list')}))
      ${wsClause}
      ORDER BY t.position ASC, t.created_at ASC`,
     params
@@ -103,10 +113,114 @@ export async function getDashTaskForUser(userId: string, taskId: string) {
   return r.rows[0] ? sanitizeTask(r.rows[0]) : null;
 }
 
+/**
+ * B5: batch-hydrate MANY dash tasks in ONE query instead of the N
+ * round-trips `getDashTaskForUser` called in a loop would cost — used by
+ * `/api/sync/delta`'s re-serialization of a batch of changed task ids. Same
+ * access boundary (`user_id = $1 AND source = 'dash'`) as `getDashTaskForUser`
+ * — a requested id owned by someone else, or a list-sourced task id, is
+ * simply absent from the returned Map.
+ */
+export async function getDashTasksForUserBatch(userId: string, taskIds: string[]): Promise<Map<string, ReturnType<typeof sanitizeTask>>> {
+  const map = new Map<string, ReturnType<typeof sanitizeTask>>();
+  if (taskIds.length === 0) return map;
+  const r = await query<TaskRow>(
+    `SELECT t.*, (SELECT COUNT(*) FROM task_attachments ta WHERE ta.task_id = t.id) AS attachment_count
+     FROM tasks t WHERE t.id = ANY($1::bigint[]) AND t.user_id = $2 AND t.source = 'dash'`,
+    [taskIds, userId]
+  );
+  for (const row of r.rows) map.set(String(row.id), sanitizeTask(row));
+  return map;
+}
+
+// B5: keyset-paginated variant of buildTasksForUser, additive — SAME access
+// conditions/filters, just bounded + resumable via an opaque cursor instead
+// of returning every matching row in one unbounded query. Used by both
+// `GET /api/tasks?cursor=&limit=` and the sync bootstrap's task slice (see
+// routes/sync.ts) so a workspace with a very large task count can never
+// force either endpoint to build/ship an unbounded payload.
+export async function buildTasksPageForUser(
+  userId: string,
+  workspaceId: string | undefined,
+  opts: { cursor: KeysetCursor | null; limit: number }
+): Promise<{ tasks: ReturnType<typeof sanitizeTask>[]; nextCursor: string | null }> {
+  const params: unknown[] = [userId];
+  const wsClause = workspaceId
+    ? `AND (t.workspace_id = $2 OR t.workspace_id IS NULL OR (t.source = 'list' AND (l.workspace_id = $2 OR l.workspace_id IS NULL)))`
+    : '';
+  if (workspaceId) params.push(workspaceId);
+
+  let cursorClause = '';
+  if (opts.cursor) {
+    params.push(opts.cursor.position, opts.cursor.createdAt, opts.cursor.id);
+    const n = params.length;
+    // Keyset predicate on the SAME tuple the ORDER BY below sorts by — a
+    // plain row-comparison Postgres can evaluate directly against the scan
+    // order, unlike OFFSET (see pagination.ts's header comment for why).
+    // `EXTRACT(EPOCH FROM t.created_at)::double precision` (not the raw
+    // `timestamptz` column) on BOTH sides of the comparison — see
+    // pagination.ts's `KeysetCursor` doc comment for why comparing against a
+    // JS-Date-derived ISO string truncates below millisecond precision and
+    // can re-include the exact cursor row on the next page. The explicit
+    // `::double precision` cast matters here too, not just cosmetically:
+    // `EXTRACT(EPOCH FROM ...)` returns SQL `numeric` by default, and this
+    // app's `pg` driver returns `numeric` values as STRINGS (its default,
+    // precision-preserving behavior for arbitrary-precision decimals) — left
+    // uncast, the SELECT below would hand back a string where `KeysetCursor`
+    // expects a number, and `decodeKeysetCursor`'s type guard would then
+    // silently reject every encoded cursor as malformed, degrading every
+    // "next page" request back to page 1 forever. Casting to `double
+    // precision` (`float8`) makes both the wire type AND the driver's JS
+    // return type a genuine number.
+    cursorClause = `AND (t.position, EXTRACT(EPOCH FROM t.created_at)::double precision, t.id) > ($${n - 2}, $${n - 1}::double precision, $${n}::bigint)`;
+  }
+
+  // Fetch one extra row past the page size to detect "is there a next page"
+  // without a separate COUNT(*) query.
+  params.push(opts.limit + 1);
+  const limitParamIndex = params.length;
+
+  const result = await query<TaskRow & { created_at_epoch: number }>(
+    `SELECT t.*, EXTRACT(EPOCH FROM t.created_at)::double precision AS created_at_epoch,
+            (SELECT COUNT(*) FROM task_attachments ta WHERE ta.task_id = t.id) AS attachment_count
+     FROM tasks t
+     LEFT JOIN lists l ON t.list_id = l.id
+     ${workspaceMembersJoin('l')}
+     WHERE ((t.user_id = $1 AND t.source = 'dash')
+        OR (t.source = 'list' AND ${objectAccessCondition('l', 'list')}))
+     ${wsClause}
+     ${cursorClause}
+     ORDER BY t.position ASC, t.created_at ASC, t.id ASC
+     LIMIT $${limitParamIndex}`,
+    params
+  );
+
+  const { page, nextCursor } = paginateRows(result.rows, opts.limit, (row) => ({
+    position: row.position,
+    createdAt: row.created_at_epoch,
+    id: String(row.id),
+  }), encodeKeysetCursor);
+  return { tasks: page.map(sanitizeTask), nextCursor };
+}
+
 // GET /api/tasks
+// Backward-compatible: with no `cursor`/`limit` query param, behaves exactly
+// as before (the full, unbounded set in one `{ tasks }` response) — every
+// existing caller (the frontend's classic loader, useAppStore.loadFromApi)
+// keeps working unmodified. Passing either param opts into the NEW paginated
+// shape (`{ tasks, nextCursor }`) instead — additive, not a breaking change.
 router.get('/', async (req: Request, res: Response) => {
   try {
     const workspaceId = req.query.workspaceId as string | undefined;
+    const wantsPage = req.query.cursor !== undefined || req.query.limit !== undefined;
+    if (wantsPage) {
+      const cursor = decodeKeysetCursor(req.query.cursor);
+      const limit = parsePageLimit(req.query.limit);
+      const { tasks, nextCursor } = await buildTasksPageForUser(req.userId!, workspaceId, { cursor, limit });
+      wlog(`tasks GET(paged) user=${req.userId} workspace=${workspaceId ?? 'ALL'} limit=${limit} → ${tasks.length} task(s), nextCursor=${nextCursor ? 'yes' : 'no'}`);
+      res.json({ tasks, nextCursor });
+      return;
+    }
     const tasks = await buildTasksForUser(req.userId!, workspaceId);
     wlog(`tasks GET user=${req.userId} workspace=${workspaceId ?? 'ALL'} → ${tasks.length} task(s)`);
     res.json({ tasks });
@@ -183,21 +297,22 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT /api/tasks/reorder  — must be before /:id
 router.put('/reorder', async (req: Request, res: Response) => {
   try {
-    const { ids } = req.body as { ids?: number[] };
+    const validation = validateReorderIds((req.body as { ids?: unknown }).ids, 'number');
+    if (!validation.ok) { res.status(validation.status).json({ error: validation.error }); return; }
+    const ids = validation.ids as number[];
+    if (ids.length === 0) { res.json({ success: true }); return; }
 
-    if (!Array.isArray(ids)) {
-      res.status(400).json({ error: 'ids must be an array' });
+    const owned = await query<{ id: string }>(
+      `SELECT id FROM tasks WHERE id = ANY($1::bigint[]) AND user_id = $2 AND source = 'dash'`,
+      [ids, req.userId]
+    );
+    if (owned.rows.length !== ids.length) {
+      res.status(400).json({ error: 'One or more ids do not belong to a dashboard task you own' });
       return;
     }
 
-    await Promise.all(
-      ids.map((taskId, index) =>
-        query(
-          `UPDATE tasks SET position = $1 WHERE id = $2 AND user_id = $3 AND source = 'dash'`,
-          [index, taskId, req.userId]
-        )
-      )
-    );
+    // ONE bulk statement — atomically all-or-nothing (B4).
+    await bulkSetPositions('tasks', 'bigint', ids, `t.user_id = $3 AND t.source = 'dash'`, [req.userId]);
 
     res.json({ success: true });
     broadcastToUser(req.userId!, 'tasks');

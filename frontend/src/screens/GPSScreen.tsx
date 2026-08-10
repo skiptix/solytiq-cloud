@@ -16,6 +16,7 @@ import GPSMergeWizard from '../components/GPSMergeWizard';
 import { searchNominatim, parseCoordInput } from '../utils/nominatim';
 import { POI_CATEGORY_CONFIG, createPoiDivIcon, createPinDivIcon } from '../utils/poiCategories';
 import { diffPoiMarkers } from '../utils/routeState';
+import { buildPoiPopupElement, buildSafeTooltipElement } from '../utils/poiPopup';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDist(m?: number | null) {
@@ -421,11 +422,7 @@ export default function GPSScreen() {
         const marker = L.marker([poi.lat, poi.lon], { icon, zIndexOffset: 250 });
         const cfg = (POI_CATEGORY_CONFIG as Record<string, typeof POI_CATEGORY_CONFIG[PoiCategory]>)[poi.category];
         marker.bindPopup(
-          `<div style="font-family:Inter,sans-serif;min-width:160px;max-width:240px;">`
-          + (cfg ? `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><span style="background:${cfg.bg};color:${cfg.fg};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Hanken Grotesk',sans-serif;white-space:nowrap;">${cfg.label}</span></div>` : '')
-          + `<div style="font-size:13px;font-weight:700;color:var(--color-text-primary);font-family:'Hanken Grotesk',sans-serif;">${poi.name.replace(/</g, '&lt;')}</div>`
-          + (poi.description ? `<div style="font-size:11px;color:var(--color-text-tertiary);margin-top:4px;">${String(poi.description).replace(/</g, '&lt;')}</div>` : '')
-          + `</div>`,
+          buildPoiPopupElement({ name: poi.name, description: poi.description, category: cfg ?? null }),
           { maxWidth: 260, className: 'solytiq-poi-popup' },
         );
         marker.addTo(map);
@@ -515,7 +512,17 @@ export default function GPSScreen() {
           tags['addr:city'] || tags['addr:town'],
         ].filter(Boolean).join(', ');
         const cfg = POI_CATEGORY_CONFIG[poi.category as PoiCategory];
-        marker.bindPopup(`<div style="font-family:Inter,sans-serif;min-width:180px;max-width:240px;"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><span style="background:${cfg.bg};color:${cfg.fg};border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;font-family:'Hanken Grotesk',sans-serif;white-space:nowrap;">${cfg.label}</span></div><div style="font-size:13px;font-weight:700;color:var(--color-text-primary);font-family:'Hanken Grotesk',sans-serif;margin-bottom:6px;">${poi.name}</div>${address ? `<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px;">📍 ${address}</div>` : ''}${tags['opening_hours'] ? `<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px;">🕐 ${tags['opening_hours']}</div>` : ''}${tags['phone'] || tags['contact:phone'] ? `<div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px;">📞 ${tags['phone'] || tags['contact:phone']}</div>` : ''}${tags['website'] || tags['contact:website'] ? `<div style="font-size:11px;margin-top:4px;"><a href="${tags['website'] || tags['contact:website']}" target="_blank" rel="noopener" style="color:var(--color-primary);text-decoration:none;">🌐 Website</a></div>` : ''}</div>`, { maxWidth: 260, className: 'solytiq-poi-popup' });
+        marker.bindPopup(
+          buildPoiPopupElement({
+            name: poi.name,
+            category: cfg ?? null,
+            address: address || null,
+            openingHours: tags['opening_hours'] ?? null,
+            phone: tags['phone'] || tags['contact:phone'] || null,
+            website: tags['website'] || tags['contact:website'] || null,
+          }),
+          { maxWidth: 260, className: 'solytiq-poi-popup' },
+        );
         layer.addLayer(marker);
         poiMarkersRef.current.set(poi.id, marker);
       });
@@ -555,7 +562,10 @@ export default function GPSScreen() {
     if (!map) return;
     searchPinRef.current?.remove();
     const icon = L.divIcon({ className: '', html: `<div style="background:var(--color-primary);color:var(--color-white);border:2px solid var(--color-white);border-radius:50%;width:14px;height:14px;box-shadow:0 2px 8px rgba(var(--color-primary-rgb), 0.4);"></div>`, iconSize: [14, 14], iconAnchor: [7, 7] });
-    searchPinRef.current = L.marker([lat, lon], { icon }).bindTooltip(label, { permanent: false, direction: 'top' }).addTo(map);
+    // `label` is untrusted third-party search-result text (Nominatim
+    // `display_name`) — pass a DOM node, never the raw string, so Leaflet's
+    // tooltip doesn't fall into its innerHTML-assignment path (see poiPopup.ts).
+    searchPinRef.current = L.marker([lat, lon], { icon }).bindTooltip(buildSafeTooltipElement(label), { permanent: false, direction: 'top' }).addTo(map);
   }
 
   function handleSearchChange(q: string) {

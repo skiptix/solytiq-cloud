@@ -1,0 +1,16 @@
+# Root .dockerignore — trims the build context sent to the daemon for the
+# frontend image (docker-compose.yml builds it with context: "."). Backend
+# has its own backend/.dockerignore for its own (backend-context) build.
+.git
+.gitignore
+*.md
+security_report.md
+refactor
+backend/node_modules
+backend/dist
+frontend/node_modules
+frontend/dist
+**/.env
+**/.env.*
+**/*.log
+**/.DS_Store

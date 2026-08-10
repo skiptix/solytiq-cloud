@@ -10,6 +10,7 @@ import { generateAndLogSetupToken } from '../setupToken';
 import { generateAdminApiKey, sanitizeScopes } from '../adminApiKey';
 import { broadcastNukeToAll } from '../sse';
 import { UPLOAD_DIR } from './files';
+import { validatePassword } from '../passwordPolicy';
 
 const execFileAsync = promisify(execFile);
 
@@ -147,6 +148,8 @@ router.post('/users', authenticate, requireAdmin, async (req: Request, res: Resp
       res.status(400).json({ error: 'username and password are required' });
       return;
     }
+    const pwCheck = validatePassword(password);
+    if (!pwCheck.ok) { res.status(400).json({ error: pwCheck.error }); return; }
 
     const passwordHash = await hashPassword(password);
     const resolvedEmail = email?.trim() || `${username}@local`;
@@ -192,6 +195,8 @@ router.put('/users/:id', authenticate, requireAdmin, async (req: Request, res: R
 
     if (username?.trim()) { sets.push(`username = $${idx++}`); values.push(username.trim()); }
     if (password) {
+      const pwCheck = validatePassword(password);
+      if (!pwCheck.ok) { res.status(400).json({ error: pwCheck.error }); return; }
       sets.push(`password_hash = $${idx++}`);
       values.push(await hashPassword(password));
       // FIND-03: Invalidate sessions when admin changes user password

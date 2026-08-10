@@ -27,6 +27,46 @@ const router = Router();
 
 const CODE_TTL_MS = 5 * 60 * 1000; // authorization codes live 5 minutes
 
+// SECURITY (S3): a PAT minted through this OAuth flow used to never expire
+// (no expires_at was ever set) — a single consent click created a
+// forever-valid credential with no natural rotation point. 90 days forces
+// periodic re-consent/re-issuance while staying well clear of "log in every
+// week" annoyance for a long-lived MCP connector.
+const OAUTH_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+// SECURITY (S3): Dynamic Client Registration (RFC 7591) is, by design, open
+// to any client that can reach this endpoint — that's the whole point of the
+// spec, and blocking it outright would break every legitimate MCP connector,
+// not just attackers. What must NOT be trusted is a REGISTERED CLIENT'S OWN
+// CLAIMED NAME: `oauth_clients.client_name` is attacker-controlled input (any
+// anonymous caller can register a client and name it "Claude"), yet the
+// consent screen used to render the string "Claude" unconditionally,
+// regardless of which client_id was actually in the URL — a textbook OAuth
+// consent-phishing setup (register a fake client → send the victim a
+// consent link → the victim approves what LOOKS like "Claude" → the
+// authorization code, and then a full-power PAT, lands on the attacker's own
+// redirect_uri). The fix is NOT to block DCR; it's to stop trusting a
+// self-reported name and instead derive "is this really Claude" from
+// something the CALLER cannot forge: which host will actually receive the
+// authorization code. `GET /client-info` (below) exposes that verdict so the
+// consent screen can render the REAL registered name plus the REAL redirect
+// host, and only ever say "Claude" when the redirect_uri's host is on this
+// operator-controlled allowlist.
+const DEFAULT_TRUSTED_REDIRECT_HOSTS = ['claude.ai', 'claude.com'];
+export function trustedRedirectHosts(): string[] {
+  const configured = process.env.OAUTH_TRUSTED_REDIRECT_HOSTS;
+  if (!configured) return DEFAULT_TRUSTED_REDIRECT_HOSTS;
+  return configured.split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
+}
+export function isTrustedRedirectUri(redirectUri: string): boolean {
+  try {
+    const host = new URL(redirectUri).hostname.toLowerCase();
+    return trustedRedirectHosts().some((trusted) => host === trusted || host.endsWith(`.${trusted}`));
+  } catch {
+    return false;
+  }
+}
+
 // A redirect_uri must be an absolute https URL (http only for loopback dev).
 function isValidRedirectUri(value: unknown): value is string {
   if (typeof value !== 'string') return false;
@@ -154,6 +194,48 @@ router.get('/authorize', async (req: Request, res: Response) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /api/oauth/client-info — what the consent screen renders BEFORE the
+// user approves anything. Requires the caller to already be logged in
+// (mirrors the frontend's /oauth/consent route guard) since this is only
+// ever called from that screen. Returns the REGISTERED client_name (never
+// trusted as "Claude" on its own — see the isTrustedRedirectUri comment
+// above) and the exact redirect_uri the code would be delivered to, plus a
+// server-computed `trusted` verdict the frontend cannot spoof by editing the
+// URL's query params.
+// ---------------------------------------------------------------------------
+router.get('/client-info', authenticate, async (req: Request, res: Response) => {
+  try {
+    const clientId = typeof req.query.client_id === 'string' ? req.query.client_id : '';
+    const redirectUri = typeof req.query.redirect_uri === 'string' ? req.query.redirect_uri : '';
+    if (!clientId || !redirectUri) { res.status(400).json({ error: 'invalid_request' }); return; }
+
+    const clientRes = await query<{ client_name: string | null; redirect_uris: string[] }>(
+      `SELECT client_name, redirect_uris FROM oauth_clients WHERE client_id = $1`,
+      [clientId]
+    );
+    const client = clientRes.rows[0];
+    if (!client || !client.redirect_uris.includes(redirectUri)) {
+      res.status(404).json({ error: 'invalid_client' });
+      return;
+    }
+
+    let redirectHost = '';
+    try { redirectHost = new URL(redirectUri).hostname; } catch { /* validated at registration time */ }
+
+    res.json({
+      clientName: client.client_name?.trim() || 'Unnamed app',
+      redirectHost,
+      // Only true when the redirect_uri's host is on the operator-controlled
+      // allowlist — the one signal a self-registered client cannot forge.
+      trusted: isTrustedRedirectUri(redirectUri),
+    });
+  } catch (err) {
+    console.error('oauth client-info error:', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/oauth/approve — the logged-in user consents. Mints a single-use
 // authorization code bound to the user, client, redirect_uri and PKCE challenge.
 // ---------------------------------------------------------------------------
@@ -237,10 +319,11 @@ router.post('/token', async (req: Request, res: Response) => {
       redirect_uri: string;
       code_challenge: string;
       scope: string | null;
+      resource: string | null;
       expires_at: string;
     }>(
       `DELETE FROM oauth_codes WHERE code = $1
-       RETURNING user_id, client_id, redirect_uri, code_challenge, scope, expires_at`,
+       RETURNING user_id, client_id, redirect_uri, code_challenge, scope, resource, expires_at`,
       [code]
     );
     const row = codeRes.rows[0];
@@ -265,24 +348,46 @@ router.post('/token', async (req: Request, res: Response) => {
       res.status(400).json({ error: 'invalid_grant', error_description: 'PKCE verification failed' });
       return;
     }
+    // SECURITY (S3): audience/resource check (RFC 8707) — a client that
+    // requested a `resource` at /authorize time (this server's own /mcp
+    // endpoint, per protectedResourceMetadata in index.ts) must still be
+    // asking for THIS server at token-exchange time. A client that never
+    // specified a resource is left alone (optional per spec, and every PAT
+    // is scoped to the consenting user regardless), but one that specified a
+    // resource for a DIFFERENT server is rejected rather than silently
+    // handed a token anyway.
+    if (row.resource) {
+      const expectedResource = `${getPublicBaseUrl(req)}/mcp`;
+      if (row.resource !== expectedResource) {
+        res.status(400).json({ error: 'invalid_target', error_description: 'resource does not match this authorization server' });
+        return;
+      }
+    }
 
     // Name the token after the registered client so it's recognisable in the
-    // "Connected" list under Settings.
+    // "Connected" list under Settings. Never defaults to "Claude" — an empty
+    // client_name is exactly the self-registered-impersonator case the
+    // consent screen's `trusted` flag (see /client-info above) already
+    // guards; the token list must not re-introduce the same false signal.
     const nameRes = await query<{ client_name: string | null }>(
       `SELECT client_name FROM oauth_clients WHERE client_id = $1`,
       [client_id]
     );
-    const tokenName = nameRes.rows[0]?.client_name?.trim() || 'Claude';
+    const tokenName = nameRes.rows[0]?.client_name?.trim() || 'MCP Client';
 
+    // SECURITY (S3): a fixed TTL, not an indefinite token — see
+    // OAUTH_TOKEN_TTL_MS's comment above.
     const { raw, hash, prefix } = generateApiToken();
+    const expiresAt = new Date(Date.now() + OAUTH_TOKEN_TTL_MS).toISOString();
     await query(
-      `INSERT INTO api_tokens (user_id, name, token_hash, token_prefix) VALUES ($1, $2, $3, $4)`,
-      [row.user_id, tokenName.slice(0, 100), hash, prefix]
+      `INSERT INTO api_tokens (user_id, name, token_hash, token_prefix, expires_at) VALUES ($1, $2, $3, $4, $5)`,
+      [row.user_id, tokenName.slice(0, 100), hash, prefix, expiresAt]
     );
 
     res.json({
       access_token: raw,
       token_type: 'Bearer',
+      expires_in: Math.floor(OAUTH_TOKEN_TTL_MS / 1000),
       scope: row.scope ?? undefined,
     });
   } catch (err) {
