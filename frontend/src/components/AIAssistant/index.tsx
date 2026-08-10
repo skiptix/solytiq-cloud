@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMobile } from '../../hooks/useBreakpoint';
@@ -64,7 +64,12 @@ import {
 } from '../../api/client';
 import useGpsStore from '../../store/useGpsStore';
 import AIBubble from './AIBubble';
-import AIChatWindow from './AIChatWindow';
+// AIAssistant's own root (this file) is always mounted app-wide as a
+// floating bubble; the full chat window (tool-calling UI, session list,
+// file uploads, ~1000 lines) is only ever rendered once the user actually
+// opens it — lazy-loaded so every page's initial chunk only pays for the
+// small always-visible bubble, not the whole chat surface.
+const AIChatWindow = lazy(() => import('./AIChatWindow'));
 
 interface ToolCall {
   id: string;
@@ -1155,26 +1160,49 @@ export default function AIAssistant() {
     >
       <AnimatePresence>
         {isOpen && (
-          <AIChatWindow
-            key="ai-chat-window"
-            messages={messages}
-            isThinking={isThinking}
-            contextView={ctx.view}
-            onSend={handleSend}
-            onClose={() => setOpen(false)}
-            onClearHistory={handleClearHistory}
-            onShowRecentChats={handleShowRecentChats}
-            showRecentChats={showRecentChats}
-            recentSessions={recentSessions}
-            onSelectSession={handleSelectSession}
-            onDeleteSession={handleDeleteSession}
-            onCloseRecentChats={() => setShowRecentChats(false)}
-            uploadedFiles={uploadedFiles}
-            onAddFile={addUploadedFile}
-            onRemoveFile={removeUploadedFile}
-            sessionId={useAIStore.getState().currentSessionId}
-            isMobile={isMobile}
-          />
+          <Suspense
+            fallback={
+              <div
+                role="status"
+                aria-live="polite"
+                style={{
+                  width: isMobile ? '100vw' : 380,
+                  height: isMobile ? '100dvh' : 560,
+                  maxHeight: 'calc(100dvh - 40px)',
+                  borderRadius: isMobile ? 0 : 20,
+                  background: 'var(--color-white)',
+                  boxShadow: '0 8px 40px rgba(94,77,187,0.10)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <div style={{ width: 28, height: 28, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} aria-hidden="true" />
+                <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>Loading Sol…</span>
+              </div>
+            }
+          >
+            <AIChatWindow
+              key="ai-chat-window"
+              messages={messages}
+              isThinking={isThinking}
+              contextView={ctx.view}
+              onSend={handleSend}
+              onClose={() => setOpen(false)}
+              onClearHistory={handleClearHistory}
+              onShowRecentChats={handleShowRecentChats}
+              showRecentChats={showRecentChats}
+              recentSessions={recentSessions}
+              onSelectSession={handleSelectSession}
+              onDeleteSession={handleDeleteSession}
+              onCloseRecentChats={() => setShowRecentChats(false)}
+              uploadedFiles={uploadedFiles}
+              onAddFile={addUploadedFile}
+              onRemoveFile={removeUploadedFile}
+              sessionId={useAIStore.getState().currentSessionId}
+              isMobile={isMobile}
+            />
+          </Suspense>
         )}
       </AnimatePresence>
       {/* On mobile the open chat is a full-screen bottom sheet with its own

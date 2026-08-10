@@ -13,6 +13,7 @@ import VisibilityConflictModal from '../components/VisibilityConflictModal';
 import CreatorBubble from '../components/CreatorBubble';
 import TrashPanel from '../components/TrashPanel';
 import ArchivedPanel from '../components/ArchivedPanel';
+import { deriveWorkspacePermissions } from '../utils/workspacePermissions';
 
 interface UserSuggestion { id: string; username: string; fullName: string | null; profileImage: string | null; }
 
@@ -238,9 +239,17 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
 
   const { updateWorkspace, deleteWorkspace, getMembers, addMember, removeMember, setDeletingWorkspaceId } = useWorkspaceStore();
   const setWorkspaceAgent = useAgentStore(s => s.setWorkspaceAgent);
-  const { userId, isAdmin } = useAuthStore();
+  const { isAdmin } = useAuthStore();
   const { lists, timelines } = useAppStore();
-  const isOwner = workspace.ownerId === userId || workspace.role === 'owner';
+  // Sprint 03, M17 fix: derive visibility/permission from the real server
+  // model (per-viewer `workspace.role` + the instance-wide `isAdmin` flag)
+  // instead of a client-side `workspace.ownerId === userId` comparison that
+  // duplicated, rather than read, server state and — critically — never
+  // considered `isAdmin` at all, silently hiding owner-gated controls
+  // (Save, the Agent tab, Delete workspace) from an admin managing a
+  // workspace they don't personally own even though the server explicitly
+  // grants them that access. See utils/workspacePermissions.ts.
+  const { canManageWorkspace, canInviteMembers, canRemoveMember } = deriveWorkspacePermissions(workspace, isAdmin);
   const [copiedWorkspaceId, setCopiedWorkspaceId] = useState(false);
   const workspaceLists = lists.filter(l => l.workspaceId === workspace.id);
   const workspaceTimelines = timelines.filter(t => t.workspaceId === workspace.id);
@@ -261,10 +270,10 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   }, [activeTab, membersLoaded]);
 
   useEffect(() => {
-    if (activeTab === 'agent' && isOwner && !agentRunsLoaded) {
+    if (activeTab === 'agent' && canManageWorkspace && !agentRunsLoaded) {
       void loadAgentRuns(workspace.id);
     }
-  }, [activeTab, isOwner, agentRunsLoaded, loadAgentRuns, workspace.id]);
+  }, [activeTab, canManageWorkspace, agentRunsLoaded, loadAgentRuns, workspace.id]);
 
   const memberUserIds = new Set(members.map(m => m.userId));
   const suggestions = inviteUsername.trim().length > 0
@@ -373,7 +382,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   const TABS: { id: Tab; label: string; icon: string }[] = [
     { id: 'general', label: 'General',  icon: 'settings'     },
     { id: 'members', label: 'Members',  icon: 'group'        },
-    ...(isOwner ? [{ id: 'agent' as const, label: 'Agent', icon: 'smart_toy' }] : []),
+    ...(canManageWorkspace ? [{ id: 'agent' as const, label: 'Agent', icon: 'smart_toy' }] : []),
     ...(isAdmin ? [{ id: 'admin' as const, label: 'Admin', icon: 'admin_panel_settings' }] : []),
     { id: 'trash',   label: 'Trash',    icon: 'delete'       },
     { id: 'danger',  label: 'Danger',   icon: 'warning'      },
@@ -513,8 +522,8 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10 }}>
                 {saved && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-green-deep-3)', animation: 'savedPop 300ms ease both', display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="check_circle" size={14} color="var(--color-green-deep-3)" /> Saved</div>}
-                <button onClick={() => handleSave()} disabled={saving || !isOwner}
-                  style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '10px 22px', cursor: (saving || !isOwner) ? 'default' : 'pointer', opacity: !isOwner ? 0.5 : 1 }}>
+                <button onClick={() => handleSave()} disabled={saving || !canManageWorkspace}
+                  style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '10px 22px', cursor: (saving || !canManageWorkspace) ? 'default' : 'pointer', opacity: !canManageWorkspace ? 0.5 : 1 }}>
                   {saving ? 'Saving…' : 'Save changes'}
                 </button>
               </div>
@@ -524,7 +533,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
           {/* ── Members ── */}
           {activeTab === 'members' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
-              {isOwner && (
+              {canInviteMembers && (
                 <div>
                   <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Invite member</div>
                   <div style={{ position: 'relative' }}>
@@ -604,7 +613,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                             <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 9999, background: m.role === 'owner' ? 'var(--color-surface-tint)' : 'var(--color-surface-tint-2)', color: m.role === 'owner' ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>
                               {m.role}
                             </span>
-                            {isOwner && m.role !== 'owner' && (
+                            {canRemoveMember(m.role) && (
                               <button onClick={() => handleRemoveMember(m.userId)}
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 4, borderRadius: 6 }}
                                 title="Remove member">
@@ -622,7 +631,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
 
 
           {/* ── Agent ── */}
-          {activeTab === 'agent' && isOwner && (
+          {activeTab === 'agent' && canManageWorkspace && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
               <div>
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Autonomy</div>
@@ -753,8 +762,8 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
           {/* ── Danger ── */}
           {activeTab === 'danger' && (
             <div style={{ animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
-              {!isOwner
-                ? <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)', fontSize: 13 }}>Only the workspace owner can perform these actions.</div>
+              {!canManageWorkspace
+                ? <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)', fontSize: 13 }}>Only the workspace owner{isAdmin ? '' : ' or an instance admin'} can perform these actions.</div>
                 : confirmDelete
                   ? (
                     <div style={{ background: 'var(--color-error-bg-alt)', border: '1.5px solid var(--color-error-bg)', borderRadius: 14, padding: '24px', textAlign: 'center' }}>

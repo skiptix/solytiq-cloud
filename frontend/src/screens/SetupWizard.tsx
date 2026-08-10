@@ -10,7 +10,15 @@ const w: Record<string, CSSProperties> = {
   wrap: { minHeight: '100vh', background: 'linear-gradient(135deg, var(--color-page-bg) 0%, var(--color-purple-pale-12) 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, padding: 24 },
   card: { width: '100%', maxWidth: 460, background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 16, padding: '32px 36px 28px', boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.05), 0 8px 32px rgba(var(--color-primary-rgb), 0.06)', display: 'flex', flexDirection: 'column', gap: 24 },
   title: { fontFamily: 'var(--font-heading)', fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.015em', lineHeight: 1.2 },
-  sub: { fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', lineHeight: 1.55 },
+  // Sprint 03, test:a11y finding: --color-text-tertiary (#787584) on white is
+  // 4.49:1, just under WCAG AA's 4.5:1 minimum for normal-size text at
+  // 13.5px. --color-text-secondary (#484552, 9.34:1) is an EXISTING Solytiq
+  // token, not a new color — swapping which established token this one
+  // subtitle line uses is a contrast fix, not a redesign. (This app-wide
+  // token is used very broadly for tertiary/secondary copy; a full sweep of
+  // every use site is out of Sprint 03's "no visual relaunch" scope — see
+  // the Sprint 03 handoff.)
+  sub: { fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-secondary)', lineHeight: 1.55 },
   label: { fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)' },
   input: { fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'var(--color-purple-pale-4)', border: '1.5px solid var(--color-purple-pale-31)', borderRadius: 10, padding: '13px 16px', outline: 'none', width: '100%', transition: 'all 180ms' },
   primaryBtn: { width: '100%', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '12px 0', cursor: 'pointer', transition: 'all 180ms', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 },

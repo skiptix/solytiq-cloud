@@ -6,6 +6,13 @@
     "module": "esnext",
     "types": ["vite/client"],
     "skipLibCheck": true,
+    /* `@/*` alias used only by the vendored src/components/animate-ui tree
+       (kept as shadcn/Animate UI upstream sources expect it). Deliberately
+       `paths` WITHOUT `baseUrl` — TypeScript 6 deprecates bare `baseUrl`
+       (see https://aka.ms/ts6); `paths` alone resolves relative to this
+       tsconfig file under "moduleResolution": "bundler", which is what Vite's
+       resolver also does via the alias below, so no baseUrl is needed. */
+    "paths": { "@/*": ["./src/*"] },
 
     /* Bundler mode */
     "moduleResolution": "bundler",
