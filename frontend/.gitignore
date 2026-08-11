@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# scripts/check-animations.mjs --json output — regenerated on every run
+animations-report.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -10,7 +10,11 @@ const s: Record<string, CSSProperties> = {
   wrap:  { minHeight: '100vh', background: 'linear-gradient(135deg, var(--color-page-bg) 0%, var(--color-purple-pale-12) 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, padding: 24 },
   card:  { width: '100%', maxWidth: 400, background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 12, padding: '40px 40px 36px', boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.05)', display: 'flex', flexDirection: 'column', gap: 28 },
   title: { fontFamily: 'var(--font-heading)', fontSize: 30, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 },
-  sub:   { fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)', lineHeight: 1.5 },
+  // Sprint 03, test:a11y finding: --color-text-tertiary on white is 4.49:1,
+  // just under WCAG AA's 4.5:1 for normal-size text — see the identical note
+  // in SetupWizard.tsx's `sub` style. --color-text-secondary (9.34:1) is an
+  // existing token, not a new color.
+  sub:   { fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.5 },
   label: { fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' },
   input: { fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', padding: '8px 0', outline: 'none', width: '100%', transition: 'border-color 200ms' },
 };
@@ -151,26 +155,35 @@ export default function LoginScreen() {
             </div>
             <form style={{ display: 'flex', flexDirection: 'column', gap: 20 }} onSubmit={handleSubmit}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={s.label}>Username</label>
-                <input type="text" value={username} onChange={e => setUsername(e.target.value)}
+                <label htmlFor="login-username" style={s.label}>Username</label>
+                <input id="login-username" type="text" value={username} onChange={e => setUsername(e.target.value)}
                   placeholder="Enter your username…" autoFocus autoComplete="username"
+                  aria-invalid={!!error || undefined}
+                  aria-describedby={error ? 'login-error' : undefined}
                   style={{ ...s.input, borderBottom: `${userFocus ? 2 : 1.5}px solid ${userFocus ? 'var(--color-primary)' : 'var(--color-border-alt)'}` }}
                   onFocus={() => setUserFocus(true)} onBlur={() => setUserFocus(false)} />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={s.label}>Password</label>
+                <label htmlFor="login-password" style={s.label}>Password</label>
                 <div style={{ position: 'relative' }}>
-                  <input type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
+                  <input id="login-password" type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
                     placeholder="••••••••" autoComplete="current-password"
+                    aria-invalid={!!error || undefined}
+                    aria-describedby={error ? 'login-error' : undefined}
                     style={{ ...s.input, borderBottom: `${passFocus ? 2 : 1.5}px solid ${passFocus ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, paddingRight: 32 }}
                     onFocus={() => setPassFocus(true)} onBlur={() => setPassFocus(false)} />
-                  <button type="button" onClick={() => setShowPw(v => !v)}
+                  <button type="button" onClick={() => setShowPw(v => !v)} aria-label={showPw ? 'Hide password' : 'Show password'} aria-pressed={showPw}
                     style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)', fontSize: 11.5, fontWeight: 600 }}>
                     {showPw ? 'Hide' : 'Show'}
                   </button>
                 </div>
               </div>
-              {error && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: -8 }}>{error}</div>}
+              {/* role="alert" (a dedicated, always-mounted live region) means a
+                  screen reader announces a login failure the moment it
+                  appears — without it, text that only exists once an error
+                  occurs is easy to miss entirely for a non-sighted user who
+                  isn't focused on this part of the page when it shows up. */}
+              {error && <div id="login-error" role="alert" style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: -8 }}>{error}</div>}
               <button type="submit" disabled={loading}
                 style={{ width: '100%', background: loading ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 10, border: 'none', cursor: loading ? 'wait' : 'pointer', transition: 'all 180ms', marginTop: 4 }}>
                 {loading ? 'Signing in…' : 'Sign In'}
@@ -207,6 +220,7 @@ export default function LoginScreen() {
                     type="text"
                     inputMode="numeric"
                     maxLength={1}
+                    aria-label={`Verification code digit ${i + 1} of 6`}
                     value={digit}
                     onChange={e => handleOtpChange(i, e.target.value)}
                     onKeyDown={e => handleOtpKey(i, e)}

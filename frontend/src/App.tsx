@@ -23,39 +23,59 @@ import { useMobile } from './hooks/useBreakpoint';
 
 import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
-import AddWizard from './modals/AddWizard';
-import WorkspaceWizard from './modals/WorkspaceWizard';
+// AddWizard/WorkspaceWizard are only ever rendered behind a boolean gate
+// (opened from the sidebar's "Add" button, or the forced no-workspace
+// state) — ideal, low-risk lazy-load candidates ("schwere bedarfsabhängige
+// Features/Modals lazy laden").
+const AddWizard = lazy(() => import('./modals/AddWizard'));
+const WorkspaceWizard = lazy(() => import('./modals/WorkspaceWizard'));
 import AIAssistant from './components/AIAssistant';
 import KeyboardShortcuts from './components/KeyboardShortcuts';
 
-import LoginScreen from './screens/LoginScreen';
-import SetupWizard from './screens/SetupWizard';
-import NukeScreen from './screens/NukeScreen';
-import OAuthConsentScreen from './screens/OAuthConsentScreen';
-import DashboardScreen from './screens/DashboardScreen';
-import ListScreen from './screens/ListScreen';
-import TimelineScreen from './screens/TimelineScreen';
-import CalendarScreen from './screens/CalendarScreen';
-import FilesScreen from './screens/FilesScreen';
-import GPSScreen from './screens/GPSScreen';
-import GPSEditScreen from './screens/GPSEditScreen';
-import SharePage from './screens/SharePage';
-import SharedListPage from './screens/SharedListPage';
-import SharedTimelinePage from './screens/SharedTimelinePage';
-import SharedMarkdownListPage from './screens/SharedMarkdownListPage';
-import SharedFolderPage from './screens/SharedFolderPage';
-import SettingsScreen from './screens/SettingsScreen';
-import FolderDashboardScreen from './screens/FolderDashboardScreen';
-import TemplatesScreen from './screens/TemplatesScreen';
-import AutomationsScreen from './screens/AutomationsScreen';
+import RouteFallback from './components/RouteFallback';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
+
+// Sprint 03, Phase 2 — "Alle Route-Screens ... lazy laden": every screen
+// mounted by a <Route> below is its own chunk, fetched on first navigation
+// rather than bundled into the initial app chunk. This is what brings the
+// eager entry chunk from ~600kB gzip (every screen, including GPS/Leaflet,
+// the Automation Hub's React Flow canvas, and every share page, all
+// pre-bundled) down under the 250kB gzip budget. Combined with a shared
+// <Suspense fallback={<RouteFallback />}> + <RouteErrorBoundary> around each
+// <Routes> block (see AppLayout/App below) so a chunk fetch is never a blank
+// screen and a chunk-load failure is recoverable instead of a white-screen
+// crash.
+const LoginScreen = lazy(() => import('./screens/LoginScreen'));
+const SetupWizard = lazy(() => import('./screens/SetupWizard'));
+const NukeScreen = lazy(() => import('./screens/NukeScreen'));
+const OAuthConsentScreen = lazy(() => import('./screens/OAuthConsentScreen'));
+const DashboardScreen = lazy(() => import('./screens/DashboardScreen'));
+const ListScreen = lazy(() => import('./screens/ListScreen'));
+const TimelineScreen = lazy(() => import('./screens/TimelineScreen'));
+const CalendarScreen = lazy(() => import('./screens/CalendarScreen'));
+const FilesScreen = lazy(() => import('./screens/FilesScreen'));
+// GPS screens pull in Leaflet (~150kB) — must never be in the initial chunk.
+const GPSScreen = lazy(() => import('./screens/GPSScreen'));
+const GPSEditScreen = lazy(() => import('./screens/GPSEditScreen'));
+const SharePage = lazy(() => import('./screens/SharePage'));
+const SharedListPage = lazy(() => import('./screens/SharedListPage'));
+const SharedTimelinePage = lazy(() => import('./screens/SharedTimelinePage'));
+const SharedMarkdownListPage = lazy(() => import('./screens/SharedMarkdownListPage'));
+const SharedFolderPage = lazy(() => import('./screens/SharedFolderPage'));
+const SettingsScreen = lazy(() => import('./screens/SettingsScreen'));
+const FolderDashboardScreen = lazy(() => import('./screens/FolderDashboardScreen'));
+const TemplatesScreen = lazy(() => import('./screens/TemplatesScreen'));
+const AutomationsScreen = lazy(() => import('./screens/AutomationsScreen'));
 // The Graph screen pulls in sigma/graphology (~180kB gzip) — lazy-loaded so
 // the primary dashboard bundle is unaffected (a hard requirement, not an
 // optimization; see CLAUDE.md's Graph Layer section).
 const GraphScreen = lazy(() => import('./screens/GraphScreen'));
 const KnowledgeScreen = lazy(() => import('./screens/KnowledgeScreen'));
-import AutomationEditorScreen from './screens/AutomationEditorScreen';
-import MarkdownListScreen from './screens/MarkdownListScreen';
-import AdminPasswordResetScreen from './screens/AdminPasswordResetScreen';
+// The Automation Hub editor pulls in @xyflow/react (~90kB) — must never be
+// in the initial chunk either.
+const AutomationEditorScreen = lazy(() => import('./screens/AutomationEditorScreen'));
+const MarkdownListScreen = lazy(() => import('./screens/MarkdownListScreen'));
+const AdminPasswordResetScreen = lazy(() => import('./screens/AdminPasswordResetScreen'));
 
 // Sign out on any 401 (expired / revoked JWT) so the user is redirected to
 // /login instead of seeing the "no workspace" forced-creation wizard.
@@ -333,7 +353,19 @@ function AppLayout() {
     return () => clearInterval(id);
   }, [loadError, loadFromApi]);
 
-  // Close drawer on route change (mobile)
+  // Close drawer on route change (mobile).
+  // NOTE (Sprint 03 handoff): this pre-existing effect trips this project's
+  // `react-hooks/set-state-in-effect` rule (calling setState synchronously
+  // in an effect body). It predates Phase 3 and is untouched by this sprint's
+  // functional changes. A rewrite to React's documented "track the previous
+  // value in a ref and branch during render" pattern was attempted here and
+  // reverted — this repo's lint config also enables `react-hooks/refs`,
+  // which forbids reading/writing `ref.current` during render, so that
+  // pattern is not actually available in this codebase; fixing this
+  // correctly needs a structural change (e.g. keying a subtree to force a
+  // remount) that is out of Sprint 03's scope. Left as a known, precisely
+  // located pre-existing baseline error — see the Sprint 03 handoff's
+  // Altfehler list. Do not add an `eslint-disable` here.
   useEffect(() => {
     if (isMobile) setDrawerOpen(false);
   }, [location.pathname, isMobile]);
@@ -399,6 +431,35 @@ function AppLayout() {
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+      {/* Sprint 03, Phase 3 — skip link. The very first focusable element in
+          the whole authenticated app: a keyboard/screen-reader user landing
+          on any page can jump straight past the sidebar + top bar to
+          `#main-content` without tabbing through every nav item first.
+          Visually hidden until focused (standard skip-link pattern — off
+          canvas by default, slides into view on :focus so a sighted keyboard
+          user can also see where focus went). */}
+      <a
+        href="#main-content"
+        style={{
+          position: 'fixed',
+          top: -60,
+          left: 12,
+          zIndex: 10000,
+          background: 'var(--color-primary)',
+          color: 'var(--color-white)',
+          padding: '10px 16px',
+          borderRadius: 8,
+          fontFamily: 'var(--font-heading)',
+          fontSize: 13,
+          fontWeight: 600,
+          textDecoration: 'none',
+          transition: 'top 150ms ease',
+        }}
+        onFocus={(e) => { e.currentTarget.style.top = '12px'; }}
+        onBlur={(e) => { e.currentTarget.style.top = '-60px'; }}
+      >
+        Skip to main content
+      </a>
       {/* Mobile sidebar backdrop */}
       {isMobile && drawerOpen && (
         <div
@@ -411,24 +472,31 @@ function AppLayout() {
           }}
         />
       )}
-      <Sidebar
-        active={getActive()}
-        activeListId={activeListId}
-        activeTimelineId={activeTimelineId}
-        activeFolderId={activeFolderId}
-        activeGpsFileId={activeGpsFileId}
-        activeMarkdownListId={activeMarkdownListId}
-        lists={lists}
-        width={sidebarWidth}
-        onNavigate={navigate}
-        onOpenModal={(m) => { setAddWizardMode(undefined); setModal(m); }}
-        onReorderLists={handleReorderLists}
-        onResizeStart={handleResizeStart}
-        onTaskDropToList={moveTaskToList}
-        isMobile={isMobile}
-        drawerOpen={drawerOpen}
-        resizing={sidebarResizing}
-      />
+      {/* `<nav>` landmark around the whole sidebar — Sidebar.tsx itself
+          renders plain `<div>`s internally (it's a large, pre-existing
+          component; see Sprint 03 handoff for the deeper aria-current sweep
+          left for Sprint 04), so the landmark is added at this call site
+          instead of touching its internals. */}
+      <nav aria-label="Primary">
+        <Sidebar
+          active={getActive()}
+          activeListId={activeListId}
+          activeTimelineId={activeTimelineId}
+          activeFolderId={activeFolderId}
+          activeGpsFileId={activeGpsFileId}
+          activeMarkdownListId={activeMarkdownListId}
+          lists={lists}
+          width={sidebarWidth}
+          onNavigate={navigate}
+          onOpenModal={(m) => { setAddWizardMode(undefined); setModal(m); }}
+          onReorderLists={handleReorderLists}
+          onResizeStart={handleResizeStart}
+          onTaskDropToList={moveTaskToList}
+          isMobile={isMobile}
+          drawerOpen={drawerOpen}
+          resizing={sidebarResizing}
+        />
+      </nav>
       <div style={{
         marginLeft: isMobile ? 0 : sidebarWidth,
         flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0,
@@ -442,37 +510,52 @@ function AppLayout() {
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', position: 'relative' }}>
           {/* Keying by pathname re-mounts the screen on navigation, replaying the
               `pageIn` animation for a smooth transition between pages/items. */}
-          <div key={location.pathname} className="page-transition" style={{ flex: 1, display: 'flex', minWidth: 0, animation: 'pageIn 300ms cubic-bezier(0.22,1,0.36,1) both' }}>
-            <Routes location={location}>
-              <Route path="/dashboard" element={<DashboardScreen />} />
-              <Route path="/folder/:folderId" element={<FolderDashboardScreen />} />
-              <Route path="/calendar" element={<CalendarScreen />} />
-              <Route path="/files" element={!appsLoaded ? null : filesInstalled ? <FilesScreen /> : <Navigate to="/dashboard" replace />} />
-              <Route path="/list/:listId" element={<ListScreen />} />
-              <Route path="/timeline/:timelineId" element={<TimelineScreen />} />
-              <Route path="/settings" element={<SettingsScreen />} />
-              <Route path="/templates" element={<TemplatesScreen />} />
-              <Route path="/automations" element={!appsLoaded ? null : automationsInstalled ? <AutomationsScreen /> : <Navigate to="/dashboard" replace />} />
-              <Route path="/graph" element={<Suspense fallback={null}><GraphScreen /></Suspense>} />
-              <Route path="/knowledge" element={<Suspense fallback={null}><KnowledgeScreen /></Suspense>} />
-              <Route path="/automations/:id" element={!appsLoaded ? null : automationsInstalled ? <AutomationEditorScreen /> : <Navigate to="/dashboard" replace />} />
-              <Route path="/gps" element={!appsLoaded ? null : gpsInstalled ? <GPSScreen /> : <Navigate to="/dashboard" replace />} />
-              <Route path="/markdown-list/:id" element={<MarkdownListScreen />} />
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
-          </div>
+          <main
+            id="main-content"
+            key={location.pathname}
+            className="page-transition"
+            // -1 so the skip link's focus() call above lands here even
+            // though a plain <main> isn't natively focusable, without adding
+            // it to the normal Tab order.
+            tabIndex={-1}
+            style={{ flex: 1, display: 'flex', minWidth: 0, animation: 'pageIn 300ms cubic-bezier(0.22,1,0.36,1) both', outline: 'none' }}
+          >
+            <RouteErrorBoundary label="This page">
+              <Suspense fallback={<RouteFallback />}>
+                <Routes location={location}>
+                  <Route path="/dashboard" element={<DashboardScreen />} />
+                  <Route path="/folder/:folderId" element={<FolderDashboardScreen />} />
+                  <Route path="/calendar" element={<CalendarScreen />} />
+                  <Route path="/files" element={!appsLoaded ? <RouteFallback /> : filesInstalled ? <FilesScreen /> : <Navigate to="/dashboard" replace />} />
+                  <Route path="/list/:listId" element={<ListScreen />} />
+                  <Route path="/timeline/:timelineId" element={<TimelineScreen />} />
+                  <Route path="/settings" element={<SettingsScreen />} />
+                  <Route path="/templates" element={<TemplatesScreen />} />
+                  <Route path="/automations" element={!appsLoaded ? <RouteFallback /> : automationsInstalled ? <AutomationsScreen /> : <Navigate to="/dashboard" replace />} />
+                  <Route path="/graph" element={<GraphScreen />} />
+                  <Route path="/knowledge" element={<KnowledgeScreen />} />
+                  <Route path="/automations/:id" element={!appsLoaded ? <RouteFallback /> : automationsInstalled ? <AutomationEditorScreen /> : <Navigate to="/dashboard" replace />} />
+                  <Route path="/gps" element={!appsLoaded ? <RouteFallback /> : gpsInstalled ? <GPSScreen /> : <Navigate to="/dashboard" replace />} />
+                  <Route path="/markdown-list/:id" element={<MarkdownListScreen />} />
+                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                </Routes>
+              </Suspense>
+            </RouteErrorBoundary>
+          </main>
         </div>
       </div>
 
       {modal === 'add' && (
-        <AddWizard
-          initialMode={addWizardMode}
-          onClose={() => setModal(null)}
-          onCreatedList={(_list: List) => { setModal(null); navigate(`/list/${_list.id}`); }}
-          onCreatedTimeline={(_t: Timeline) => { setModal(null); navigate(`/timeline/${_t.id}`); }}
-          onCreatedMarkdownList={(_md) => { setModal(null); navigate(`/markdown-list/${_md.id}`); }}
-          onCreatedKnowledgeBase={() => { setModal(null); navigate('/knowledge'); }}
-        />
+        <Suspense fallback={<RouteFallback label="Loading…" />}>
+          <AddWizard
+            initialMode={addWizardMode}
+            onClose={() => setModal(null)}
+            onCreatedList={(_list: List) => { setModal(null); navigate(`/list/${_list.id}`); }}
+            onCreatedTimeline={(_t: Timeline) => { setModal(null); navigate(`/timeline/${_t.id}`); }}
+            onCreatedMarkdownList={(_md) => { setModal(null); navigate(`/markdown-list/${_md.id}`); }}
+            onCreatedKnowledgeBase={() => { setModal(null); navigate('/knowledge'); }}
+          />
+        </Suspense>
       )}
       <AIAssistant />
       <KeyboardShortcuts />
@@ -497,7 +580,9 @@ function AppLayout() {
       {workspacesLoaded && workspaces.length === 0 && !location.pathname.startsWith('/settings') && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 450, backdropFilter: 'blur(10px)', background: 'rgba(var(--color-surface-tint-rgb), 0.65)', pointerEvents: 'all' }} />
-          <WorkspaceWizard forced onClose={() => {}} />
+          <Suspense fallback={<RouteFallback label="Loading…" />}>
+            <WorkspaceWizard forced onClose={() => {}} />
+          </Suspense>
         </>
       )}
     </div>
@@ -556,31 +641,35 @@ export default function App() {
   const gpsInstalled = installedApps.includes('gps');
 
   return (
-    <Routes>
-      <Route path="/share/list/:token" element={<SharedListPage />} />
-      <Route path="/share/timeline/:token" element={<SharedTimelinePage />} />
-      <Route path="/share/markdown-list/:token" element={<SharedMarkdownListPage />} />
-      <Route path="/share/folder/:token" element={<SharedFolderPage />} />
-      <Route path="/share/:token" element={<SharePage />} />
-      <Route path="/oauth/consent" element={loggedIn ? <OAuthConsentScreen /> : <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />} />
-      <Route path="/login" element={loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : <LoginScreen />} />
-      <Route path="/setup" element={loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> : <SetupWizard />} />
-      <Route path="/admin-reset" element={loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> : <AdminPasswordResetScreen />} />
-      <Route path="/nuke" element={loggedIn && isAdmin ? <NukeScreen /> : <Navigate to={loggedIn ? '/dashboard' : '/login'} replace />} />
-      <Route path="/gps/:id/edit" element={
-        !loggedIn ? <Navigate to="/login" replace /> :
-        !appsLoaded ? null :
-        gpsInstalled ? <GPSEditScreen /> : <Navigate to="/dashboard" replace />
-      } />
-      <Route path="/*" element={
-        <Protected>
-          <AppLayout />
-        </Protected>
-      } />
-      <Route path="/" element={
-        loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> :
-        (setupRequired === null ? null : setupRequired ? <Navigate to="/setup" replace /> : <Navigate to="/login" replace />)
-      } />
-    </Routes>
+    <RouteErrorBoundary label="Solytiq Cloud">
+      <Suspense fallback={<RouteFallback label="Loading Solytiq Cloud…" />}>
+        <Routes>
+          <Route path="/share/list/:token" element={<SharedListPage />} />
+          <Route path="/share/timeline/:token" element={<SharedTimelinePage />} />
+          <Route path="/share/markdown-list/:token" element={<SharedMarkdownListPage />} />
+          <Route path="/share/folder/:token" element={<SharedFolderPage />} />
+          <Route path="/share/:token" element={<SharePage />} />
+          <Route path="/oauth/consent" element={loggedIn ? <OAuthConsentScreen /> : <Navigate to="/login" state={{ from: location.pathname + location.search }} replace />} />
+          <Route path="/login" element={loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : setupRequired === null ? <RouteFallback /> : <LoginScreen />} />
+          <Route path="/setup" element={loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> : <SetupWizard />} />
+          <Route path="/admin-reset" element={loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> : <AdminPasswordResetScreen />} />
+          <Route path="/nuke" element={loggedIn && isAdmin ? <NukeScreen /> : <Navigate to={loggedIn ? '/dashboard' : '/login'} replace />} />
+          <Route path="/gps/:id/edit" element={
+            !loggedIn ? <Navigate to="/login" replace /> :
+            !appsLoaded ? <RouteFallback /> :
+            gpsInstalled ? <GPSEditScreen /> : <Navigate to="/dashboard" replace />
+          } />
+          <Route path="/*" element={
+            <Protected>
+              <AppLayout />
+            </Protected>
+          } />
+          <Route path="/" element={
+            loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> :
+            (setupRequired === null ? <RouteFallback /> : setupRequired ? <Navigate to="/setup" replace /> : <Navigate to="/login" replace />)
+          } />
+        </Routes>
+      </Suspense>
+    </RouteErrorBoundary>
   );
 }

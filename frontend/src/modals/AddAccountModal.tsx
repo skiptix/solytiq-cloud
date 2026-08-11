@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import Icon from '../components/Icon';
 import useAuthStore from '../store/useAuthStore';
 import useAccountsStore from '../store/useAccountsStore';
 import { apiLoginAdditional, api2FAVerifyAdditional } from '../api/client';
-import { backdropVariants, modalVariants, crossFadeVariants } from '../utils/motionTokens';
+import { backdropVariants, modalVariants, crossFadeVariants } from '@/components/animate-ui/motionTokens';
 import type { AuthUser } from '../types';
 
 interface AddAccountModalProps {

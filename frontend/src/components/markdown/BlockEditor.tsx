@@ -18,8 +18,8 @@
 
 import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { createPortal, flushSync } from 'react-dom';
-import { motion } from 'motion/react';
-import { LAYOUT_TRANSITION } from '../../utils/motionTokens';
+import { motion } from '@/components/animate-ui/motion';
+import { LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
 import type {
   MarkdownBlock, MarkdownBlockType, MarkdownTodoBlock, MarkdownImageBlock, MarkdownLinkBlock,
   MarkdownHeadingBlock, MarkdownDividerBlock,

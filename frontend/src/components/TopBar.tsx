@@ -1,11 +1,14 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { useLocation } from 'react-router-dom';
 import Icon from './Icon';
 import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import useAuthStore from '../store/useAuthStore';
 import useShortcutsStore from '../store/useShortcutsStore';
 import { apiUploadFile } from '../api/client';
-import CommandPalette from './CommandPalette';
+// Only ever rendered while the search overlay is open — lazy-loaded so its
+// entity-search/keyboard-nav logic isn't in every page's initial chunk.
+const CommandPalette = lazy(() => import('./CommandPalette'));
+import RouteFallback from './RouteFallback';
 import NotificationBell from './NotificationBell';
 import { SHORTCUT_DEFS, bindingFor, formatCombo } from '../shortcuts/registry';
 
@@ -242,7 +245,11 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
       </header>
 
       {/* Command palette (search) */}
-      {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} onNavigate={onNavigate} onOpenAccountSettings={() => window.dispatchEvent(new CustomEvent('shortcut:open-settings'))} />}
+      {paletteOpen && (
+        <Suspense fallback={<RouteFallback label="Loading search…" />}>
+          <CommandPalette onClose={() => setPaletteOpen(false)} onNavigate={onNavigate} onOpenAccountSettings={() => window.dispatchEvent(new CustomEvent('shortcut:open-settings'))} />
+        </Suspense>
+      )}
     </>
   );
 }

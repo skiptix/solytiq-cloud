@@ -10,6 +10,7 @@ import Icon from '../components/Icon';
 import CreateTemplateModal from '../modals/CreateTemplateModal';
 import UseTemplateModal from '../modals/UseTemplateModal';
 import EditTemplateStructureModal from '../modals/EditTemplateStructureModal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 
 type Filter = 'all' | 'list' | 'timeline';
 
@@ -18,10 +19,15 @@ function TemplateCardMenu({ template, onRename, onEditStructure, onToggleShared,
   onRename: () => void;
   onEditStructure: () => void;
   onToggleShared: () => void;
-  onDelete: () => void;
+  // Receives the "..." trigger button element (still mounted after the menu
+  // closes, unlike the "Delete" menu item itself) so the caller can restore
+  // focus to it once the confirmation dialog closes — see the
+  // `restoreFocusTo` note on ConfirmDialog below.
+  onDelete: (triggerEl: HTMLButtonElement | null) => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -32,7 +38,7 @@ function TemplateCardMenu({ template, onRename, onEditStructure, onToggleShared,
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <button onClick={() => setOpen((o) => !o)}
+      <button ref={triggerRef} onClick={() => setOpen((o) => !o)}
         style={{ width: 26, height: 26, borderRadius: 7, border: 'none', background: open ? 'var(--color-purple-pale-39)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Icon name="more_vert" size={15} color="var(--color-accent-purple-light)" />
       </button>
@@ -55,7 +61,7 @@ function TemplateCardMenu({ template, onRename, onEditStructure, onToggleShared,
             {template.isShared ? 'Make private' : 'Share with everyone'}
           </button>
           <div style={{ height: 1, background: 'var(--color-divider)', margin: '4px 0' }} />
-          <button onClick={() => { setOpen(false); onDelete(); }}
+          <button onClick={() => { setOpen(false); onDelete(triggerRef.current); }}
             style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-error)', textAlign: 'left' }}
             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-error-bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
             <Icon name="delete" size={15} color="var(--color-error)" /> Delete
@@ -73,7 +79,7 @@ function TemplateCard({ template, index, onUse, onRename, onEditStructure, onTog
   onRename: () => void;
   onEditStructure: () => void;
   onToggleShared: () => void;
-  onDelete: () => void;
+  onDelete: (triggerEl: HTMLButtonElement | null) => void;
 }) {
   const accent = template.color ?? 'var(--color-primary)';
   const bg = template.colorBg ?? 'var(--color-surface-tint)';
@@ -143,6 +149,15 @@ export default function TemplatesScreen() {
   const [showCreate, setShowCreate] = useState(false);
   const [useTarget, setUseTarget] = useState<Template | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Template | null>(null);
+  // Sprint 03 review fix: the "..." card-menu trigger button that opened the
+  // delete flow — captured so ConfirmDialog can explicitly restore focus to
+  // it on close. The "Delete" menu item itself unmounts the instant it's
+  // clicked (the menu closes), so Radix's default onCloseAutoFocus (which
+  // restores focus to whatever was active when the dialog opened) has
+  // nothing left in the DOM to focus by the time the dialog actually closes
+  // — it was silently falling back to <body>. The "..." trigger button,
+  // unlike the menu item, stays mounted throughout, so it's a valid target.
+  const [deleteTriggerEl, setDeleteTriggerEl] = useState<HTMLButtonElement | null>(null);
   const [renameTarget, setRenameTarget] = useState<Template | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [structureTarget, setStructureTarget] = useState<Template | null>(null);
@@ -240,7 +255,7 @@ export default function TemplatesScreen() {
                 onRename={() => openRename(t)}
                 onEditStructure={() => setStructureTarget(t)}
                 onToggleShared={() => update(t.id, { isShared: !t.isShared })}
-                onDelete={() => setConfirmDelete(t)} />
+                onDelete={(triggerEl) => { setConfirmDelete(t); setDeleteTriggerEl(triggerEl); }} />
             ))}
           </div>
         )}
@@ -301,23 +316,21 @@ export default function TemplatesScreen() {
         document.body
       )}
 
-      {confirmDelete && createPortal(
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setConfirmDelete(null); }}>
-          <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 380, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', padding: 24, animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Delete "{confirmDelete.name}"?</div>
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: 20 }}>This can't be undone. Boards/timelines already created from it are not affected.</div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={() => setConfirmDelete(null)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 16px' }}>Cancel</button>
-              <button onClick={() => { remove(confirmDelete.id); setConfirmDelete(null); }}
-                style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '10px 20px', cursor: 'pointer' }}>
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+      {/* Sprint 03 Animate-UI production pilot: this used to be a hand-rolled
+          createPortal div with a click-outside-to-close handler but no
+          dialog semantics — no accessible name, no focus trap, no Escape
+          handling. ConfirmDialog wraps the vendored, patched Animate UI
+          Radix Dialog primitive and supplies all of that for free, with the
+          exact same visual language as before. */}
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(open) => { if (!open) setConfirmDelete(null); }}
+        title={`Delete "${confirmDelete?.name ?? ''}"?`}
+        description="This can't be undone. Boards/timelines already created from it are not affected."
+        confirmLabel="Delete"
+        onConfirm={() => { if (confirmDelete) remove(confirmDelete.id); }}
+        restoreFocusTo={deleteTriggerEl}
+      />
     </div>
   );
 }

@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import type { List } from '../types';
 import { apiGetArchivedLists, apiUnarchiveList } from '../api/client';
 import Icon from './Icon';
-import { listItemVariants, crossFadeVariants, LAYOUT_TRANSITION } from '../utils/motionTokens';
+import { listItemVariants, crossFadeVariants, LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
 
 function friendlyTime(iso: string) {
   const d = new Date(iso);

@@ -1,0 +1,40 @@
+/*
+ * Additive Tailwind v4 entry point for vendored Animate UI primitives ONLY.
+ *
+ * Deliberately imports the `theme` and `utilities` layers but NOT
+ * `preflight` (Tailwind's base-style reset) — this is the officially
+ * documented pattern for adding Tailwind to an existing project without
+ * touching any of its current global element styles:
+ * https://tailwindcss.com/docs/preflight
+ *
+ * Verified in the Sprint 03 Animate-UI-Kompatibilitäts-Spike (Playwright,
+ * real Chromium): a bare, non-Tailwind <button> elsewhere in the app keeps
+ * its native browser chrome (appearance/background/border all UA-default)
+ * with this file loaded — no Tailwind reset leaks onto Controls, Typografie,
+ * Leaflet, Sigma, React Flow, or the block/notes editors.
+ *
+ * frontend/src/index.css is NOT touched or replaced by this file — this is a
+ * second, narrowly-scoped stylesheet imported once from main.tsx alongside
+ * it, per the Phase 3 Invariante "Tailwind nur additiv ... index.css nicht
+ * ersetzen."
+ */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/*
+ * Token bridge: maps the small set of shadcn/Animate UI CSS variables the
+ * vendored components actually reference to Solytiq's EXISTING tokens
+ * (frontend/src/index.css) instead of inventing a second color system, per
+ * the Phase 3 Invariante "kein zweites Farbsystem". Only the variables the
+ * currently-vendored Dialog primitive's className strings use are bridged;
+ * extend this list only as further primitives are actually vendored.
+ */
+:root {
+  --background: var(--color-white);
+  --foreground: var(--color-text-primary);
+  --border: var(--color-border);
+  --input: var(--color-border);
+  --ring: var(--color-primary);
+  --muted-foreground: var(--color-text-tertiary);
+}

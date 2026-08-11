@@ -2,7 +2,7 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useMobile } from '../hooks/useBreakpoint';
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence } from '@/components/animate-ui/motion';
 import type { ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Milestone, MilestoneStatus, TimelineLayout, MilestoneAttachment, SharedFile, WorkspaceMember } from '../types';

@@ -1,7 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence } from '@/components/animate-ui/motion';
 import { useMobile } from '../hooks/useBreakpoint';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';

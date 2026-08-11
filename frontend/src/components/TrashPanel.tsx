@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import useAppStore, { apiEmptyTrash } from '../store/useAppStore';
 import Icon from './Icon';
-import { listItemVariants, modalVariants, LAYOUT_TRANSITION } from '../utils/motionTokens';
+import { listItemVariants, modalVariants, LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
 import type { TrashedTask, TrashedList, TrashedFolder, TrashedTimeline, TrashedMilestone } from '../types';
 
 function friendlyTime(iso: string) {

@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import type { KnowledgeEntry, MarkdownBlock, ResolvedLink } from '../../types';
 import Icon from '../Icon';
 import BlockEditor from '../markdown/BlockEditor';
@@ -21,7 +21,7 @@ import EntityChip from '../EntityChip';
 import { makeEmptyBlock } from '../../utils/markdownBlocks';
 import { ENTRY_TYPE_OPTIONS } from '../../utils/knowledgeEntryTypes';
 import { knowledgeEntryImageUrl, apiUploadKnowledgeEntryImage, ensureAssetTicket } from '../../api/client';
-import { panelVariantsRight, crossFadeVariants } from '../../utils/motionTokens';
+import { panelVariantsRight, crossFadeVariants } from '@/components/animate-ui/motionTokens';
 import type { MentionMember } from '../../utils/mention';
 
 const ORIGIN_LABEL: Record<string, string> = {

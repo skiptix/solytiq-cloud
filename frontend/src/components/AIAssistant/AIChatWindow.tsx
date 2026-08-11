@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { motion, useDragControls, type PanInfo } from 'motion/react';
+import { motion, useDragControls, type PanInfo } from '@/components/animate-ui/motion';
 import type { AIChatMessage, AISession } from '../../store/useAIStore';
 import type { AIFile } from '../../types';
 import Icon from '../Icon';
 import AIRecentChats from './AIRecentChats';
 import { apiUploadAIFile, apiDeleteAIFile } from '../../api/client';
-import { backdropVariants, sheetVariants, desktopWindowVariants, SWIPE_DISMISS_DISTANCE, SWIPE_DISMISS_VELOCITY } from '../../utils/motionTokens';
+import { backdropVariants, sheetVariants, desktopWindowVariants, SWIPE_DISMISS_DISTANCE, SWIPE_DISMISS_VELOCITY } from '@/components/animate-ui/motionTokens';
 
 interface Props {
   messages: AIChatMessage[];

@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence } from '@/components/animate-ui/motion';
 import { useNavigate } from 'react-router-dom';
 import { useMobile } from '../hooks/useBreakpoint';
 import useWorkspaceStore from '../store/useWorkspaceStore';
