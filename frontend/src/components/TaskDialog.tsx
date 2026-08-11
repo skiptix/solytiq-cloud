@@ -25,6 +25,8 @@ import {
 import type { WorkspaceMember } from '../types';
 import type { MentionMember } from '../utils/mention';
 import Spinner from '@/components/animate-ui/Spinner';
+import MotionButton from '@/components/animate-ui/MotionButton';
+import MotionIn from '@/components/animate-ui/MotionIn';
 
 function fmtAttSize(bytes: number): string {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
@@ -185,13 +187,14 @@ export function FilePicker({ onSelect, onClose }: { onSelect: (file: SharedFile)
             <div style={{ textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '28px 16px' }}>{search ? 'No matching files' : 'No files uploaded yet'}</div>
           ) : (
             filtered.map(f => (
-              <button
+              <MotionButton
                 key={f.id}
                 disabled={picking === f.id}
                 onClick={() => { setPickingId(f.id); onSelect(f); }}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 10px', borderRadius: 10, border: 'none', background: picking === f.id ? 'var(--color-surface-tint)' : 'transparent', cursor: picking === f.id ? 'default' : 'pointer', textAlign: 'left', transition: 'background 120ms' }}
-                onMouseEnter={e => { if (picking !== f.id) e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
-                onMouseLeave={e => { if (picking !== f.id) e.currentTarget.style.background = 'transparent'; }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 10px', borderRadius: 10, border: 'none', cursor: picking === f.id ? 'default' : 'pointer', textAlign: 'left' }}
+                animate={{ background: picking === f.id ? 'var(--color-surface-tint)' : 'transparent' }}
+                whileHover={picking !== f.id ? { background: 'var(--color-surface-tint-3)' } : undefined}
+                transition={{ duration: 0.12 }}
               >
                 <AttachBadge mime={f.mimeType} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -202,7 +205,7 @@ export function FilePicker({ onSelect, onClose }: { onSelect: (file: SharedFile)
                   <Spinner size={14} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} flexShrink={0} />
                 )}
                 {picking !== f.id && <Icon name="add" size={16} color="var(--color-border-strong)" />}
-              </button>
+              </MotionButton>
             ))
           )}
         </div>
@@ -550,16 +553,18 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
           {...dropHandlers}
           variants={isMobile ? sheetVariants : modalVariants}
           initial="initial"
-          animate="animate"
+          // `animate` becomes a merged object (rather than the "animate" variant
+          // label) only on desktop, so maxWidth's own independent resize timing
+          // (the changelog panel's open/close) can be given its own per-property
+          // transition below without disturbing the modal-open transition the
+          // "initial"/"exit" labels still resolve from `variants` normally.
+          animate={isMobile ? 'animate' : { ...modalVariants.animate, maxWidth: showChangelog ? 800 + 320 : 800 }}
           exit="exit"
+          transition={isMobile ? undefined : { maxWidth: { duration: 0.32, ease: [0.4, 0, 0.2, 1] } }}
           style={{
             background: 'var(--color-white)',
             borderRadius: isMobile ? '16px 16px 0 0' : 18,
             width: '100%',
-            // Widens to make room for the change-history panel — the backdrop's
-            // own flex centering re-centers the whole card smoothly as this
-            // transitions, no extra positioning logic needed.
-            maxWidth: isMobile ? undefined : (showChangelog ? 800 + 320 : 800),
             // dvh (not vh) on mobile: iOS Safari/Arc's vh is pegged to the
             // largest possible viewport (address bar hidden), so a bottom sheet
             // sized off it can be taller than the viewport actually visible
@@ -571,7 +576,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
             flexDirection: isMobile ? 'column' : 'row',
             position: 'relative',
             boxShadow: '0 32px 80px rgba(var(--color-black-rgb), 0.22), 0 2px 8px rgba(var(--color-black-rgb), 0.08)',
-            transition: isMobile ? undefined : 'max-width 320ms cubic-bezier(0.4,0,0.2,1)',
           }}>
 
           <AttachDropOverlay visible={dragging} subtitle="Files will be uploaded and attached to this item" />
@@ -581,66 +585,74 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
           <div style={{ flex: '1 1 auto', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Priority accent stripe */}
-          <div style={{ height: 3, background: priority ? PRIORITY_COLORS[priority] : 'var(--color-purple-pale-23)', flexShrink: 0, transition: 'background 200ms' }} />
+          <MotionIn animate={{ background: priority ? PRIORITY_COLORS[priority] : 'var(--color-purple-pale-23)' }} transition={{ duration: 0.2 }} style={{ height: 3, flexShrink: 0 }} />
 
           {/* Scrollable body */}
           <div style={{ overflowY: 'auto', flex: 1, padding: isMobile ? '20px 16px 24px' : '28px 32px 36px' }}>
 
             {/* Title row */}
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 26 }}>
-              <div
+              <MotionIn
                 onClick={() => setChecked(c => !c)}
+                animate={{
+                  borderColor: checked ? 'var(--color-primary)' : 'var(--color-border-strong)',
+                  background: checked ? 'var(--color-primary)' : 'transparent',
+                }}
+                transition={{ duration: 0.15 }}
                 style={{
                   width: 24, height: 24, minWidth: 24, borderRadius: 7,
-                  border: `2px solid ${checked ? 'var(--color-primary)' : 'var(--color-border-strong)'}`,
-                  background: checked ? 'var(--color-primary)' : 'transparent',
+                  borderWidth: 2, borderStyle: 'solid',
                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'all 150ms', marginTop: 4, flexShrink: 0,
+                  marginTop: 4, flexShrink: 0,
                 }}>
                 {checked && <Checkmark />}
-              </div>
+              </MotionIn>
 
-              <textarea
+              <motion.textarea
                 ref={titleRef}
                 value={title}
                 onChange={e => { setTitle(e.target.value); resizeTA(e.target); }}
+                animate={{ opacity: checked ? 0.4 : 1 }}
+                transition={{ duration: 0.2 }}
                 style={{
                   flex: 1, fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700,
                   color: 'var(--color-text-primary)', background: 'transparent', border: 'none', outline: 'none',
                   resize: 'none', lineHeight: 1.3, padding: 0, overflowY: 'hidden',
                   textDecoration: checked ? 'line-through' : 'none',
-                  opacity: checked ? 0.4 : 1, transition: 'opacity 200ms',
                 }}
                 rows={1}
               />
 
               <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginTop: 2 }}>
                 {isListTask && (
-                  <button
+                  <MotionButton
                     onClick={() => setShowChangelog(v => !v)}
                     title={showChangelog ? 'Hide change history' : 'View change history'}
-                    style={{ width: 34, height: 34, borderRadius: 9, background: showChangelog ? 'var(--color-surface-tint)' : 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 120ms' }}
-                    onMouseEnter={e => { if (!showChangelog) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-                    onMouseLeave={e => { if (!showChangelog) e.currentTarget.style.background = 'transparent'; }}>
+                    style={{ width: 34, height: 34, borderRadius: 9, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    animate={{ background: showChangelog ? 'var(--color-surface-tint)' : 'transparent' }}
+                    whileHover={{ background: 'var(--color-surface-tint)' }}
+                    transition={{ duration: 0.12 }}>
                     <Icon name="manage_history" size={17} color={showChangelog ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
-                  </button>
+                  </MotionButton>
                 )}
-                <button
+                <MotionButton
                   onClick={() => setShowDelete(true)}
                   title="Delete task"
-                  style={{ width: 34, height: 34, borderRadius: 9, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 120ms' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-error-bg)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  style={{ width: 34, height: 34, borderRadius: 9, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  animate={{ background: 'transparent' }}
+                  whileHover={{ background: 'var(--color-error-bg)' }}
+                  transition={{ duration: 0.12 }}>
                   <Icon name="delete" size={17} color="var(--color-error)" />
-                </button>
-                <button
+                </MotionButton>
+                <MotionButton
                   onClick={onClose}
                   title="Close"
-                  style={{ width: 34, height: 34, borderRadius: 9, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 120ms' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  style={{ width: 34, height: 34, borderRadius: 9, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  animate={{ background: 'transparent' }}
+                  whileHover={{ background: 'var(--color-surface-tint)' }}
+                  transition={{ duration: 0.12 }}>
                   <Icon name="close" size={18} color="var(--color-text-tertiary)" />
-                </button>
+                </MotionButton>
               </div>
             </div>
 
@@ -648,7 +660,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
             <div style={{ background: 'var(--color-surface-tint-3)', borderRadius: 12, marginBottom: 28, border: '1px solid var(--color-purple-pale-23)' }}>
               <PropRow icon="calendar_today" label="Due date" first>
                 <div style={{ display: 'inline-flex', alignItems: 'center' }}>
-                  <button
+                  <MotionButton
                     ref={calBtnRef}
                     onClick={() => {
                       const rect = calBtnRef.current?.getBoundingClientRect();
@@ -657,17 +669,20 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                     }}
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6,
-                      background: deadline ? 'var(--color-surface-tint)' : 'transparent',
-                      border: `1px solid ${deadline ? 'var(--color-accent-purple-soft-alt)' : 'transparent'}`,
-                      borderRadius: 8, padding: '5px 10px', cursor: 'pointer', transition: 'all 120ms',
+                      borderWidth: 1, borderStyle: 'solid',
+                      borderRadius: 8, padding: '5px 10px', cursor: 'pointer',
                     }}
-                    onMouseEnter={e => { if (!deadline) { (e.currentTarget.style.background = 'var(--color-surface-tint)'); (e.currentTarget.style.borderColor = 'var(--color-purple-pale-44)'); } }}
-                    onMouseLeave={e => { if (!deadline) { (e.currentTarget.style.background = 'transparent'); (e.currentTarget.style.borderColor = 'transparent'); } }}>
+                    animate={{
+                      background: deadline ? 'var(--color-surface-tint)' : 'transparent',
+                      borderColor: deadline ? 'var(--color-accent-purple-soft-alt)' : 'transparent',
+                    }}
+                    whileHover={!deadline ? { background: 'var(--color-surface-tint)', borderColor: 'var(--color-purple-pale-44)' } : undefined}
+                    transition={{ duration: 0.12 }}>
                     <Icon name="calendar_today" size={13} color={deadline ? 'var(--color-primary)' : 'var(--color-border-strong)'} />
                     <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: deadline ? 'var(--color-primary)' : 'var(--color-border-strong)', fontWeight: deadline ? 500 : 400 }}>
                       {deadline ? friendlyDate(deadline) : 'No date'}
                     </span>
-                  </button>
+                  </MotionButton>
                   {deadline && (
                     <button
                       onClick={() => { setDeadline(''); setShowCal(false); }}
@@ -681,18 +696,22 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
               <PropRow icon="flag" label="Priority">
                 <div style={{ display: 'flex', gap: 6 }}>
                   {PRIORITIES.map(p => (
-                    <button key={p}
+                    <MotionButton key={p}
                       onClick={() => setPriority(prev => (prev === p ? '' : p))}
+                      animate={{
+                        borderColor: priority === p ? PRIORITY_COLORS[p] : 'var(--color-border-alt)',
+                        background: priority === p ? `${PRIORITY_COLORS[p]}18` : 'transparent',
+                        color: priority === p ? PRIORITY_COLORS[p] : 'var(--color-text-tertiary)',
+                      }}
+                      transition={{ duration: 0.12 }}
                       style={{
                         padding: '4px 12px', borderRadius: 8,
-                        border: `1px solid ${priority === p ? PRIORITY_COLORS[p] : 'var(--color-border-alt)'}`,
-                        background: priority === p ? `${PRIORITY_COLORS[p]}18` : 'transparent',
+                        borderWidth: 1, borderStyle: 'solid',
                         fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600,
-                        color: priority === p ? PRIORITY_COLORS[p] : 'var(--color-text-tertiary)',
-                        cursor: 'pointer', transition: 'all 120ms',
+                        cursor: 'pointer',
                       }}>
                       {p}
-                    </button>
+                    </MotionButton>
                   ))}
                 </div>
               </PropRow>
@@ -834,7 +853,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-primary)', marginBottom: 4 }}>Uploading… {uploadProgress}%</div>
                     <div style={{ background: 'var(--color-border-alt)', borderRadius: 99, height: 3, overflow: 'hidden' }}>
-                      <div style={{ width: `${uploadProgress}%`, height: '100%', background: 'var(--color-primary)', borderRadius: 99, transition: 'width 150ms' }} />
+                      <MotionIn animate={{ width: `${uploadProgress}%` }} transition={{ duration: 0.15 }} style={{ height: '100%', background: 'var(--color-primary)', borderRadius: 99 }} />
                     </div>
                   </div>
                 </div>
@@ -842,23 +861,25 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
 
               {/* Action buttons */}
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button
+                <MotionButton
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadProgress !== null}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1.5px dashed var(--color-blue-tint-3)', borderRadius: 9, padding: '7px 14px', cursor: uploadProgress !== null ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', transition: 'all 120ms', opacity: uploadProgress !== null ? 0.5 : 1 }}
-                  onMouseEnter={e => { if (uploadProgress === null) { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--color-surface-tint-3)'; } }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-blue-tint-3)'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; e.currentTarget.style.background = 'transparent'; }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 9, padding: '7px 14px', cursor: uploadProgress !== null ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, opacity: uploadProgress !== null ? 0.5 : 1 }}
+                  animate={{ borderColor: 'var(--color-blue-tint-3)', color: 'var(--color-text-tertiary)', background: 'transparent' }}
+                  whileHover={uploadProgress === null ? { borderColor: 'var(--color-primary)', color: 'var(--color-primary)', background: 'var(--color-surface-tint-3)' } : undefined}
+                  transition={{ duration: 0.12 }}>
                   <Icon name="upload" size={14} color="currentColor" />
                   Upload file
-                </button>
-                <button
+                </MotionButton>
+                <MotionButton
                   onClick={() => setShowFilePicker(true)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1.5px dashed var(--color-blue-tint-3)', borderRadius: 9, padding: '7px 14px', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', transition: 'all 120ms' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-blue-tint-3)'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; e.currentTarget.style.background = 'transparent'; }}>
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, borderWidth: 1.5, borderStyle: 'dashed', borderRadius: 9, padding: '7px 14px', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600 }}
+                  animate={{ borderColor: 'var(--color-blue-tint-3)', color: 'var(--color-text-tertiary)', background: 'transparent' }}
+                  whileHover={{ borderColor: 'var(--color-primary)', color: 'var(--color-primary)', background: 'var(--color-surface-tint-3)' }}
+                  transition={{ duration: 0.12 }}>
                   <Icon name="folder_open" size={14} color="currentColor" />
                   Attach from Files
-                </button>
+                </MotionButton>
               </div>
 
               {/* Hidden file input */}
@@ -890,17 +911,21 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
               {subItems.map(sub => (
                 <div key={sub.id}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid var(--color-surface-tint-3)' }}>
-                  <div
+                  <MotionIn
                     onClick={() => linkedListId && updateListTask(linkedListId, sub.id, { checked: !sub.checked })}
+                    animate={{
+                      borderColor: sub.checked ? 'var(--color-primary)' : 'var(--color-border-strong)',
+                      background: sub.checked ? 'var(--color-primary)' : 'transparent',
+                    }}
+                    transition={{ duration: 0.15 }}
                     style={{
                       width: 18, height: 18, minWidth: 18, borderRadius: 5,
-                      border: `1.5px solid ${sub.checked ? 'var(--color-primary)' : 'var(--color-border-strong)'}`,
-                      background: sub.checked ? 'var(--color-primary)' : 'transparent',
+                      borderWidth: 1.5, borderStyle: 'solid',
                       cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      transition: 'all 150ms', flexShrink: 0,
+                      flexShrink: 0,
                     }}>
                     {sub.checked && <SmallCheck />}
-                  </div>
+                  </MotionIn>
                   <span style={{
                     fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-secondary)', flex: 1,
                     textDecoration: sub.checked ? 'line-through' : 'none',
@@ -928,19 +953,19 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                   />
                 </div>
               ) : (
-                <button
+                <MotionButton
                   onClick={() => setAddingSubItem(true)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     marginTop: subItems.length > 0 ? 8 : 0,
                     background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 0',
-                    opacity: 0.55, transition: 'opacity 150ms',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-                  onMouseLeave={e => (e.currentTarget.style.opacity = '0.55')}>
+                  animate={{ opacity: 0.55 }}
+                  whileHover={{ opacity: 1 }}
+                  transition={{ duration: 0.15 }}>
                   <Icon name="add" size={16} color="var(--color-primary)" />
                   <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-primary)' }}>Add sub-item</span>
-                </button>
+                </MotionButton>
               )}
             </div>
           </div>
@@ -961,15 +986,15 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
               scrollable body instead). Always mounted so TaskChangeHistory's
               lazy fetch only ever fires once; width animates 0 <-> 320. */}
           {!isMobile && isListTask && (
-            <div style={{
-              width: showChangelog ? 320 : 0, flexShrink: 0, overflow: 'hidden',
-              borderLeft: '1px solid', borderLeftColor: showChangelog ? 'var(--color-surface-tint-2)' : 'transparent',
-              transition: 'width 320ms cubic-bezier(0.4,0,0.2,1), border-color 320ms',
-            }}>
+            <MotionIn
+              animate={{ width: showChangelog ? 320 : 0, borderLeftColor: showChangelog ? 'var(--color-surface-tint-2)' : 'transparent' }}
+              transition={{ width: { duration: 0.32, ease: [0.4, 0, 0.2, 1] }, borderLeftColor: { duration: 0.32 } }}
+              style={{ flexShrink: 0, overflow: 'hidden', borderLeftWidth: 1, borderLeftStyle: 'solid' }}
+            >
               <div style={{ width: 320, height: '100%', flexShrink: 0 }}>
                 <TaskChangeHistory task={task} listId={task._listId!} open={showChangelog} variant="panel" />
               </div>
-            </div>
+            </MotionIn>
           )}
         </motion.div>
       </motion.div>
