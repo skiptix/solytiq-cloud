@@ -4,6 +4,10 @@ import Icon from '../components/Icon';
 import { useMobile } from '../hooks/useBreakpoint';
 import { apiGetAppsCatalog, apiInstallApp, apiUninstallApp, ApiError, type AppCatalogEntry } from '../api/client';
 import Spinner from '@/components/animate-ui/Spinner';
+import MotionButton from '@/components/animate-ui/MotionButton';
+import MotionIn from '@/components/animate-ui/MotionIn';
+import { motion } from '@/components/animate-ui/motion';
+import { EASE_SETTLE, EASE_SPRING, EASE_STANDARD } from '@/components/animate-ui/motionTokens';
 
 interface AppsStoreModalProps {
   onClose: () => void;
@@ -28,16 +32,15 @@ function AppCard({
 }) {
   const [hov, setHov] = useState(false);
   return (
-    <div
+    <MotionIn
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
+      initial={{ opacity: 0, y: 12, scale: 0.96 }}
+      animate={{ opacity: 1, y: hov ? -2 : 0, scale: 1, boxShadow: hov ? '0 8px 24px rgba(var(--color-black-rgb), 0.08)' : '0 1px 3px rgba(var(--color-black-rgb), 0.03)' }}
+      transition={{ opacity: { duration: 0.32, ease: EASE_SETTLE }, scale: { duration: 0.32, ease: EASE_SETTLE }, y: { duration: 0.2 }, boxShadow: { duration: 0.2 } }}
       style={{
         background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 16, padding: 18,
         display: 'flex', flexDirection: 'column', gap: 12,
-        boxShadow: hov ? '0 8px 24px rgba(var(--color-black-rgb), 0.08)' : '0 1px 3px rgba(var(--color-black-rgb), 0.03)',
-        transform: hov ? 'translateY(-2px)' : 'none',
-        transition: 'box-shadow 200ms, transform 200ms',
-        animation: 'cardIn 320ms cubic-bezier(0.22,1,0.36,1) both',
       }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `${app.accentColor}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -50,9 +53,14 @@ function AppCard({
           </span>
         </div>
         {app.installed && !confirmingUninstall && (
-          <span title="Installed" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', background: 'var(--color-green-pale-5)', flexShrink: 0, animation: 'appInstalledPop 420ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          <motion.span
+            title="Installed"
+            initial={{ opacity: 0, scale: 0.3 }}
+            animate={{ opacity: [0, 1, 1], scale: [0.3, 1.25, 1] }}
+            transition={{ duration: 0.42, times: [0, 0.6, 1], ease: EASE_SPRING }}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: '50%', background: 'var(--color-green-pale-5)', flexShrink: 0 }}>
             <Icon name="check" size={14} color="var(--color-success)" />
-          </span>
+          </motion.span>
         )}
       </div>
 
@@ -61,7 +69,7 @@ function AppCard({
       </div>
 
       {confirmingUninstall ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, animation: 'sectionFadeUp 160ms ease both' }}>
+        <MotionIn initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.16, ease: EASE_STANDARD }} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-error)', lineHeight: 1.4 }}>
             This hides {app.name} for every user. Uninstall?
           </div>
@@ -75,25 +83,27 @@ function AppCard({
               Uninstall
             </button>
           </div>
-        </div>
+        </MotionIn>
       ) : app.installed ? (
-        <button onClick={onUninstallClick} disabled={installing}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 0', borderRadius: 9, border: '1.5px solid var(--color-border)', background: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-tertiary)', cursor: 'pointer' }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-red-tint-2)'; e.currentTarget.style.color = 'var(--color-error)'; e.currentTarget.style.background = 'var(--color-red-pale-3)'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; e.currentTarget.style.background = 'var(--color-white)'; }}>
+        <MotionButton onClick={onUninstallClick} disabled={installing}
+          whileHover={{ borderColor: 'var(--color-red-tint-2)', color: 'var(--color-error)', background: 'var(--color-red-pale-3)' }}
+          transition={{ duration: 0.15 }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 0', borderRadius: 9, border: '1.5px solid var(--color-border)', background: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-tertiary)', cursor: 'pointer' }}>
           <Icon name="remove_circle_outline" size={14} color="currentColor" />
           Uninstall
-        </button>
+        </MotionButton>
       ) : (
-        <button onClick={onInstall} disabled={installing}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 0', borderRadius: 9, border: 'none', background: installing ? 'var(--color-border-strong)' : 'var(--color-primary)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', cursor: installing ? 'wait' : 'pointer', transition: 'background 150ms' }}>
+        <MotionButton onClick={onInstall} disabled={installing}
+          animate={{ background: installing ? 'var(--color-border-strong)' : 'var(--color-primary)' }}
+          transition={{ duration: 0.15 }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 0', borderRadius: 9, border: 'none', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', cursor: installing ? 'wait' : 'pointer' }}>
           {installing
             ? <><Spinner size={13} thickness={2} trackColor="rgba(var(--color-white-rgb), 0.4)" indicatorColor="var(--color-white)" durationMs={700} display="inline-block" /> Installing…</>
             : <><Icon name="add_circle" size={14} color="var(--color-white)" /> Install</>
           }
-        </button>
+        </MotionButton>
       )}
-    </div>
+    </MotionIn>
   );
 }
 
@@ -170,12 +180,18 @@ export default function AppsStoreModal({ onClose }: AppsStoreModalProps) {
   ];
 
   return createPortal(
-    <div
+    <motion.div
       onClick={onClose}
-      style={{ position: 'fixed', inset: 0, zIndex: 4000, background: 'rgba(var(--color-purple-deep-5-rgb), 0.55)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobile ? 0 : 28, animation: 'backdropIn 220ms ease both' }}>
-      <div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.22, ease: EASE_STANDARD }}
+      style={{ position: 'fixed', inset: 0, zIndex: 4000, background: 'rgba(var(--color-purple-deep-5-rgb), 0.55)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobile ? 0 : 28 }}>
+      <MotionIn
         onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--color-purple-pale-3)', borderRadius: isMobile ? 0 : 22, width: '100%', maxWidth: 1100, height: isMobile ? '100%' : '92vh', maxHeight: isMobile ? '100%' : '92vh', boxShadow: '0 24px 70px rgba(var(--color-black-rgb), 0.35)', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both' }}>
+        initial={{ opacity: 0, y: 22, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.36, ease: EASE_SETTLE }}
+        style={{ background: 'var(--color-purple-pale-3)', borderRadius: isMobile ? 0 : 22, width: '100%', maxWidth: 1100, height: isMobile ? '100%' : '92vh', maxHeight: isMobile ? '100%' : '92vh', boxShadow: '0 24px 70px rgba(var(--color-black-rgb), 0.35)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* Header */}
         <div style={{ padding: isMobile ? '18px 16px 14px' : '24px 28px 18px', borderBottom: '1px solid var(--color-purple-pale-32)', flexShrink: 0 }}>
@@ -189,14 +205,14 @@ export default function AppsStoreModal({ onClose }: AppsStoreModalProps) {
                 <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>Install optional features for everyone on this instance.</div>
               </div>
             </div>
-            <button
+            <MotionButton
               onClick={onClose}
-              style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 150ms' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-surface-tint-2)')}
+              whileHover={{ background: 'var(--color-border)' }}
+              transition={{ duration: 0.15 }}
+              style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
             >
               <Icon name="close" size={17} color="var(--color-text-secondary)" />
-            </button>
+            </MotionButton>
           </div>
 
           {/* Search */}
@@ -221,10 +237,12 @@ export default function AppsStoreModal({ onClose }: AppsStoreModalProps) {
               {statusTabs.map(t => {
                 const active = statusFilter === t.id;
                 return (
-                  <button key={t.id} onClick={() => setStatusFilter(t.id)}
-                    style={{ padding: '6px 13px', borderRadius: 8, border: 'none', background: active ? 'var(--color-primary)' : 'transparent', color: active ? 'var(--color-white)' : 'var(--color-primary)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'all 150ms' }}>
+                  <MotionButton key={t.id} onClick={() => setStatusFilter(t.id)}
+                    animate={{ background: active ? 'var(--color-primary)' : 'transparent', color: active ? 'var(--color-white)' : 'var(--color-primary)' }}
+                    transition={{ duration: 0.15 }}
+                    style={{ padding: '6px 13px', borderRadius: 8, border: 'none', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
                     {t.label}
-                  </button>
+                  </MotionButton>
                 );
               })}
             </div>
@@ -283,8 +301,8 @@ export default function AppsStoreModal({ onClose }: AppsStoreModalProps) {
             </div>
           )}
         </div>
-      </div>
-    </div>,
+      </MotionIn>
+    </motion.div>,
     document.body
   );
 }
