@@ -6,6 +6,9 @@ import useWorkspaceStore from '../store/useWorkspaceStore';
 import useAppStore from '../store/useAppStore';
 import Icon from '../components/Icon';
 import ModalIn from '../components/animate-ui/ModalIn';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
+import { EASE_SETTLE, EASE_SPRING } from '../components/animate-ui/motionTokens';
 
 interface UseTemplateModalProps {
   template: Template;
@@ -70,7 +73,7 @@ export default function UseTemplateModal({ template, onClose, onCreatedList, onC
         </div>
 
         <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <div style={{ background: bg, border: `1px solid ${accent}40`, borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, animation: 'previewReveal 320ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          <MotionIn initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.32, ease: EASE_SPRING }} style={{ background: bg, border: `1px solid ${accent}40`, borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 20 }}>{template.emoji ?? (template.type === 'list' ? '📋' : '🗓️')}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{template.name}</div>
@@ -80,9 +83,9 @@ export default function UseTemplateModal({ template, onClose, onCreatedList, onC
                   : `${template.summary.milestoneCount ?? 0} milestone${template.summary.milestoneCount === 1 ? '' : 's'}`}
               </div>
             </div>
-          </div>
+          </MotionIn>
 
-          <div style={{ animation: 'wizardStepIn 260ms cubic-bezier(0.22,1,0.36,1) 40ms both' }}>
+          <MotionIn initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.26, delay: 0.04, ease: EASE_SETTLE }}>
             <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 6 }}>
               {template.type === 'list' ? 'Board' : 'Timeline'} Name *
             </label>
@@ -90,35 +93,37 @@ export default function UseTemplateModal({ template, onClose, onCreatedList, onC
               style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, border: 'none', borderBottom: '1.5px solid var(--color-border-alt)', padding: '8px 0', outline: 'none', color: 'var(--color-text-primary)', background: 'transparent' }}
               onFocus={(e) => (e.target.style.borderBottomColor = 'var(--color-primary)')}
               onBlur={(e) => (e.target.style.borderBottomColor = 'var(--color-border-alt)')} />
-          </div>
+          </MotionIn>
 
-          <div style={{ animation: 'wizardStepIn 260ms cubic-bezier(0.22,1,0.36,1) 80ms both' }}>
+          <MotionIn initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.26, delay: 0.08, ease: EASE_SETTLE }}>
             <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 8 }}>Privacy</label>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setIsPublic(false)}
-                style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${!isPublic ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: !isPublic ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'border-color 150ms, background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)' }}
-                onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-1px)')}
-                onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}>
+              <MotionButton onClick={() => setIsPublic(false)}
+                animate={{ borderColor: !isPublic ? 'var(--color-primary)' : 'var(--color-border-alt)', background: !isPublic ? 'var(--color-surface-tint)' : 'var(--color-white)' }}
+                whileHover={{ y: -1 }}
+                transition={{ borderColor: { duration: 0.15 }, background: { duration: 0.15 }, y: { duration: 0.15, ease: EASE_SPRING } }}
+                style={{ flex: 1, padding: '10px', borderRadius: 10, borderWidth: 1.5, borderStyle: 'solid', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 <Icon name="lock" size={16} color={!isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                 <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: !isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>Private</span>
-              </button>
-              <button onClick={() => setIsPublic(true)}
-                style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${isPublic ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: isPublic ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'border-color 150ms, background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)' }}
-                onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-1px)')}
-                onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}>
+              </MotionButton>
+              <MotionButton onClick={() => setIsPublic(true)}
+                animate={{ borderColor: isPublic ? 'var(--color-primary)' : 'var(--color-border-alt)', background: isPublic ? 'var(--color-surface-tint)' : 'var(--color-white)' }}
+                whileHover={{ y: -1 }}
+                transition={{ borderColor: { duration: 0.15 }, background: { duration: 0.15 }, y: { duration: 0.15, ease: EASE_SPRING } }}
+                style={{ flex: 1, padding: '10px', borderRadius: 10, borderWidth: 1.5, borderStyle: 'solid', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 <Icon name="public" size={16} color={isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                 <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>Public</span>
-              </button>
+              </MotionButton>
             </div>
-          </div>
+          </MotionIn>
 
           {!template.isOwner && (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', background: 'var(--color-yellow-pale-1)', border: '1px solid var(--color-yellow-tint-2)', borderRadius: 10, animation: 'wizardStepIn 260ms cubic-bezier(0.22,1,0.36,1) 120ms both' }}>
+            <MotionIn initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.26, delay: 0.12, ease: EASE_SETTLE }} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', background: 'var(--color-yellow-pale-1)', border: '1px solid var(--color-yellow-tint-2)', borderRadius: 10 }}>
               <Icon name="info" size={15} color="var(--color-warning)" />
               <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-orange-deep-1)', lineHeight: 1.5 }}>
                 This template was shared by {template.ownerName ?? 'another user'}. Any attached files won't carry over — you'll need to attach your own.
               </span>
-            </div>
+            </MotionIn>
           )}
 
           {error && (
@@ -130,12 +135,13 @@ export default function UseTemplateModal({ template, onClose, onCreatedList, onC
           <button onClick={onClose} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 16px' }}>
             Cancel
           </button>
-          <button onClick={handleCreate} disabled={loading || !name.trim()}
-            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: (loading || !name.trim()) ? 'var(--color-border-strong)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: (loading || !name.trim()) ? 'not-allowed' : 'pointer', transition: 'background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)' }}
-            onMouseEnter={(e) => { if (!loading && name.trim()) e.currentTarget.style.transform = 'scale(1.04)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}>
+          <MotionButton onClick={handleCreate} disabled={loading || !name.trim()}
+            animate={{ background: (loading || !name.trim()) ? 'var(--color-border-strong)' : 'var(--color-primary)' }}
+            whileHover={!loading && name.trim() ? { scale: 1.04 } : undefined}
+            transition={{ background: { duration: 0.15 }, scale: { duration: 0.15, ease: EASE_SPRING } }}
+            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: (loading || !name.trim()) ? 'not-allowed' : 'pointer' }}>
             {loading ? 'Creating…' : 'Create'}
-          </button>
+          </MotionButton>
         </div>
       </ModalIn>
     </div>,
