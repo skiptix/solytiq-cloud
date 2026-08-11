@@ -34,6 +34,7 @@ import KeyboardShortcuts from './components/KeyboardShortcuts';
 
 import RouteFallback from './components/RouteFallback';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
+import PopIn from './components/animate-ui/PopIn';
 
 // Sprint 03, Phase 2 — "Alle Route-Screens ... lazy laden": every screen
 // mounted by a <Route> below is its own chunk, fetched on first navigation
@@ -564,7 +565,7 @@ function AppLayout() {
           failure must be visible — a silently empty sidebar looks like data
           loss. The previous slices stay rendered while this is shown. */}
       {loadError && (
-        <div style={{ position: 'fixed', bottom: 20, left: '50%', marginLeft: -170, width: 340, maxWidth: 'calc(100vw - 32px)', zIndex: 500, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, background: 'var(--color-white)', border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', animation: 'menuIn 200ms ease both' }}>
+        <PopIn duration={200} style={{ position: 'fixed', bottom: 20, left: '50%', marginLeft: -170, width: 340, maxWidth: 'calc(100vw - 32px)', zIndex: 500, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, background: 'var(--color-white)', border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)' }}>
           <span style={{ color: 'var(--color-error)', fontWeight: 600 }}>Couldn't refresh your data.</span>
           <button
             onClick={() => (SYNC_ENGINE ? useSyncStore.getState().bootstrap(currentWorkspaceId ?? undefined) : loadFromApi(currentWorkspaceId ?? undefined))}
@@ -574,7 +575,7 @@ function AppLayout() {
           >
             Retry
           </button>
-        </div>
+        </PopIn>
       )}
 
       {workspacesLoaded && workspaces.length === 0 && !location.pathname.startsWith('/settings') && (

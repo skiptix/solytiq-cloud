@@ -4,6 +4,7 @@ import CopyButton from './CopyButton';
 import MarkdownView from './MarkdownView';
 import MentionPopover from './MentionPopover';
 import LinkPicker from './LinkPicker';
+import PopIn from './animate-ui/PopIn';
 import { toggleWrap, formatMarkerForKeyDown, type FormatMarker as Marker } from '../utils/textFormatting';
 import { detectMention, applyMention, filterMentionMembers, type MentionMember, type MentionContext } from '../utils/mention';
 import { detectLinkTrigger, applyLinkToken, type LinkTriggerContext } from '../utils/linkTrigger';
@@ -114,7 +115,7 @@ function AiAssistButton({ aiContext, value, onApply }: AiAssistButtonProps) {
       </button>
 
       {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 60, width: Math.min(280, window.innerWidth - 32), background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 12, animation: 'menuIn 140ms ease both' }}>
+        <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 60, width: Math.min(280, window.innerWidth - 32), background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, color: 'var(--color-text-primary)' }}>Ask AI about this note</span>
             <button type="button" onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}>
@@ -147,7 +148,7 @@ function AiAssistButton({ aiContext, value, onApply }: AiAssistButtonProps) {
           </div>
 
           {error && <div style={{ marginTop: 8, fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-error)' }}>{error}</div>}
-        </div>
+        </PopIn>
       )}
     </div>
   );

@@ -23,6 +23,7 @@ import useForceSimulation from '../../hooks/useForceSimulation';
 import type { SimLink, SimNodeSpec } from '../../utils/forceSimulation';
 import Icon from '../Icon';
 import NodeInspector from './NodeInspector';
+import PopIn from '../animate-ui/PopIn';
 
 const MIN_K = 0.2;
 const MAX_K = 3;
@@ -485,18 +486,24 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
       </svg>
 
       {tooltip && hoveredNode && hoveredSrn !== selectedSrn && (
-        <div
-          style={{
-            position: 'absolute', left: tooltip.x, top: tooltip.y - 14, transform: 'translate(-50%, -100%)',
-            pointerEvents: 'none', zIndex: 6, padding: '6px 10px', borderRadius: 9,
-            background: 'rgba(28, 27, 34, 0.92)', color: '#fff', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600,
-            whiteSpace: 'nowrap', boxShadow: '0 6px 20px rgba(0,0,0,0.22)', animation: 'menuIn 120ms cubic-bezier(0.34,1.56,0.64,1) both',
-          }}
-        >
-          {hoveredNode.title || (hoveredNode.type === 'workspace' ? 'Workspace' : 'Untitled')}
-          {hoveredNode.type !== 'workspace' && (
-            <span style={{ opacity: 0.7, fontWeight: 500, marginLeft: 6, textTransform: 'capitalize' }}>{hoveredNode.type}</span>
-          )}
+        // Static anchor wrapper (unanimated) — kept separate from PopIn's own
+        // animated transform so the fixed translate(-50%,-100%) positioning
+        // isn't clobbered by Motion's per-frame transform composition.
+        <div style={{ position: 'absolute', left: tooltip.x, top: tooltip.y - 14, transform: 'translate(-50%, -100%)', pointerEvents: 'none', zIndex: 6 }}>
+          <PopIn
+            duration={120}
+            ease="spring"
+            style={{
+              padding: '6px 10px', borderRadius: 9,
+              background: 'rgba(28, 27, 34, 0.92)', color: '#fff', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600,
+              whiteSpace: 'nowrap', boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
+            }}
+          >
+            {hoveredNode.title || (hoveredNode.type === 'workspace' ? 'Workspace' : 'Untitled')}
+            {hoveredNode.type !== 'workspace' && (
+              <span style={{ opacity: 0.7, fontWeight: 500, marginLeft: 6, textTransform: 'capitalize' }}>{hoveredNode.type}</span>
+            )}
+          </PopIn>
         </div>
       )}
 

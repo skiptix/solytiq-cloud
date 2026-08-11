@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icon';
 import MemberAvatar from './MemberAvatar';
+import PopIn from './animate-ui/PopIn';
 import useMembersStore from '../store/useMembersStore';
 import useSharedItemsStore from '../store/useSharedItemsStore';
 import {
@@ -165,7 +166,7 @@ export default function TaggedUsersRow({ taskId, workspaceId, listId, creatorId,
           </button>
 
           {adding && (
-            <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 60, width: Math.min(260, window.innerWidth - 32), background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 8, animation: 'menuIn 140ms ease both' }}>
+            <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 60, width: Math.min(260, window.innerWidth - 32), background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '6px 9px', marginBottom: 6 }}>
                 <Icon name="search" size={14} color="var(--color-text-quaternary)" />
                 <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search people…"
@@ -188,7 +189,7 @@ export default function TaggedUsersRow({ taskId, workspaceId, listId, creatorId,
                   </button>
                 ))}
               </div>
-            </div>
+            </PopIn>
           )}
         </div>
       )}

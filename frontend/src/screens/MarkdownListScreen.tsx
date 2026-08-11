@@ -16,6 +16,9 @@ import MarkdownListAIAssist from '../components/AIAssistant/MarkdownListAIAssist
 import SaveStatusDot from '../components/SaveStatusDot';
 import BacklinksPanel from '../components/graph/BacklinksPanel';
 import AutomationsButton from '../components/AutomationsButton';
+import PopIn from '../components/animate-ui/PopIn';
+import { motion } from '../components/animate-ui/motion';
+import { EASE_STANDARD } from '../components/animate-ui/motionTokens';
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 export default function MarkdownListScreen() {
@@ -242,15 +245,18 @@ export default function MarkdownListScreen() {
           </button>
           {mdId && <AutomationsButton ownerType="markdownList" ownerId={mdId} isMobile={isMobile} />}
           {todoListId && (
-            <button
+            <motion.button
+              initial={{ opacity: 0, scale: 0.88, y: -6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.16, ease: EASE_STANDARD }}
               onClick={() => navigate(`/list/${todoListId}`)}
               title="Open this page's Todo list"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: 32, width: isMobile ? 32 : undefined, padding: isMobile ? 0 : '0 11px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer', transition: 'all 120ms', animation: 'menuIn 160ms ease both', flexShrink: 0 }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: 32, width: isMobile ? 32 : undefined, padding: isMobile ? 0 : '0 11px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer', transition: 'all 120ms', flexShrink: 0 }}
               onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-green-pale-1)'; e.currentTarget.style.borderColor = 'var(--color-success)'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}>
               <Icon name="checklist" size={15} color="var(--color-success)" />
               {!isMobile && <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-success)' }}>Todo list</span>}
-            </button>
+            </motion.button>
           )}
           <MarkdownListAIAssist
             markdownListId={mdId}
@@ -276,7 +282,7 @@ export default function MarkdownListScreen() {
             {menuOpen && (
               <>
                 <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 190 }} />
-                <div style={{ position: 'absolute', top: 38, right: 0, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', border: '1px solid var(--color-border)', minWidth: 180, zIndex: 200, overflow: 'hidden', animation: 'menuIn 160ms ease both' }}>
+                <PopIn duration={160} style={{ position: 'absolute', top: 38, right: 0, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', border: '1px solid var(--color-border)', minWidth: 180, zIndex: 200, overflow: 'hidden' }}>
                   {todoListId && (
                     <button onClick={() => { setMenuOpen(false); navigate(`/list/${todoListId}`); }}
                       style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-text-primary)', textAlign: 'left' }}>
@@ -291,7 +297,7 @@ export default function MarkdownListScreen() {
                     style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-error)', textAlign: 'left' }}>
                     <Icon name="delete" size={16} color="var(--color-error)" /> Delete
                   </button>
-                </div>
+                </PopIn>
               </>
             )}
           </div>

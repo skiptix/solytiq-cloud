@@ -1,11 +1,7 @@
 import { useState } from 'react';
 import { motion, useReducedMotion } from '@/components/animate-ui/motion';
+import { EASE_STANDARD } from '@/components/animate-ui/motionTokens';
 import useSaveStatusStore, { type SaveStatus } from '../store/useSaveStatusStore';
-
-// CSS `ease` keyword as an explicit cubic-bezier, so the Motion-driven
-// tooltip entrance below is timing-identical to the `menuIn` keyframe it
-// replaces here (opacity 0→1, scale .88→1, translateY -6px→0, 120ms ease).
-const MENU_IN_EASE: [number, number, number, number] = [0.25, 0.1, 0.25, 1];
 
 // Small colored status dot shown after a list/timeline/markdown page title:
 //   green  = all changes saved (resting/idle or just-saved)
@@ -56,7 +52,7 @@ export default function SaveStatusDot({ state, size = 10 }: SaveStatusDotProps) 
         <motion.span
           initial={{ opacity: 0, scale: 0.88, y: -6 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.12, ease: MENU_IN_EASE }}
+          transition={{ duration: 0.12, ease: EASE_STANDARD }}
           style={{
             position: 'absolute', top: 'calc(100% + 8px)', left: '50%', x: '-50%',
             background: 'var(--color-text-primary)', color: 'var(--color-white)',

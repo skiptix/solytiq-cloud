@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import Icon from '../Icon';
 import LinkPicker from '../LinkPicker';
 import GraphControls from './GraphControls';
+import PopIn from '../animate-ui/PopIn';
 import { useEntitySearch } from '../../hooks/useEntitySearch';
 import type { EntityIndexEntry } from '../../types';
 
@@ -96,9 +97,9 @@ export default function GraphToolbar({
           {!isMobile && 'Filters'}
         </button>
         {filtersOpen && (
-          <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 7, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          <PopIn duration={160} ease="spring" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 7 }}>
             <GraphControls isMobile={isMobile} onClose={() => setFiltersOpen(false)} />
-          </div>
+          </PopIn>
         )}
       </div>
 

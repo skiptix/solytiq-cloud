@@ -15,6 +15,7 @@ import TrashPanel from '../components/TrashPanel';
 import ArchivedPanel from '../components/ArchivedPanel';
 import { deriveWorkspacePermissions } from '../utils/workspacePermissions';
 import Spinner from '@/components/animate-ui/Spinner';
+import PopIn from '@/components/animate-ui/PopIn';
 
 interface UserSuggestion { id: string; username: string; fullName: string | null; profileImage: string | null; }
 
@@ -562,7 +563,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                     </div>
 
                     {showSuggestions && suggestions.length > 0 && (
-                      <div ref={suggestionsRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', overflow: 'hidden', zIndex: 50, animation: 'menuIn 140ms ease both' }}>
+                      <PopIn ref={suggestionsRef} duration={140} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', overflow: 'hidden', zIndex: 50 }}>
                         {suggestions.map((u, i) => (
                           <button key={u.id}
                             tabIndex={0}
@@ -584,7 +585,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                             <Icon name="person_add" size={14} color="var(--color-accent-purple-light)" />
                           </button>
                         ))}
-                      </div>
+                      </PopIn>
                     )}
                   </div>
                   {inviteError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: 6 }}>{inviteError}</div>}

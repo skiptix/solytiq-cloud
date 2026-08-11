@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import Icon from './Icon';
+import PopIn from './animate-ui/PopIn';
 
 interface TimePickerProps {
   /** "HH:MM" (24-hour), or undefined when unset. */
@@ -84,7 +85,7 @@ export default function TimePicker({ value, onChange, onClear }: TimePickerProps
   );
 
   return (
-    <div style={{ background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: '14px 16px', width: Math.min(220, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+    <PopIn duration={180} ease="spring" style={{ background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: '14px 16px', width: Math.min(220, window.innerWidth - 32), transformOrigin: 'top center' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
         <Icon name="schedule" size={16} color="var(--color-primary)" />
         <span style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '0.02em', fontVariantNumeric: 'tabular-nums' }}>
@@ -112,6 +113,6 @@ export default function TimePicker({ value, onChange, onClear }: TimePickerProps
           </button>
         )}
       </div>
-    </div>
+    </PopIn>
   );
 }

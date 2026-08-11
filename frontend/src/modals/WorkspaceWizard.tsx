@@ -5,6 +5,7 @@ import useWorkspaceStore from '../store/useWorkspaceStore';
 import type { WorkspaceMember } from '../types';
 import { EmojiGrid } from '../components/EmojiSelector';
 import Spinner from '@/components/animate-ui/Spinner';
+import PopIn from '@/components/animate-ui/PopIn';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -168,9 +169,9 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
 
             {/* Emoji picker */}
             {!useImage && showEmojiPicker && (
-              <div style={{ marginBottom: 14, border: '1px solid var(--color-border)', borderRadius: 12, padding: 10, background: 'var(--color-white)', width: 'fit-content', animation: 'menuIn 160ms ease both', transformOrigin: 'top left' }}>
+              <PopIn duration={160} style={{ marginBottom: 14, border: '1px solid var(--color-border)', borderRadius: 12, padding: 10, background: 'var(--color-white)', width: 'fit-content', transformOrigin: 'top left' }}>
                 <EmojiGrid value={emoji} onSelect={em => { setEmoji(em); setShowEmojiPicker(false); }} />
-              </div>
+              </PopIn>
             )}
 
             {/* Image upload */}

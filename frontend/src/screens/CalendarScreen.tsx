@@ -22,6 +22,7 @@ import NotesEditor from '../components/NotesEditor';
 import MarkdownView from '../components/MarkdownView';
 import Icon from '../components/Icon';
 import ContextMenu, { type ContextMenuEntry } from '../components/ContextMenu';
+import PopIn from '../components/animate-ui/PopIn';
 import { useMobile } from '../hooks/useBreakpoint';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -577,7 +578,7 @@ function InvitePopover({ candidates, search, onSearchChange, selectedIds, onTogg
     : candidates;
 
   return (
-    <div style={{ background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: '10px', width: Math.min(260, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+    <PopIn duration={180} ease="spring" style={{ background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: '10px', width: Math.min(260, window.innerWidth - 32), transformOrigin: 'top center' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--color-surface-tint-3)', borderRadius: 8, padding: '6px 10px', border: '1px solid var(--color-border)', marginBottom: 8 }}>
         <Icon name="search" size={13} color="var(--color-text-tertiary)" />
         <input autoFocus value={search} onChange={e => onSearchChange(e.target.value)} placeholder="Search people…"
@@ -609,7 +610,7 @@ function InvitePopover({ candidates, search, onSearchChange, selectedIds, onTogg
         style={{ width: '100%', marginTop: 10, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 7, padding: '8px 0', cursor: 'pointer' }}>
         Done
       </button>
-    </div>
+    </PopIn>
   );
 }
 
@@ -644,7 +645,7 @@ function RepeatPopover({ preset, onPresetChange, customDays, onCustomDaysChange,
   );
 
   return (
-    <div style={{ background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: '10px', width: Math.min(240, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+    <PopIn duration={180} ease="spring" style={{ background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: '10px', width: Math.min(240, window.innerWidth - 32), transformOrigin: 'top center' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {REPEAT_PRESETS.map(p => {
           const active = preset === p.value;
@@ -680,7 +681,7 @@ function RepeatPopover({ preset, onPresetChange, customDays, onCustomDaysChange,
         style={{ width: '100%', marginTop: 10, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 7, padding: '8px 0', cursor: 'pointer' }}>
         Done
       </button>
-    </div>
+    </PopIn>
   );
 }
 
@@ -1780,7 +1781,7 @@ export default function CalendarScreen() {
                 {hiddenWs.size > 0 && <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, color: 'var(--color-white)', background: 'var(--color-primary)', borderRadius: 9999, padding: '1px 6px' }}>{Math.max(workspaces.length - hiddenWs.size, 0)}/{workspaces.length}</span>}
               </button>
               {showFilter && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 250, maxHeight: 360, overflowY: 'auto', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border-alt)', boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.14)', zIndex: 400, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                <PopIn duration={160} ease="spring" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 250, maxHeight: 360, overflowY: 'auto', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border-alt)', boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.14)', zIndex: 400 }}>
                   {/* Event families — hide meetings / task deadlines / milestones */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px 8px' }}>
                     <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-quaternary)' }}>Show</span>
@@ -1829,7 +1830,7 @@ export default function CalendarScreen() {
                       );
                     })}
                   </div>
-                </div>
+                </PopIn>
               )}
             </div>
 
@@ -1844,7 +1845,7 @@ export default function CalendarScreen() {
                   {unscheduled.length > 0 && <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, color: 'var(--color-white)', background: 'var(--color-primary)', borderRadius: 9999, padding: '1px 6px' }}>{unscheduled.length}</span>}
                 </button>
                 {showUnscheduled && (
-                  <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 280, maxHeight: '60vh', display: 'flex', flexDirection: 'column', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border-alt)', boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.14)', zIndex: 400, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+                  <PopIn duration={160} ease="spring" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 280, maxHeight: '60vh', display: 'flex', flexDirection: 'column', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border-alt)', boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.14)', zIndex: 400, overflow: 'hidden' }}>
                     <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid var(--color-divider)', flexShrink: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                         <Icon name="bolt" size={15} color="var(--color-primary)" />
@@ -1878,7 +1879,7 @@ export default function CalendarScreen() {
                         ))
                       )}
                     </div>
-                  </div>
+                  </PopIn>
                 )}
               </div>
             )}

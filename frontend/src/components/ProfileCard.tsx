@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
+import PopIn from './animate-ui/PopIn';
 import useAuthStore from '../store/useAuthStore';
 import useAccountsStore from '../store/useAccountsStore';
 import { apiUpdateProfile, apiUploadProfileImage } from '../api/client';
@@ -307,9 +308,11 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
           escapes the sidebar's overflow clipping and always opens upward
           regardless of scroll position or collapsed width. */}
       {menuOpen && menuPos && createPortal(
-        <div
+        <PopIn
           ref={menuRef}
-          style={{ position: 'fixed', left: menuPos.left, bottom: menuPos.bottom, width: menuPos.width, background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 16, boxShadow: '0 -8px 32px rgba(var(--color-black-rgb), 0.14)', zIndex: 1200, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+          duration={160}
+          ease="spring"
+          style={{ position: 'fixed', left: menuPos.left, bottom: menuPos.bottom, width: menuPos.width, background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 16, boxShadow: '0 -8px 32px rgba(var(--color-black-rgb), 0.14)', zIndex: 1200, overflow: 'hidden' }}
         >
           {/* Avatar header */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '22px 20px 16px', background: 'var(--color-surface-tint-3)', borderBottom: '1px solid var(--color-surface-tint-2)', gap: 8 }}>
@@ -441,7 +444,7 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
               Sign Out
             </button>
           </div>
-        </div>,
+        </PopIn>,
         document.body
       )}
 

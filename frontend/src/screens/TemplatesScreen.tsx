@@ -11,6 +11,7 @@ import CreateTemplateModal from '../modals/CreateTemplateModal';
 import UseTemplateModal from '../modals/UseTemplateModal';
 import EditTemplateStructureModal from '../modals/EditTemplateStructureModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
+import PopIn from '../components/animate-ui/PopIn';
 
 type Filter = 'all' | 'list' | 'timeline';
 
@@ -43,7 +44,7 @@ function TemplateCardMenu({ template, onRename, onEditStructure, onToggleShared,
         <Icon name="more_vert" size={15} color="var(--color-accent-purple-light)" />
       </button>
       {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, width: 190, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', padding: '4px 0', zIndex: 400, animation: 'menuIn 140ms ease both' }}>
+        <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, width: 190, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', padding: '4px 0', zIndex: 400 }}>
           <button onClick={() => { setOpen(false); onRename(); }}
             style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-text-primary)', textAlign: 'left' }}
             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-surface-tint)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
@@ -66,7 +67,7 @@ function TemplateCardMenu({ template, onRename, onEditStructure, onToggleShared,
             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-error-bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
             <Icon name="delete" size={15} color="var(--color-error)" /> Delete
           </button>
-        </div>
+        </PopIn>
       )}
     </div>
   );

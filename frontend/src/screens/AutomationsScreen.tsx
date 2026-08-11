@@ -9,6 +9,7 @@ import useAppStore from '../store/useAppStore';
 import useMarkdownListsStore from '../store/useMarkdownListsStore';
 import useSyncStore from '../store/useSyncStore';
 import Icon from '../components/Icon';
+import PopIn from '../components/animate-ui/PopIn';
 
 /** Where the "back" arrow returns to — the exact Board/Page/Timeline this
  *  automation gallery was opened from (there's no standalone gallery route
@@ -49,7 +50,7 @@ function AutomationCardMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete
         <Icon name="more_vert" size={15} color="var(--color-accent-purple-light)" />
       </button>
       {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, width: 170, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', padding: '4px 0', zIndex: 400, animation: 'menuIn 140ms ease both' }}>
+        <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, width: 170, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', padding: '4px 0', zIndex: 400 }}>
           <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit(); }}
             style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-text-primary)', textAlign: 'left' }}
             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-surface-tint)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
@@ -61,7 +62,7 @@ function AutomationCardMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete
             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-error-bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
             <Icon name="delete" size={15} color="var(--color-error)" /> Delete
           </button>
-        </div>
+        </PopIn>
       )}
     </div>
   );

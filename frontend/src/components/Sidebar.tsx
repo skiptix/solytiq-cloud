@@ -15,6 +15,7 @@ import MoveToWorkspaceModal from '../modals/MoveToWorkspaceModal';
 import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
 import RenameDialog from './RenameDialog';
 import ProfileCard from './ProfileCard';
+import PopIn from './animate-ui/PopIn';
 import { apiGetGpsFiles, apiReorderTimelines, type ShareInfo } from '../api/client';
 
 const MINI = 60;
@@ -728,7 +729,8 @@ function FolderRow({ folder, lists, timelines, markdownLists, markdownTodoLists,
       {/* Collapsed-sidebar fold-out — mirrors the expanded folder contents above,
           anchored to the right of the icon and shown on hover. */}
       {collapsed && flyoutOpen && flyoutPos && createPortal(
-        <div
+        <PopIn
+          duration={160}
           onMouseEnter={openFlyout}
           onMouseLeave={scheduleFlyoutClose}
           style={{
@@ -736,7 +738,7 @@ function FolderRow({ folder, lists, timelines, markdownLists, markdownTodoLists,
             minWidth: 220, maxWidth: 280, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto',
             background: 'var(--color-white)', borderRadius: 12, border: '1px solid var(--color-border)',
             boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 6,
-            animation: 'menuIn 160ms ease both', transformOrigin: 'top left',
+            transformOrigin: 'top left',
           }}
         >
           <button
@@ -814,7 +816,7 @@ function FolderRow({ folder, lists, timelines, markdownLists, markdownTodoLists,
               })}
             </>
           )}
-        </div>,
+        </PopIn>,
         document.body
       )}
 
@@ -1293,8 +1295,8 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
       </button>
 
       {dropdownOpen && dropdownPos && (
-        <div ref={dropRef}
-          style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 500, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 24px rgba(var(--color-black-rgb), 0.14)', border: '1px solid var(--color-border)', minWidth: 230, padding: '4px 0', animation: 'menuIn 140ms ease both', overflow: 'hidden' }}>
+        <PopIn ref={dropRef} duration={140}
+          style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 500, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 24px rgba(var(--color-black-rgb), 0.14)', border: '1px solid var(--color-border)', minWidth: 230, padding: '4px 0', overflow: 'hidden' }}>
 
           {workspaces.length === 0 && (
             <div style={{ padding: '12px 14px', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>No workspaces yet.</div>
@@ -1345,7 +1347,7 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
             <Icon name="add_circle" size={15} color="var(--color-primary)" /> New workspace
           </button>
-        </div>
+        </PopIn>
       )}
 
       {showWizard && <WorkspaceWizard onClose={() => setShowWizard(false)} />}

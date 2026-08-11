@@ -29,6 +29,7 @@ import { apiGetWorkspaceGraph, apiGetEntityLinks, apiGetWorkspaceMembers } from 
 import type { GraphEdge, GraphNode, MarkdownBlock, ResolvedLink, KnowledgeEntry } from '../types';
 import type { MentionMember } from '../utils/mention';
 import Spinner from '@/components/animate-ui/Spinner';
+import PopIn from '@/components/animate-ui/PopIn';
 
 // A term's bubble grows with how much its definition actually holds — summary,
 // aliases, and written block content — not just its explicit relation degree.
@@ -401,13 +402,13 @@ export default function KnowledgeScreen() {
       </div>
 
       {scanMessage && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 9, background: 'var(--color-surface-tint)', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-secondary)', animation: 'menuIn 160ms ease both' }}>
+        <PopIn duration={160} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 9, background: 'var(--color-surface-tint)', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-secondary)' }}>
           <Icon name="info" size={15} color="var(--color-primary)" />
           <span style={{ flex: 1 }}>{scanMessage}</span>
           <button onClick={() => setScanMessage('')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
             <Icon name="close" size={14} color="var(--color-text-quaternary)" />
           </button>
-        </div>
+        </PopIn>
       )}
 
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: 'relative', borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.04)', overflow: 'hidden', background: 'var(--color-white)' }}>
@@ -470,7 +471,7 @@ export default function KnowledgeScreen() {
                 )}
               </div>
               {searchOpen && searchQuery.trim() && (
-                <div style={{ marginTop: 6, background: 'var(--color-white)', borderRadius: 10, border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', overflow: 'hidden', animation: 'menuIn 140ms ease both' }}>
+                <PopIn duration={140} style={{ marginTop: 6, background: 'var(--color-white)', borderRadius: 10, border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', overflow: 'hidden' }}>
                   {searchMatches.length === 0 ? (
                     <div style={{ padding: '10px 12px', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)' }}>No terms match "{searchQuery.trim()}"</div>
                   ) : (
@@ -486,7 +487,7 @@ export default function KnowledgeScreen() {
                       </button>
                     ))
                   )}
-                </div>
+                </PopIn>
               )}
             </div>
 
@@ -510,7 +511,7 @@ export default function KnowledgeScreen() {
                 )}
               </button>
               {typeFilterOpen && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 190, background: 'var(--color-white)', borderRadius: 10, border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: 8, animation: 'menuIn 140ms ease both' }}>
+                <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 190, background: 'var(--color-white)', borderRadius: 10, border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 4px 6px' }}>
                     <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 700, color: 'var(--color-text-secondary)' }}>Term type</span>
                     {typeFilter.length > 0 && (
@@ -534,7 +535,7 @@ export default function KnowledgeScreen() {
                       </button>
                     );
                   })}
-                </div>
+                </PopIn>
               )}
             </div>
           </div>

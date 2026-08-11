@@ -1,4 +1,5 @@
 import Icon from './Icon';
+import PopIn from './animate-ui/PopIn';
 import type { EntityIndexEntry, GraphEntityType } from '../types';
 import { ENTITY_TYPE_LABEL } from '../utils/graphLayout';
 
@@ -29,12 +30,12 @@ export default function LinkPicker({ results, loading, query, activeIndex, onPic
 
   const width = Math.min(300, (typeof window !== 'undefined' ? window.innerWidth : 400) - 32);
   return (
-    <div
+    <PopIn
+      duration={120}
       style={{
         position: 'absolute', zIndex: 220, width, maxHeight: 280, overflowY: 'auto',
         background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12,
         boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 6,
-        animation: 'menuIn 120ms ease both',
         ...style,
       }}
       onMouseDown={(e) => e.preventDefault()}
@@ -76,6 +77,6 @@ export default function LinkPicker({ results, loading, query, activeIndex, onPic
           </span>
         </button>
       ))}
-    </div>
+    </PopIn>
   );
 }

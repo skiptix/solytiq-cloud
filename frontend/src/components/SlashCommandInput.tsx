@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import type { List } from '../types';
 import Icon from './Icon';
+import PopIn from './animate-ui/PopIn';
 
 export interface SlashCommandResult {
   type: 'list' | 'link';
@@ -173,7 +174,6 @@ export default function SlashCommandInput({
     borderRadius: 12,
     boxShadow: '0 8px 24px rgba(var(--color-primary-rgb), 0.12), 0 2px 8px rgba(var(--color-black-rgb), 0.06)',
     overflow: 'hidden',
-    animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both',
   } : { display: 'none' };
 
   const itemBase: React.CSSProperties = {
@@ -199,7 +199,7 @@ export default function SlashCommandInput({
 
       {/* ── Slash command picker ── */}
       {menu.kind === 'slash-menu' && dropdownPos && (
-        <div style={dropdownBase}>
+        <PopIn duration={180} ease="spring" style={dropdownBase}>
           {/* Header */}
           <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid var(--color-surface-tint)', display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-primary)' }}>
@@ -247,12 +247,12 @@ export default function SlashCommandInput({
             <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-border-strong)' }}>Close menu</span>
             <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-border-strong)', background: 'var(--color-surface-tint)', borderRadius: 5, padding: '2px 7px' }}>esc</span>
           </div>
-        </div>
+        </PopIn>
       )}
 
       {/* ── Link search ── */}
       {menu.kind === 'link-search' && dropdownPos && (
-        <div style={dropdownBase}>
+        <PopIn duration={180} ease="spring" style={dropdownBase}>
           {searchResults.length === 0 ? (
             <div style={{ padding: '10px 14px', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-border-strong)' }}>
               No boards found
@@ -273,7 +273,7 @@ export default function SlashCommandInput({
               </button>
             ))
           )}
-        </div>
+        </PopIn>
       )}
     </div>
   );

@@ -15,6 +15,7 @@ import AiSkillEditModal from '../modals/AiSkillEditModal';
 import { featureForScope } from '../modals/adminApiFeatures';
 import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import useAiSkillsStore from '../store/useAiSkillsStore';
+import PopIn from '../components/animate-ui/PopIn';
 
 interface UserEntry {
   id: string;
@@ -1029,7 +1030,7 @@ export default function SettingsScreen() {
 
                     {/* Confirmation dialog — shown inline when admin clicks to disable */}
                     {showMcpDisableConfirm && (
-                      <div style={{ background: 'var(--color-orange-pale-1)', border: '1.5px solid var(--color-error-bg)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12, animation: 'menuIn 160ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                      <PopIn duration={160} ease="settle" style={{ background: 'var(--color-orange-pale-1)', border: '1.5px solid var(--color-error-bg)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                           <Icon name="warning" size={18} color="var(--color-error)" />
                           <div>
@@ -1053,7 +1054,7 @@ export default function SettingsScreen() {
                             Disable MCP &amp; revoke all connections
                           </button>
                         </div>
-                      </div>
+                      </PopIn>
                     )}
                   </div>
                 </div>
@@ -1451,7 +1452,7 @@ export default function SettingsScreen() {
 
                     {/* Confirmation dialog — shown inline when admin clicks to disable */}
                     {showMobileDisableConfirm && (
-                      <div style={{ background: 'var(--color-orange-pale-1)', border: '1.5px solid var(--color-error-bg)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12, animation: 'menuIn 160ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                      <PopIn duration={160} ease="settle" style={{ background: 'var(--color-orange-pale-1)', border: '1.5px solid var(--color-error-bg)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                           <Icon name="warning" size={18} color="var(--color-error)" />
                           <div>
@@ -1475,7 +1476,7 @@ export default function SettingsScreen() {
                             Disable &amp; sign out all devices
                           </button>
                         </div>
-                      </div>
+                      </PopIn>
                     )}
                   </div>
                 </div>

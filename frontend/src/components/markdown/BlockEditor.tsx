@@ -20,6 +20,7 @@ import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { motion } from '@/components/animate-ui/motion';
 import { LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
+import PopIn from '@/components/animate-ui/PopIn';
 import type {
   MarkdownBlock, MarkdownBlockType, MarkdownTodoBlock, MarkdownImageBlock, MarkdownLinkBlock,
   MarkdownHeadingBlock, MarkdownDividerBlock,
@@ -755,7 +756,7 @@ export default function BlockEditor({
           )}
 
           {slashMenu?.blockId === block.id && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', border: '1px solid var(--color-border)', minWidth: 220, maxHeight: 260, overflowY: 'auto', zIndex: 210, animation: 'menuIn 140ms ease both' }}>
+            <PopIn duration={140} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', border: '1px solid var(--color-border)', minWidth: 220, maxHeight: 260, overflowY: 'auto', zIndex: 210 }}>
             {filteredCommands(slashMenu.query).length === 0 && (
               <div style={{ padding: '10px 14px', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)' }}>No matching command</div>
             )}
@@ -769,7 +770,7 @@ export default function BlockEditor({
                 <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-quaternary)' }}>/{cmd.cmd}</span>
               </button>
             ))}
-            </div>
+            </PopIn>
           )}
 
           {mention?.blockId === block.id && mentionActive && (
@@ -962,7 +963,7 @@ export default function BlockEditor({
         return createPortal(
           <>
             <div onClick={() => setContextMenu(null)} onContextMenu={e => { e.preventDefault(); setContextMenu(null); }} style={{ position: 'fixed', inset: 0, zIndex: 1190 }} />
-            <div style={{ position: 'fixed', left, top, minWidth: MENU_W, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5, zIndex: 1200, animation: 'menuIn 150ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <PopIn duration={150} ease="settle" style={{ position: 'fixed', left, top, minWidth: MENU_W, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5, zIndex: 1200 }}>
               {items.map((item, ii) => {
                 if (item.submenu) {
                   // Outer "bridge" wrapper is transparent and carries a 6px side
@@ -982,7 +983,7 @@ export default function BlockEditor({
                       </button>
                       {ctxSubmenuOpen && (
                         <div style={{ position: 'absolute', top: -5, ...bridgePos, zIndex: 1201 }}>
-                          <div style={{ minWidth: SUB_W, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5, animation: 'menuIn 140ms cubic-bezier(0.22,1,0.36,1) both', transformOrigin: subOnLeft ? 'right top' : 'left top' }}>
+                          <PopIn duration={140} ease="settle" style={{ minWidth: SUB_W, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5, transformOrigin: subOnLeft ? 'right top' : 'left top' }}>
                             {item.submenu.map((sub, si) => (
                               <button key={si}
                                 onClick={() => { sub.onClick?.(); setContextMenu(null); }}
@@ -994,7 +995,7 @@ export default function BlockEditor({
                                 {sub.active && <Icon name="check" size={15} color="var(--color-primary)" />}
                               </button>
                             ))}
-                          </div>
+                          </PopIn>
                         </div>
                       )}
                     </div>
@@ -1011,7 +1012,7 @@ export default function BlockEditor({
                   </button>
                 );
               })}
-            </div>
+            </PopIn>
           </>,
           document.body
         );

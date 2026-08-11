@@ -21,6 +21,7 @@ import { useEntitySearch } from '../hooks/useEntitySearch';
 import { apiGetCanvases, apiCreateCanvas, apiGetCanvas, apiUpdateCanvas, apiCreateLink, apiGetWorkspaceGraph, apiGetEntityLinks } from '../api/client';
 import type { GraphNode, GraphCanvas, EntityIndexEntry } from '../types';
 import Spinner from '@/components/animate-ui/Spinner';
+import PopIn from '@/components/animate-ui/PopIn';
 
 function ExploreView({ isMobile }: { isMobile: boolean }) {
   const navigate = useNavigate();
@@ -376,7 +377,7 @@ function CanvasView({ isMobile }: { isMobile: boolean }) {
           <Icon name="add" size={14} color="var(--color-white)" /> Add node
         </button>
         {adding && (
-          <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 260, padding: 8, borderRadius: 10, border: '1px solid var(--color-border)', background: 'var(--color-white)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          <PopIn duration={160} ease="spring" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 260, padding: 8, borderRadius: 10, border: '1px solid var(--color-border)', background: 'var(--color-white)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)' }}>
             <input
               autoFocus
               value={addQuery}
@@ -399,9 +400,9 @@ function CanvasView({ isMobile }: { isMobile: boolean }) {
               onHover={setAddActiveIndex}
               onPick={addEntityToCanvas}
               emptyHint="Type to find something to place on this canvas"
-              style={{ position: 'static', width: '100%', boxShadow: 'none', border: 'none', padding: 0, marginTop: 6, animation: 'none' }}
+              style={{ position: 'static', width: '100%', boxShadow: 'none', border: 'none', padding: 0, marginTop: 6 }}
             />
-          </div>
+          </PopIn>
         )}
       </div>
 

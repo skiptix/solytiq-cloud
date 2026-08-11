@@ -24,6 +24,7 @@ import CreatorBubble from '../components/CreatorBubble';
 import NotificationItem from '../components/NotificationItem';
 import GraphMiniMap from '../components/graph/GraphMiniMap';
 import AgentInbox from '../components/AgentInbox';
+import PopIn from '../components/animate-ui/PopIn';
 import useNotificationsStore from '../store/useNotificationsStore';
 import useSyncStore from '../store/useSyncStore';
 import { notificationTarget } from '../utils/notifications';
@@ -318,8 +319,8 @@ function ModeDropdown({ mode, setMode }: { mode: DynamicMode; setMode: (m: Dynam
         <Icon name="unfold_more" size={14} color="var(--color-accent-purple-light)" />
       </button>
       {open && pos && createPortal(
-        <div ref={menuRef}
-          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 500, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', minWidth: 172, padding: '4px 0', animation: 'menuIn 140ms ease both' }}>
+        <PopIn ref={menuRef} duration={140}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 500, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', minWidth: 172, padding: '4px 0' }}>
           {MODE_OPTIONS.map(opt => (
             <button key={opt.key} onClick={() => { setMode(opt.key); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: opt.key === mode ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: opt.key === mode ? 600 : 500, color: opt.key === mode ? 'var(--color-primary)' : 'var(--color-text-primary)', textAlign: 'left' }}
@@ -330,7 +331,7 @@ function ModeDropdown({ mode, setMode }: { mode: DynamicMode; setMode: (m: Dynam
               {opt.key === mode && <Icon name="check" size={14} color="var(--color-primary)" />}
             </button>
           ))}
-        </div>,
+        </PopIn>,
         document.body
       )}
     </>

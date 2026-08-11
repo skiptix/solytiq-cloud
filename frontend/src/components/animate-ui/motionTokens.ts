@@ -4,6 +4,8 @@ import type { Variants } from './motion';
 export const EASE_SPRING: [number, number, number, number] = [0.34, 1.56, 0.64, 1];
 /** Ease-out settle curve — mirrors the app's `backdropIn`/`sectionFadeUp`/`aiSheetIn` CSS keyframes. */
 export const EASE_SETTLE: [number, number, number, number] = [0.22, 1, 0.36, 1];
+/** The CSS `ease` keyword's own curve, spelled out as a bezier — mirrors every `menuIn ...ms ease` CSS call site so migrating off the keyframe changes zero timing/physics. */
+export const EASE_STANDARD: [number, number, number, number] = [0.25, 0.1, 0.25, 1];
 
 /** Durations in seconds (Motion's convention), consolidating the scattered ms values found across the CSS. */
 export const DURATION = {
