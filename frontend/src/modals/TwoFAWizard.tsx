@@ -2,6 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import Icon from '../components/Icon';
 import { api2FASetup, api2FAEnable } from '../api/client';
 import ModalIn from '../components/animate-ui/ModalIn';
+import MotionButton from '../components/animate-ui/MotionButton';
+import MotionIn from '../components/animate-ui/MotionIn';
+import { motion } from '../components/animate-ui/motion';
+import { EASE_SPRING } from '../components/animate-ui/motionTokens';
 
 interface TwoFAWizardProps {
   onClose: () => void;
@@ -124,11 +128,12 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
           <div style={{ padding: '36px 32px 32px', display: 'flex', flexDirection: 'column', gap: 0 }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-              <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-quaternary)', transition: 'background 150ms' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+              <MotionButton onClick={onClose}
+                whileHover={{ background: 'var(--color-surface-tint-2)' }}
+                transition={{ duration: 0.15 }}
+                style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-quaternary)' }}>
                 <Icon name="close" size={18} color="var(--color-text-quaternary)" />
-              </button>
+              </MotionButton>
             </div>
 
             {/* Icon */}
@@ -177,16 +182,17 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
                 <Icon name={passwordVisible ? 'visibility_off' : 'visibility'} size={16} color="var(--color-text-quaternary)" />
               </button>
             </div>
-            <button
+            <MotionButton
               onClick={() => setStep('scan')}
               disabled={!password}
-              style={{ width: '100%', background: password ? 'var(--color-primary)' : 'var(--color-border-strong)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '13px 0', borderRadius: 12, border: 'none', cursor: password ? 'pointer' : 'not-allowed', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-              onMouseEnter={e => { if (password) e.currentTarget.style.background = 'var(--color-purple-mid-10)'; }}
-              onMouseLeave={e => { if (password) e.currentTarget.style.background = 'var(--color-primary)'; }}
+              animate={{ background: password ? 'var(--color-primary)' : 'var(--color-border-strong)' }}
+              whileHover={password ? { background: 'var(--color-purple-mid-10)' } : undefined}
+              transition={{ duration: 0.15 }}
+              style={{ width: '100%', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '13px 0', borderRadius: 12, border: 'none', cursor: password ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
             >
               Get Started
               <Icon name="arrow_forward" size={16} color="var(--color-white)" />
-            </button>
+            </MotionButton>
           </div>
         )}
 
@@ -197,14 +203,18 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
               <div style={{ display: 'flex', gap: 6 }}>
                 {['scan', 'verify'].map((s, i) => (
-                  <div key={s} style={{ width: i === 0 ? 20 : 8, height: 8, borderRadius: 4, background: i === 0 ? 'var(--color-primary)' : 'var(--color-border)', transition: 'all 300ms' }} />
+                  <motion.div key={s}
+                    animate={{ width: i === 0 ? 20 : 8, background: i === 0 ? 'var(--color-primary)' : 'var(--color-border)' }}
+                    transition={{ duration: 0.3 }}
+                    style={{ height: 8, borderRadius: 4 }} />
                 ))}
               </div>
-              <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 150ms' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+              <MotionButton onClick={onClose}
+                whileHover={{ background: 'var(--color-surface-tint-2)' }}
+                transition={{ duration: 0.15 }}
+                style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon name="close" size={18} color="var(--color-text-quaternary)" />
-              </button>
+              </MotionButton>
             </div>
 
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.01em', marginBottom: 6 }}>
@@ -240,28 +250,30 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
                     {secret.match(/.{1,4}/g)?.join(' ')}
                   </div>
                 </div>
-                <button
+                <MotionButton
                   onClick={copySecret}
                   title="Copy setup key"
-                  style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 8, border: 'none', background: copied ? 'rgba(var(--color-success-rgb), 0.1)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 150ms' }}
-                  onMouseEnter={e => { if (!copied) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-                  onMouseLeave={e => { if (!copied) e.currentTarget.style.background = 'transparent'; }}
+                  animate={{ background: copied ? 'rgba(var(--color-success-rgb), 0.1)' : 'transparent' }}
+                  whileHover={!copied ? { background: 'var(--color-surface-tint)' } : undefined}
+                  transition={{ duration: 0.15 }}
+                  style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 8, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
                   <Icon name={copied ? 'check' : 'content_copy'} size={15} color={copied ? 'var(--color-success)' : 'var(--color-text-tertiary)'} />
-                </button>
+                </MotionButton>
               </div>
             )}
 
-            <button
+            <MotionButton
               onClick={() => { setStep('verify'); setTimeout(() => r0.current?.focus(), 80); }}
               disabled={loadingSetup || !qrCode}
-              style={{ width: '100%', background: loadingSetup || !qrCode ? 'var(--color-border-strong)' : 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '13px 0', borderRadius: 12, border: 'none', cursor: loadingSetup || !qrCode ? 'not-allowed' : 'pointer', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-              onMouseEnter={e => { if (!loadingSetup && qrCode) e.currentTarget.style.background = 'var(--color-purple-mid-10)'; }}
-              onMouseLeave={e => { if (!loadingSetup && qrCode) e.currentTarget.style.background = 'var(--color-primary)'; }}
+              animate={{ background: loadingSetup || !qrCode ? 'var(--color-border-strong)' : 'var(--color-primary)' }}
+              whileHover={!loadingSetup && qrCode ? { background: 'var(--color-purple-mid-10)' } : undefined}
+              transition={{ duration: 0.15 }}
+              style={{ width: '100%', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '13px 0', borderRadius: 12, border: 'none', cursor: loadingSetup || !qrCode ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
             >
               I've scanned it
               <Icon name="arrow_forward" size={16} color="var(--color-white)" />
-            </button>
+            </MotionButton>
           </div>
         )}
 
@@ -272,14 +284,18 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
               <div style={{ display: 'flex', gap: 6 }}>
                 {['scan', 'verify'].map((s, i) => (
-                  <div key={s} style={{ width: i === 1 ? 20 : 8, height: 8, borderRadius: 4, background: i === 1 ? 'var(--color-primary)' : 'var(--color-border)', transition: 'all 300ms' }} />
+                  <motion.div key={s}
+                    animate={{ width: i === 1 ? 20 : 8, background: i === 1 ? 'var(--color-primary)' : 'var(--color-border)' }}
+                    transition={{ duration: 0.3 }}
+                    style={{ height: 8, borderRadius: 4 }} />
                 ))}
               </div>
-              <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 150ms' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+              <MotionButton onClick={onClose}
+                whileHover={{ background: 'var(--color-surface-tint-2)' }}
+                transition={{ duration: 0.15 }}
+                style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon name="close" size={18} color="var(--color-text-quaternary)" />
-              </button>
+              </MotionButton>
             </div>
 
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.01em', marginBottom: 6 }}>
@@ -290,9 +306,12 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
             </div>
 
             {/* 6-box OTP */}
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 8, animation: shake ? 'shake 400ms ease-in-out' : undefined }}>
+            <motion.div
+              animate={shake ? { x: [0, -8, 8, -6, 6, -3, 3, 0] } : { x: 0 }}
+              transition={{ duration: 0.4, ease: 'easeInOut' }}
+              style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 8 }}>
               {otp.map((digit, i) => (
-                <input
+                <motion.input
                   key={i}
                   ref={otpRefs[i]}
                   type="text"
@@ -302,17 +321,22 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
                   onChange={e => handleOtpChange(i, e.target.value)}
                   onKeyDown={e => handleOtpKey(i, e)}
                   onPaste={i === 0 ? handleOtpPaste : undefined}
+                  animate={{
+                    background: digit ? 'var(--color-surface-tint)' : 'var(--color-surface-gray)',
+                    borderColor: otpError ? 'var(--color-error-bg)' : digit ? 'var(--color-primary)' : 'var(--color-border-alt)',
+                  }}
+                  transition={{ duration: 0.15 }}
                   style={{
                     width: 46, height: 56, textAlign: 'center',
                     fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700,
-                    color: 'var(--color-text-primary)', background: digit ? 'var(--color-surface-tint)' : 'var(--color-surface-gray)',
-                    border: `2px solid ${otpError ? 'var(--color-error-bg)' : digit ? 'var(--color-primary)' : 'var(--color-border-alt)'}`,
-                    borderRadius: 10, outline: 'none', transition: 'border-color 150ms, background 150ms',
+                    color: 'var(--color-text-primary)',
+                    borderWidth: 2, borderStyle: 'solid',
+                    borderRadius: 10, outline: 'none',
                     caretColor: 'transparent',
                   }}
                 />
               ))}
-            </div>
+            </motion.div>
 
             {otpError && (
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', textAlign: 'center', marginBottom: 16, marginTop: 4 }}>{otpError}</div>
@@ -320,25 +344,26 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
             {!otpError && <div style={{ height: 20, marginBottom: 16 }} />}
 
             <div style={{ display: 'flex', gap: 10 }}>
-              <button
+              <MotionButton
                 onClick={() => { setStep('scan'); setOtp(Array(6).fill('')); setOtpError(''); }}
-                style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)', background: 'var(--color-surface-gray)', border: '1.5px solid var(--color-border-alt)', borderRadius: 12, padding: '12px 0', cursor: 'pointer', transition: 'background 150ms' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-gray)'; }}
+                whileHover={{ background: 'var(--color-surface-tint-2)' }}
+                transition={{ duration: 0.15 }}
+                style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)', background: 'var(--color-surface-gray)', border: '1.5px solid var(--color-border-alt)', borderRadius: 12, padding: '12px 0', cursor: 'pointer' }}
               >
                 ← Back
-              </button>
-              <button
+              </MotionButton>
+              <MotionButton
                 onClick={handleVerify}
                 disabled={verifying || !otpComplete}
-                style={{ flex: 2, background: verifying || !otpComplete ? 'var(--color-border-strong)' : 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 12, border: 'none', cursor: verifying || !otpComplete ? 'not-allowed' : 'pointer', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-                onMouseEnter={e => { if (!verifying && otpComplete) e.currentTarget.style.background = 'var(--color-purple-mid-10)'; }}
-                onMouseLeave={e => { if (!verifying && otpComplete) e.currentTarget.style.background = 'var(--color-primary)'; }}
+                animate={{ background: verifying || !otpComplete ? 'var(--color-border-strong)' : 'var(--color-primary)' }}
+                whileHover={!verifying && otpComplete ? { background: 'var(--color-purple-mid-10)' } : undefined}
+                transition={{ duration: 0.15 }}
+                style={{ flex: 2, color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 12, border: 'none', cursor: verifying || !otpComplete ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
               >
                 {verifying ? 'Activating…' : (
                   <><Icon name="shield_lock" size={15} color="var(--color-white)" />Activate 2FA</>
                 )}
-              </button>
+              </MotionButton>
             </div>
           </div>
         )}
@@ -346,9 +371,13 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
         {/* ── DONE ── */}
         {step === 'done' && (
           <div style={{ padding: '48px 32px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-            <div style={{ width: 68, height: 68, borderRadius: '50%', background: 'rgba(var(--color-success-rgb), 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'scIn 400ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <MotionIn
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.4, ease: EASE_SPRING }}
+              style={{ width: 68, height: 68, borderRadius: '50%', background: 'rgba(var(--color-success-rgb), 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Icon name="check_circle" size={36} color="var(--color-success)" />
-            </div>
+            </MotionIn>
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'center' }}>2FA Enabled!</div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)', textAlign: 'center', lineHeight: 1.5 }}>
               Your account is now protected with two-factor authentication.
