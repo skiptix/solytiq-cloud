@@ -339,11 +339,10 @@ body { font-family: var(--font-body); background: var(--color-page-bg); color: v
 @keyframes fileDropIconFloat { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-5px); } }
 @keyframes filesBtnPulse { 0%, 100% { box-shadow: 0 0 0 0px rgba(var(--color-primary-rgb), 0.25); } 50% { box-shadow: 0 0 0 5px rgba(var(--color-primary-rgb), 0.15); } }
 @keyframes fileUploadDone { 0% { opacity: 0; transform: scale(0.6); } 60% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
-@keyframes pageIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 /* Timeline progress rail: a soft highlight flowing down the filled span signals live, hourly progress. */
 @keyframes railFlow { 0% { background-position: 0 -200%; } 100% { background-position: 0 200%; } }
 @keyframes railTipPulse { 0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.9; } 50% { transform: translateX(-50%) scale(2.1); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .page-transition { animation: none !important; } .timeline-rail-flow, .timeline-rail-tip { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .timeline-rail-flow, .timeline-rail-tip { animation: none !important; } }
 
 /* ─── Net (Graph Layer) view ─────────────────────────────────────────────── */
 /* A slow ambient glow behind the workspace-root dot, so the center of the
