@@ -30,6 +30,7 @@ import type { GraphEdge, GraphNode, MarkdownBlock, ResolvedLink, KnowledgeEntry 
 import type { MentionMember } from '../utils/mention';
 import Spinner from '@/components/animate-ui/Spinner';
 import PopIn from '@/components/animate-ui/PopIn';
+import ModalIn from '@/components/animate-ui/ModalIn';
 
 // A term's bubble grows with how much its definition actually holds — summary,
 // aliases, and written block content — not just its explicit relation degree.
@@ -560,7 +561,7 @@ export default function KnowledgeScreen() {
         </AnimatePresence>
 
         {showSuggestions && suggestions.length > 0 && (
-          <div style={{ position: 'absolute', top: 64, left: 12, width: isMobile ? 'calc(100% - 24px)' : 340, maxHeight: 'calc(100% - 76px)', overflowY: 'auto', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.16)', zIndex: 5, animation: 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          <ModalIn duration={260} style={{ position: 'absolute', top: 64, left: 12, width: isMobile ? 'calc(100% - 24px)' : 340, maxHeight: 'calc(100% - 76px)', overflowY: 'auto', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.16)', zIndex: 5 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
               <Icon name="rate_review" size={16} color="var(--color-primary)" />
               <span style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 700, color: 'var(--color-text-primary)' }}>Suggested terms</span>
@@ -591,14 +592,14 @@ export default function KnowledgeScreen() {
                 </div>
               </div>
             ))}
-          </div>
+          </ModalIn>
         )}
 
         {creating && (
           <div onClick={() => setCreating(false)}
             style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-black-rgb), 0.14)', backdropFilter: 'blur(3px)', zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}>
-            <div onClick={e => e.stopPropagation()}
-              style={{ background: 'var(--color-white)', borderRadius: 14, padding: 20, width: '100%', maxWidth: 380, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <ModalIn duration={280} onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--color-white)', borderRadius: 14, padding: 20, width: '100%', maxWidth: 380, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)' }}>
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15.5, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>Add a term</div>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 12 }}>
                 What does this workspace call it? You can add the definition next.
@@ -617,7 +618,7 @@ export default function KnowledgeScreen() {
                 <button onClick={() => void handleCreate()} disabled={!newTerm.trim()}
                   style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: newTerm.trim() ? 'var(--color-primary)' : 'var(--color-border-strong)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: newTerm.trim() ? 'pointer' : 'not-allowed' }}>Add</button>
               </div>
-            </div>
+            </ModalIn>
           </div>
         )}
       </div>

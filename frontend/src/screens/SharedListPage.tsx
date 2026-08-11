@@ -10,6 +10,7 @@ import {
 } from '../components/SharedListViews';
 import { verifySharePassword, ShareSessionError } from '../utils/shareSession';
 import Spinner from '@/components/animate-ui/Spinner';
+import ModalIn from '@/components/animate-ui/ModalIn';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -310,7 +311,7 @@ function ItemPreview({ task, accent, onClose }: { task: SharedTask; accent: stri
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', animation: 'backdropIn 200ms ease both' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 560, maxHeight: '88vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(var(--color-black-rgb), 0.22)', animation: 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+      <ModalIn duration={260} onClick={e => e.stopPropagation()} style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 560, maxHeight: '88vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(var(--color-black-rgb), 0.22)' }}>
         <div style={{ height: 3, background: accent, flexShrink: 0 }} />
         <div style={{ overflowY: 'auto', padding: '24px 28px 28px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: hasProps || task.note ? 22 : 0 }}>
@@ -337,7 +338,7 @@ function ItemPreview({ task, accent, onClose }: { task: SharedTask; accent: stri
             </div>
           )}
         </div>
-      </div>
+      </ModalIn>
     </div>
   );
 }

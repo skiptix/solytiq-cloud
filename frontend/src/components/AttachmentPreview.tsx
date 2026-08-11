@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import Icon from './Icon';
 import MarkdownView from './MarkdownView';
 import { previewKind, extOf } from '../utils/attachmentPreview';
+import ModalIn from './animate-ui/ModalIn';
 import Spinner from '@/components/animate-ui/Spinner';
 
 // ── Attachment preview ────────────────────────────────────────────────────
@@ -126,7 +127,7 @@ export default function AttachmentPreviewModal({ name, mimeType, fetchBlob, onDo
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.5)', backdropFilter: 'blur(4px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 860, maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 8px 40px rgba(var(--color-black-rgb), 0.28)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 860, maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 8px 40px rgba(var(--color-black-rgb), 0.28)' }}
         onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 14px 20px', borderBottom: '1px solid var(--color-purple-pale-23)', flexShrink: 0 }}>
@@ -147,7 +148,7 @@ export default function AttachmentPreviewModal({ name, mimeType, fetchBlob, onDo
         <div style={{ padding: 16, overflowY: 'auto', background: kind === 'image' || kind === 'pdf' || kind === 'video' ? 'var(--color-purple-pale-17)' : 'var(--color-white)' }}>
           {body}
         </div>
-      </div>
+      </ModalIn>
     </div>,
     document.body
   );

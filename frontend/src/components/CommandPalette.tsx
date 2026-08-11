@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import useAuthStore from '../store/useAuthStore';
+import ModalIn from './animate-ui/ModalIn';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import { apiGlobalSearch, apiKnowledgeSearch, type GlobalSearchResult } from '../api/client';
 
@@ -153,9 +154,10 @@ export default function CommandPalette({ onClose, onNavigate, onOpenAccountSetti
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 1500, background: 'rgba(var(--color-black-rgb), 0.32)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'clamp(12px, 5vw, 24px)', animation: 'backdropIn 180ms ease both' }}
     >
-      <div
+      <ModalIn
+        duration={220}
         onMouseDown={e => e.stopPropagation()}
-        style={{ width: 'min(600px, 100%)', maxHeight: '68vh', background: 'var(--color-white)', borderRadius: 18, boxShadow: '0 24px 60px rgba(var(--color-black-rgb), 0.25)', display: 'flex', flexDirection: 'column', overflow: 'hidden', animation: 'modalIn 220ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+        style={{ width: 'min(600px, 100%)', maxHeight: '68vh', background: 'var(--color-white)', borderRadius: 18, boxShadow: '0 24px 60px rgba(var(--color-black-rgb), 0.25)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
       >
         {/* Input row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--color-divider)', flexShrink: 0 }}>
@@ -235,7 +237,7 @@ export default function CommandPalette({ onClose, onNavigate, onOpenAccountSetti
             </div>
           ))}
         </div>
-      </div>
+      </ModalIn>
     </div>,
     document.body
   );

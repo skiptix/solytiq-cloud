@@ -17,6 +17,7 @@ import SaveStatusDot from '../components/SaveStatusDot';
 import BacklinksPanel from '../components/graph/BacklinksPanel';
 import AutomationsButton from '../components/AutomationsButton';
 import PopIn from '../components/animate-ui/PopIn';
+import ModalIn from '../components/animate-ui/ModalIn';
 import { motion } from '../components/animate-ui/motion';
 import { EASE_STANDARD } from '../components/animate-ui/motionTokens';
 
@@ -343,7 +344,7 @@ export default function MarkdownListScreen() {
 
       {showDeleteDialog && createPortal(
         <div onClick={() => setShowDeleteDialog(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--color-white)', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          <ModalIn duration={280} onClick={e => e.stopPropagation()} style={{ background: 'var(--color-white)', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)' }}>
             <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
               <Icon name="delete" size={20} color="var(--color-error)" />
             </div>
@@ -355,7 +356,7 @@ export default function MarkdownListScreen() {
               <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
               <button onClick={handleDelete} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
             </div>
-          </div>
+          </ModalIn>
         </div>,
         document.body
       )}

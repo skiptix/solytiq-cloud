@@ -12,6 +12,7 @@ import UseTemplateModal from '../modals/UseTemplateModal';
 import EditTemplateStructureModal from '../modals/EditTemplateStructureModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import PopIn from '../components/animate-ui/PopIn';
+import ModalIn from '../components/animate-ui/ModalIn';
 
 type Filter = 'all' | 'list' | 'timeline';
 
@@ -280,7 +281,7 @@ export default function TemplatesScreen() {
       {renameTarget && createPortal(
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
           onClick={(e) => { if (e.target === e.currentTarget) setRenameTarget(null); }}>
-          <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 400, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', padding: 24, animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 400, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', padding: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               <div style={{ width: 38, height: 38, borderRadius: 10, background: renameTarget.colorBg ?? 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 17 }}>
                 {renameTarget.emoji ?? (renameTarget.type === 'list' ? '📋' : '🗓️')}
@@ -312,7 +313,7 @@ export default function TemplatesScreen() {
                 Save
               </button>
             </div>
-          </div>
+          </ModalIn>
         </div>,
         document.body
       )}

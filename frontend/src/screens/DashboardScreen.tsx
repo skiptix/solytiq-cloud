@@ -25,6 +25,7 @@ import NotificationItem from '../components/NotificationItem';
 import GraphMiniMap from '../components/graph/GraphMiniMap';
 import AgentInbox from '../components/AgentInbox';
 import PopIn from '../components/animate-ui/PopIn';
+import ModalIn from '../components/animate-ui/ModalIn';
 import useNotificationsStore from '../store/useNotificationsStore';
 import useSyncStore from '../store/useSyncStore';
 import { notificationTarget } from '../utils/notifications';
@@ -205,7 +206,7 @@ function AllTasksDialog({ tasks, resolve, wsById, todayIso, onClose, onToggle, o
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 640, maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+      <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 640, maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 20px', borderBottom: '1px solid var(--color-surface-tint-2)', flexShrink: 0 }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon name="checklist" size={18} color="var(--color-primary)" />
@@ -239,7 +240,7 @@ function AllTasksDialog({ tasks, resolve, wsById, todayIso, onClose, onToggle, o
             </div>
           )}
         </div>
-      </div>
+      </ModalIn>
     </div>,
     document.body
   );

@@ -11,6 +11,7 @@ import { markdownToPlainText } from './MarkdownView';
 import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
 import RenameDialog from './RenameDialog';
 import MoveTaskModal from '../modals/MoveTaskModal';
+import ModalIn from './animate-ui/ModalIn';
 
 const BADGE_COLORS: Record<string, { bg: string; color: string }> = {
   Work:     { bg: 'var(--color-yellow-tint-3)', color: 'var(--color-yellow-deep-1)' },
@@ -69,7 +70,7 @@ export function EditModal({ task = {}, mode = 'edit', onSave, onClose, available
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
       onClick={onClose}>
-      <div style={{ background: 'var(--color-white)', borderRadius: 14, width: '100%', maxWidth: 440, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 14, width: '100%', maxWidth: 440, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 16px', borderBottom: '1px solid var(--color-surface-tint)' }}>
           <span style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>{isCreate ? 'New Task' : 'Edit Task'}</span>
@@ -159,7 +160,7 @@ export function EditModal({ task = {}, mode = 'edit', onSave, onClose, available
             {isCreate ? 'Add Task' : 'Save Changes'}
           </button>
         </div>
-      </div>
+      </ModalIn>
     </div>
   );
 }
@@ -182,7 +183,7 @@ export function DeleteConfirmModal({ task, name, heading, description, onConfirm
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
       onClick={onCancel}>
-      <div style={{ background: 'var(--color-white)', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
           <Icon name="delete" size={20} color="var(--color-error)" />
@@ -195,7 +196,7 @@ export function DeleteConfirmModal({ task, name, heading, description, onConfirm
           <button onClick={onCancel} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
           <button autoFocus onClick={onConfirm} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
         </div>
-      </div>
+      </ModalIn>
     </div>
   );
 }

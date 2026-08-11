@@ -23,6 +23,7 @@ import MarkdownView from '../components/MarkdownView';
 import Icon from '../components/Icon';
 import ContextMenu, { type ContextMenuEntry } from '../components/ContextMenu';
 import PopIn from '../components/animate-ui/PopIn';
+import ModalIn from '../components/animate-ui/ModalIn';
 import { useMobile } from '../hooks/useBreakpoint';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -317,7 +318,7 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
     // click (not a portaled descendant's) closes the modal.
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 480, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 480, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)' }}
         onClick={e => e.stopPropagation()}>
         {/* Accent stripe + header */}
         <div style={{ height: 5, background: color, flexShrink: 0 }} />
@@ -474,7 +475,7 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
         {showDelete && initial && onDelete && (
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-black-rgb), 0.25)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 160ms ease both' }}
             onClick={() => setShowDelete(false)}>
-            <div style={{ background: 'var(--color-white)', borderRadius: 14, padding: '22px 24px', maxWidth: 340, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+            <ModalIn duration={240} style={{ background: 'var(--color-white)', borderRadius: 14, padding: '22px 24px', maxWidth: 340, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.18)' }}
               onClick={e => e.stopPropagation()}>
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 6 }}>Delete this meeting?</div>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: isRecurringSeries ? 12 : 18 }}>This can't be undone.</div>
@@ -498,10 +499,10 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
                 <button onClick={() => setShowDelete(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Cancel</button>
                 <button onClick={() => { onDelete(initial.id, { series: deleteWholeSeries }); }} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Delete</button>
               </div>
-            </div>
+            </ModalIn>
           </div>
         )}
-      </div>
+      </ModalIn>
 
       {/* Date/Time/Repeat popovers — portaled to <body> so position:fixed is
           relative to the viewport, not this modal's scrollable body. */}
@@ -710,7 +711,7 @@ function MeetingViewModal({ meeting, onClose, onLeave }: { meeting: Meeting; onC
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 440, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', position: 'relative' }}
+      <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 440, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)', position: 'relative' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ height: 5, background: color, flexShrink: 0 }} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 12px', flexShrink: 0 }}>
@@ -798,7 +799,7 @@ function MeetingViewModal({ meeting, onClose, onLeave }: { meeting: Meeting; onC
         {confirmLeave && (
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-black-rgb), 0.25)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 160ms ease both' }}
             onClick={() => setConfirmLeave(false)}>
-            <div style={{ background: 'var(--color-white)', borderRadius: 14, padding: '22px 24px', maxWidth: 320, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+            <ModalIn duration={240} style={{ background: 'var(--color-white)', borderRadius: 14, padding: '22px 24px', maxWidth: 320, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.18)' }}
               onClick={e => e.stopPropagation()}>
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 6 }}>Remove this meeting?</div>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: 18 }}>It'll disappear from your calendar. {organizer ? (organizer.fullName || organizer.username) : 'The organizer'} keeps it on theirs.</div>
@@ -806,10 +807,10 @@ function MeetingViewModal({ meeting, onClose, onLeave }: { meeting: Meeting; onC
                 <button onClick={() => setConfirmLeave(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Cancel</button>
                 <button onClick={onLeave} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Remove</button>
               </div>
-            </div>
+            </ModalIn>
           </div>
         )}
-      </div>
+      </ModalIn>
     </div>,
     document.body
   );
@@ -838,7 +839,7 @@ function DayAddChooser({ date, onTask, onMeeting, onClose }: { date: string; onT
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
       onClick={onClose}>
-      <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 380, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 380, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px 8px' }}>
           <div>
@@ -853,7 +854,7 @@ function DayAddChooser({ date, onTask, onMeeting, onClose }: { date: string; onT
           {opt('task_alt', 'Task', 'A to-do with a deadline', onTask)}
           {opt('event', 'Meeting', 'A standalone calendar event', onMeeting)}
         </div>
-      </div>
+      </ModalIn>
     </div>,
     document.body
   );
@@ -888,7 +889,7 @@ function AddToDateModal({ date, lists, onAdd, onClose }: AddToDateModalProps) {
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={onClose}>
-      <div style={{ background: 'var(--color-white)', borderRadius: 14, width: '100%', maxWidth: 420, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 14, width: '100%', maxWidth: 420, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px 14px', borderBottom: '1px solid var(--color-surface-tint)' }}>
           <div>
@@ -940,7 +941,7 @@ function AddToDateModal({ date, lists, onAdd, onClose }: AddToDateModalProps) {
             Add Task
           </button>
         </div>
-      </div>
+      </ModalIn>
     </div>,
     document.body
   );
@@ -1009,7 +1010,7 @@ function DayItemsModal({ date, chips, onClose, onOpenMenu }: { date: string; chi
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
       onClick={onClose}>
-      <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 380, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 380, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px 12px', flexShrink: 0 }}>
           <div>
@@ -1025,7 +1026,7 @@ function DayItemsModal({ date, chips, onClose, onOpenMenu }: { date: string; chi
             <ChipCard key={c.key} chip={{ ...c, onClick: () => { onClose(); c.onClick(); } }} onOpenMenu={onOpenMenu} />
           ))}
         </div>
-      </div>
+      </ModalIn>
     </div>,
     document.body
   );

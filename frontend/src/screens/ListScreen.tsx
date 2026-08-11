@@ -1,7 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from '@/components/animate-ui/motion';
-import { listItemVariants, LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
+import { listItemVariants, LAYOUT_TRANSITION, EASE_SPRING } from '@/components/animate-ui/motionTokens';
 import { useMobile } from '../hooks/useBreakpoint';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -519,7 +519,17 @@ export default function ListScreen() {
                   <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
                 </button>
               )}
-              {section.emoji && editingSection?.id !== section.id && <span key={section.emoji} style={{ fontSize: 14, animation: 'modalIn 200ms cubic-bezier(0.34,1.56,0.64,1) both' }}>{section.emoji}</span>}
+              {section.emoji && editingSection?.id !== section.id && (
+                <motion.span
+                  key={section.emoji}
+                  initial={{ opacity: 0, scale: 0.94 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.2, ease: EASE_SPRING }}
+                  style={{ fontSize: 14 }}
+                >
+                  {section.emoji}
+                </motion.span>
+              )}
 
               {editingSection?.id === section.id ? (
                 /* Inline edit — label + emoji */

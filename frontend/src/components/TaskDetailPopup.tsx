@@ -3,6 +3,7 @@ import type { Task } from '../types';
 import Icon from './Icon';
 import CreatorBubble from './CreatorBubble';
 import MarkdownView from './MarkdownView';
+import ModalIn from './animate-ui/ModalIn';
 import useMembersStore from '../store/useMembersStore';
 
 const PRIORITY_COLORS: Record<string, string> = { High: 'var(--color-orange)', Medium: 'var(--color-warning-alt)', Low: 'var(--color-text-tertiary)' };
@@ -56,8 +57,8 @@ export default function TaskDetailPopup({ task, anchor, onEdit, onGoToList, onCl
   return (
     <>
       <div style={{ position: 'fixed', inset: 0, zIndex: 1099 }} onClick={onClose} />
-      <div ref={popupRef}
-        style={{ position: 'fixed', ...pos, zIndex: 1100, width: 320, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', overflow: 'hidden', animation: 'modalIn 200ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+      <ModalIn ref={popupRef} duration={200}
+        style={{ position: 'fixed', ...pos, zIndex: 1100, width: 320, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', overflow: 'hidden' }}>
         <div style={{ height: 4, background: stripeColor }} />
         <div style={{ padding: '14px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
@@ -120,7 +121,7 @@ export default function TaskDetailPopup({ task, anchor, onEdit, onGoToList, onCl
             )}
           </div>
         </div>
-      </div>
+      </ModalIn>
     </>
   );
 }

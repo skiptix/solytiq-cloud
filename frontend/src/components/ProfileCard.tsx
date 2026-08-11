@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import PopIn from './animate-ui/PopIn';
+import ModalIn from './animate-ui/ModalIn';
 import useAuthStore from '../store/useAuthStore';
 import useAccountsStore from '../store/useAccountsStore';
 import { apiUpdateProfile, apiUploadProfileImage } from '../api/client';
@@ -469,8 +470,9 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
           style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 200ms ease both' }}
           onClick={e => { if (e.target === e.currentTarget) closeUploadWizard(); }}
         >
-          <div
-            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 440, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+          <ModalIn
+            duration={280}
+            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 440, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 0' }}>
@@ -574,7 +576,7 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
                 </>
               )}
             </div>
-          </div>
+          </ModalIn>
         </div>
       )}
     </>

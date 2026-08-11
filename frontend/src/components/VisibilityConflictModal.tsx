@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
 import type { VisibilityConflict } from '../api/client';
 import Icon from './Icon';
+import ModalIn from './animate-ui/ModalIn';
 
 interface VisibilityConflictModalProps {
   conflict: VisibilityConflict;
@@ -62,9 +63,10 @@ export default function VisibilityConflictModal({ conflict, busy, onConfirm, onC
     <div
       onClick={onCancel}
       style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(4px)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 200ms ease both' }}>
-      <div
+      <ModalIn
+        duration={280}
         onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--color-white)', borderRadius: 18, maxWidth: 420, width: '100%', maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+        style={{ background: 'var(--color-white)', borderRadius: 18, maxWidth: 420, width: '100%', maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)', overflow: 'hidden' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 22px 16px' }}>
@@ -112,7 +114,7 @@ export default function VisibilityConflictModal({ conflict, busy, onConfirm, onC
             </button>
           )}
         </div>
-      </div>
+      </ModalIn>
     </div>,
     document.body,
   );

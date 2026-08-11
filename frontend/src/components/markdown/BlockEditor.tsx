@@ -21,6 +21,7 @@ import { createPortal, flushSync } from 'react-dom';
 import { motion } from '@/components/animate-ui/motion';
 import { LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
 import PopIn from '@/components/animate-ui/PopIn';
+import ModalIn from '@/components/animate-ui/ModalIn';
 import type {
   MarkdownBlock, MarkdownBlockType, MarkdownTodoBlock, MarkdownImageBlock, MarkdownLinkBlock,
   MarkdownHeadingBlock, MarkdownDividerBlock,
@@ -103,7 +104,7 @@ function ImageUploadModal({ uploadImage, isMobile, onUploaded, onClose }: ImageU
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={e => { if (e.target === e.currentTarget && !uploading) onClose(); }}>
-      <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: isMobile ? '100%' : 440, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+      <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: isMobile ? '100%' : 440, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
           <span style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>Add image</span>
@@ -141,7 +142,7 @@ function ImageUploadModal({ uploadImage, isMobile, onUploaded, onClose }: ImageU
           </div>
           {error && <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--color-error-bg)', borderRadius: 8, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>{error}</div>}
         </div>
-      </div>
+      </ModalIn>
     </div>,
     document.body
   );

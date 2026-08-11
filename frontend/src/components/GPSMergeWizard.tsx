@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { GpsFile, GapMode } from '../types';
 import { apiUploadGpsFile, apiMergeGpsFilesDownload, apiMergeGpsFilesSave } from '../api/client';
 import Icon from './Icon';
+import ModalIn from './animate-ui/ModalIn';
 
 function fmtDist(m?: number | null) {
   if (m == null) return null;
@@ -135,12 +136,12 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
       onClick={onClose}
       style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
-      <div
+      <ModalIn
+        duration={260}
         onClick={e => e.stopPropagation()}
         style={{
           background: 'var(--color-white)', borderRadius: 18, width: 560, maxWidth: '95vw', maxHeight: '90vh',
           display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(var(--color-black-rgb), 0.18)',
-          animation: 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both',
           overflow: 'hidden',
         }}
       >
@@ -528,7 +529,7 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
             )}
           </div>
         </div>
-      </div>
+      </ModalIn>
     </div>,
     document.body
   );
