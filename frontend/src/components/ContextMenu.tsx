@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icon';
 import PopIn from './animate-ui/PopIn';
+import MotionButton from './animate-ui/MotionButton';
+import { EASE_STANDARD } from './animate-ui/motionTokens';
 
 export interface ContextMenuItem {
   key: string;
@@ -78,24 +80,25 @@ export default function ContextMenu({ x, y, items, onClose, minWidth = 190 }: Co
         'divider' in item ? (
           <div key={item.key} style={{ height: 1, background: 'var(--color-divider)', margin: '3px 0' }} />
         ) : (
-          <button
+          <MotionButton
             key={item.key}
             disabled={item.disabled}
             onClick={() => { if (!item.disabled) { item.onClick(); onClose(); } }}
+            initial={{ opacity: 0, x: 6 }}
+            animate={{ opacity: item.disabled ? 0.6 : 1, x: 0 }}
+            transition={{ duration: 0.16, ease: EASE_STANDARD, delay: i * 0.02 }}
+            whileHover={!item.disabled ? { background: item.danger ? 'var(--color-red-pale-5)' : 'var(--color-surface-tint)' } : undefined}
             style={{
               display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px',
               border: 'none', background: 'transparent', cursor: item.disabled ? 'default' : 'pointer',
               fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500,
               color: item.disabled ? 'var(--color-border-strong)' : (item.danger ? 'var(--color-error)' : 'var(--color-text-primary)'),
-              textAlign: 'left', opacity: item.disabled ? 0.6 : 1,
-              animation: 'menuItemIn 160ms ease both', animationDelay: `${i * 20}ms`,
+              textAlign: 'left',
             }}
-            onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.background = item.danger ? 'var(--color-red-pale-5)' : 'var(--color-surface-tint)'; }}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
           >
             <Icon name={item.icon} size={15} color={item.disabled ? 'var(--color-border-strong)' : (item.danger ? 'var(--color-error)' : 'var(--color-text-tertiary)')} />
             {item.label}
-          </button>
+          </MotionButton>
         )
       )}
     </PopIn>,

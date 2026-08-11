@@ -11,6 +11,9 @@ const CommandPalette = lazy(() => import('./CommandPalette'));
 import RouteFallback from './RouteFallback';
 import NotificationBell from './NotificationBell';
 import { SHORTCUT_DEFS, bindingFor, formatCombo } from '../shortcuts/registry';
+import MotionButton from './animate-ui/MotionButton';
+import MotionIn from './animate-ui/MotionIn';
+import { EASE_SPRING } from './animate-ui/motionTokens';
 
 const focusSearchDef = SHORTCUT_DEFS.find(d => d.id === 'focus-search')!;
 
@@ -117,44 +120,44 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
             <Icon name="search" size={20} color="var(--color-text-tertiary)" />
           </button>
         ) : (
-          <button
+          <MotionButton
             onClick={() => setPaletteOpen(true)}
-            style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', width: 'min(308px, 28vw)', display: 'flex', alignItems: 'center', gap: 10, background: 'var(--color-purple-pale-11)', borderRadius: 9999, border: '1.5px solid transparent', padding: '8px 14px', cursor: 'pointer', transition: 'all 200ms', textAlign: 'left' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-purple-pale-38)'; e.currentTarget.style.background = 'var(--color-white)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'var(--color-purple-pale-11)'; }}
+            style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', width: 'min(308px, 28vw)', display: 'flex', alignItems: 'center', gap: 10, background: 'var(--color-purple-pale-11)', borderRadius: 9999, border: '1.5px solid transparent', padding: '8px 14px', cursor: 'pointer', textAlign: 'left' }}
+            whileHover={{ borderColor: 'var(--color-purple-pale-38)', background: 'var(--color-white)' }}
+            transition={{ duration: 0.2 }}
           >
             <Icon name="search" size={16} color="var(--color-text-tertiary)" />
             <span style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-purple-mid-6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Search tasks, lists…</span>
             <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 6, padding: '2px 6px', flexShrink: 0 }}>{searchShortcutHint}</span>
-          </button>
+          </MotionButton>
         )}
 
         {/* Right controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 10, marginLeft: 'auto' }}>
           {/* Admin settings button — admins only, desktop only */}
           {isAdmin && !isMobile && (
-            <button
+            <MotionButton
               onClick={() => onNavigate('/settings')}
               title="Admin Settings"
-              style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-soft)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+              style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              whileHover={{ background: 'var(--color-surface-tint)', borderColor: 'var(--color-accent-purple-soft)' }}
+              transition={{ duration: 0.15 }}
             >
               <Icon name="admin_panel_settings" size={17} color="var(--color-text-tertiary)" />
-            </button>
+            </MotionButton>
           )}
 
           {/* GPS Routes button — desktop only, hidden until an admin installs the app */}
           {!isMobile && gpsInstalled && (
-            <button
+            <MotionButton
               onClick={() => onNavigate('/gps')}
               title="GPS Routes"
-              style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-soft)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+              style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: '1px solid var(--color-border)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              whileHover={{ background: 'var(--color-surface-tint)', borderColor: 'var(--color-accent-purple-soft)' }}
+              transition={{ duration: 0.15 }}
             >
               <Icon name="route" size={17} color="var(--color-text-tertiary)" />
-            </button>
+            </MotionButton>
           )}
 
           {/* Files button + drag-to-upload — desktop only, hidden until an admin installs the app */}
@@ -168,30 +171,43 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
             onDragOver={e => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }}
             onDrop={handleFileAreaDrop}
           >
-            <button
+            <MotionButton
               onClick={() => onNavigate('/files')}
               title="Files"
               style={{
                 width: 32, height: 32, borderRadius: '50%', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 200ms',
-                background: fileDropHover ? 'var(--color-surface-tint-4)' : (fileDragActive ? 'var(--color-surface-tint)' : 'transparent'),
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
                 border: fileDropHover ? '1.5px solid var(--color-primary)' : (fileDragActive ? '1px solid var(--color-accent-purple-soft)' : '1px solid var(--color-border)'),
-                boxShadow: fileDropHover ? '0 0 0 3px rgba(var(--color-primary-rgb), 0.18)' : 'none',
-                animation: fileDragActive && !fileDropHover ? 'filesBtnPulse 1.4s ease infinite' : undefined,
               }}
-              onMouseEnter={e => { if (!fileDragActive) { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-soft)'; } }}
-              onMouseLeave={e => { if (!fileDragActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-border)'; } }}
+              animate={
+                fileDropHover
+                  ? { background: 'var(--color-surface-tint-4)', boxShadow: '0 0 0 3px rgba(var(--color-primary-rgb), 0.18)' }
+                  : fileDragActive
+                    ? { background: 'var(--color-surface-tint)', boxShadow: ['0 0 0 0px rgba(var(--color-primary-rgb), 0.25)', '0 0 0 5px rgba(var(--color-primary-rgb), 0.15)', '0 0 0 0px rgba(var(--color-primary-rgb), 0.25)'] }
+                    : { background: 'transparent', boxShadow: '0 0 0 0px rgba(var(--color-primary-rgb), 0)' }
+              }
+              transition={fileDragActive && !fileDropHover ? { duration: 1.4, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.2 }}
+              whileHover={!fileDragActive ? { background: 'var(--color-surface-tint)', borderColor: 'var(--color-accent-purple-soft)' } : undefined}
             >
               <Icon name="folder_shared" size={17} color={fileDropHover || fileDragActive ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
-            </button>
+            </MotionButton>
 
             {fileDropHover && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: 220, background: 'var(--color-white)', borderRadius: 14, boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.18)', border: '1.5px solid var(--color-accent-purple-soft)', zIndex: 400, animation: 'fileDropPanelIn 220ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+              <MotionIn
+                initial={{ opacity: 0, scale: 0.9, y: -6 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.22, ease: EASE_SPRING }}
+                style={{ position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: 220, background: 'var(--color-white)', borderRadius: 14, boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.18)', border: '1.5px solid var(--color-accent-purple-soft)', zIndex: 400, transformOrigin: 'top right', overflow: 'hidden' }}
+              >
                 {fileUploadProgress === null ? (
                   <div style={{ padding: '18px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 46, height: 46, borderRadius: 13, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fileDropIconFloat 1.6s ease infinite' }}>
+                    <MotionIn
+                      animate={{ y: [0, -5, 0] }}
+                      transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+                      style={{ width: 46, height: 46, borderRadius: 13, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
                       <Icon name="cloud_upload" size={24} color="var(--color-primary)" />
-                    </div>
+                    </MotionIn>
                     <div>
                       <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'center' }}>Drop to upload</div>
                       <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-purple-mid-6)', textAlign: 'center', marginTop: 3 }}>Adds file to your Files</div>
@@ -199,16 +215,21 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
                   </div>
                 ) : fileUploadDone ? (
                   <div style={{ padding: '18px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 46, height: 46, borderRadius: 13, background: 'var(--color-green-pale-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fileUploadDone 380ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                    <MotionIn
+                      initial={{ opacity: 0, scale: 0.6 }}
+                      animate={{ opacity: [0, 1, 1], scale: [0.6, 1.15, 1] }}
+                      transition={{ duration: 0.38, times: [0, 0.6, 1], ease: EASE_SPRING }}
+                      style={{ width: 46, height: 46, borderRadius: 13, background: 'var(--color-green-pale-4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
                       <Icon name="check" size={22} color="var(--color-green-deep-1)" />
-                    </div>
+                    </MotionIn>
                     <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>Uploaded!</div>
                   </div>
                 ) : (
                   <div style={{ padding: '16px' }}>
                     <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 8 }}>Uploading…</div>
                     <div style={{ height: 5, borderRadius: 9999, background: 'var(--color-divider)', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${fileUploadProgress}%`, background: 'linear-gradient(90deg, var(--color-accent-purple-light), var(--color-primary))', borderRadius: 9999, transition: 'width 150ms ease' }} />
+                      <MotionIn animate={{ width: `${fileUploadProgress}%` }} transition={{ duration: 0.15, ease: 'easeOut' }} style={{ height: '100%', background: 'linear-gradient(90deg, var(--color-accent-purple-light), var(--color-primary))', borderRadius: 9999 }} />
                     </div>
                     <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-purple-mid-6)', marginTop: 5, textAlign: 'right' }}>{fileUploadProgress}%</div>
                   </div>
@@ -224,20 +245,20 @@ export default function TopBar({ onNavigate, isMobile, onOpenDrawer }: TopBarPro
                     </button>
                   </div>
                 )}
-              </div>
+              </MotionIn>
             )}
           </div>}
 
           {/* Calendar button — left of the notification bell; highlighted while on /calendar */}
-          <button
+          <MotionButton
             onClick={() => onNavigate('/calendar')}
             title="Calendar"
-            style={{ width: isMobile ? 40 : 32, height: isMobile ? 40 : 32, borderRadius: '50%', background: isCalendarActive ? 'var(--color-surface-tint)' : 'transparent', border: isMobile ? 'none' : `1px solid ${isCalendarActive ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', flexShrink: 0 }}
-            onMouseEnter={e => { if (!isCalendarActive && !isMobile) { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-soft)'; } }}
-            onMouseLeave={e => { if (!isCalendarActive && !isMobile) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-border)'; } }}
+            style={{ width: isMobile ? 40 : 32, height: isMobile ? 40 : 32, borderRadius: '50%', background: isCalendarActive ? 'var(--color-surface-tint)' : 'transparent', border: isMobile ? 'none' : `1px solid ${isCalendarActive ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+            whileHover={!isCalendarActive && !isMobile ? { background: 'var(--color-surface-tint)', borderColor: 'var(--color-accent-purple-soft)' } : undefined}
+            transition={{ duration: 0.15 }}
           >
             <Icon name="calendar_month" size={isMobile ? 20 : 17} color={isCalendarActive ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
-          </button>
+          </MotionButton>
 
           {/* Notification bell */}
           <NotificationBell isMobile={isMobile} onNavigate={onNavigate} />

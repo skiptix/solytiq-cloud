@@ -35,6 +35,7 @@ import KeyboardShortcuts from './components/KeyboardShortcuts';
 import RouteFallback from './components/RouteFallback';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import PopIn from './components/animate-ui/PopIn';
+import PageIn from './components/animate-ui/PageIn';
 
 // Sprint 03, Phase 2 — "Alle Route-Screens ... lazy laden": every screen
 // mounted by a <Route> below is its own chunk, fetched on first navigation
@@ -509,17 +510,18 @@ function AppLayout() {
           onOpenDrawer={() => setDrawerOpen(true)}
         />
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', position: 'relative' }}>
-          {/* Keying by pathname re-mounts the screen on navigation, replaying the
-              `pageIn` animation for a smooth transition between pages/items. */}
-          <main
+          {/* Keying by pathname re-mounts the screen on navigation, replaying
+              PageIn's entrance for a smooth transition between pages/items. */}
+          <PageIn
             id="main-content"
             key={location.pathname}
             className="page-transition"
+            duration={300}
             // -1 so the skip link's focus() call above lands here even
             // though a plain <main> isn't natively focusable, without adding
             // it to the normal Tab order.
             tabIndex={-1}
-            style={{ flex: 1, display: 'flex', minWidth: 0, animation: 'pageIn 300ms cubic-bezier(0.22,1,0.36,1) both', outline: 'none' }}
+            style={{ flex: 1, display: 'flex', minWidth: 0, outline: 'none' }}
           >
             <RouteErrorBoundary label="This page">
               <Suspense fallback={<RouteFallback />}>
@@ -542,7 +544,7 @@ function AppLayout() {
                 </Routes>
               </Suspense>
             </RouteErrorBoundary>
-          </main>
+          </PageIn>
         </div>
       </div>
 

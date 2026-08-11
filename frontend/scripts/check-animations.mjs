@@ -69,6 +69,29 @@ function walk(dir, out = []) {
 
 const files = walk(srcDir);
 
+// Comments are prose, not code — a doc comment that *mentions* `transition:`
+// or `strokeDashoffset` while explaining a migration (e.g. "mirrors the
+// `transition: 'stroke-dashoffset 300ms ease'` it replaces") is not itself
+// a violation, but the patterns below are plain substring/regex scans with
+// no syntax awareness, so it would be flagged as one. Blank out comment
+// text before scanning, replacing every stripped character with a space
+// (never removing bytes) so every match's line/column stays accurate.
+//   - `/* ... */` block comments: always safe to strip in full — nothing
+//     inside one is live code, in .ts/.tsx or .css.
+//   - `//` line comments: only stripped when the ENTIRE line is a comment
+//     (optional leading whitespace then `//`). A trailing `// comment`
+//     after real code is deliberately left alone, since telling it apart
+//     from a `//` inside a string literal (e.g. a `https://` URL) would
+//     need a real tokenizer — every false positive actually seen so far
+//     has come from a full-line doc comment, so this narrower, safe rule
+//     covers the real case without risking a false negative on code that
+//     happens to follow a URL on the same line.
+function stripComments(content) {
+  let stripped = content.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
+  stripped = stripped.replace(/^[ \t]*\/\/.*$/gm, (m) => ' '.repeat(m.length));
+  return stripped;
+}
+
 // Each pattern is mutually exclusive by construction (no two patterns below
 // can match the same substring), so no post-hoc de-dupe is needed — an
 // earlier version of this script had `css-animation-prop`/`inline-animation-prop`
@@ -86,14 +109,24 @@ const PATTERNS = [
   { kind: 'web-animations-api', re: /\.animate\(\s*\[/g, category: (rel) => classify(rel) },
   { kind: 'raf-loop', re: /\brequestAnimationFrame\s*\(/g, category: (rel) => classify(rel) },
   { kind: 'dynamic-style-block', re: /<style[>\s]|styleSheet\.insertRule|\.insertRule\(/g, category: (rel) => classify(rel) },
-  { kind: 'animated-svg-attr', re: /<animate(Transform|Motion)?[\s>]|stroke-dashoffset|strokeDashoffset/g, category: (rel) => classify(rel) },
+  // Deliberately kebab-case `stroke-dashoffset` only, not camelCase
+  // `strokeDashoffset` too — the camelCase JSX prop name is ambiguous
+  // between raw/legacy usage (a static SVG attribute paired with a CSS
+  // transition/animation to actually move it — always ALSO caught by the
+  // transition-prop/animation-prop/keyframes-def/dynamic-style-block
+  // patterns above on the same element) and the compliant migrated form,
+  // Motion's `animate={{ strokeDashoffset: ... }}` prop key, which would
+  // otherwise be permanently unflaggable-clean by this rule alone. The
+  // kebab-case form only occurs in real CSS/string contexts (inline
+  // `style` strings, `<style>` blocks, .css files), never as a Motion
+  // prop key, so it stays a precise, unambiguous signal on its own.
+  { kind: 'animated-svg-attr', re: /<animate(Transform|Motion)?[\s>]|stroke-dashoffset/g, category: (rel) => classify(rel) },
 ];
 
 for (const abs of files) {
   const rel = relative(root, abs).replace(/\\/g, '/');
   const central = isCentral(abs);
-  const content = readFileSync(abs, 'utf8');
-  const lines = content.split('\n');
+  const content = stripComments(readFileSync(abs, 'utf8'));
   for (const { kind, re, category } of PATTERNS) {
     re.lastIndex = 0;
     let m;
