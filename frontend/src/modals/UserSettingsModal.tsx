@@ -1038,119 +1038,148 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
 
       {/* Profile Image Upload Wizard (nested modal) */}
       {uploadWizardOpen && (
-        <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.32)', backdropFilter: 'blur(6px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 200ms ease both' }}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.2, ease: EASE_STANDARD }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.32)', backdropFilter: 'blur(6px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) closeUploadWizard(); }}
         >
-          <div
-            style={{ background: 'var(--color-white)', borderRadius: 22, width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.24)', animation: 'nestedModalIn 320ms cubic-bezier(0.22,1,0.36,1) both', overflow: 'hidden' }}
+          <MotionIn
+            initial={{ opacity: 0, scale: 0.92, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.32, ease: EASE_SETTLE }}
+            style={{ background: 'var(--color-white)', borderRadius: 22, width: '100%', maxWidth: 440, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.24)', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 0' }}>
-              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)', transition: 'opacity 200ms' }}>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)' }}>
                 {pendingImage ? 'Preview' : 'Upload Profile Photo'}
               </div>
-              <button
+              <MotionButton
                 onClick={closeUploadWizard}
-                style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 150ms, transform 150ms' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; e.currentTarget.style.transform = 'scale(1)'; }}
+                style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                animate={{ background: 'var(--color-surface-tint-2)', scale: 1 }}
+                whileHover={{ background: 'var(--color-border)', scale: 1.08 }}
+                transition={{ duration: 0.15 }}
               >
                 <Icon name="close" size={15} color="var(--color-text-secondary)" />
-              </button>
+              </MotionButton>
             </div>
 
             <div style={{ padding: '20px 24px 24px' }}>
               <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style={{ display: 'none' }} onChange={handleFileInput} />
 
               {!pendingImage ? (
-                <div style={{ animation: 'wizardStepIn 240ms cubic-bezier(0.22,1,0.36,1) both' }}>
-                  <div
+                <MotionIn initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24, ease: EASE_SETTLE }}>
+                  <MotionIn
                     onDrop={handleDrop}
                     onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={e => { e.preventDefault(); setDragOver(false); }}
                     onClick={() => fileInputRef.current?.click()}
-                    style={{ border: `2px dashed ${dragOver ? 'var(--color-primary)' : imgFileError ? 'var(--color-error)' : 'var(--color-border)'}`, borderRadius: 16, background: dragOver ? 'var(--color-surface-tint)' : imgFileError ? 'var(--color-error-bg-alt)' : 'var(--color-surface-tint-3)', padding: '36px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'all 200ms', userSelect: 'none' }}
+                    animate={{
+                      borderColor: dragOver ? 'var(--color-primary)' : imgFileError ? 'var(--color-error)' : 'var(--color-border)',
+                      background: dragOver ? 'var(--color-surface-tint)' : imgFileError ? 'var(--color-error-bg-alt)' : 'var(--color-surface-tint-3)',
+                    }}
+                    transition={{ duration: 0.2 }}
+                    style={{ borderWidth: 2, borderStyle: 'dashed', borderRadius: 16, padding: '36px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}
                   >
-                    <div style={{ width: 52, height: 52, borderRadius: '50%', background: dragOver ? 'var(--color-surface-tint-4)' : 'var(--color-surface-tint-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 200ms, transform 200ms', transform: dragOver ? 'scale(1.12)' : 'scale(1)' }}>
+                    <MotionIn
+                      animate={{ background: dragOver ? 'var(--color-surface-tint-4)' : 'var(--color-surface-tint-2)', scale: dragOver ? 1.12 : 1 }}
+                      transition={{ duration: 0.2 }}
+                      style={{ width: 52, height: 52, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
                       <Icon name="upload" size={24} color={dragOver ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
-                    </div>
-                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: dragOver ? 'var(--color-primary)' : 'var(--color-text-secondary)', textAlign: 'center', transition: 'color 200ms' }}>
+                    </MotionIn>
+                    <MotionIn
+                      animate={{ color: dragOver ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}
+                      transition={{ duration: 0.2 }}
+                      style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, textAlign: 'center' }}
+                    >
                       {dragOver ? 'Drop to upload' : 'Drag & drop your photo'}
-                    </div>
+                    </MotionIn>
                     <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>or</div>
-                    <div
-                      style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', borderRadius: 9, padding: '8px 22px', transition: 'background 150ms, transform 100ms' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-tint-4)'; (e.currentTarget as HTMLElement).style.transform = 'scale(1.04)'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-tint)'; (e.currentTarget as HTMLElement).style.transform = 'scale(1)'; }}
+                    <MotionIn
+                      animate={{ background: 'var(--color-surface-tint)', scale: 1 }}
+                      whileHover={{ background: 'var(--color-surface-tint-4)', scale: 1.04 }}
+                      transition={{ duration: 0.1 }}
+                      style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', borderRadius: 9, padding: '8px 22px' }}
                     >
                       Select file
-                    </div>
+                    </MotionIn>
                     <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', marginTop: 2 }}>JPG, PNG, GIF or WebP · Max 2 MB</div>
-                  </div>
+                  </MotionIn>
 
                   {imgFileError && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '10px 14px', background: 'var(--color-error-bg-alt)', borderRadius: 8, border: '1px solid var(--color-error-bg)', animation: 'wizardStepIn 180ms ease both' }}>
+                    <MotionIn initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18, ease: EASE_STANDARD }} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '10px 14px', background: 'var(--color-error-bg-alt)', borderRadius: 8, border: '1px solid var(--color-error-bg)' }}>
                       <Icon name="error" size={15} color="var(--color-error)" />
                       <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>{imgFileError}</span>
-                    </div>
+                    </MotionIn>
                   )}
 
                   <div style={{ marginTop: 20 }}>
-                    <button
+                    <MotionButton
                       onClick={closeUploadWizard}
-                      style={{ width: '100%', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 9, padding: '11px 0', cursor: 'pointer', transition: 'background 150ms' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
+                      style={{ width: '100%', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', border: 'none', borderRadius: 9, padding: '11px 0', cursor: 'pointer' }}
+                      animate={{ background: 'var(--color-surface-tint-2)' }}
+                      whileHover={{ background: 'var(--color-border)' }}
+                      transition={{ duration: 0.15 }}
                     >
                       Cancel
-                    </button>
+                    </MotionButton>
                   </div>
-                </div>
+                </MotionIn>
               ) : (
-                <div style={{ animation: 'wizardStepIn 240ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                <MotionIn initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.24, ease: EASE_SETTLE }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-                    <div style={{ width: 104, height: 104, borderRadius: '50%', overflow: 'hidden', boxShadow: '0 0 0 4px rgba(var(--color-primary-rgb), 0.18), 0 8px 24px rgba(var(--color-primary-rgb), 0.22)', animation: 'previewReveal 380ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                    <MotionIn
+                      initial={{ opacity: 0, scale: 0.7 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.38, ease: EASE_SPRING }}
+                      style={{ width: 104, height: 104, borderRadius: '50%', overflow: 'hidden', boxShadow: '0 0 0 4px rgba(var(--color-primary-rgb), 0.18), 0 8px 24px rgba(var(--color-primary-rgb), 0.22)' }}
+                    >
                       <img src={pendingImage} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
-                    <div style={{ textAlign: 'center', animation: 'sectionFadeUp 280ms 100ms ease both' }}>
+                    </MotionIn>
+                    <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, delay: 0.1, ease: EASE_STANDARD }} style={{ textAlign: 'center' }}>
                       <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>Looks good?</div>
                       <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 4 }}>This will be your profile photo.</div>
-                    </div>
+                    </MotionIn>
                   </div>
 
                   {imgFileError && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, padding: '10px 14px', background: 'var(--color-error-bg-alt)', borderRadius: 8, border: '1px solid var(--color-error-bg)', animation: 'wizardStepIn 180ms ease both' }}>
+                    <MotionIn initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18, ease: EASE_STANDARD }} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, padding: '10px 14px', background: 'var(--color-error-bg-alt)', borderRadius: 8, border: '1px solid var(--color-error-bg)' }}>
                       <Icon name="error" size={15} color="var(--color-error)" />
                       <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>{imgFileError}</span>
-                    </div>
+                    </MotionIn>
                   )}
 
                   <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-                    <button
+                    <MotionButton
                       onClick={() => { setPendingImage(null); setImgFileError(null); }}
-                      style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 9, padding: '11px 0', cursor: 'pointer', transition: 'background 150ms' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
+                      style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', border: 'none', borderRadius: 9, padding: '11px 0', cursor: 'pointer' }}
+                      animate={{ background: 'var(--color-surface-tint-2)' }}
+                      whileHover={{ background: 'var(--color-border)' }}
+                      transition={{ duration: 0.15 }}
                     >
                       Choose different
-                    </button>
-                    <button
+                    </MotionButton>
+                    <MotionButton
                       onClick={handleSaveImage}
                       disabled={imgSaving}
-                      style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: imgSaving ? 'var(--color-border-strong)' : 'var(--color-primary)', border: 'none', borderRadius: 9, padding: '11px 0', cursor: imgSaving ? 'wait' : 'pointer', transition: 'background 150ms, transform 100ms' }}
-                      onMouseEnter={e => { if (!imgSaving) { e.currentTarget.style.background = 'var(--color-purple-mid-11)'; e.currentTarget.style.transform = 'scale(1.02)'; } }}
-                      onMouseLeave={e => { if (!imgSaving) { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.transform = 'scale(1)'; } }}
+                      style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', border: 'none', borderRadius: 9, padding: '11px 0', cursor: imgSaving ? 'wait' : 'pointer' }}
+                      animate={{ background: imgSaving ? 'var(--color-border-strong)' : 'var(--color-primary)', scale: 1 }}
+                      whileHover={!imgSaving ? { background: 'var(--color-purple-mid-11)', scale: 1.02 } : undefined}
+                      transition={{ duration: 0.15 }}
                     >
                       {imgSaving ? 'Saving…' : 'Save Photo'}
-                    </button>
+                    </MotionButton>
                   </div>
-                </div>
+                </MotionIn>
               )}
             </div>
-          </div>
-        </div>
+          </MotionIn>
+        </motion.div>
       )}
 
       {/* 2FA Enable Wizard (nested modal) */}
@@ -1312,29 +1341,32 @@ function ClaudeMcpSection() {
               <code style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '7px 10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {mcpUrl}
               </code>
-              <button
+              <MotionButton
                 onClick={copyUrl}
                 title="Copy MCP server URL"
-                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: urlCopied ? 'var(--color-success)' : 'var(--color-primary)', background: urlCopied ? 'rgba(var(--color-success-rgb), 0.1)' : 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', transition: 'background 150ms, color 150ms' }}
+                style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 8, padding: '8px 12px', cursor: 'pointer' }}
+                animate={{ color: urlCopied ? 'var(--color-success)' : 'var(--color-primary)', background: urlCopied ? 'rgba(var(--color-success-rgb), 0.1)' : 'var(--color-surface-tint)' }}
+                transition={{ duration: 0.15 }}
               >
                 <Icon name={urlCopied ? 'check' : 'content_copy'} size={13} color={urlCopied ? 'var(--color-success)' : 'var(--color-primary)'} />
                 {urlCopied ? 'Copied' : 'Copy'}
-              </button>
+              </MotionButton>
             </div>
           </div>
         </div>
       </div>
 
       {/* Connect to Claude */}
-      <button
+      <MotionButton
         onClick={handleConnect}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 12, padding: '13px 0', cursor: 'pointer', transition: 'background 150ms, transform 100ms' }}
-        onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-mid-11)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', border: 'none', borderRadius: 12, padding: '13px 0', cursor: 'pointer' }}
+        animate={{ background: 'var(--color-primary)', y: 0 }}
+        whileHover={{ background: 'var(--color-purple-mid-11)', y: -1 }}
+        transition={{ duration: 0.1 }}
       >
         <Icon name="open_in_new" size={16} color="var(--color-white)" />
         Connect to Claude
-      </button>
+      </MotionButton>
       <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', textAlign: 'center', marginTop: -4 }}>
         Opens Claude connector settings and copies the URL. Paste it into "Add custom connector".
       </div>
@@ -1356,16 +1388,17 @@ function ClaudeMcpSection() {
                   </div>
                 </div>
               </div>
-              <button
+              <MotionButton
                 onClick={() => handleDisconnect(t.id)}
                 disabled={revokingId === t.id}
                 title="Disconnect"
-                style={{ flexShrink: 0, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: '1px solid var(--color-error-bg)', borderRadius: 8, padding: '7px 12px', cursor: revokingId === t.id ? 'wait' : 'pointer', transition: 'background 150ms' }}
-                onMouseEnter={e => { if (revokingId !== t.id) e.currentTarget.style.background = 'var(--color-red-pale-7)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
+                style={{ flexShrink: 0, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)', border: '1px solid var(--color-error-bg)', borderRadius: 8, padding: '7px 12px', cursor: revokingId === t.id ? 'wait' : 'pointer' }}
+                animate={{ background: 'var(--color-error-bg-alt)' }}
+                whileHover={revokingId !== t.id ? { background: 'var(--color-red-pale-7)' } : undefined}
+                transition={{ duration: 0.15 }}
               >
                 {revokingId === t.id ? 'Disconnecting…' : 'Disconnect'}
-              </button>
+              </MotionButton>
             </div>
           ))}
         </div>
@@ -1440,7 +1473,7 @@ function ShortcutsSection() {
           const isOverridden = Boolean(overrides[def.id]?.key !== undefined || overrides[def.id]?.enabled !== undefined);
           const isRecording = recordingId === def.id;
           return (
-            <div key={def.id} style={{ ...rowStyle, flexWrap: 'wrap', borderTop: i === 0 ? 'none' : '1px solid var(--color-surface-tint-2)', opacity: binding.enabled ? 1 : 0.55, transition: 'opacity 150ms' }}>
+            <MotionIn key={def.id} animate={{ opacity: binding.enabled ? 1 : 0.55 }} transition={{ duration: 0.15 }} style={{ ...rowStyle, flexWrap: 'wrap', borderTop: i === 0 ? 'none' : '1px solid var(--color-surface-tint-2)' }}>
               <div style={{ minWidth: 0, flex: '1 1 200px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>{def.label}</span>
@@ -1454,47 +1487,52 @@ function ShortcutsSection() {
                 )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                <button
+                <MotionButton
                   onClick={() => { setRecordingId(def.id); setRecordError(''); }}
-                  style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: isRecording ? 'var(--color-white)' : 'var(--color-primary)', background: isRecording ? 'var(--color-primary)' : 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer', minWidth: 60, textAlign: 'center', transition: 'background 150ms' }}
-                  onMouseEnter={e => { if (!isRecording) e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
-                  onMouseLeave={e => { if (!isRecording) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                  style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer', minWidth: 60, textAlign: 'center' }}
+                  animate={{ color: isRecording ? 'var(--color-white)' : 'var(--color-primary)', background: isRecording ? 'var(--color-primary)' : 'var(--color-surface-tint)' }}
+                  whileHover={!isRecording ? { background: 'var(--color-surface-tint-4)' } : undefined}
+                  transition={{ duration: 0.15 }}
                 >
                   {isRecording ? 'Press key…' : formatCombo(binding.key)}
-                </button>
+                </MotionButton>
                 {isOverridden && (
-                  <button
+                  <MotionButton
                     onClick={() => resetOne(def.id)}
                     title="Reset to default"
-                    style={{ width: 30, height: 30, borderRadius: 7, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint-2)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    style={{ width: 30, height: 30, borderRadius: 7, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                    animate={{ background: 'transparent' }}
+                    whileHover={{ background: 'var(--color-surface-tint-2)' }}
+                    transition={{ duration: 0.15 }}
                   >
                     <Icon name="restart_alt" size={16} color="var(--color-purple-mid-6)" />
-                  </button>
+                  </MotionButton>
                 )}
-                <button
+                <MotionButton
                   onClick={() => setEnabled(def.id, !binding.enabled)}
                   title={binding.enabled ? 'Turn off' : 'Turn on'}
-                  style={{ width: 38, height: 22, borderRadius: 9999, border: 'none', background: binding.enabled ? 'var(--color-primary)' : 'var(--color-border-alt)', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 150ms' }}
+                  style={{ width: 38, height: 22, borderRadius: 9999, border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}
+                  animate={{ background: binding.enabled ? 'var(--color-primary)' : 'var(--color-border-alt)' }}
+                  transition={{ duration: 0.15 }}
                 >
-                  <div style={{ position: 'absolute', top: 2, left: binding.enabled ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', transition: 'left 150ms', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.2)' }} />
-                </button>
+                  <MotionIn animate={{ left: binding.enabled ? 18 : 2 }} transition={{ duration: 0.15 }} style={{ position: 'absolute', top: 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.2)' }} />
+                </MotionButton>
               </div>
-            </div>
+            </MotionIn>
           );
         })}
       </div>
 
-      <button
+      <MotionButton
         onClick={resetAll}
         disabled={!hasAnyOverride}
-        style={{ alignSelf: 'flex-start', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: hasAnyOverride ? 'var(--color-text-tertiary)' : 'var(--color-border-strong)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '7px 14px', cursor: hasAnyOverride ? 'pointer' : 'default', transition: 'all 150ms' }}
-        onMouseEnter={e => { if (hasAnyOverride) { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.color = 'var(--color-primary)'; } }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = hasAnyOverride ? 'var(--color-text-tertiary)' : 'var(--color-border-strong)'; }}
+        style={{ alignSelf: 'flex-start', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '7px 14px', cursor: hasAnyOverride ? 'pointer' : 'default' }}
+        animate={{ background: 'transparent', color: hasAnyOverride ? 'var(--color-text-tertiary)' : 'var(--color-border-strong)' }}
+        whileHover={hasAnyOverride ? { background: 'var(--color-surface-tint)', color: 'var(--color-primary)' } : undefined}
+        transition={{ duration: 0.15 }}
       >
         Reset all to defaults
-      </button>
+      </MotionButton>
     </div>
   );
 }
@@ -1567,16 +1605,17 @@ function MobileConnectionsSection() {
                   </div>
                 </div>
               </div>
-              <button
+              <MotionButton
                 onClick={() => handleRevoke(c.id)}
                 disabled={revokingId === c.id}
                 title="Revoke"
-                style={{ flexShrink: 0, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: '1px solid var(--color-error-bg)', borderRadius: 8, padding: '7px 12px', cursor: revokingId === c.id ? 'wait' : 'pointer', transition: 'background 150ms' }}
-                onMouseEnter={e => { if (revokingId !== c.id) e.currentTarget.style.background = 'var(--color-red-pale-7)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
+                style={{ flexShrink: 0, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)', border: '1px solid var(--color-error-bg)', borderRadius: 8, padding: '7px 12px', cursor: revokingId === c.id ? 'wait' : 'pointer' }}
+                animate={{ background: 'var(--color-error-bg-alt)' }}
+                whileHover={revokingId !== c.id ? { background: 'var(--color-red-pale-7)' } : undefined}
+                transition={{ duration: 0.15 }}
               >
                 {revokingId === c.id ? 'Revoking…' : 'Revoke'}
-              </button>
+              </MotionButton>
             </div>
           ))}
         </div>
@@ -1659,16 +1698,17 @@ function HomeScreenConnectionsSection() {
                   </div>
                 </div>
               </div>
-              <button
+              <MotionButton
                 onClick={() => handleRemove(c.id)}
                 disabled={removingId === c.id}
                 title="Remove"
-                style={{ flexShrink: 0, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: '1px solid var(--color-error-bg)', borderRadius: 8, padding: '7px 12px', cursor: removingId === c.id ? 'wait' : 'pointer', transition: 'background 150ms' }}
-                onMouseEnter={e => { if (removingId !== c.id) e.currentTarget.style.background = 'var(--color-red-pale-7)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
+                style={{ flexShrink: 0, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)', border: '1px solid var(--color-error-bg)', borderRadius: 8, padding: '7px 12px', cursor: removingId === c.id ? 'wait' : 'pointer' }}
+                animate={{ background: 'var(--color-error-bg-alt)' }}
+                whileHover={removingId !== c.id ? { background: 'var(--color-red-pale-7)' } : undefined}
+                transition={{ duration: 0.15 }}
               >
                 {removingId === c.id ? 'Removing…' : 'Remove'}
-              </button>
+              </MotionButton>
             </div>
           ))}
         </div>
