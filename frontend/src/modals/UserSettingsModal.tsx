@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '../components/Icon';
+import { motion } from '../components/animate-ui/motion';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
+import { EASE_SETTLE, EASE_SPRING, EASE_STANDARD } from '../components/animate-ui/motionTokens';
 import { useMobile } from '../hooks/useBreakpoint';
 import useAuthStore from '../store/useAuthStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
@@ -36,7 +40,10 @@ interface UserSettingsModalProps {
 
 type PwStep = 'idle' | 'current' | 'new' | 'done';
 
-const inputStyle = (focused: boolean): React.CSSProperties => ({
+// Static part only — the focus-driven border color is animated separately
+// via `inputBorderAnimate`/`motion.input`'s `animate` prop, not a raw CSS
+// `transition`.
+const inputStyle: React.CSSProperties = {
   width: '100%',
   fontFamily: 'var(--font-body)',
   fontSize: 14,
@@ -45,9 +52,14 @@ const inputStyle = (focused: boolean): React.CSSProperties => ({
   border: 'none',
   outline: 'none',
   padding: '8px 0',
-  borderBottom: `1.5px solid ${focused ? 'var(--color-primary)' : 'var(--color-border-alt)'}`,
-  transition: 'border-color 180ms',
+  borderBottomWidth: 1.5,
+  borderBottomStyle: 'solid',
+};
+
+const inputBorderAnimate = (focused: boolean) => ({
+  borderBottomColor: focused ? 'var(--color-primary)' : 'var(--color-border-alt)',
 });
+const inputBorderTransition = { duration: 0.18, ease: EASE_STANDARD };
 
 const sectionLabel = (text: string) => (
   <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: 'var(--color-text-quaternary)', marginBottom: 10, paddingLeft: 2 }}>
@@ -442,7 +454,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
 
             {/* ── PROFILE ── */}
             {activeTab === 'profile' && (
-            <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, ease: EASE_SETTLE }}>
               {sectionLabel('Profile')}
               <div style={card}>
                 {/* Avatar + identity */}
@@ -455,18 +467,34 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                     onClick={() => setUploadWizardOpen(true)}
                     title="Upload profile photo"
                   >
-                    <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-accent-purple-light) 0%, var(--color-primary) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0, transition: 'box-shadow 200ms', boxShadow: avatarHover ? '0 0 0 3px rgba(var(--color-primary-rgb), 0.35)' : '0 0 0 0px transparent' }}>
+                    <MotionIn
+                      animate={{ boxShadow: avatarHover ? '0 0 0 3px rgba(var(--color-primary-rgb), 0.35)' : '0 0 0 0px transparent' }}
+                      transition={{ duration: 0.2 }}
+                      style={{ width: 72, height: 72, borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-accent-purple-light) 0%, var(--color-primary) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}
+                    >
                       {profileImage ? (
-                        <img key={profileImage} src={profileImage} alt={username} style={{ width: '100%', height: '100%', objectFit: 'cover', animation: 'avatarSwap 300ms ease both' }} />
+                        <motion.img
+                          key={profileImage}
+                          src={profileImage}
+                          alt={username}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.3, ease: EASE_STANDARD }}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
                       ) : (
                         <span style={{ fontFamily: 'var(--font-heading)', fontSize: 26, fontWeight: 700, color: 'var(--color-white)' }}>
                           {(fullName || username || 'U').split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2)}
                         </span>
                       )}
-                    </div>
-                    <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(var(--color-black-rgb), 0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: avatarHover ? 1 : 0, transition: 'opacity 180ms', pointerEvents: 'none' }}>
+                    </MotionIn>
+                    <MotionIn
+                      animate={{ opacity: avatarHover ? 1 : 0 }}
+                      transition={{ duration: 0.18 }}
+                      style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(var(--color-black-rgb), 0.42)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}
+                    >
                       <Icon name="add" size={24} color="var(--color-white)" />
-                    </div>
+                    </MotionIn>
                   </div>
 
                   {/* Name + role + username */}
@@ -496,60 +524,80 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                 <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
                   <div style={{ fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Full Name</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input
+                    <motion.input
                       value={nameValue}
                       onChange={e => { setNameValue(e.target.value); setNameError(''); setNameSaved(false); }}
                       onFocus={() => setNameFocused(true)}
                       onBlur={() => setNameFocused(false)}
                       onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setNameValue(fullName || username); }}
-                      style={{ ...inputStyle(nameFocused), flex: 1 }}
+                      animate={inputBorderAnimate(nameFocused)}
+                      transition={inputBorderTransition}
+                      style={{ ...inputStyle, flex: 1 }}
                       placeholder="Your full name"
                     />
                     {pwChanged && (
-                      <button
+                      <MotionButton
                         onClick={handleSaveName}
                         disabled={nameSaving}
-                        style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 7, background: nameSaved ? 'rgba(var(--color-success-rgb), 0.1)' : 'var(--color-surface-tint)', border: 'none', cursor: nameSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 150ms' }}
-                        onMouseEnter={e => { if (!nameSaving && !nameSaved) e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
-                        onMouseLeave={e => { if (!nameSaving && !nameSaved) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                        style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 7, border: 'none', cursor: nameSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        animate={{ background: nameSaved ? 'rgba(var(--color-success-rgb), 0.1)' : 'var(--color-surface-tint)' }}
+                        whileHover={!nameSaving && !nameSaved ? { background: 'var(--color-surface-tint-4)' } : undefined}
+                        transition={{ duration: 0.15 }}
                       >
                         <Icon name="check" size={14} color={nameSaved ? 'var(--color-success)' : 'var(--color-primary)'} />
-                      </button>
+                      </MotionButton>
                     )}
                   </div>
                   {nameError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-error)', marginTop: 5 }}>{nameError}</div>}
-                  {nameSaved && <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-success)', marginTop: 5, animation: 'savedPop 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>Saved!</div>}
+                  {nameSaved && (
+                    <MotionIn
+                      initial={{ opacity: 0, scale: 0.7 }}
+                      animate={{ opacity: [0, 1, 1], scale: [0.7, 1.15, 1] }}
+                      transition={{ duration: 0.28, times: [0, 0.6, 1], ease: EASE_SPRING }}
+                      style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-success)', marginTop: 5 }}
+                    >Saved!</MotionIn>
+                  )}
                 </div>
 
                 {/* Email */}
                 <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
                   <div style={{ fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>Email</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input
+                    <motion.input
                       type="email"
                       value={emailValue}
                       onChange={e => { setEmailValue(e.target.value); setEmailError(''); setEmailSaved(false); }}
                       onFocus={() => setEmailFocused(true)}
                       onBlur={() => setEmailFocused(false)}
                       onKeyDown={e => { if (e.key === 'Enter') handleSaveEmail(); if (e.key === 'Escape') setEmailValue(email || ''); }}
-                      style={{ ...inputStyle(emailFocused), flex: 1 }}
+                      animate={inputBorderAnimate(emailFocused)}
+                      transition={inputBorderTransition}
+                      style={{ ...inputStyle, flex: 1 }}
                       placeholder="you@example.com"
                       autoComplete="email"
                     />
                     {emailChanged && (
-                      <button
+                      <MotionButton
                         onClick={handleSaveEmail}
                         disabled={emailSaving}
-                        style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 7, background: emailSaved ? 'rgba(var(--color-success-rgb), 0.1)' : 'var(--color-surface-tint)', border: 'none', cursor: emailSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 150ms' }}
-                        onMouseEnter={e => { if (!emailSaving && !emailSaved) e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
-                        onMouseLeave={e => { if (!emailSaving && !emailSaved) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                        style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 7, border: 'none', cursor: emailSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        animate={{ background: emailSaved ? 'rgba(var(--color-success-rgb), 0.1)' : 'var(--color-surface-tint)' }}
+                        whileHover={!emailSaving && !emailSaved ? { background: 'var(--color-surface-tint-4)' } : undefined}
+                        transition={{ duration: 0.15 }}
                       >
                         <Icon name="check" size={14} color={emailSaved ? 'var(--color-success)' : 'var(--color-primary)'} />
-                      </button>
+                      </MotionButton>
                     )}
                   </div>
                   {emailError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-error)', marginTop: 5 }}>{emailError}</div>}
-                  {emailSaved && <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-success)', marginTop: 5, animation: 'savedPop 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>Saved!</div>}
+                  {emailSaved && (
+                    <MotionIn
+                      initial={{ opacity: 0, scale: 0.7 }}
+                      animate={{ opacity: [0, 1, 1], scale: [0.7, 1.15, 1] }}
+                      transition={{ duration: 0.28, times: [0, 0.6, 1], ease: EASE_SPRING }}
+                      style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-success)', marginTop: 5 }}
+                    >Saved!</MotionIn>
+                  )}
                   {!emailValue.trim() && !emailError && (
                     <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', marginTop: 5 }}>Add an email address to your account.</div>
                   )}
@@ -564,12 +612,12 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                   </div>
                 </div>
               </div>
-            </div>
+            </MotionIn>
             )}
 
             {/* ── PREFERENCES ── */}
             {activeTab === 'preferences' && (
-            <div style={{ position: 'relative', zIndex: 10, animation: 'sectionFadeUp 340ms 40ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn style={{ position: 'relative', zIndex: 10 }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, delay: 0.04, ease: EASE_SETTLE }}>
               {sectionLabel('Preferences')}
               <div style={{ ...card, overflow: 'visible' }}>
                 <div style={{ padding: '14px 18px' }}>
@@ -591,39 +639,44 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                   </div>
                   <div style={{ display: 'flex', gap: 10 }}>
                     {(['list', 'kanban'] as const).map(v => (
-                      <button key={v} onClick={() => setDefaultListViewMode(v)}
-                        style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${defaultListViewMode === v ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: defaultListViewMode === v ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 150ms' }}>
+                      <MotionButton key={v} onClick={() => setDefaultListViewMode(v)}
+                        animate={{
+                          borderColor: defaultListViewMode === v ? 'var(--color-primary)' : 'var(--color-border-alt)',
+                          background: defaultListViewMode === v ? 'var(--color-surface-tint)' : 'var(--color-white)',
+                        }}
+                        transition={{ duration: 0.15 }}
+                        style={{ flex: 1, padding: '10px', borderRadius: 10, borderWidth: 1.5, borderStyle: 'solid', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                         <Icon name={v === 'list' ? 'format_list_bulleted' : 'view_kanban'} size={16} color={defaultListViewMode === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                         <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: defaultListViewMode === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>{v === 'list' ? 'List' : 'Kanban'}</span>
                         {defaultListViewMode === v && <Icon name="check" size={14} color="var(--color-primary)" />}
-                      </button>
+                      </MotionButton>
                     ))}
                   </div>
                 </div>
                 <div style={{ height: 1, background: 'var(--color-surface-tint-2)' }} />
                 <MemorySection />
               </div>
-            </div>
+            </MotionIn>
             )}
 
             {/* ── CONTROLS (keyboard shortcuts) ── */}
             {activeTab === 'controls' && (
-            <div style={{ animation: 'sectionFadeUp 340ms 60ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, delay: 0.06, ease: EASE_SETTLE }}>
               {sectionLabel('Keyboard Shortcuts')}
               <ShortcutsSection />
-            </div>
+            </MotionIn>
             )}
 
             {/* ── SECURITY ── */}
             {activeTab === 'security' && (
-            <div style={{ animation: 'sectionFadeUp 340ms 80ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, delay: 0.08, ease: EASE_SETTLE }}>
               {sectionLabel('Security')}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
                 {/* Password card */}
                 <div style={card}>
                   {pwStep === 'idle' && (
-                    <div style={{ ...rowStyle, animation: 'wizardStepIn 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                    <MotionIn style={rowStyle} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: EASE_SETTLE }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           <Icon name="lock" size={18} color="var(--color-primary)" />
@@ -633,29 +686,30 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                           <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 1 }}>Change your account password</div>
                         </div>
                       </div>
-                      <button
+                      <MotionButton
                         onClick={() => { setPwStep('current'); setTimeout(() => currentPwRef.current?.focus(), 60); }}
-                        style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', transition: 'background 150ms' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                        style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}
+                        animate={{ background: 'var(--color-surface-tint)' }}
+                        whileHover={{ background: 'var(--color-surface-tint-4)' }}
+                        transition={{ duration: 0.15 }}
                       >
                         Change
                         <Icon name="arrow_forward" size={14} color="var(--color-primary)" />
-                      </button>
-                    </div>
+                      </MotionButton>
+                    </MotionIn>
                   )}
 
                   {pwStep === 'current' && (
-                    <div style={{ padding: '18px 18px 16px', animation: 'wizardStepIn 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                    <MotionIn style={{ padding: '18px 18px 16px' }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: EASE_SETTLE }}>
                       {/* Progress */}
                       <div style={{ display: 'flex', gap: 5, marginBottom: 16 }}>
                         {[0, 1].map(i => (
-                          <div key={i} style={{ height: 3, flex: 1, borderRadius: 99, background: i === 0 ? 'var(--color-primary)' : 'var(--color-border)', transition: 'background 300ms' }} />
+                          <MotionIn key={i} animate={{ background: i === 0 ? 'var(--color-primary)' : 'var(--color-border)' }} transition={{ duration: 0.3 }} style={{ height: 3, flex: 1, borderRadius: 99 }} />
                         ))}
                       </div>
                       <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 14 }}>Enter your current password</div>
                       <div style={{ position: 'relative' }}>
-                        <input
+                        <motion.input
                           ref={currentPwRef}
                           type={currentPwVisible ? 'text' : 'password'}
                           value={currentPw}
@@ -664,7 +718,9 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                           onBlur={() => setCurrentPwFocused(false)}
                           onKeyDown={e => { if (e.key === 'Enter') handlePwNext(); if (e.key === 'Escape') resetPwWizard(); }}
                           placeholder="Current password"
-                          style={{ ...inputStyle(currentPwFocused), paddingRight: 32 }}
+                          animate={inputBorderAnimate(currentPwFocused)}
+                          transition={inputBorderTransition}
+                          style={{ ...inputStyle, paddingRight: 32 }}
                           autoComplete="current-password"
                         />
                         <button
@@ -677,37 +733,39 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                       </div>
                       {pwError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: 8 }}>{pwError}</div>}
                       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-                        <button
+                        <MotionButton
                           onClick={resetPwWizard}
-                          style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer', transition: 'background 150ms' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
-                        >Cancel</button>
-                        <button
+                          style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}
+                          animate={{ background: 'var(--color-surface-tint-2)' }}
+                          whileHover={{ background: 'var(--color-border)' }}
+                          transition={{ duration: 0.15 }}
+                        >Cancel</MotionButton>
+                        <MotionButton
                           onClick={handlePwNext}
                           disabled={!currentPw}
-                          style={{ flex: 2, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: currentPw ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '10px 0', cursor: currentPw ? 'pointer' : 'not-allowed', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-                          onMouseEnter={e => { if (currentPw) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
-                          onMouseLeave={e => { if (currentPw) e.currentTarget.style.background = 'var(--color-primary)'; }}
+                          style={{ flex: 2, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', border: 'none', borderRadius: 8, padding: '10px 0', cursor: currentPw ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                          animate={{ background: currentPw ? 'var(--color-primary)' : 'var(--color-border-strong)' }}
+                          whileHover={currentPw ? { background: 'var(--color-purple-mid-11)' } : undefined}
+                          transition={{ duration: 0.15 }}
                         >
                           Next <Icon name="arrow_forward" size={14} color="var(--color-white)" />
-                        </button>
+                        </MotionButton>
                       </div>
-                    </div>
+                    </MotionIn>
                   )}
 
                   {pwStep === 'new' && (
-                    <div style={{ padding: '18px 18px 16px', animation: 'wizardStepIn 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                    <MotionIn style={{ padding: '18px 18px 16px' }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: EASE_SETTLE }}>
                       {/* Progress */}
                       <div style={{ display: 'flex', gap: 5, marginBottom: 16 }}>
                         {[0, 1].map(i => (
-                          <div key={i} style={{ height: 3, flex: 1, borderRadius: 99, background: 'var(--color-primary)', transition: 'background 300ms' }} />
+                          <div key={i} style={{ height: 3, flex: 1, borderRadius: 99, background: 'var(--color-primary)' }} />
                         ))}
                       </div>
                       <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 14 }}>Set a new password</div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         <div style={{ position: 'relative' }}>
-                          <input
+                          <motion.input
                             ref={newPwRef}
                             type={newPwVisible ? 'text' : 'password'}
                             value={newPw}
@@ -716,7 +774,9 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                             onBlur={() => setNewPwFocused(false)}
                             onKeyDown={e => { if (e.key === 'Escape') resetPwWizard(); }}
                             placeholder="New password"
-                            style={{ ...inputStyle(newPwFocused), paddingRight: 32 }}
+                            animate={inputBorderAnimate(newPwFocused)}
+                            transition={inputBorderTransition}
+                            style={{ ...inputStyle, paddingRight: 32 }}
                             autoComplete="new-password"
                           />
                           <button
@@ -727,7 +787,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                             <Icon name={newPwVisible ? 'visibility_off' : 'visibility'} size={16} color="var(--color-text-quaternary)" />
                           </button>
                         </div>
-                        <input
+                        <motion.input
                           type={newPwVisible ? 'text' : 'password'}
                           value={confirmPw}
                           onChange={e => { setConfirmPw(e.target.value); setPwError(''); }}
@@ -735,7 +795,9 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                           onBlur={() => setConfirmPwFocused(false)}
                           onKeyDown={e => { if (e.key === 'Enter') handlePwSave(); if (e.key === 'Escape') resetPwWizard(); }}
                           placeholder="Confirm new password"
-                          style={inputStyle(confirmPwFocused)}
+                          animate={inputBorderAnimate(confirmPwFocused)}
+                          transition={inputBorderTransition}
+                          style={inputStyle}
                           autoComplete="new-password"
                         />
                       </div>
@@ -744,35 +806,42 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                       )}
                       {pwError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: 8 }}>{pwError}</div>}
                       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-                        <button
+                        <MotionButton
                           onClick={() => { setPwStep('current'); setPwError(''); setNewPw(''); setConfirmPw(''); }}
-                          style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer', transition: 'background 150ms' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
-                        >← Back</button>
-                        <button
+                          style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', border: 'none', borderRadius: 8, padding: '10px 0', cursor: 'pointer' }}
+                          animate={{ background: 'var(--color-surface-tint-2)' }}
+                          whileHover={{ background: 'var(--color-border)' }}
+                          transition={{ duration: 0.15 }}
+                        >← Back</MotionButton>
+                        <MotionButton
                           onClick={handlePwSave}
                           disabled={pwSaving || !newPw || !confirmPw}
-                          style={{ flex: 2, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: pwSaving || !newPw || !confirmPw ? 'var(--color-border-strong)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '10px 0', cursor: pwSaving || !newPw || !confirmPw ? 'not-allowed' : 'pointer', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-                          onMouseEnter={e => { if (!pwSaving && newPw && confirmPw) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
-                          onMouseLeave={e => { if (!pwSaving && newPw && confirmPw) e.currentTarget.style.background = 'var(--color-primary)'; }}
+                          style={{ flex: 2, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', border: 'none', borderRadius: 8, padding: '10px 0', cursor: pwSaving || !newPw || !confirmPw ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                          animate={{ background: pwSaving || !newPw || !confirmPw ? 'var(--color-border-strong)' : 'var(--color-primary)' }}
+                          whileHover={!pwSaving && newPw && confirmPw ? { background: 'var(--color-purple-mid-11)' } : undefined}
+                          transition={{ duration: 0.15 }}
                         >
                           {pwSaving ? 'Saving…' : <><Icon name="lock_reset" size={14} color="var(--color-white)" /> Save Password</>}
-                        </button>
+                        </MotionButton>
                       </div>
-                    </div>
+                    </MotionIn>
                   )}
 
                   {pwStep === 'done' && (
-                    <div style={{ padding: '24px 18px', display: 'flex', alignItems: 'center', gap: 14, animation: 'wizardStepIn 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
-                      <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(var(--color-success-rgb), 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, animation: 'scIn 380ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+                    <MotionIn style={{ padding: '24px 18px', display: 'flex', alignItems: 'center', gap: 14 }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: EASE_SETTLE }}>
+                      <MotionIn
+                        initial={{ opacity: 0, scale: 0 }}
+                        animate={{ opacity: [0, 1, 1], scale: [0, 1.1, 1] }}
+                        transition={{ duration: 0.38, times: [0, 0.6, 1], ease: EASE_SPRING }}
+                        style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(var(--color-success-rgb), 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                      >
                         <Icon name="check_circle" size={22} color="var(--color-success)" />
-                      </div>
+                      </MotionIn>
                       <div>
                         <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Password changed!</div>
                         <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>Your new password is active.</div>
                       </div>
-                    </div>
+                    </MotionIn>
                   )}
                 </div>
 
@@ -798,19 +867,21 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                       </div>
                       <div style={{ flexShrink: 0 }}>
                         {totpEnabled ? (
-                          <button
+                          <MotionButton
                             onClick={() => { setDisableOpen(true); setDisableOtp(Array(6).fill('')); setDisablePassword(''); setDisableError(''); }}
-                            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', transition: 'background 150ms' }}
-                            onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-error-bg)'; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
-                          >Disable</button>
+                            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}
+                            animate={{ background: 'var(--color-error-bg-alt)' }}
+                            whileHover={{ background: 'var(--color-error-bg)' }}
+                            transition={{ duration: 0.15 }}
+                          >Disable</MotionButton>
                         ) : (
-                          <button
+                          <MotionButton
                             onClick={() => setTwoFAOpen(true)}
-                            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', transition: 'background 150ms' }}
-                            onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
-                            onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-                          >Enable 2FA</button>
+                            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer' }}
+                            animate={{ background: 'var(--color-surface-tint)' }}
+                            whileHover={{ background: 'var(--color-surface-tint-4)' }}
+                            transition={{ duration: 0.15 }}
+                          >Enable 2FA</MotionButton>
                         )}
                       </div>
                     </div>
@@ -828,7 +899,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                             onChange={e => { setDisablePassword(e.target.value); setDisableError(''); }}
                             onKeyDown={e => { if (e.key === 'Enter' && disablePassword && disableOtp.every(d => d)) handleDisable2FA(); }}
                             placeholder="Current password"
-                            style={{ ...inputStyle(false), paddingRight: 32 }}
+                            style={{ ...inputStyle, paddingRight: 32 }}
                             autoComplete="current-password"
                           />
                           <button
@@ -839,9 +910,13 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                             <Icon name={disablePasswordVisible ? 'visibility_off' : 'visibility'} size={16} color="var(--color-text-quaternary)" />
                           </button>
                         </div>
-                        <div style={{ display: 'flex', gap: 7, justifyContent: 'center', marginBottom: 8, animation: disableShake ? 'shake 400ms ease-in-out' : undefined }}>
+                        <MotionIn
+                          style={{ display: 'flex', gap: 7, justifyContent: 'center', marginBottom: 8 }}
+                          animate={{ x: disableShake ? [0, -8, 8, 0] : 0 }}
+                          transition={{ duration: 0.4, times: disableShake ? [0, 0.25, 0.75, 1] : undefined, ease: 'easeInOut' }}
+                        >
                           {disableOtp.map((digit, i) => (
-                            <input
+                            <motion.input
                               key={i}
                               ref={disableRefs[i]}
                               type="text"
@@ -851,17 +926,22 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                               onChange={e => handleDisableOtpChange(i, e.target.value)}
                               onKeyDown={e => handleDisableOtpKey(i, e)}
                               onPaste={i === 0 ? handleDisableOtpPaste : undefined}
+                              animate={{
+                                background: digit ? 'var(--color-surface-tint)' : 'var(--color-surface-gray)',
+                                borderColor: disableError ? 'var(--color-error-bg)' : digit ? 'var(--color-primary)' : 'var(--color-border-alt)',
+                              }}
+                              transition={{ duration: 0.15 }}
                               style={{
                                 width: 40, height: 50, textAlign: 'center',
                                 fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 700,
-                                color: 'var(--color-text-primary)', background: digit ? 'var(--color-surface-tint)' : 'var(--color-surface-gray)',
-                                border: `2px solid ${disableError ? 'var(--color-error-bg)' : digit ? 'var(--color-primary)' : 'var(--color-border-alt)'}`,
-                                borderRadius: 9, outline: 'none', transition: 'border-color 150ms, background 150ms',
+                                color: 'var(--color-text-primary)',
+                                borderWidth: 2, borderStyle: 'solid',
+                                borderRadius: 9, outline: 'none',
                                 caretColor: 'transparent',
                               }}
                             />
                           ))}
-                        </div>
+                        </MotionIn>
                         {disableError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', textAlign: 'center', marginBottom: 10 }}>{disableError}</div>}
                         <div style={{ display: 'flex', gap: 8, marginTop: disableError ? 0 : 10 }}>
                           <button
@@ -870,35 +950,36 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                             onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
                             onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
                           >Cancel</button>
-                          <button
+                          <MotionButton
                             onClick={handleDisable2FA}
                             disabled={disableLoading || !disablePassword || !disableOtp.every(d => d)}
-                            style={{ flex: 2, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: disableLoading || !disablePassword || !disableOtp.every(d => d) ? 'var(--color-border-strong)' : 'var(--color-error)', border: 'none', borderRadius: 8, padding: '9px 0', cursor: disableLoading || !disablePassword || !disableOtp.every(d => d) ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}
-                            onMouseEnter={e => { if (!disableLoading && disablePassword && disableOtp.every(d => d)) e.currentTarget.style.background = 'var(--color-red-deep-1)'; }}
-                            onMouseLeave={e => { if (!disableLoading && disablePassword && disableOtp.every(d => d)) e.currentTarget.style.background = 'var(--color-error)'; }}
+                            style={{ flex: 2, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', border: 'none', borderRadius: 8, padding: '9px 0', cursor: disableLoading || !disablePassword || !disableOtp.every(d => d) ? 'not-allowed' : 'pointer' }}
+                            animate={{ background: disableLoading || !disablePassword || !disableOtp.every(d => d) ? 'var(--color-border-strong)' : 'var(--color-error)' }}
+                            whileHover={!disableLoading && disablePassword && disableOtp.every(d => d) ? { background: 'var(--color-red-deep-1)' } : undefined}
+                            transition={{ duration: 0.15 }}
                           >
                             {disableLoading ? 'Disabling…' : 'Confirm Disable'}
-                          </button>
+                          </MotionButton>
                         </div>
                       </div>
                     )}
                   </div>
                 )}
               </div>
-            </div>
+            </MotionIn>
             )}
 
             {/* ── CONNECTIONS (Claude MCP) ── */}
             {activeTab === 'connections' && mcpVisible && (
-            <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, ease: EASE_SETTLE }}>
               {sectionLabel('Claude MCP')}
               <ClaudeMcpSection />
-            </div>
+            </MotionIn>
             )}
 
             {/* ── MOBILE (device connections) ── */}
             {activeTab === 'mobile' && mobileEnabled && (
-            <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, ease: EASE_SETTLE }}>
               {sectionLabel('Mobile App')}
               <MobileConnectionsSection />
 
@@ -906,36 +987,42 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                 {sectionLabel('iOS Home Screen App')}
                 <HomeScreenConnectionsSection />
               </div>
-            </div>
+            </MotionIn>
             )}
 
             {/* ── CALENDAR SYNC (CalDAV) ── */}
             {activeTab === 'calendar' && (
-            <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, ease: EASE_SETTLE }}>
               {sectionLabel('Calendar Sync (CalDAV)')}
               <CalDavSection />
-            </div>
+            </MotionIn>
             )}
           </div>
 
           {/* Footer save bar */}
           <div style={{ flexShrink: 0, borderTop: '1px solid var(--color-surface-tint-2)', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 14 }}>
             {savedFlash && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, animation: 'savedPop 320ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+              <MotionIn
+                initial={{ opacity: 0, scale: 0.7 }}
+                animate={{ opacity: [0, 1, 1], scale: [0.7, 1.15, 1] }}
+                transition={{ duration: 0.32, times: [0, 0.6, 1], ease: EASE_SPRING }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
                 <Icon name="check_circle" size={16} color="var(--color-success)" />
                 <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-success)' }}>Saved!</span>
-              </div>
+              </MotionIn>
             )}
-            <button
+            <MotionButton
               onClick={handleSaveAll}
               disabled={savingAll || !hasPendingEdits}
-              style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: savingAll || !hasPendingEdits ? 'var(--color-border-strong)' : 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: savingAll || !hasPendingEdits ? 'not-allowed' : 'pointer', transition: 'background 150ms, transform 100ms' }}
-              onMouseEnter={e => { if (!savingAll && hasPendingEdits) { e.currentTarget.style.background = 'var(--color-purple-mid-11)'; e.currentTarget.style.transform = 'translateY(-1px)'; } }}
-              onMouseLeave={e => { if (!savingAll && hasPendingEdits) { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.transform = 'translateY(0)'; } }}
+              style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: savingAll || !hasPendingEdits ? 'not-allowed' : 'pointer' }}
+              animate={{ background: savingAll || !hasPendingEdits ? 'var(--color-border-strong)' : 'var(--color-primary)', y: 0 }}
+              whileHover={!savingAll && hasPendingEdits ? { background: 'var(--color-purple-mid-11)', y: -1 } : undefined}
+              transition={{ duration: 0.1 }}
             >
               <Icon name="check" size={15} color="var(--color-white)" />
               {savingAll ? 'Saving…' : 'Save changes'}
-            </button>
+            </MotionButton>
           </div>
         </div>
       </div>
