@@ -4,6 +4,7 @@ import type { Milestone, Timeline } from '../types';
 import Icon from '../components/Icon';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import { apiGetTimelines } from '../api/client';
+import ModalIn from '../components/animate-ui/ModalIn';
 
 interface MoveMilestoneModalProps {
   milestone: Milestone;
@@ -48,9 +49,10 @@ export default function MoveMilestoneModal({ milestone, currentTimelineId, onPic
     <div
       onClick={onClose}
       style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.24)', backdropFilter: 'blur(5px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 220ms ease both' }}>
-      <div
+      <ModalIn
+        duration={280}
         onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--color-white)', borderRadius: 18, maxWidth: 420, width: '100%', maxHeight: '78vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+        style={{ background: 'var(--color-white)', borderRadius: 18, maxWidth: 420, width: '100%', maxHeight: '78vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)', overflow: 'hidden' }}>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 22px 4px' }}>
           <div style={{ width: 38, height: 38, borderRadius: 11, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -114,7 +116,7 @@ export default function MoveMilestoneModal({ milestone, currentTimelineId, onPic
             Cancel
           </button>
         </div>
-      </div>
+      </ModalIn>
     </div>,
     document.body
   );
