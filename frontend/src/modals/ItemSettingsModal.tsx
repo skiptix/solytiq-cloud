@@ -8,6 +8,10 @@ import CreatorBubble from '../components/CreatorBubble';
 import ItemMembersSection from '../components/ItemMembersSection';
 import type { SharedItemType } from '../api/client';
 import { useMobile } from '../hooks/useBreakpoint';
+import { motion } from '../components/animate-ui/motion';
+import MotionButton from '../components/animate-ui/MotionButton';
+import MotionIn from '../components/animate-ui/MotionIn';
+import { EASE_SETTLE, EASE_STANDARD, EASE_SPRING } from '../components/animate-ui/motionTokens';
 import {
   apiUpdateListShare, apiUpdateTimelineShare, apiUpdateMarkdownListShare, apiUpdateFolderShare,
   apiUpdateList, apiUpdateTimeline, apiUpdateFolder, apiUpdateMarkdownList,
@@ -159,14 +163,16 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
             {([{ label: 'Off', icon: 'link_off', val: false }, { label: 'On', icon: 'link', val: true }] as const).map(opt => {
               const selected = enabled === opt.val;
               return (
-                <button key={opt.label}
+                <MotionButton key={opt.label}
                   disabled={saving}
                   onClick={() => { if (enabled !== opt.val) apply({ enabled: opt.val }); }}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'transparent', cursor: saving ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? 'var(--color-white)' : 'var(--color-primary)', transition: 'all 120ms' }}>
+                  animate={{ background: selected ? 'var(--color-primary)' : 'transparent', color: selected ? 'var(--color-white)' : 'var(--color-primary)' }}
+                  transition={{ duration: 0.12 }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', cursor: saving ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500 }}>
                   <Icon name={opt.icon} size={15} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
                   {opt.label}
                   {selected && <Icon name="check" size={13} color="var(--color-white)" />}
-                </button>
+                </MotionButton>
               );
             })}
           </div>
@@ -174,7 +180,7 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
       </div>
 
       {enabled && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'sectionFadeUp 200ms ease both' }}>
+        <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: EASE_STANDARD }} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Copyable link */}
           {shareUrl && (
             <div>
@@ -182,11 +188,17 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
               <div style={{ background: 'var(--color-surface-tint)', borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Icon name="link" size={16} color="var(--color-primary)" />
                 <span style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shareUrl}</span>
-                <button onClick={copyLink}
-                  style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: copied ? 'var(--color-success)' : 'var(--color-primary)', background: copied ? 'var(--color-green-pale-1)' : 'var(--color-white)', border: `1px solid ${copied ? 'var(--color-green-tint-2)' : 'var(--color-accent-purple-soft-alt)'}`, borderRadius: 7, padding: '5px 12px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, transition: 'all 150ms' }}>
+                <MotionButton onClick={copyLink}
+                  animate={{
+                    color: copied ? 'var(--color-success)' : 'var(--color-primary)',
+                    background: copied ? 'var(--color-green-pale-1)' : 'var(--color-white)',
+                    borderColor: copied ? 'var(--color-green-tint-2)' : 'var(--color-accent-purple-soft-alt)',
+                  }}
+                  transition={{ duration: 0.15 }}
+                  style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, borderWidth: 1, borderStyle: 'solid', borderRadius: 7, padding: '5px 12px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
                   <Icon name={copied ? 'check' : 'content_copy'} size={12} color={copied ? 'var(--color-success)' : 'var(--color-primary)'} />
                   {copied ? 'Copied!' : 'Copy'}
-                </button>
+                </MotionButton>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', lineHeight: 1.4, marginTop: 6, paddingLeft: 2 }}>
                 <span style={{ marginTop: 1, flexShrink: 0, display: 'flex' }}><Icon name="visibility" size={13} color="var(--color-text-quaternary)" /></span>
@@ -207,13 +219,15 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
                   ] as const).map(opt => {
                     const selected = includeAll === opt.val;
                     return (
-                      <button key={opt.label}
+                      <MotionButton key={opt.label}
                         disabled={saving}
                         onClick={() => { if (includeAll !== opt.val) apply({ includeAll: opt.val }); }}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 8px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'transparent', cursor: saving ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: selected ? 600 : 500, color: selected ? 'var(--color-white)' : 'var(--color-primary)', transition: 'all 120ms' }}>
+                        animate={{ background: selected ? 'var(--color-primary)' : 'transparent', color: selected ? 'var(--color-white)' : 'var(--color-primary)' }}
+                        transition={{ duration: 0.12 }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 8px', borderRadius: 10, border: 'none', cursor: saving ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: selected ? 600 : 500 }}>
                         <Icon name={opt.icon} size={14} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
                         {opt.label}
-                      </button>
+                      </MotionButton>
                     );
                   })}
                 </div>
@@ -239,13 +253,15 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
                   ] as const).map(opt => {
                     const selected = viewMode === opt.val;
                     return (
-                      <button key={opt.val}
+                      <MotionButton key={opt.val}
                         disabled={saving}
                         onClick={() => { if (viewMode !== opt.val) apply({ viewMode: opt.val }); }}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 8px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'transparent', cursor: saving ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: selected ? 600 : 500, color: selected ? 'var(--color-white)' : 'var(--color-primary)', transition: 'all 120ms' }}>
+                        animate={{ background: selected ? 'var(--color-primary)' : 'transparent', color: selected ? 'var(--color-white)' : 'var(--color-primary)' }}
+                        transition={{ duration: 0.12 }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 8px', borderRadius: 10, border: 'none', cursor: saving ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: selected ? 600 : 500 }}>
                         <Icon name={opt.icon} size={14} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
                         {opt.label}
-                      </button>
+                      </MotionButton>
                     );
                   })}
                 </div>
@@ -265,13 +281,15 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
                   {([{ label: 'Keep private', icon: 'lock', val: false }, { label: 'Share too', icon: 'account_tree', val: true }] as const).map(opt => {
                     const selected = subpages === opt.val;
                     return (
-                      <button key={opt.label}
+                      <MotionButton key={opt.label}
                         disabled={saving}
                         onClick={() => { if (subpages !== opt.val) apply({ subpages: opt.val }); }}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'transparent', cursor: saving ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? 'var(--color-white)' : 'var(--color-primary)', transition: 'all 120ms' }}>
+                        animate={{ background: selected ? 'var(--color-primary)' : 'transparent', color: selected ? 'var(--color-white)' : 'var(--color-primary)' }}
+                        transition={{ duration: 0.12 }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', cursor: saving ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500 }}>
                         <Icon name={opt.icon} size={14} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
                         {opt.label}
-                      </button>
+                      </MotionButton>
                     );
                   })}
                 </div>
@@ -343,7 +361,7 @@ function ShareSection({ kind, itemId, share, onShareUpdated }: {
               </div>
             )}
           </div>
-        </div>
+        </MotionIn>
       )}
     </div>
   );
@@ -390,14 +408,16 @@ function AccessibilitySection({ kind, itemId, initialPublic, onApplied }: {
         {([{ label: 'Private', icon: 'lock', val: false }, { label: 'Public', icon: 'public', val: true }] as const).map(opt => {
           const selected = pub === opt.val;
           return (
-            <button key={opt.label}
+            <MotionButton key={opt.label}
               disabled={busy}
               onClick={() => { if (pub !== opt.val) apply(opt.val); }}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'transparent', cursor: busy ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? 'var(--color-white)' : 'var(--color-primary)', transition: 'all 120ms' }}>
+              animate={{ background: selected ? 'var(--color-primary)' : 'transparent', color: selected ? 'var(--color-white)' : 'var(--color-primary)' }}
+              transition={{ duration: 0.12 }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', cursor: busy ? 'wait' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500 }}>
               <Icon name={opt.icon} size={14} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
               {opt.label}
               {selected && <Icon name="check" size={13} color="var(--color-white)" />}
-            </button>
+            </MotionButton>
           );
         })}
       </div>
@@ -456,12 +476,18 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
   const [activeTab, setActiveTab] = useState<ItemTab>('appearance');
 
   const modal = (
-    <div
+    <motion.div
       onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.24)', backdropFilter: 'blur(5px)', zIndex: 1200, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : 24, animation: 'backdropIn 220ms ease both' }}>
-      <div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.22, ease: EASE_STANDARD }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.24)', backdropFilter: 'blur(5px)', zIndex: 1200, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : 24 }}>
+      <MotionIn
         onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--color-white)', borderRadius: isMobile ? '16px 16px 0 0' : 22, width: '100%', maxWidth: isMobile ? undefined : 720, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.22)', animation: isMobile ? 'slideUp 300ms cubic-bezier(0.22,1,0.36,1) both' : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both', overflow: 'hidden', maxHeight: isMobile ? '92vh' : '90vh', display: 'flex', flexDirection: 'column' }}>
+        initial={isMobile ? { opacity: 0.6, y: '100%' } : { opacity: 0, y: 22, scale: 0.96 }}
+        animate={isMobile ? { opacity: 1, y: 0 } : { opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: isMobile ? 0.3 : 0.36, ease: EASE_SETTLE }}
+        style={{ background: 'var(--color-white)', borderRadius: isMobile ? '16px 16px 0 0' : 22, width: '100%', maxWidth: isMobile ? undefined : 720, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.22)', overflow: 'hidden', maxHeight: isMobile ? '92vh' : '90vh', display: 'flex', flexDirection: 'column' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 24px 0', flexShrink: 0 }}>
@@ -481,14 +507,15 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             {creatorId && <CreatorBubble creatorId={creatorId} taskHovered />}
-            <button
+            <MotionButton
               onClick={onClose}
-              style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 150ms' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-border)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-surface-tint-2)')}
+              style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+              animate={{ background: 'var(--color-surface-tint-2)' }}
+              whileHover={{ background: 'var(--color-border)' }}
+              transition={{ duration: 0.15 }}
             >
               <Icon name="close" size={15} color="var(--color-text-secondary)" />
-            </button>
+            </MotionButton>
           </div>
         </div>
 
@@ -498,23 +525,25 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
             {tabs.map(tab => {
               const active = activeTab === tab.id;
               return (
-                <button
+                <MotionButton
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
+                  animate={{
+                    color: active ? 'var(--color-white)' : 'var(--color-primary)',
+                    background: active ? 'var(--color-primary)' : 'transparent',
+                  }}
+                  whileHover={!active ? { background: 'var(--color-surface-tint-4)' } : undefined}
+                  transition={{ duration: 0.15 }}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6,
                     fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600,
-                    color: active ? 'var(--color-white)' : 'var(--color-primary)',
-                    background: active ? 'var(--color-primary)' : 'transparent',
                     border: 'none', borderRadius: 10, padding: '8px 14px', cursor: 'pointer',
-                    transition: 'all 150ms', flex: '1 1 0', flexBasis: 0, justifyContent: 'center', minWidth: 0,
+                    flex: '1 1 0', flexBasis: 0, justifyContent: 'center', minWidth: 0,
                   }}
-                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
-                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
                 >
                   <Icon name={tab.icon} size={15} color={active ? 'var(--color-white)' : 'var(--color-primary)'} />
                   <span style={{ whiteSpace: 'nowrap' }}>{tab.label}</span>
-                </button>
+                </MotionButton>
               );
             })}
           </div>
@@ -525,7 +554,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
 
           {/* ── APPEARANCE ── */}
           {activeTab === 'appearance' && (
-            <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, ease: EASE_SETTLE }}>
               {sectionLabel('Icon')}
               <div style={card}>
                 <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -545,16 +574,18 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                   <div style={{ padding: '16px 18px', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                     {kind === 'folder'
                       ? FOLDER_COLORS.map(c => (
-                        <button key={c} onClick={() => onChange({ color: c })} title={c}
-                          style={{ width: 32, height: 32, borderRadius: '50%', background: c, border: 'none', cursor: 'pointer', padding: 0, outline: 'none', boxShadow: color === c ? `0 0 0 2px white, 0 0 0 4px ${c}` : 'none', transition: 'all 140ms cubic-bezier(0.34,1.56,0.64,1)' }}
-                          onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.18)')}
-                          onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')} />
+                        <MotionButton key={c} onClick={() => onChange({ color: c })} title={c}
+                          style={{ width: 32, height: 32, borderRadius: '50%', background: c, border: 'none', cursor: 'pointer', padding: 0, outline: 'none', boxShadow: color === c ? `0 0 0 2px white, 0 0 0 4px ${c}` : 'none' }}
+                          animate={{ scale: 1 }}
+                          whileHover={{ scale: 1.18 }}
+                          transition={{ duration: 0.14, ease: EASE_SPRING }} />
                       ))
                       : LIST_COLORS.map(c => (
-                        <button key={c.color} onClick={() => onChange({ color: c.color, colorBg: c.bg })} title={c.color}
-                          style={{ width: 32, height: 32, borderRadius: '50%', background: c.color, border: 'none', cursor: 'pointer', padding: 0, outline: 'none', boxShadow: color === c.color ? `0 0 0 2px white, 0 0 0 4px ${c.color}` : 'none', transition: 'all 140ms cubic-bezier(0.34,1.56,0.64,1)' }}
-                          onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.18)')}
-                          onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')} />
+                        <MotionButton key={c.color} onClick={() => onChange({ color: c.color, colorBg: c.bg })} title={c.color}
+                          style={{ width: 32, height: 32, borderRadius: '50%', background: c.color, border: 'none', cursor: 'pointer', padding: 0, outline: 'none', boxShadow: color === c.color ? `0 0 0 2px white, 0 0 0 4px ${c.color}` : 'none' }}
+                          animate={{ scale: 1 }}
+                          whileHover={{ scale: 1.18 }}
+                          transition={{ duration: 0.14, ease: EASE_SPRING }} />
                       ))
                     }
                   </div>
@@ -572,13 +603,15 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                     ] as const).map(opt => {
                       const selected = fw === opt.val;
                       return (
-                        <button key={opt.label}
+                        <MotionButton key={opt.label}
                           onClick={() => { if (fw !== opt.val) { setFw(opt.val); onChange({ fullWidth: opt.val }); } }}
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? 'var(--color-white)' : 'var(--color-primary)', transition: 'all 120ms' }}>
+                          animate={{ background: selected ? 'var(--color-primary)' : 'transparent', color: selected ? 'var(--color-white)' : 'var(--color-primary)' }}
+                          transition={{ duration: 0.12 }}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500 }}>
                           <Icon name={opt.icon} size={15} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
                           {opt.label}
                           {selected && <Icon name="check" size={13} color="var(--color-white)" />}
-                        </button>
+                        </MotionButton>
                       );
                     })}
                   </div>
@@ -587,12 +620,12 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                   </div>
                 </div>
               )}
-            </div>
+            </MotionIn>
           )}
 
           {/* ── ACCESS ── */}
           {activeTab === 'access' && (
-            <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, ease: EASE_SETTLE }}>
               {sectionLabel('Workspace visibility')}
               {itemId
                 ? <AccessibilitySection kind={kind} itemId={itemId} initialPublic={isPublic} onApplied={onVisibilityApplied} />
@@ -601,13 +634,15 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                     {([{ label: 'Private', icon: 'lock', val: false }, { label: 'Public', icon: 'public', val: true }] as const).map(opt => {
                       const selected = isPublic === opt.val;
                       return (
-                        <button key={opt.label}
+                        <MotionButton key={opt.label}
                           onClick={() => onChange({ isPublic: opt.val })}
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', background: selected ? 'var(--color-primary)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500, color: selected ? 'var(--color-white)' : 'var(--color-primary)', transition: 'all 120ms' }}>
+                          animate={{ background: selected ? 'var(--color-primary)' : 'transparent', color: selected ? 'var(--color-white)' : 'var(--color-primary)' }}
+                          transition={{ duration: 0.12 }}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500 }}>
                           <Icon name={opt.icon} size={14} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
                           {opt.label}
                           {selected && <Icon name="check" size={13} color="var(--color-white)" />}
-                        </button>
+                        </MotionButton>
                       );
                     })}
                   </div>
@@ -615,23 +650,24 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', marginTop: 10, lineHeight: 1.5, paddingLeft: 2 }}>
                 Controls who can see this {KIND_DISPLAY_NAME[kind]} inside your workspace. Does not affect public share links.
               </div>
-            </div>
+            </MotionIn>
           )}
 
           {/* ── ORGANIZATION (folder picker) ── */}
           {activeTab === 'organization' && hasFolders && (
-            <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, ease: EASE_SETTLE }}>
               {sectionLabel('Folder')}
               <div style={card}>
                 {[{ id: null as string | null, name: 'No folder', emoji: undefined as string | undefined, color: undefined as string | undefined }, ...(folders ?? [])].map((f, i, arr) => {
                   const selected = (f.id ?? undefined) === folderId || (f.id === null && !folderId);
                   return (
                     <div key={f.id ?? '__none__'}>
-                      <button
+                      <MotionButton
                         onClick={() => { if (!selected) onChange({ folderId: f.id }); }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', border: 'none', background: selected ? 'var(--color-surface-tint-alt)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: selected ? 600 : 450, color: selected ? 'var(--color-primary)' : 'var(--color-text-secondary)', textAlign: 'left', width: '100%', transition: 'background 120ms' }}
-                        onMouseEnter={e => { if (!selected) e.currentTarget.style.background = 'var(--color-purple-pale-5)'; }}
-                        onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'transparent'; }}>
+                        animate={{ background: selected ? 'var(--color-surface-tint-alt)' : 'transparent', color: selected ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}
+                        whileHover={!selected ? { background: 'var(--color-purple-pale-5)' } : undefined}
+                        transition={{ duration: 0.12 }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: selected ? 600 : 450, textAlign: 'left', width: '100%' }}>
                         {f.id === null
                           ? <Icon name="remove_circle_outline" size={17} color={selected ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
                           : f.emoji
@@ -640,19 +676,19 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                         }
                         <span style={{ flex: 1 }}>{f.name}</span>
                         {selected && <Icon name="check" size={15} color="var(--color-primary)" />}
-                      </button>
+                      </MotionButton>
                       {i < arr.length - 1 && <div style={{ height: 1, background: 'var(--color-divider)', marginLeft: 18 }} />}
                     </div>
                   );
                 })}
               </div>
-            </div>
+            </MotionIn>
           )}
 
 
           {/* ── ADMIN ── */}
           {activeTab === 'admin' && isAdmin && itemId && kind !== 'folder' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18, animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, ease: EASE_SETTLE }} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               {sectionLabel(`${kind === 'timeline' ? 'Timeline' : kind === 'markdownList' ? 'Markdown Page' : 'Board'} ID`)}
               <div style={{ background: 'var(--color-surface-tint)', border: '1px solid var(--color-border)', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <code style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemId}</code>
@@ -687,39 +723,40 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                   </div>
                 ))}
               </div>
-            </div>
+            </MotionIn>
           )}
 
           {/* ── SHARE ── */}
           {activeTab === 'share' && hasShare && itemId && (
-            <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, ease: EASE_SETTLE }}>
               <ShareSection kind={kind} itemId={itemId} share={share} onShareUpdated={onShareUpdated} />
-            </div>
+            </MotionIn>
           )}
 
           {/* ── PEOPLE (per-item invitations) ── */}
           {activeTab === 'people' && itemId && kind !== 'folder' && (
-            <div style={{ animation: 'sectionFadeUp 340ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, ease: EASE_SETTLE }}>
               <p style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-tertiary)', margin: '0 0 14px', lineHeight: 1.5 }}>
                 Invite people to collaborate on this {kind === 'timeline' ? 'timeline' : kind === 'markdownList' ? 'page' : 'list'} directly — they can view and edit it even if it's not shared with the whole workspace.
               </p>
               <ItemMembersSection itemType={kind as SharedItemType} itemId={itemId} canManage={creatorId === userId || isAdmin} />
-            </div>
+            </MotionIn>
           )}
         </div>
 
         {/* Footer */}
         <div style={{ borderTop: '1px solid var(--color-divider)', padding: '14px 24px 18px', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
-          <button
+          <MotionButton
             onClick={onClose}
-            style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '10px 28px', cursor: 'pointer', transition: 'filter 140ms, transform 140ms' }}
-            onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(0.88)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-            onMouseLeave={e => { e.currentTarget.style.filter = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}>
+            style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '10px 28px', cursor: 'pointer' }}
+            animate={{ filter: 'brightness(1)', y: 0 }}
+            whileHover={{ filter: 'brightness(0.88)', y: -1 }}
+            transition={{ duration: 0.14 }}>
             Done
-          </button>
+          </MotionButton>
         </div>
-      </div>
-    </div>
+      </MotionIn>
+    </motion.div>
   );
 
   return createPortal(modal, document.body);
