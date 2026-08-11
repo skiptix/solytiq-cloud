@@ -64,6 +64,7 @@ import {
 } from '../../api/client';
 import useGpsStore from '../../store/useGpsStore';
 import AIBubble from './AIBubble';
+import Spinner from '@/components/animate-ui/Spinner';
 // AIAssistant's own root (this file) is always mounted app-wide as a
 // floating bubble; the full chat window (tool-calling UI, session list,
 // file uploads, ~1000 lines) is only ever rendered once the user actually
@@ -1177,7 +1178,7 @@ export default function AIAssistant() {
                   justifyContent: 'center',
                 }}
               >
-                <div style={{ width: 28, height: 28, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} aria-hidden="true" />
+                <Spinner size={28} thickness={3} durationMs={700} aria-hidden />
                 <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>Loading Sol…</span>
               </div>
             }

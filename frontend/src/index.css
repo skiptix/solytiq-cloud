@@ -314,7 +314,6 @@ body { font-family: var(--font-body); background: var(--color-page-bg); color: v
 @keyframes aiWindowIn { from { opacity: 0; transform: scale(0.92) translateY(16px); transform-origin: bottom right; } to { opacity: 1; transform: scale(1) translateY(0); transform-origin: bottom right; } }
 @keyframes aiSheetIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
 @keyframes aiPanelIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
-@keyframes spin { to { transform: rotate(360deg); } }
 @keyframes saveDotPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 @keyframes backdropIn  { from { opacity: 0 } to { opacity: 1 } }
 @keyframes backdropOut { from { opacity: 1 } to { opacity: 0 } }

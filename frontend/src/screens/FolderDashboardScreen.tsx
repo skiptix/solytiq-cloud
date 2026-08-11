@@ -6,6 +6,7 @@ import type { Task, List } from '../types';
 import useAppStore from '../store/useAppStore';
 import UpcomingTimelineWidget from '../components/UpcomingTimelineWidget';
 import Icon from '../components/Icon';
+import Spinner from '@/components/animate-ui/Spinner';
 
 // ── Date helpers ────────────────────────────────────────────────
 function toIso(d: Date): string {
@@ -197,7 +198,7 @@ export default function FolderDashboardScreen() {
     if (listsLoading || !graceElapsed) {
       return (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 32, height: 32, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+          <Spinner size={32} thickness={3} durationMs={700} />
         </div>
       );
     }

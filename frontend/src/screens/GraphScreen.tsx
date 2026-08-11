@@ -20,6 +20,7 @@ import { buildWorkspaceRootNode, type NetRenderNode } from '../utils/graphHierar
 import { useEntitySearch } from '../hooks/useEntitySearch';
 import { apiGetCanvases, apiCreateCanvas, apiGetCanvas, apiUpdateCanvas, apiCreateLink, apiGetWorkspaceGraph, apiGetEntityLinks } from '../api/client';
 import type { GraphNode, GraphCanvas, EntityIndexEntry } from '../types';
+import Spinner from '@/components/animate-ui/Spinner';
 
 function ExploreView({ isMobile }: { isMobile: boolean }) {
   const navigate = useNavigate();
@@ -103,7 +104,7 @@ function ExploreView({ isMobile }: { isMobile: boolean }) {
     <div style={{ position: 'relative', height: '100%', width: '100%', minWidth: 0, borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.04)', overflow: 'hidden', animation: 'cardIn 320ms cubic-bezier(0.22,1,0.36,1) both' }}>
       {loading && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', fontFamily: 'var(--font-heading)', fontSize: 13, zIndex: 4, background: 'var(--color-white)' }}>
-          <div style={{ width: 16, height: 16, border: '2px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+          <Spinner size={16} thickness={2} durationMs={600} />
           Loading…
         </div>
       )}

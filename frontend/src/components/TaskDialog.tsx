@@ -24,6 +24,7 @@ import {
 } from '../api/client';
 import type { WorkspaceMember } from '../types';
 import type { MentionMember } from '../utils/mention';
+import Spinner from '@/components/animate-ui/Spinner';
 
 function fmtAttSize(bytes: number): string {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
@@ -178,7 +179,7 @@ export function FilePicker({ onSelect, onClose }: { onSelect: (file: SharedFile)
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px 12px' }}>
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 28 }}>
-              <div style={{ width: 22, height: 22, border: '2.5px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+              <Spinner size={22} thickness={2.5} durationMs={600} />
             </div>
           ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '28px 16px' }}>{search ? 'No matching files' : 'No files uploaded yet'}</div>
@@ -198,7 +199,7 @@ export function FilePicker({ onSelect, onClose }: { onSelect: (file: SharedFile)
                   <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', marginTop: 1 }}>{fmtAttSize(f.size)}</div>
                 </div>
                 {picking === f.id && (
-                  <div style={{ width: 14, height: 14, border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite', flexShrink: 0 }} />
+                  <Spinner size={14} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} flexShrink={0} />
                 )}
                 {picking !== f.id && <Icon name="add" size={16} color="var(--color-border-strong)" />}
               </button>
@@ -771,7 +772,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
               {/* Attachment rows */}
               {attachLoading ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', opacity: 0.5 }}>
-                  <div style={{ width: 13, height: 13, border: '2px solid var(--color-border-strong)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                  <Spinner size={13} thickness={2} trackColor="var(--color-border-strong)" durationMs={600} />
                   <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Loading…</span>
                 </div>
               ) : attachments.map(att => {
@@ -806,7 +807,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                     onMouseEnter={e => { if (downloadingAttId !== att.id) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                     {downloadingAttId === att.id
-                      ? <div style={{ width: 12, height: 12, border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                      ? <Spinner size={12} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} />
                       : <Icon name="download" size={15} color="var(--color-primary)" />}
                   </button>
                   <button
@@ -817,7 +818,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                     onMouseEnter={e => { if (removingAttId !== att.id) e.currentTarget.style.background = 'var(--color-error-bg)'; }}
                     onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                     {removingAttId === att.id
-                      ? <div style={{ width: 12, height: 12, border: '2px solid var(--color-red-mid-1)', borderTopColor: 'var(--color-error)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                      ? <Spinner size={12} thickness={2} trackColor="var(--color-red-mid-1)" indicatorColor="var(--color-error)" durationMs={600} />
                       : <Icon name="close" size={14} color="var(--color-error)" />}
                   </button>
                 </div>
@@ -828,7 +829,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
               {uploadProgress !== null && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: 'var(--color-surface-tint-3)', marginBottom: 6, border: '1px solid var(--color-purple-pale-23)' }}>
                   <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--color-surface-tint)', border: '1px solid var(--color-border-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <div style={{ width: 14, height: 14, border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                    <Spinner size={14} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-primary)', marginBottom: 4 }}>Uploading… {uploadProgress}%</div>
@@ -882,7 +883,7 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
                   </span>
                 )}
                 {creatingList && (
-                  <div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid var(--color-primary)', borderTopColor: 'transparent', animation: 'spin 0.6s linear infinite' }} />
+                  <Spinner size={13} thickness={2} trackColor="var(--color-primary)" indicatorColor="transparent" durationMs={600} />
                 )}
               </div>
 

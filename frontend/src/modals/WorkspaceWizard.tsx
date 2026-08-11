@@ -4,6 +4,7 @@ import Icon from '../components/Icon';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import type { WorkspaceMember } from '../types';
 import { EmojiGrid } from '../components/EmojiSelector';
+import Spinner from '@/components/animate-ui/Spinner';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -279,7 +280,7 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
               <button onClick={handleCreate} disabled={saving}
                 style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '10px 22px', cursor: saving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
                 {saving
-                  ? <><div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(var(--color-white-rgb), 0.3)', borderTop: '2px solid var(--color-white)', animation: 'spin 600ms linear infinite' }} /> Creating…</>
+                  ? <><Spinner size={14} thickness={2} trackColor="rgba(var(--color-white-rgb), 0.3)" indicatorColor="var(--color-white)" durationMs={600} /> Creating…</>
                   : 'Create workspace'
                 }
               </button>

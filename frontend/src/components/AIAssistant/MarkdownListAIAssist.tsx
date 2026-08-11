@@ -4,6 +4,7 @@ import useAIStore from '../../store/useAIStore';
 import useMarkdownListsStore from '../../store/useMarkdownListsStore';
 import { apiGetAISettings, apiAIChat, apiGetAiToolDefs, apiExecuteAiTool } from '../../api/client';
 import type { MarkdownList } from '../../types';
+import Spinner from '@/components/animate-ui/Spinner';
 
 // ── Scoped "full access" AI editor for a single Markdown page ──────────────
 // Unlike the global Sol assistant (which can touch every list/task/timeline
@@ -203,7 +204,7 @@ export default function MarkdownListAIAssist({ markdownListId, markdownListName,
             })}
             {busy && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>
-                <div style={{ width: 11, height: 11, border: '2px solid var(--color-border-strong)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                <Spinner size={11} thickness={2} trackColor="var(--color-border-strong)" durationMs={600} />
                 Working…
               </div>
             )}

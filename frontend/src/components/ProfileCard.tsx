@@ -9,6 +9,7 @@ import { apiUpdateProfile, apiUploadProfileImage } from '../api/client';
 import UserSettingsModal from '../modals/UserSettingsModal';
 import AddAccountModal from '../modals/AddAccountModal';
 import { LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
+import Spinner from '@/components/animate-ui/Spinner';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -391,7 +392,7 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
                         <div style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{acct.username}</div>
                       </div>
                       {busy
-                        ? <div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', animation: 'spin 600ms linear infinite', flexShrink: 0 }} />
+                        ? <Spinner size={13} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} flexShrink={0} />
                         : <Icon name="login" size={14} color="var(--color-text-quaternary)" />
                       }
                     </button>

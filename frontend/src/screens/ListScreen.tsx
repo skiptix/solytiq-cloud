@@ -18,6 +18,7 @@ import Icon from '../components/Icon';
 import SaveStatusDot from '../components/SaveStatusDot';
 import EmojiSelector from '../components/EmojiSelector';
 import AutomationsButton from '../components/AutomationsButton';
+import Spinner from '@/components/animate-ui/Spinner';
 
 // ── Pull-to-refresh indicator (mobile only) ────────────────────────
 // Purely presentational: height/opacity/rotation driven by usePullToRefresh's
@@ -32,7 +33,7 @@ function PullToRefreshIndicator({ pullDistance, threshold, refreshing, settling 
   return (
     <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: (refreshing || settling) ? 'height 200ms ease' : undefined }}>
       {refreshing ? (
-        <div style={{ width: 22, height: 22, border: '2.5px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+        <Spinner size={22} thickness={2.5} durationMs={600} />
       ) : (
         <div style={{ opacity: 0.4 + progress * 0.6, transform: `rotate(${pastThreshold ? 180 : 0}deg) scale(${0.7 + progress * 0.3})`, transition: 'transform 120ms ease' }}>
           <Icon name="arrow_downward" size={20} color="var(--color-primary)" />
@@ -142,7 +143,7 @@ export default function ListScreen() {
     if (listsLoading) {
       return (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 32, height: 32, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+          <Spinner size={32} thickness={3} durationMs={700} />
         </div>
       );
     }

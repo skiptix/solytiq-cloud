@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import Icon from './Icon';
 import MarkdownView from './MarkdownView';
 import { previewKind, extOf } from '../utils/attachmentPreview';
+import Spinner from '@/components/animate-ui/Spinner';
 
 // ── Attachment preview ────────────────────────────────────────────────────
 // A click-to-preview viewer for the most common attachment formats, shared by
@@ -72,7 +73,7 @@ export default function AttachmentPreviewModal({ name, mimeType, fetchBlob, onDo
     if (state.status === 'loading') {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, minHeight: 200, color: 'var(--color-text-quaternary)' }}>
-          <div style={{ width: 26, height: 26, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+          <Spinner size={26} thickness={3} durationMs={700} />
           <span style={{ fontFamily: 'var(--font-body)', fontSize: 13 }}>Loading preview…</span>
         </div>
       );

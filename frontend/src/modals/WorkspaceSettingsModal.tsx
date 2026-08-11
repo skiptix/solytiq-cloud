@@ -14,6 +14,7 @@ import CreatorBubble from '../components/CreatorBubble';
 import TrashPanel from '../components/TrashPanel';
 import ArchivedPanel from '../components/ArchivedPanel';
 import { deriveWorkspacePermissions } from '../utils/workspacePermissions';
+import Spinner from '@/components/animate-ui/Spinner';
 
 interface UserSuggestion { id: string; username: string; fullName: string | null; profileImage: string | null; }
 
@@ -109,7 +110,7 @@ function WorkspaceImagePicker({ onSelect, onClose }: { onSelect: (dataUrl: strin
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px 12px' }}>
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 28 }}>
-              <div style={{ width: 22, height: 22, border: '2.5px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+              <Spinner size={22} thickness={2.5} durationMs={600} />
             </div>
           ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '28px 16px' }}>
@@ -137,7 +138,7 @@ function WorkspaceImagePicker({ onSelect, onClose }: { onSelect: (dataUrl: strin
                   <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', marginTop: 1 }}>{(f.size / 1024).toFixed(0)} KB</div>
                 </div>
                 {fetchingId === f.id
-                  ? <div style={{ width: 14, height: 14, border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite', flexShrink: 0 }} />
+                  ? <Spinner size={14} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} flexShrink={0} />
                   : <Icon name="add_photo_alternate" size={16} color="var(--color-border-strong)" />
                 }
               </button>
@@ -557,7 +558,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                         placeholder="Search by name or username…"
                         style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-primary)' }}
                       />
-                      {inviteLoading && <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', animation: 'spin 600ms linear infinite', flexShrink: 0 }} />}
+                      {inviteLoading && <Spinner size={14} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} flexShrink={0} />}
                     </div>
 
                     {showSuggestions && suggestions.length > 0 && (

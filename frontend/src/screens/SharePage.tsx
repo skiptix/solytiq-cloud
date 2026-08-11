@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import Icon from '../components/Icon';
 import { verifySharePassword, ShareSessionError } from '../utils/shareSession';
+import Spinner from '@/components/animate-ui/Spinner';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -305,7 +306,7 @@ export default function SharePage() {
         {/* Loading */}
         {state === 'loading' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px 0' }}>
-            <div style={{ width: 36, height: 36, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+            <Spinner size={36} thickness={3} durationMs={700} />
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-quaternary)' }}>Loading…</div>
           </div>
         )}
@@ -398,7 +399,7 @@ export default function SharePage() {
             {previewLoading && (
               <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '28px 0', marginBottom: 20, borderRadius: 14, border: '1.5px solid var(--color-border-alt)', background: 'var(--color-surface-gray)' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 28, height: 28, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                  <Spinner size={28} thickness={3} durationMs={700} />
                   <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Loading preview…</span>
                 </div>
               </div>
@@ -523,7 +524,7 @@ export default function SharePage() {
               onMouseLeave={e => { if (!downloading) e.currentTarget.style.background = 'var(--color-primary)'; }}
             >
               {downloading
-                ? <><div style={{ width: 16, height: 16, border: '2px solid rgba(var(--color-white-rgb), 0.4)', borderTopColor: 'var(--color-white)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />Downloading…</>
+                ? <><Spinner size={16} thickness={2} trackColor="rgba(var(--color-white-rgb), 0.4)" indicatorColor="var(--color-white)" durationMs={700} />Downloading…</>
                 : <><Icon name="download" size={18} color="var(--color-white)" />{info.files && info.files.length > 1 ? 'Download first file' : 'Download'}</>
               }
             </button>

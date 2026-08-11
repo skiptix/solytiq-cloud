@@ -6,6 +6,7 @@ import MarkdownView from '../components/MarkdownView';
 import { localIso } from '../utils/date';
 import { milestoneCompletion, railFillIndex } from '../utils/timeline';
 import { verifySharePassword, ShareSessionError } from '../utils/shareSession';
+import Spinner from '@/components/animate-ui/Spinner';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -187,7 +188,7 @@ export default function SharedTimelinePage() {
         {/* Loading */}
         {state === 'loading' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px 0' }}>
-            <div style={{ width: 36, height: 36, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+            <Spinner size={36} thickness={3} durationMs={700} />
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-quaternary)' }}>Loading…</div>
           </div>
         )}
@@ -237,7 +238,7 @@ export default function SharedTimelinePage() {
               onClick={() => void submitPassword(password)}
               disabled={loadingContent || !password}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-white)', background: loadingContent || !password ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', border: 'none', borderRadius: 12, padding: '13px', cursor: loadingContent || !password ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}>
-              {loadingContent ? <div style={{ width: 16, height: 16, border: '2px solid rgba(var(--color-white-rgb), 0.4)', borderTopColor: 'var(--color-white)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> : <Icon name="visibility" size={18} color="var(--color-white)" />}
+              {loadingContent ? <Spinner size={16} thickness={2} trackColor="rgba(var(--color-white-rgb), 0.4)" indicatorColor="var(--color-white)" durationMs={700} /> : <Icon name="visibility" size={18} color="var(--color-white)" />}
               View timeline
             </button>
           </div>

@@ -8,6 +8,7 @@ import useAuthStore from '../store/useAuthStore';
 import useSyncStore from '../store/useSyncStore';
 import Icon from '../components/Icon';
 import CalendarPicker from '../components/CalendarPicker';
+import Spinner from '@/components/animate-ui/Spinner';
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -240,7 +241,7 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true, initialFile
                       {fmtSize(Math.round(entry.file.size * entry.progress / 100))} of {fmtSize(entry.file.size)}
                     </span>
                     <span style={{ color: 'var(--color-blue-tint-3)' }}>·</span>
-                    {entry.status === 'uploading' && <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-warning)', display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid var(--color-warning)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />Uploading...</span>}
+                    {entry.status === 'uploading' && <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-warning)', display: 'flex', alignItems: 'center', gap: 4 }}><Spinner size={10} thickness={2} trackColor="var(--color-warning)" indicatorColor="transparent" durationMs={700} display="inline-block" />Uploading...</span>}
                     {entry.status === 'done'      && <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="check_circle" size={13} color="var(--color-success)" />Completed</span>}
                     {entry.status === 'error'     && <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>Failed</span>}
                     {entry.status === 'pending'   && <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>Waiting…</span>}
@@ -370,7 +371,7 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
         <div style={{ background: 'var(--color-purple-pale-11)', borderBottom: '1px solid var(--color-surface-tint-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 220, maxHeight: 300, overflow: 'hidden', flexShrink: 0, position: 'relative' }}>
           {previewLoading && canPreview ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 28, height: 28, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 600ms linear infinite' }} />
+              <Spinner size={28} thickness={3} durationMs={600} />
               <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>Loading preview…</span>
             </div>
           ) : previewUrl && isImage ? (

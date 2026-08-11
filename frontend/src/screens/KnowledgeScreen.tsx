@@ -28,6 +28,7 @@ import { ENTRY_TYPE_OPTIONS } from '../utils/knowledgeEntryTypes';
 import { apiGetWorkspaceGraph, apiGetEntityLinks, apiGetWorkspaceMembers } from '../api/client';
 import type { GraphEdge, GraphNode, MarkdownBlock, ResolvedLink, KnowledgeEntry } from '../types';
 import type { MentionMember } from '../utils/mention';
+import Spinner from '@/components/animate-ui/Spinner';
 
 // A term's bubble grows with how much its definition actually holds — summary,
 // aliases, and written block content — not just its explicit relation degree.
@@ -412,7 +413,7 @@ export default function KnowledgeScreen() {
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: 'relative', borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.04)', overflow: 'hidden', background: 'var(--color-white)' }}>
         {loading && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', fontFamily: 'var(--font-heading)', fontSize: 13, zIndex: 4, background: 'var(--color-white)' }}>
-            <div style={{ width: 16, height: 16, border: '2px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+            <Spinner size={16} thickness={2} durationMs={600} />
             Loading…
           </div>
         )}

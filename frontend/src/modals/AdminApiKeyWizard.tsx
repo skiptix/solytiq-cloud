@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import Icon from '../components/Icon';
 import { apiCreateAdminReadApiKey, type AdminApiScope, type AdminReadApiKey } from '../api/client';
 import { ADMIN_API_FEATURES } from './adminApiFeatures';
+import Spinner from '@/components/animate-ui/Spinner';
 
 interface Props {
   onClose: () => void;
@@ -116,7 +117,7 @@ export default function AdminApiKeyWizard({ onClose, onCreated }: Props) {
               <button onClick={handleGenerate} disabled={saving || !name.trim() || scopes.size === 0}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: (!name.trim() || scopes.size === 0) ? 'var(--color-accent-purple-soft-alt)' : 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '10px 22px', cursor: (saving || !name.trim() || scopes.size === 0) ? 'default' : 'pointer', transition: 'background 150ms' }}>
                 {saving
-                  ? <><div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(var(--color-white-rgb), 0.3)', borderTop: '2px solid var(--color-white)', animation: 'spin 600ms linear infinite' }} /> Generating…</>
+                  ? <><Spinner size={14} thickness={2} trackColor="rgba(var(--color-white-rgb), 0.3)" indicatorColor="var(--color-white)" durationMs={600} /> Generating…</>
                   : <><Icon name="key" size={15} color="var(--color-white)" /> Generate key</>
                 }
               </button>

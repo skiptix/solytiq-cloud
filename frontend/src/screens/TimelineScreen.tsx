@@ -38,6 +38,7 @@ import ContextMenu, { type ContextMenuEntry } from '../components/ContextMenu';
 import RenameDialog from '../components/RenameDialog';
 import MoveMilestoneModal from '../modals/MoveMilestoneModal';
 import useMembersStore from '../store/useMembersStore';
+import Spinner from '@/components/animate-ui/Spinner';
 
 function fmtAttSize(bytes: number): string {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
@@ -393,7 +394,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
 
                 {attachLoading ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', opacity: 0.5 }}>
-                    <div style={{ width: 13, height: 13, border: '2px solid var(--color-border-strong)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                    <Spinner size={13} thickness={2} trackColor="var(--color-border-strong)" durationMs={600} />
                     <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Loading…</span>
                   </div>
                 ) : attachments.map(att => {
@@ -425,7 +426,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
                       onMouseEnter={e => { if (downloadingAttId !== att.id) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                       {downloadingAttId === att.id
-                        ? <div style={{ width: 12, height: 12, border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                        ? <Spinner size={12} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} />
                         : <Icon name="download" size={15} color="var(--color-primary)" />}
                     </button>
                     <button onClick={() => handleRemoveAttachment(att)} disabled={removingAttId === att.id} title="Remove"
@@ -433,7 +434,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
                       onMouseEnter={e => { if (removingAttId !== att.id) e.currentTarget.style.background = 'var(--color-error-bg)'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                       {removingAttId === att.id
-                        ? <div style={{ width: 12, height: 12, border: '2px solid var(--color-red-mid-1)', borderTopColor: 'var(--color-error)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                        ? <Spinner size={12} thickness={2} trackColor="var(--color-red-mid-1)" indicatorColor="var(--color-error)" durationMs={600} />
                         : <Icon name="close" size={14} color="var(--color-error)" />}
                     </button>
                   </div>
@@ -443,7 +444,7 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
                 {uploadProgress !== null && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: 'var(--color-surface-tint-3)', marginBottom: 6, border: '1px solid var(--color-purple-pale-23)' }}>
                     <div style={{ width: 34, height: 34, borderRadius: 8, background: 'var(--color-surface-tint)', border: '1px solid var(--color-border-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <div style={{ width: 14, height: 14, border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                      <Spinner size={14} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-primary)', marginBottom: 4 }}>Uploading… {uploadProgress}%</div>
@@ -589,7 +590,7 @@ export default function TimelineScreen() {
     if (listsLoading) {
       return (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 32, height: 32, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+          <Spinner size={32} thickness={3} durationMs={700} />
         </div>
       );
     }
