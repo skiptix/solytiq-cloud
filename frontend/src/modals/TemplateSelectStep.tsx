@@ -5,6 +5,8 @@ import useTemplatesStore from '../store/useTemplatesStore';
 import Icon from '../components/Icon';
 import UseTemplateModal from './UseTemplateModal';
 import ModalIn from '../components/animate-ui/ModalIn';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
 
 interface TemplateSelectStepProps {
   type: 'list' | 'timeline';
@@ -51,33 +53,37 @@ export default function TemplateSelectStep({ type, onBack, onBlank, onCreatedLis
         </div>
 
         <div style={{ padding: '16px 24px 24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <button onClick={onBlank}
-            style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 12, border: '1.5px dashed var(--color-purple-tint-3)', background: 'var(--color-purple-pale-2)', cursor: 'pointer', textAlign: 'left', transition: 'border-color 150ms, background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)', animation: 'menuItemIn 200ms ease both' }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-purple-tint-3)'; e.currentTarget.style.background = 'var(--color-purple-pale-2)'; e.currentTarget.style.transform = 'translateY(0)'; }}>
+          <MotionButton onClick={onBlank}
+            initial={{ opacity: 0, x: 6 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.2 }}
+            whileHover={{ borderColor: 'var(--color-primary)', background: 'var(--color-surface-tint)', y: -2 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 12, border: '1.5px dashed var(--color-purple-tint-3)', background: 'var(--color-purple-pale-2)', cursor: 'pointer', textAlign: 'left' }}>
             <Icon name="add_circle" size={22} color="var(--color-primary)" />
             <div>
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>Start blank</div>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>Build it from scratch</div>
             </div>
-          </button>
+          </MotionButton>
 
-          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-quaternary)', marginTop: 6, animation: 'menuItemIn 200ms ease 40ms both' }}>
+          <MotionIn initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2, delay: 0.04 }} style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-quaternary)', marginTop: 6 }}>
             Or use a template
-          </div>
+          </MotionIn>
 
           {loading && list.length === 0 ? (
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '16px 0', textAlign: 'center' }}>Loading templates…</div>
           ) : list.length === 0 ? (
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '16px 0', textAlign: 'center', animation: 'menuItemIn 200ms ease 40ms both' }}>
+            <MotionIn initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2, delay: 0.04 }} style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '16px 0', textAlign: 'center' }}>
               No {type} templates yet — save one from the Templates page.
-            </div>
+            </MotionIn>
           ) : (
             list.map((t, i) => (
-              <button key={t.id} onClick={() => setSelected(t)}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 12, border: '1.5px solid var(--color-purple-pale-34)', background: 'var(--color-white)', cursor: 'pointer', textAlign: 'left', transition: 'border-color 150ms, background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)', animation: `menuItemIn 200ms ease ${40 + Math.min(i, 6) * 30}ms both` }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.color ?? 'var(--color-primary)'; e.currentTarget.style.background = t.colorBg ?? 'var(--color-surface-tint)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-purple-pale-34)'; e.currentTarget.style.background = 'var(--color-white)'; e.currentTarget.style.transform = 'translateY(0)'; }}>
+              <MotionButton key={t.id} onClick={() => setSelected(t)}
+                initial={{ opacity: 0, x: 6 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2, delay: (40 + Math.min(i, 6) * 30) / 1000 }}
+                whileHover={{ borderColor: t.color ?? 'var(--color-primary)', background: t.colorBg ?? 'var(--color-surface-tint)', y: -2 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 12, border: '1.5px solid var(--color-purple-pale-34)', background: 'var(--color-white)', cursor: 'pointer', textAlign: 'left' }}>
                 <div style={{ width: 34, height: 34, borderRadius: 9, background: t.colorBg ?? 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 16 }}>
                   {t.emoji ?? (type === 'list' ? '📋' : '🗓️')}
                 </div>
@@ -91,7 +97,7 @@ export default function TemplateSelectStep({ type, onBack, onBlank, onCreatedLis
                   </div>
                 </div>
                 <Icon name="chevron_right" size={18} color="var(--color-border-strong)" />
-              </button>
+              </MotionButton>
             ))
           )}
         </div>
