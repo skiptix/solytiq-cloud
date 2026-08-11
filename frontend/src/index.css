@@ -356,6 +356,32 @@ body { font-family: var(--font-body); background: var(--color-page-bg); color: v
 @keyframes netEdgeFlow { to { stroke-dashoffset: -24; } }
 @media (prefers-reduced-motion: reduce) { .net-root-glow, .net-edge-flow { animation: none !important; } }
 
+/* ─── Reduced motion — global fallback (Sprint 04, Phase 4) ─────────────────
+   Motion-driven UI already honors `prefers-reduced-motion` via
+   `MotionConfig reducedMotion="user"` at the app root (main.tsx) — see
+   components/animate-ui/AppMotionConfig.tsx. But the ~45 raw CSS
+   `@keyframes` still scattered through this file (not yet migrated to the
+   central Motion layer — see scripts/check-animations.mjs's real baseline)
+   had ZERO reduced-motion guard beyond the two narrow per-selector
+   exceptions above: a user with the OS preference set got the exact same
+   entrance/pulse/flow animations as everyone else. This is the standard
+   platform-recommended "nuclear option" fallback (WCAG 2.3.3 / the pattern
+   MDN documents) — it collapses every remaining CSS animation/transition to
+   a single, near-instant frame and stops infinite loops after one
+   iteration, so content and state stay visible without abrupt motion, while
+   the more specific rules above (which fully disable rather than shorten)
+   still win on specificity where a component actively depends on that. Does
+   not affect Motion-driven elements, which never use the CSS `animation`/
+   `transition` properties in the first place. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* ─── POI Popup Styles ───────────────────────────────────────────────────── */
 @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: 0.5; } }
 .solytiq-poi-popup .leaflet-popup-content-wrapper {
