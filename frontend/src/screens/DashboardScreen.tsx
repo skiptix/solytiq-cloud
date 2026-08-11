@@ -1,7 +1,7 @@
 import { usePageTitle } from '../hooks/usePageTitle';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence } from '@/components/animate-ui/motion';
 import { useNavigate } from 'react-router-dom';
 import { useMobile } from '../hooks/useBreakpoint';
 import type { Task, List, MarkdownList, Timeline, Meeting, Workspace, MilestoneStatus } from '../types';

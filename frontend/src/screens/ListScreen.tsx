@@ -1,7 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
-import { listItemVariants, LAYOUT_TRANSITION } from '../utils/motionTokens';
+import { AnimatePresence, motion } from '@/components/animate-ui/motion';
+import { listItemVariants, LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
 import { useMobile } from '../hooks/useBreakpoint';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useParams, useNavigate } from 'react-router-dom';

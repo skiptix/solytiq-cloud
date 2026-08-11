@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:a11y": "node scripts/run-a11y-tests.mjs",
     "test:e2e": "node scripts/run-e2e-regression-tests.mjs",
-    "check:bundle": "node scripts/check-bundle.mjs"
+    "check:bundle": "node scripts/check-bundle.mjs",
+    "check:animations": "node scripts/check-animations.mjs"
   },
   "dependencies": {
     "@react-sigma/core": "^5.0.5",

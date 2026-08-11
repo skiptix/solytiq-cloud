@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef, lazy, Suspense } from 'react';
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence } from '@/components/animate-ui/motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMobile } from '../../hooks/useBreakpoint';
 import useAIStore, {

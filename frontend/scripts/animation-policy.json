@@ -1,0 +1,7 @@
+{
+  "strict": true,
+  "centralLayerDirs": [
+    "src/components/animate-ui"
+  ],
+  "allowlist": []
+}

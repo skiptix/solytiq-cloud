@@ -1,4 +1,4 @@
-import type { Variants } from 'motion/react';
+import type { Variants } from './motion';
 
 /** Spring-overshoot curve — mirrors the app's `modalIn`/`aiWindowIn`/`menuIn` CSS keyframes. */
 export const EASE_SPRING: [number, number, number, number] = [0.34, 1.56, 0.64, 1];

@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import Icon from './Icon';
 import NotificationItem from './NotificationItem';
 import useNotificationsStore from '../store/useNotificationsStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import { notificationTarget } from '../utils/notifications';
-import { backdropVariants, panelVariantsRight } from '../utils/motionTokens';
+import { backdropVariants, panelVariantsRight } from '@/components/animate-ui/motionTokens';
 import type { AppNotification } from '../api/client';
 
 // ── TopBar notification bell + right slide-in panel ───────────────────────────

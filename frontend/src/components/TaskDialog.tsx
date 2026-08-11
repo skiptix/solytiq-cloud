@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import type { Task, TaskAttachment, SharedFile } from '../types';
 import Icon from './Icon';
 import { useMobile } from '../hooks/useBreakpoint';
@@ -11,7 +11,7 @@ import TaggedUsersRow from './TaggedUsersRow';
 import RelationsPanel from './graph/RelationsPanel';
 import AttachmentPreviewModal from './AttachmentPreview';
 import { isPreviewable } from '../utils/attachmentPreview';
-import { backdropVariants, modalVariants, sheetVariants } from '../utils/motionTokens';
+import { backdropVariants, modalVariants, sheetVariants } from '@/components/animate-ui/motionTokens';
 import { DeleteConfirmModal } from './TaskItem';
 import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';

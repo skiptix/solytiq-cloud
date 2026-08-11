@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import Icon from '../components/Icon';
 import useAiSkillsStore from '../store/useAiSkillsStore';
 import { apiGetAiSkill, apiReplaceAiSkillBundle, ApiError } from '../api/client';
-import { backdropVariants, modalVariants, crossFadeVariants } from '../utils/motionTokens';
+import { backdropVariants, modalVariants, crossFadeVariants } from '@/components/animate-ui/motionTokens';
 import type { AiSkill, AiSkillFile } from '../types';
 
 interface AiSkillEditModalProps {
