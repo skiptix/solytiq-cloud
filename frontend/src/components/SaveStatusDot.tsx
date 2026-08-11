@@ -41,12 +41,18 @@ export default function SaveStatusDot({ state, size = 10 }: SaveStatusDotProps) 
     >
       <motion.span
         style={{
-          width: size, height: size, borderRadius: '50%', background: cfg.color,
-          boxShadow: `0 0 0 3px ${cfg.halo}`, cursor: 'default',
-          transition: 'background 200ms ease, box-shadow 200ms ease',
+          width: size, height: size, borderRadius: '50%', cursor: 'default',
         }}
-        animate={pulsing ? { opacity: [1, 0.4, 1] } : { opacity: 1 }}
-        transition={pulsing ? { duration: 1.2, ease: 'easeInOut', repeat: Infinity } : { duration: 0.2 }}
+        animate={{
+          opacity: pulsing ? [1, 0.4, 1] : 1,
+          background: cfg.color,
+          boxShadow: `0 0 0 3px ${cfg.halo}`,
+        }}
+        transition={{
+          opacity: pulsing ? { duration: 1.2, ease: 'easeInOut', repeat: Infinity } : { duration: 0.2 },
+          background: { duration: 0.2, ease: EASE_STANDARD },
+          boxShadow: { duration: 0.2, ease: EASE_STANDARD },
+        }}
       />
       {hovered && (
         <motion.span
