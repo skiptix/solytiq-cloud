@@ -399,25 +399,32 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   return createPortal(
     <>
       {/* Backdrop */}
-      <div
-        style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.24)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : 24, animation: closing ? 'backdropOut 190ms ease both' : 'backdropIn 220ms ease both' }}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: closing ? 0 : 1 }}
+        transition={{ duration: closing ? 0.19 : 0.22, ease: EASE_STANDARD }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.24)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : 24 }}
         onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
       >
-        <div
-          style={{ background: 'var(--color-white)', borderRadius: isMobile ? '16px 16px 0 0' : 22, width: '100%', maxWidth: isMobile ? undefined : 1024, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.22)', animation: closing ? 'settingsModalOut 190ms ease-in both' : (isMobile ? 'slideUp 300ms cubic-bezier(0.22,1,0.36,1) both' : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both'), overflow: 'hidden', maxHeight: '95vh', display: 'flex', flexDirection: 'column' }}
+        <motion.div
+          initial={isMobile ? { opacity: 0.6, y: '100%' } : { opacity: 0, y: 22, scale: 0.96 }}
+          animate={closing ? { opacity: 0, y: 14, scale: 0.97 } : { opacity: 1, y: 0, scale: 1 }}
+          transition={closing ? { duration: 0.19, ease: 'easeIn' } : { duration: isMobile ? 0.3 : 0.36, ease: EASE_SETTLE }}
+          style={{ background: 'var(--color-white)', borderRadius: isMobile ? '16px 16px 0 0' : 22, width: '100%', maxWidth: isMobile ? undefined : 1024, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.22)', overflow: 'hidden', maxHeight: '95vh', display: 'flex', flexDirection: 'column' }}
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 24px 0' }}>
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.01em' }}>Account Settings</div>
-            <button
+            <MotionButton
               onClick={handleClose}
-              style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 150ms, transform 150ms' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; e.currentTarget.style.transform = 'scale(1)'; }}
+              style={{ width: 30, height: 30, borderRadius: '50%', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              animate={{ background: 'var(--color-surface-tint-2)', scale: 1 }}
+              whileHover={{ background: 'var(--color-border)', scale: 1.08 }}
+              transition={{ duration: 0.15 }}
             >
               <Icon name="close" size={15} color="var(--color-text-secondary)" />
-            </button>
+            </MotionButton>
           </div>
 
           {/* Tab bar */}
@@ -426,24 +433,26 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
               {TABS.map(tab => {
                 const active = activeTab === tab.id;
                 return (
-                  <button
+                  <MotionButton
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     title={isMobile ? tab.label : undefined}
+                    animate={{
+                      color: active ? 'var(--color-white)' : 'var(--color-primary)',
+                      background: active ? 'var(--color-primary)' : 'transparent',
+                    }}
+                    whileHover={!active ? { background: 'var(--color-surface-tint-4)' } : undefined}
+                    transition={{ duration: 0.15 }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: isMobile ? 0 : 6,
                       fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600,
-                      color: active ? 'var(--color-white)' : 'var(--color-primary)',
-                      background: active ? 'var(--color-primary)' : 'transparent',
                       border: 'none', borderRadius: 10, padding: isMobile ? '9px 14px' : '9px 16px', cursor: 'pointer',
-                      transition: 'all 150ms', flex: isMobile ? '1 1 0' : '1 1 auto', justifyContent: 'center',
+                      flex: isMobile ? '1 1 0' : '1 1 auto', justifyContent: 'center',
                     }}
-                    onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
-                    onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
                   >
                     <Icon name={tab.icon} size={isMobile ? 19 : 15} color={active ? 'var(--color-white)' : 'var(--color-primary)'} />
                     {!isMobile && <span style={{ whiteSpace: 'nowrap' }}>{tab.label}</span>}
-                  </button>
+                  </MotionButton>
                 );
               })}
             </div>
@@ -1024,8 +1033,8 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
               {savingAll ? 'Saving…' : 'Save changes'}
             </MotionButton>
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* Profile Image Upload Wizard (nested modal) */}
       {uploadWizardOpen && (
