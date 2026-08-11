@@ -8,6 +8,7 @@ import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
 import CalendarPicker from '../components/CalendarPicker';
 import TimePicker from '../components/TimePicker';
+import ModalIn from '../components/animate-ui/ModalIn';
 
 const COLORS = [
   { color: 'var(--color-primary)', bg: 'var(--color-surface-tint)' },
@@ -176,7 +177,7 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 24px', overflowY: 'auto' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ margin: 'auto', background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 520, display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <ModalIn duration={280} style={{ margin: 'auto', background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 520, display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)' }}
         onClick={e => e.stopPropagation()}>
 
         {/* Header */}
@@ -441,7 +442,7 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
             </button>
           )}
         </div>
-      </div>
+      </ModalIn>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icon';
+import ModalIn from './animate-ui/ModalIn';
 
 const EMOJI_GROUPS = [
   { label: 'Work', emojis: ['📋','📁','💼','🗂️','📊','📈','✅','🎯','🔖','📌'] },
@@ -106,17 +107,18 @@ export default function EmojiSelector({ value, onChange, direction = 'down', siz
       {open && pos && createPortal(
         // Portaled to <body>: ancestors with backdrop-filter (modal overlays)
         // hijack position: fixed and their overflow: hidden clips the popup.
-        <div
+        <ModalIn
           ref={popRef}
+          duration={180}
           onMouseDown={e => e.preventDefault()}
-          style={{ position: 'fixed', left: pos.left, top: pos.top, bottom: pos.bottom, zIndex: 1600, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 24px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', padding: '10px', width: POPUP_WIDTH, boxSizing: 'border-box', maxHeight: 'calc(100vh - 24px)', overflowY: 'auto', animation: 'modalIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+          style={{ position: 'fixed', left: pos.left, top: pos.top, bottom: pos.bottom, zIndex: 1600, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 24px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', padding: '10px', width: POPUP_WIDTH, boxSizing: 'border-box', maxHeight: 'calc(100vh - 24px)', overflowY: 'auto' }}
         >
           <EmojiGrid
             value={value}
             onSelect={em => { onChange(em); setOpen(false); }}
             onRemove={allowRemove ? () => { onChange(''); setOpen(false); } : undefined}
           />
-        </div>,
+        </ModalIn>,
         document.body
       )}
     </div>

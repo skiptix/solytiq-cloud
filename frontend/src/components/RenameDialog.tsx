@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import ModalIn from './animate-ui/ModalIn';
 
 interface RenameDialogProps {
   value: string;
@@ -16,7 +17,7 @@ export default function RenameDialog({ value, accentColor = 'var(--color-primary
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', animation: 'backdropIn 180ms ease both' }}
       onClick={onCancel}>
-      <div style={{ background: 'var(--color-white)', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 360, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+      <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 360, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 16 }}>{title}</div>
         <input
@@ -36,7 +37,7 @@ export default function RenameDialog({ value, accentColor = 'var(--color-primary
             Save
           </button>
         </div>
-      </div>
+      </ModalIn>
     </div>,
     document.body
   );

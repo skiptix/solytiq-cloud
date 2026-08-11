@@ -1,4 +1,10 @@
 import { useState, useRef } from 'react';
+import { motion } from '@/components/animate-ui/motion';
+
+// CSS `ease` keyword as an explicit cubic-bezier, so the Motion-driven
+// animation below is timing-identical to the `transition: 'stroke-dashoffset
+// 300ms ease'` it replaces — no unmeasured change to duration/easing.
+const CSS_EASE: [number, number, number, number] = [0.25, 0.1, 0.25, 1];
 
 interface RingProgressProps {
   total: number;
@@ -28,15 +34,16 @@ export default function RingProgress({ total, completed, color = 'var(--color-pr
     >
       <svg width="20" height="20" viewBox="0 0 20 20">
         <circle cx="10" cy="10" r={R} fill="none" stroke="var(--color-border)" strokeWidth="2.5" />
-        <circle
+        <motion.circle
           cx="10" cy="10" r={R}
           fill="none"
           stroke={ringColor}
           strokeWidth="2.5"
           strokeDasharray={CIRC}
-          strokeDashoffset={offset}
           strokeLinecap="round"
-          style={{ transform: 'rotate(-90deg)', transformOrigin: 'center', transition: 'stroke-dashoffset 300ms ease' }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 0.3, ease: CSS_EASE }}
+          style={{ transform: 'rotate(-90deg)', transformOrigin: 'center' }}
         />
       </svg>
       {tooltipPos && (

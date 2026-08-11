@@ -1,5 +1,6 @@
 import MemberAvatar from './MemberAvatar';
 import Icon from './Icon';
+import PopIn from './animate-ui/PopIn';
 import type { MentionMember } from '../utils/mention';
 
 // ── @-mention suggestion popover ──────────────────────────────────────────────
@@ -22,12 +23,12 @@ export default function MentionPopover({ members, activeIndex, onPick, onHover, 
   // menu (z 210) so a block-anchored mention popover is never occluded.
   const width = Math.min(240, (typeof window !== 'undefined' ? window.innerWidth : 400) - 32);
   return (
-    <div
+    <PopIn
+      duration={120}
       style={{
         position: 'absolute', zIndex: 220, width, maxHeight: 232, overflowY: 'auto',
         background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12,
         boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 6,
-        animation: 'menuIn 120ms ease both',
         ...style,
       }}
       // Keep the textarea focused — don't steal selection on mousedown.
@@ -55,6 +56,6 @@ export default function MentionPopover({ members, activeIndex, onPick, onHover, 
           </div>
         </button>
       ))}
-    </div>
+    </PopIn>
   );
 }

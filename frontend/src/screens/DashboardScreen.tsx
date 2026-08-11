@@ -24,6 +24,8 @@ import CreatorBubble from '../components/CreatorBubble';
 import NotificationItem from '../components/NotificationItem';
 import GraphMiniMap from '../components/graph/GraphMiniMap';
 import AgentInbox from '../components/AgentInbox';
+import PopIn from '../components/animate-ui/PopIn';
+import ModalIn from '../components/animate-ui/ModalIn';
 import useNotificationsStore from '../store/useNotificationsStore';
 import useSyncStore from '../store/useSyncStore';
 import { notificationTarget } from '../utils/notifications';
@@ -204,7 +206,7 @@ function AllTasksDialog({ tasks, resolve, wsById, todayIso, onClose, onToggle, o
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 640, maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+      <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 640, maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 20px', borderBottom: '1px solid var(--color-surface-tint-2)', flexShrink: 0 }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon name="checklist" size={18} color="var(--color-primary)" />
@@ -238,7 +240,7 @@ function AllTasksDialog({ tasks, resolve, wsById, todayIso, onClose, onToggle, o
             </div>
           )}
         </div>
-      </div>
+      </ModalIn>
     </div>,
     document.body
   );
@@ -318,8 +320,8 @@ function ModeDropdown({ mode, setMode }: { mode: DynamicMode; setMode: (m: Dynam
         <Icon name="unfold_more" size={14} color="var(--color-accent-purple-light)" />
       </button>
       {open && pos && createPortal(
-        <div ref={menuRef}
-          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 500, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', minWidth: 172, padding: '4px 0', animation: 'menuIn 140ms ease both' }}>
+        <PopIn ref={menuRef} duration={140}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 500, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', minWidth: 172, padding: '4px 0' }}>
           {MODE_OPTIONS.map(opt => (
             <button key={opt.key} onClick={() => { setMode(opt.key); setOpen(false); }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: opt.key === mode ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: opt.key === mode ? 600 : 500, color: opt.key === mode ? 'var(--color-primary)' : 'var(--color-text-primary)', textAlign: 'left' }}
@@ -330,7 +332,7 @@ function ModeDropdown({ mode, setMode }: { mode: DynamicMode; setMode: (m: Dynam
               {opt.key === mode && <Icon name="check" size={14} color="var(--color-primary)" />}
             </button>
           ))}
-        </div>,
+        </PopIn>,
         document.body
       )}
     </>

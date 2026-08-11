@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import Icon from '../components/Icon';
 import { useMobile } from '../hooks/useBreakpoint';
 import { apiGetAppsCatalog, apiInstallApp, apiUninstallApp, ApiError, type AppCatalogEntry } from '../api/client';
+import Spinner from '@/components/animate-ui/Spinner';
 
 interface AppsStoreModalProps {
   onClose: () => void;
@@ -87,7 +88,7 @@ function AppCard({
         <button onClick={onInstall} disabled={installing}
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 0', borderRadius: 9, border: 'none', background: installing ? 'var(--color-border-strong)' : 'var(--color-primary)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', cursor: installing ? 'wait' : 'pointer', transition: 'background 150ms' }}>
           {installing
-            ? <><span style={{ width: 13, height: 13, border: '2px solid rgba(var(--color-white-rgb), 0.4)', borderTopColor: 'var(--color-white)', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} /> Installing…</>
+            ? <><Spinner size={13} thickness={2} trackColor="rgba(var(--color-white-rgb), 0.4)" indicatorColor="var(--color-white)" durationMs={700} display="inline-block" /> Installing…</>
             : <><Icon name="add_circle" size={14} color="var(--color-white)" /> Install</>
           }
         </button>
@@ -255,7 +256,7 @@ export default function AppsStoreModal({ onClose }: AppsStoreModalProps) {
 
           {apps === null ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
-              <div style={{ width: 32, height: 32, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+              <Spinner size={32} thickness={3} durationMs={700} />
             </div>
           ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '80px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>

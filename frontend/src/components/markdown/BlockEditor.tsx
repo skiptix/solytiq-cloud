@@ -20,6 +20,8 @@ import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { motion } from '@/components/animate-ui/motion';
 import { LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
+import PopIn from '@/components/animate-ui/PopIn';
+import ModalIn from '@/components/animate-ui/ModalIn';
 import type {
   MarkdownBlock, MarkdownBlockType, MarkdownTodoBlock, MarkdownImageBlock, MarkdownLinkBlock,
   MarkdownHeadingBlock, MarkdownDividerBlock,
@@ -102,7 +104,7 @@ function ImageUploadModal({ uploadImage, isMobile, onUploaded, onClose }: ImageU
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={e => { if (e.target === e.currentTarget && !uploading) onClose(); }}>
-      <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: isMobile ? '100%' : 440, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+      <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: isMobile ? '100%' : 440, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
           <span style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)' }}>Add image</span>
@@ -140,7 +142,7 @@ function ImageUploadModal({ uploadImage, isMobile, onUploaded, onClose }: ImageU
           </div>
           {error && <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--color-error-bg)', borderRadius: 8, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>{error}</div>}
         </div>
-      </div>
+      </ModalIn>
     </div>,
     document.body
   );
@@ -755,7 +757,7 @@ export default function BlockEditor({
           )}
 
           {slashMenu?.blockId === block.id && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', border: '1px solid var(--color-border)', minWidth: 220, maxHeight: 260, overflowY: 'auto', zIndex: 210, animation: 'menuIn 140ms ease both' }}>
+            <PopIn duration={140} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', border: '1px solid var(--color-border)', minWidth: 220, maxHeight: 260, overflowY: 'auto', zIndex: 210 }}>
             {filteredCommands(slashMenu.query).length === 0 && (
               <div style={{ padding: '10px 14px', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)' }}>No matching command</div>
             )}
@@ -769,7 +771,7 @@ export default function BlockEditor({
                 <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-quaternary)' }}>/{cmd.cmd}</span>
               </button>
             ))}
-            </div>
+            </PopIn>
           )}
 
           {mention?.blockId === block.id && mentionActive && (
@@ -962,7 +964,7 @@ export default function BlockEditor({
         return createPortal(
           <>
             <div onClick={() => setContextMenu(null)} onContextMenu={e => { e.preventDefault(); setContextMenu(null); }} style={{ position: 'fixed', inset: 0, zIndex: 1190 }} />
-            <div style={{ position: 'fixed', left, top, minWidth: MENU_W, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5, zIndex: 1200, animation: 'menuIn 150ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <PopIn duration={150} ease="settle" style={{ position: 'fixed', left, top, minWidth: MENU_W, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5, zIndex: 1200 }}>
               {items.map((item, ii) => {
                 if (item.submenu) {
                   // Outer "bridge" wrapper is transparent and carries a 6px side
@@ -982,7 +984,7 @@ export default function BlockEditor({
                       </button>
                       {ctxSubmenuOpen && (
                         <div style={{ position: 'absolute', top: -5, ...bridgePos, zIndex: 1201 }}>
-                          <div style={{ minWidth: SUB_W, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5, animation: 'menuIn 140ms cubic-bezier(0.22,1,0.36,1) both', transformOrigin: subOnLeft ? 'right top' : 'left top' }}>
+                          <PopIn duration={140} ease="settle" style={{ minWidth: SUB_W, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5, transformOrigin: subOnLeft ? 'right top' : 'left top' }}>
                             {item.submenu.map((sub, si) => (
                               <button key={si}
                                 onClick={() => { sub.onClick?.(); setContextMenu(null); }}
@@ -994,7 +996,7 @@ export default function BlockEditor({
                                 {sub.active && <Icon name="check" size={15} color="var(--color-primary)" />}
                               </button>
                             ))}
-                          </div>
+                          </PopIn>
                         </div>
                       )}
                     </div>
@@ -1011,7 +1013,7 @@ export default function BlockEditor({
                   </button>
                 );
               })}
-            </div>
+            </PopIn>
           </>,
           document.body
         );

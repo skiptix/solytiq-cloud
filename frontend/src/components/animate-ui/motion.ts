@@ -11,5 +11,5 @@
 // enforces this at CI time. A future swap of the underlying motion runtime
 // (or a version bump with a breaking export change) touches this one file
 // instead of the ~20 call sites that consume it.
-export { motion, AnimatePresence, useDragControls, MotionConfig } from 'motion/react';
+export { motion, AnimatePresence, useDragControls, useReducedMotion, MotionConfig } from 'motion/react';
 export type { PanInfo, Variants } from 'motion/react';

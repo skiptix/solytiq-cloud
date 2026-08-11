@@ -9,11 +9,10 @@
 //     (visually-hidden text, not just a spinning icon)
 //   - has a fixed, known size so it never causes layout shift when swapped
 //     for the real screen
-//   - uses a plain CSS `@keyframes spin` animation (the same one every other
-//     loading spinner in this app already uses, see index.css) gated by
-//     `prefers-reduced-motion` so a reduced-motion user gets a static
-//     indicator instead of a spinning one
-import './RouteFallback.css';
+//   - Sprint 04: renders through the central Spinner primitive (was a plain
+//     CSS `@keyframes spin` animation) — same reduced-motion behavior
+//     (static, dimmed ring instead of a spinning one), now Motion-driven.
+import Spinner from '@/components/animate-ui/Spinner';
 
 export default function RouteFallback({ label = 'Loading…' }: { label?: string }) {
   return (
@@ -29,7 +28,7 @@ export default function RouteFallback({ label = 'Loading…' }: { label?: string
         width: '100%',
       }}
     >
-      <div className="route-fallback-spinner" aria-hidden="true" />
+      <Spinner size={32} thickness={3} durationMs={700} aria-hidden />
       <span
         style={{
           position: 'absolute',

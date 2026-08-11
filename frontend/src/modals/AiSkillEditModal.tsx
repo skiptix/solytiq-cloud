@@ -6,6 +6,7 @@ import useAiSkillsStore from '../store/useAiSkillsStore';
 import { apiGetAiSkill, apiReplaceAiSkillBundle, ApiError } from '../api/client';
 import { backdropVariants, modalVariants, crossFadeVariants } from '@/components/animate-ui/motionTokens';
 import type { AiSkill, AiSkillFile } from '../types';
+import Spinner from '@/components/animate-ui/Spinner';
 
 interface AiSkillEditModalProps {
   skillId: string;
@@ -132,7 +133,7 @@ export default function AiSkillEditModal({ skillId, onClose }: AiSkillEditModalP
       >
         {loading || !skill ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
-            <div style={{ width: 28, height: 28, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+            <Spinner size={28} thickness={3} durationMs={700} />
           </div>
         ) : (
           <>

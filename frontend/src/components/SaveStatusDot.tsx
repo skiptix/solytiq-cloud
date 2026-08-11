@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { motion, useReducedMotion } from '@/components/animate-ui/motion';
+import { EASE_STANDARD } from '@/components/animate-ui/motionTokens';
 import useSaveStatusStore, { type SaveStatus } from '../store/useSaveStatusStore';
 
 // Small colored status dot shown after a list/timeline/markdown page title:
@@ -26,6 +28,8 @@ export default function SaveStatusDot({ state, size = 10 }: SaveStatusDotProps) 
   const status = state ?? globalStatus;
   const [hovered, setHovered] = useState(false);
   const cfg = CONFIG[status];
+  const prefersReducedMotion = useReducedMotion();
+  const pulsing = status === 'saving' && !prefersReducedMotion;
 
   return (
     <span
@@ -35,22 +39,30 @@ export default function SaveStatusDot({ state, size = 10 }: SaveStatusDotProps) 
       aria-label={cfg.label}
       role="status"
     >
-      <span style={{
-        width: size, height: size, borderRadius: '50%', background: cfg.color,
-        boxShadow: `0 0 0 3px ${cfg.halo}`, cursor: 'default',
-        animation: status === 'saving' ? 'saveDotPulse 1.2s ease-in-out infinite' : undefined,
-        transition: 'background 200ms ease, box-shadow 200ms ease',
-      }} />
+      <motion.span
+        style={{
+          width: size, height: size, borderRadius: '50%', background: cfg.color,
+          boxShadow: `0 0 0 3px ${cfg.halo}`, cursor: 'default',
+          transition: 'background 200ms ease, box-shadow 200ms ease',
+        }}
+        animate={pulsing ? { opacity: [1, 0.4, 1] } : { opacity: 1 }}
+        transition={pulsing ? { duration: 1.2, ease: 'easeInOut', repeat: Infinity } : { duration: 0.2 }}
+      />
       {hovered && (
-        <span style={{
-          position: 'absolute', top: 'calc(100% + 8px)', left: '50%', transform: 'translateX(-50%)',
-          background: 'var(--color-text-primary)', color: 'var(--color-white)',
-          fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap',
-          padding: '5px 9px', borderRadius: 7, boxShadow: '0 6px 20px rgba(var(--color-black-rgb), 0.22)',
-          zIndex: 60, pointerEvents: 'none', animation: 'menuIn 120ms ease both',
-        }}>
+        <motion.span
+          initial={{ opacity: 0, scale: 0.88, y: -6 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.12, ease: EASE_STANDARD }}
+          style={{
+            position: 'absolute', top: 'calc(100% + 8px)', left: '50%', x: '-50%',
+            background: 'var(--color-text-primary)', color: 'var(--color-white)',
+            fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap',
+            padding: '5px 9px', borderRadius: 7, boxShadow: '0 6px 20px rgba(var(--color-black-rgb), 0.22)',
+            zIndex: 60, pointerEvents: 'none',
+          }}
+        >
           {cfg.label}
-        </span>
+        </motion.span>
       )}
     </span>
   );

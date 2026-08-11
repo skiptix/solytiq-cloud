@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icon';
+import PopIn from './animate-ui/PopIn';
 
 export interface ContextMenuItem {
   key: string;
@@ -61,14 +62,15 @@ export default function ContextMenu({ x, y, items, onClose, minWidth = 190 }: Co
   }, [onClose]);
 
   return createPortal(
-    <div
+    <PopIn
       ref={ref}
+      duration={140}
       onContextMenu={e => e.preventDefault()}
       style={{
         position: 'fixed', top: pos.top, left: pos.left, zIndex: 2000,
         background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)',
         border: '1px solid var(--color-border)', minWidth, padding: '4px 0',
-        animation: 'menuIn 140ms ease both', transformOrigin: 'top left',
+        transformOrigin: 'top left',
         visibility: pos.visible ? 'visible' : 'hidden',
       }}
     >
@@ -96,7 +98,7 @@ export default function ContextMenu({ x, y, items, onClose, minWidth = 190 }: Co
           </button>
         )
       )}
-    </div>,
+    </PopIn>,
     document.body
   );
 }

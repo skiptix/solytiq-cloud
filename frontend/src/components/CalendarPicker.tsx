@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Icon from './Icon';
+import PopIn from './animate-ui/PopIn';
 
 interface CalendarPickerProps {
   value?: string;
@@ -48,7 +49,7 @@ export default function CalendarPicker({ value, onChange, onClear }: CalendarPic
   }
 
   return (
-    <div style={{ background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: '14px 16px', width: Math.min(288, window.innerWidth - 32), transformOrigin: 'top center', animation: 'menuIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+    <PopIn duration={180} ease="spring" style={{ background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: '14px 16px', width: Math.min(288, window.innerWidth - 32), transformOrigin: 'top center' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <button onClick={prevMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 4, borderRadius: 6 }}>
           <Icon name="chevron_left" size={18} color="var(--color-text-tertiary)" />
@@ -99,6 +100,6 @@ export default function CalendarPicker({ value, onChange, onClear }: CalendarPic
           </button>
         )}
       </div>
-    </div>
+    </PopIn>
   );
 }

@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icon';
 import MemberAvatar from './MemberAvatar';
+import PopIn from './animate-ui/PopIn';
+import ModalIn from './animate-ui/ModalIn';
 import useMembersStore from '../store/useMembersStore';
 import useSharedItemsStore from '../store/useSharedItemsStore';
 import {
@@ -165,7 +167,7 @@ export default function TaggedUsersRow({ taskId, workspaceId, listId, creatorId,
           </button>
 
           {adding && (
-            <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 60, width: Math.min(260, window.innerWidth - 32), background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 8, animation: 'menuIn 140ms ease both' }}>
+            <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 60, width: Math.min(260, window.innerWidth - 32), background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '6px 9px', marginBottom: 6 }}>
                 <Icon name="search" size={14} color="var(--color-text-quaternary)" />
                 <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search people…"
@@ -188,7 +190,7 @@ export default function TaggedUsersRow({ taskId, workspaceId, listId, creatorId,
                   </button>
                 ))}
               </div>
-            </div>
+            </PopIn>
           )}
         </div>
       )}
@@ -197,8 +199,8 @@ export default function TaggedUsersRow({ taskId, workspaceId, listId, creatorId,
       {prompt && createPortal(
         <div onClick={() => { if (!busy) setPrompt(null); }}
           style={{ position: 'fixed', inset: 0, zIndex: 1600, background: 'rgba(var(--color-black-rgb), 0.32)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}>
-          <div onClick={(e) => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: 400, background: 'var(--color-white)', borderRadius: 18, boxShadow: '0 24px 60px rgba(var(--color-black-rgb), 0.22)', padding: 22, animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          <ModalIn onClick={(e) => e.stopPropagation()} duration={240}
+            style={{ width: '100%', maxWidth: 400, background: 'var(--color-white)', borderRadius: 18, boxShadow: '0 24px 60px rgba(var(--color-black-rgb), 0.22)', padding: 22 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 8 }}>
               <MemberAvatar userId={prompt.id} size={38} fallbackName={nameOf(prompt)} />
               <div style={{ minWidth: 0 }}>
@@ -232,7 +234,7 @@ export default function TaggedUsersRow({ taskId, workspaceId, listId, creatorId,
                 Cancel
               </button>
             </div>
-          </div>
+          </ModalIn>
         </div>,
         document.body
       )}

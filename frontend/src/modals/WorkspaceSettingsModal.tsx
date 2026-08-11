@@ -14,6 +14,9 @@ import CreatorBubble from '../components/CreatorBubble';
 import TrashPanel from '../components/TrashPanel';
 import ArchivedPanel from '../components/ArchivedPanel';
 import { deriveWorkspacePermissions } from '../utils/workspacePermissions';
+import Spinner from '@/components/animate-ui/Spinner';
+import PopIn from '@/components/animate-ui/PopIn';
+import ModalIn from '@/components/animate-ui/ModalIn';
 
 interface UserSuggestion { id: string; username: string; fullName: string | null; profileImage: string | null; }
 
@@ -79,7 +82,7 @@ function WorkspaceImagePicker({ onSelect, onClose }: { onSelect: (dataUrl: strin
       style={{ position: 'fixed', inset: 0, zIndex: 1500, background: 'rgba(var(--color-black-rgb), 0.38)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 440, maxHeight: '68vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(var(--color-black-rgb), 0.22)', animation: 'modalIn 240ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}>
+      <ModalIn duration={240} style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 440, maxHeight: '68vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(var(--color-black-rgb), 0.22)', overflow: 'hidden' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 18px 14px', borderBottom: '1px solid var(--color-purple-pale-23)', flexShrink: 0 }}>
           <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -109,7 +112,7 @@ function WorkspaceImagePicker({ onSelect, onClose }: { onSelect: (dataUrl: strin
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px 12px' }}>
           {loading ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 28 }}>
-              <div style={{ width: 22, height: 22, border: '2.5px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+              <Spinner size={22} thickness={2.5} durationMs={600} />
             </div>
           ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '28px 16px' }}>
@@ -137,14 +140,14 @@ function WorkspaceImagePicker({ onSelect, onClose }: { onSelect: (dataUrl: strin
                   <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', marginTop: 1 }}>{(f.size / 1024).toFixed(0)} KB</div>
                 </div>
                 {fetchingId === f.id
-                  ? <div style={{ width: 14, height: 14, border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite', flexShrink: 0 }} />
+                  ? <Spinner size={14} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} flexShrink={0} />
                   : <Icon name="add_photo_alternate" size={16} color="var(--color-border-strong)" />
                 }
               </button>
             ))
           )}
         </div>
-      </div>
+      </ModalIn>
     </div>
   );
 }
@@ -479,13 +482,14 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                   </div>
                 )}
                 {!useImage && showEmojiPicker && emojiPopPos && createPortal(
-                  <div
+                  <ModalIn
                     ref={emojiPopRef}
+                    duration={180}
                     onMouseDown={e => e.preventDefault()}
-                    style={{ position: 'fixed', left: emojiPopPos.left, top: emojiPopPos.top, bottom: emojiPopPos.bottom, zIndex: 1600, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 24px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', padding: '10px', width: POPUP_WIDTH, boxSizing: 'border-box', maxHeight: 'calc(100vh - 24px)', overflowY: 'auto', animation: 'modalIn 180ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+                    style={{ position: 'fixed', left: emojiPopPos.left, top: emojiPopPos.top, bottom: emojiPopPos.bottom, zIndex: 1600, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 24px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', padding: '10px', width: POPUP_WIDTH, boxSizing: 'border-box', maxHeight: 'calc(100vh - 24px)', overflowY: 'auto' }}
                   >
                     <EmojiGrid value={emoji} onSelect={em => { setEmoji(em); setShowEmojiPicker(false); }} />
-                  </div>,
+                  </ModalIn>,
                   document.body
                 )}
               </div>
@@ -557,11 +561,11 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                         placeholder="Search by name or username…"
                         style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-primary)' }}
                       />
-                      {inviteLoading && <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', animation: 'spin 600ms linear infinite', flexShrink: 0 }} />}
+                      {inviteLoading && <Spinner size={14} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} flexShrink={0} />}
                     </div>
 
                     {showSuggestions && suggestions.length > 0 && (
-                      <div ref={suggestionsRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', overflow: 'hidden', zIndex: 50, animation: 'menuIn 140ms ease both' }}>
+                      <PopIn ref={suggestionsRef} duration={140} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', overflow: 'hidden', zIndex: 50 }}>
                         {suggestions.map((u, i) => (
                           <button key={u.id}
                             tabIndex={0}
@@ -583,7 +587,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                             <Icon name="person_add" size={14} color="var(--color-accent-purple-light)" />
                           </button>
                         ))}
-                      </div>
+                      </PopIn>
                     )}
                   </div>
                   {inviteError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: 6 }}>{inviteError}</div>}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Icon from './Icon';
 import MemberAvatar from './MemberAvatar';
+import PopIn from './animate-ui/PopIn';
 import useAuthStore from '../store/useAuthStore';
 import useMembersStore from '../store/useMembersStore';
 import {
@@ -157,7 +158,7 @@ export default function ItemMembersSection({ itemType, itemId, canManage, onChan
           {error && <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-error)', marginTop: 6 }}>{error}</div>}
 
           {showSuggest && suggestions.length > 0 && (
-            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 60, background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 10, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 6, maxHeight: 220, overflowY: 'auto', animation: 'menuIn 120ms ease both' }}>
+            <PopIn duration={120} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 60, background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 10, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 6, maxHeight: 220, overflowY: 'auto' }}>
               {suggestions.map(u => (
                 <button
                   key={u.id}
@@ -173,7 +174,7 @@ export default function ItemMembersSection({ itemType, itemId, canManage, onChan
                   </div>
                 </button>
               ))}
-            </div>
+            </PopIn>
           )}
         </div>
       )}

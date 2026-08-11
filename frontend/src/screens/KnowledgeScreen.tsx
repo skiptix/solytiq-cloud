@@ -28,6 +28,9 @@ import { ENTRY_TYPE_OPTIONS } from '../utils/knowledgeEntryTypes';
 import { apiGetWorkspaceGraph, apiGetEntityLinks, apiGetWorkspaceMembers } from '../api/client';
 import type { GraphEdge, GraphNode, MarkdownBlock, ResolvedLink, KnowledgeEntry } from '../types';
 import type { MentionMember } from '../utils/mention';
+import Spinner from '@/components/animate-ui/Spinner';
+import PopIn from '@/components/animate-ui/PopIn';
+import ModalIn from '@/components/animate-ui/ModalIn';
 
 // A term's bubble grows with how much its definition actually holds — summary,
 // aliases, and written block content — not just its explicit relation degree.
@@ -400,19 +403,19 @@ export default function KnowledgeScreen() {
       </div>
 
       {scanMessage && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 9, background: 'var(--color-surface-tint)', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-secondary)', animation: 'menuIn 160ms ease both' }}>
+        <PopIn duration={160} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderRadius: 9, background: 'var(--color-surface-tint)', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-secondary)' }}>
           <Icon name="info" size={15} color="var(--color-primary)" />
           <span style={{ flex: 1 }}>{scanMessage}</span>
           <button onClick={() => setScanMessage('')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
             <Icon name="close" size={14} color="var(--color-text-quaternary)" />
           </button>
-        </div>
+        </PopIn>
       )}
 
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: 'relative', borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.04)', overflow: 'hidden', background: 'var(--color-white)' }}>
         {loading && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', fontFamily: 'var(--font-heading)', fontSize: 13, zIndex: 4, background: 'var(--color-white)' }}>
-            <div style={{ width: 16, height: 16, border: '2px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+            <Spinner size={16} thickness={2} durationMs={600} />
             Loading…
           </div>
         )}
@@ -469,7 +472,7 @@ export default function KnowledgeScreen() {
                 )}
               </div>
               {searchOpen && searchQuery.trim() && (
-                <div style={{ marginTop: 6, background: 'var(--color-white)', borderRadius: 10, border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', overflow: 'hidden', animation: 'menuIn 140ms ease both' }}>
+                <PopIn duration={140} style={{ marginTop: 6, background: 'var(--color-white)', borderRadius: 10, border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', overflow: 'hidden' }}>
                   {searchMatches.length === 0 ? (
                     <div style={{ padding: '10px 12px', fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)' }}>No terms match "{searchQuery.trim()}"</div>
                   ) : (
@@ -485,7 +488,7 @@ export default function KnowledgeScreen() {
                       </button>
                     ))
                   )}
-                </div>
+                </PopIn>
               )}
             </div>
 
@@ -509,7 +512,7 @@ export default function KnowledgeScreen() {
                 )}
               </button>
               {typeFilterOpen && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 190, background: 'var(--color-white)', borderRadius: 10, border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: 8, animation: 'menuIn 140ms ease both' }}>
+                <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 190, background: 'var(--color-white)', borderRadius: 10, border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', padding: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 4px 6px' }}>
                     <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 700, color: 'var(--color-text-secondary)' }}>Term type</span>
                     {typeFilter.length > 0 && (
@@ -533,7 +536,7 @@ export default function KnowledgeScreen() {
                       </button>
                     );
                   })}
-                </div>
+                </PopIn>
               )}
             </div>
           </div>
@@ -558,7 +561,7 @@ export default function KnowledgeScreen() {
         </AnimatePresence>
 
         {showSuggestions && suggestions.length > 0 && (
-          <div style={{ position: 'absolute', top: 64, left: 12, width: isMobile ? 'calc(100% - 24px)' : 340, maxHeight: 'calc(100% - 76px)', overflowY: 'auto', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.16)', zIndex: 5, animation: 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          <ModalIn duration={260} style={{ position: 'absolute', top: 64, left: 12, width: isMobile ? 'calc(100% - 24px)' : 340, maxHeight: 'calc(100% - 76px)', overflowY: 'auto', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.16)', zIndex: 5 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: '1px solid var(--color-surface-tint-2)' }}>
               <Icon name="rate_review" size={16} color="var(--color-primary)" />
               <span style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 700, color: 'var(--color-text-primary)' }}>Suggested terms</span>
@@ -589,14 +592,14 @@ export default function KnowledgeScreen() {
                 </div>
               </div>
             ))}
-          </div>
+          </ModalIn>
         )}
 
         {creating && (
           <div onClick={() => setCreating(false)}
             style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-black-rgb), 0.14)', backdropFilter: 'blur(3px)', zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}>
-            <div onClick={e => e.stopPropagation()}
-              style={{ background: 'var(--color-white)', borderRadius: 14, padding: 20, width: '100%', maxWidth: 380, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <ModalIn duration={280} onClick={e => e.stopPropagation()}
+              style={{ background: 'var(--color-white)', borderRadius: 14, padding: 20, width: '100%', maxWidth: 380, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)' }}>
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15.5, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>Add a term</div>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginBottom: 12 }}>
                 What does this workspace call it? You can add the definition next.
@@ -615,7 +618,7 @@ export default function KnowledgeScreen() {
                 <button onClick={() => void handleCreate()} disabled={!newTerm.trim()}
                   style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: newTerm.trim() ? 'var(--color-primary)' : 'var(--color-border-strong)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: newTerm.trim() ? 'pointer' : 'not-allowed' }}>Add</button>
               </div>
-            </div>
+            </ModalIn>
           </div>
         )}
       </div>

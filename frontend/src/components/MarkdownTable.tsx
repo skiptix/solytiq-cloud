@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { MarkdownTableBlock, MarkdownTableRow, MarkdownTableAggregate } from '../types';
 import Icon from './Icon';
+import PopIn from './animate-ui/PopIn';
 import {
   MIN_COL_W, MIN_ROW_H, DEFAULT_COL_W, DEFAULT_ROW_H, AGG_LABELS, AGG_ORDER,
   tblId, columnValues, computeAggregate, formatAggregate,
@@ -232,7 +233,7 @@ export default function MarkdownTable({ block, onChange }: MarkdownTableProps) {
         <>
           <div onClick={() => setAggMenu(null)} onContextMenu={e => { e.preventDefault(); setAggMenu(null); }}
             style={{ position: 'fixed', inset: 0, zIndex: 1000 }} />
-          <div style={{ position: 'fixed', left: aggMenu.x, top: aggMenu.y, zIndex: 1001, minWidth: 168, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5, animation: 'menuIn 140ms ease both' }}>
+          <PopIn duration={140} style={{ position: 'fixed', left: aggMenu.x, top: aggMenu.y, zIndex: 1001, minWidth: 168, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5 }}>
             {([{ fn: null as MarkdownTableAggregate | null, label: 'None' }, ...AGG_ORDER.map(fn => ({ fn, label: AGG_LABELS[fn] }))]).map(opt => {
               const active = (columns[aggMenu.colIndex]?.aggregate ?? null) === opt.fn;
               return (
@@ -245,7 +246,7 @@ export default function MarkdownTable({ block, onChange }: MarkdownTableProps) {
                 </button>
               );
             })}
-          </div>
+          </PopIn>
         </>,
         document.body,
       )}

@@ -1,7 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from '@/components/animate-ui/motion';
-import { listItemVariants, LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
+import { listItemVariants, LAYOUT_TRANSITION, EASE_SPRING } from '@/components/animate-ui/motionTokens';
 import { useMobile } from '../hooks/useBreakpoint';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -18,6 +18,7 @@ import Icon from '../components/Icon';
 import SaveStatusDot from '../components/SaveStatusDot';
 import EmojiSelector from '../components/EmojiSelector';
 import AutomationsButton from '../components/AutomationsButton';
+import Spinner from '@/components/animate-ui/Spinner';
 
 // ── Pull-to-refresh indicator (mobile only) ────────────────────────
 // Purely presentational: height/opacity/rotation driven by usePullToRefresh's
@@ -32,7 +33,7 @@ function PullToRefreshIndicator({ pullDistance, threshold, refreshing, settling 
   return (
     <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: (refreshing || settling) ? 'height 200ms ease' : undefined }}>
       {refreshing ? (
-        <div style={{ width: 22, height: 22, border: '2.5px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+        <Spinner size={22} thickness={2.5} durationMs={600} />
       ) : (
         <div style={{ opacity: 0.4 + progress * 0.6, transform: `rotate(${pastThreshold ? 180 : 0}deg) scale(${0.7 + progress * 0.3})`, transition: 'transform 120ms ease' }}>
           <Icon name="arrow_downward" size={20} color="var(--color-primary)" />
@@ -142,7 +143,7 @@ export default function ListScreen() {
     if (listsLoading) {
       return (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ width: 32, height: 32, border: '3px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+          <Spinner size={32} thickness={3} durationMs={700} />
         </div>
       );
     }
@@ -518,7 +519,17 @@ export default function ListScreen() {
                   <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
                 </button>
               )}
-              {section.emoji && editingSection?.id !== section.id && <span key={section.emoji} style={{ fontSize: 14, animation: 'modalIn 200ms cubic-bezier(0.34,1.56,0.64,1) both' }}>{section.emoji}</span>}
+              {section.emoji && editingSection?.id !== section.id && (
+                <motion.span
+                  key={section.emoji}
+                  initial={{ opacity: 0, scale: 0.94 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.2, ease: EASE_SPRING }}
+                  style={{ fontSize: 14 }}
+                >
+                  {section.emoji}
+                </motion.span>
+              )}
 
               {editingSection?.id === section.id ? (
                 /* Inline edit — label + emoji */

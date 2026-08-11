@@ -15,6 +15,8 @@ import AiSkillEditModal from '../modals/AiSkillEditModal';
 import { featureForScope } from '../modals/adminApiFeatures';
 import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import useAiSkillsStore from '../store/useAiSkillsStore';
+import PopIn from '../components/animate-ui/PopIn';
+import ModalIn from '../components/animate-ui/ModalIn';
 
 interface UserEntry {
   id: string;
@@ -1029,7 +1031,7 @@ export default function SettingsScreen() {
 
                     {/* Confirmation dialog — shown inline when admin clicks to disable */}
                     {showMcpDisableConfirm && (
-                      <div style={{ background: 'var(--color-orange-pale-1)', border: '1.5px solid var(--color-error-bg)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12, animation: 'menuIn 160ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                      <PopIn duration={160} ease="settle" style={{ background: 'var(--color-orange-pale-1)', border: '1.5px solid var(--color-error-bg)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                           <Icon name="warning" size={18} color="var(--color-error)" />
                           <div>
@@ -1053,7 +1055,7 @@ export default function SettingsScreen() {
                             Disable MCP &amp; revoke all connections
                           </button>
                         </div>
-                      </div>
+                      </PopIn>
                     )}
                   </div>
                 </div>
@@ -1451,7 +1453,7 @@ export default function SettingsScreen() {
 
                     {/* Confirmation dialog — shown inline when admin clicks to disable */}
                     {showMobileDisableConfirm && (
-                      <div style={{ background: 'var(--color-orange-pale-1)', border: '1.5px solid var(--color-error-bg)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12, animation: 'menuIn 160ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                      <PopIn duration={160} ease="settle" style={{ background: 'var(--color-orange-pale-1)', border: '1.5px solid var(--color-error-bg)', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                           <Icon name="warning" size={18} color="var(--color-error)" />
                           <div>
@@ -1475,7 +1477,7 @@ export default function SettingsScreen() {
                             Disable &amp; sign out all devices
                           </button>
                         </div>
-                      </div>
+                      </PopIn>
                     )}
                   </div>
                 </div>
@@ -1613,8 +1615,9 @@ export default function SettingsScreen() {
           style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) setAllUsersOpen(false); }}
         >
-          <div
-            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 580, maxHeight: '82vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+          <ModalIn
+            duration={280}
+            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 580, maxHeight: '82vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ padding: '22px 24px 0', flexShrink: 0 }}>
@@ -1725,7 +1728,7 @@ export default function SettingsScreen() {
                 ))
               )}
             </div>
-          </div>
+          </ModalIn>
         </div>,
         document.body
       )}
@@ -1736,8 +1739,9 @@ export default function SettingsScreen() {
           style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) closeAddUser(); }}
         >
-          <div
-            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 420, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+          <ModalIn
+            duration={280}
+            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 420, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 24px 0' }}>
@@ -1803,7 +1807,7 @@ export default function SettingsScreen() {
                 </button>
               </div>
             </div>
-          </div>
+          </ModalIn>
         </div>,
         document.body
       )}
@@ -1814,8 +1818,9 @@ export default function SettingsScreen() {
           style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) closeEditUser(); }}
         >
-          <div
-            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 420, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+          <ModalIn
+            duration={280}
+            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 420, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 24px 0' }}>
@@ -1871,7 +1876,7 @@ export default function SettingsScreen() {
                 </button>
               </div>
             </div>
-          </div>
+          </ModalIn>
         </div>,
         document.body
       )}
@@ -1882,8 +1887,9 @@ export default function SettingsScreen() {
           style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) setDeleteTarget(null); }}
         >
-          <div
-            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 380, padding: '28px 28px 24px', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+          <ModalIn
+            duration={280}
+            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 380, padding: '28px 28px 24px', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
@@ -1899,7 +1905,7 @@ export default function SettingsScreen() {
                 {deleting ? 'Removing…' : 'Remove User'}
               </button>
             </div>
-          </div>
+          </ModalIn>
         </div>,
         document.body
       )}
@@ -1908,7 +1914,7 @@ export default function SettingsScreen() {
       {nukeStep > 0 && createPortal(
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={e => { if (e.target === e.currentTarget) setNukeStep(0); }}>
-          <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 420, padding: '28px 32px', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}
+          <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 420, padding: '28px 32px', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)' }}
             onClick={e => e.stopPropagation()}>
             <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
               <Icon name="warning" size={24} color="var(--color-error)" />
@@ -1945,7 +1951,7 @@ export default function SettingsScreen() {
                 </div>
               </>
             )}
-          </div>
+          </ModalIn>
         </div>,
         document.body
       )}

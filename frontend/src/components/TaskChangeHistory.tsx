@@ -3,6 +3,7 @@ import type { Task, TaskChangeLogEntry } from '../types';
 import { apiGetTaskChangelog } from '../api/client';
 import Icon from './Icon';
 import CreatorBubble from './CreatorBubble';
+import Spinner from '@/components/animate-ui/Spinner';
 
 interface TaskChangeHistoryProps {
   task: Task;
@@ -127,7 +128,7 @@ export default function TaskChangeHistory({ task, listId, open, variant }: TaskC
       <div style={{ flex: isPanel ? 1 : undefined, minHeight: 0, overflowY: isPanel ? 'auto' : undefined, padding: isPanel ? '0 18px 18px' : '0 0 6px' }}>
         {loading && entries === null ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}>
-            <div style={{ width: 18, height: 18, border: '2px solid var(--color-border)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+            <Spinner size={18} thickness={2} durationMs={600} />
           </div>
         ) : (
           items.map((item, i) => {

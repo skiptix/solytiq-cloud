@@ -7,6 +7,7 @@ import AddListWizard from './AddListWizard';
 import AddTimelineWizard from './AddTimelineWizard';
 import AddMarkdownListWizard from './AddMarkdownListWizard';
 import TemplateSelectStep from './TemplateSelectStep';
+import ModalIn from '../components/animate-ui/ModalIn';
 
 interface AddWizardProps {
   onClose: () => void;
@@ -111,7 +112,7 @@ export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, o
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 460, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+      <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 460, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}
         onClick={e => e.stopPropagation()}>
 
         {/* Header */}
@@ -144,7 +145,7 @@ export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, o
             </button>
           ))}
         </div>
-      </div>
+      </ModalIn>
     </div>
   );
 }

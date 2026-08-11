@@ -15,6 +15,7 @@ import TimePicker from '../components/TimePicker';
 import CalendarPicker from '../components/CalendarPicker';
 import JsonTree from '../components/JsonTree';
 import { ownerEntityPath } from './AutomationsScreen';
+import ModalIn from '../components/animate-ui/ModalIn';
 
 // ---------------------------------------------------------------------------
 // Pure graph helpers — shared by the desktop canvas and the mobile step-list
@@ -1184,7 +1185,7 @@ function StepCard({ icon, label, accent, bg, expanded, onToggle, rightAction, te
 
 function RunHistoryPanel({ runs, onClose }: { runs: AutomationRun[] | null; onClose: () => void }) {
   return (
-    <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(380px, 100vw)', background: 'var(--color-white)', boxShadow: '-8px 0 32px rgba(var(--color-black-rgb), 0.14)', zIndex: 500, display: 'flex', flexDirection: 'column', animation: 'modalIn 220ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+    <ModalIn duration={220} style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(380px, 100vw)', background: 'var(--color-white)', boxShadow: '-8px 0 32px rgba(var(--color-black-rgb), 0.14)', zIndex: 500, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--color-purple-pale-34)' }}>
         <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>Run history</div>
         <button onClick={onClose} style={{ width: 28, height: 28, border: 'none', background: 'var(--color-surface-tint)', borderRadius: 8, cursor: 'pointer' }}>
@@ -1219,6 +1220,6 @@ function RunHistoryPanel({ runs, onClose }: { runs: AutomationRun[] | null; onCl
           </div>
         )}
       </div>
-    </div>
+    </ModalIn>
   );
 }

@@ -3,12 +3,15 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
+import PopIn from './animate-ui/PopIn';
+import ModalIn from './animate-ui/ModalIn';
 import useAuthStore from '../store/useAuthStore';
 import useAccountsStore from '../store/useAccountsStore';
 import { apiUpdateProfile, apiUploadProfileImage } from '../api/client';
 import UserSettingsModal from '../modals/UserSettingsModal';
 import AddAccountModal from '../modals/AddAccountModal';
 import { LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
+import Spinner from '@/components/animate-ui/Spinner';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -306,9 +309,11 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
           escapes the sidebar's overflow clipping and always opens upward
           regardless of scroll position or collapsed width. */}
       {menuOpen && menuPos && createPortal(
-        <div
+        <PopIn
           ref={menuRef}
-          style={{ position: 'fixed', left: menuPos.left, bottom: menuPos.bottom, width: menuPos.width, background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 16, boxShadow: '0 -8px 32px rgba(var(--color-black-rgb), 0.14)', zIndex: 1200, animation: 'menuIn 160ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+          duration={160}
+          ease="spring"
+          style={{ position: 'fixed', left: menuPos.left, bottom: menuPos.bottom, width: menuPos.width, background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 16, boxShadow: '0 -8px 32px rgba(var(--color-black-rgb), 0.14)', zIndex: 1200, overflow: 'hidden' }}
         >
           {/* Avatar header */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '22px 20px 16px', background: 'var(--color-surface-tint-3)', borderBottom: '1px solid var(--color-surface-tint-2)', gap: 8 }}>
@@ -391,7 +396,7 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
                         <div style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{acct.username}</div>
                       </div>
                       {busy
-                        ? <div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid var(--color-accent-purple-soft-alt)', borderTopColor: 'var(--color-primary)', animation: 'spin 600ms linear infinite', flexShrink: 0 }} />
+                        ? <Spinner size={13} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} flexShrink={0} />
                         : <Icon name="login" size={14} color="var(--color-text-quaternary)" />
                       }
                     </button>
@@ -440,7 +445,7 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
               Sign Out
             </button>
           </div>
-        </div>,
+        </PopIn>,
         document.body
       )}
 
@@ -465,8 +470,9 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
           style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 200ms ease both' }}
           onClick={e => { if (e.target === e.currentTarget) closeUploadWizard(); }}
         >
-          <div
-            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 440, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both', overflow: 'hidden' }}
+          <ModalIn
+            duration={280}
+            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 440, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 0' }}>
@@ -570,7 +576,7 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
                 </>
               )}
             </div>
-          </div>
+          </ModalIn>
         </div>
       )}
     </>

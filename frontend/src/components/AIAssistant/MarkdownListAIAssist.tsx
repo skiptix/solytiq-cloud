@@ -4,6 +4,8 @@ import useAIStore from '../../store/useAIStore';
 import useMarkdownListsStore from '../../store/useMarkdownListsStore';
 import { apiGetAISettings, apiAIChat, apiGetAiToolDefs, apiExecuteAiTool } from '../../api/client';
 import type { MarkdownList } from '../../types';
+import Spinner from '@/components/animate-ui/Spinner';
+import PopIn from '@/components/animate-ui/PopIn';
 
 // ── Scoped "full access" AI editor for a single Markdown page ──────────────
 // Unlike the global Sol assistant (which can touch every list/task/timeline
@@ -150,7 +152,7 @@ export default function MarkdownListAIAssist({ markdownListId, markdownListName,
       </button>
 
       {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 250, width: Math.min(360, window.innerWidth - 32), maxHeight: 460, display: 'flex', flexDirection: 'column', background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 14, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', animation: 'menuIn 140ms ease both', overflow: 'hidden' }}>
+        <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 250, width: Math.min(360, window.innerWidth - 32), maxHeight: 460, display: 'flex', flexDirection: 'column', background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 14, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid var(--color-purple-pale-23)', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
               <Icon name="auto_awesome" size={15} color="var(--color-primary)" />
@@ -203,7 +205,7 @@ export default function MarkdownListAIAssist({ markdownListId, markdownListName,
             })}
             {busy && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>
-                <div style={{ width: 11, height: 11, border: '2px solid var(--color-border-strong)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                <Spinner size={11} thickness={2} trackColor="var(--color-border-strong)" durationMs={600} />
                 Working…
               </div>
             )}
@@ -224,7 +226,7 @@ export default function MarkdownListAIAssist({ markdownListId, markdownListName,
               <Icon name={busy ? 'progress_activity' : 'arrow_upward'} size={15} color="var(--color-white)" />
             </button>
           </div>
-        </div>
+        </PopIn>
       )}
     </div>
   );

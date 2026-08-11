@@ -9,6 +9,8 @@ import useAppStore from '../store/useAppStore';
 import useMarkdownListsStore from '../store/useMarkdownListsStore';
 import useSyncStore from '../store/useSyncStore';
 import Icon from '../components/Icon';
+import PopIn from '../components/animate-ui/PopIn';
+import ModalIn from '../components/animate-ui/ModalIn';
 
 /** Where the "back" arrow returns to — the exact Board/Page/Timeline this
  *  automation gallery was opened from (there's no standalone gallery route
@@ -49,7 +51,7 @@ function AutomationCardMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete
         <Icon name="more_vert" size={15} color="var(--color-accent-purple-light)" />
       </button>
       {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, width: 170, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', padding: '4px 0', zIndex: 400, animation: 'menuIn 140ms ease both' }}>
+        <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, width: 170, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', padding: '4px 0', zIndex: 400 }}>
           <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEdit(); }}
             style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-text-primary)', textAlign: 'left' }}
             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-surface-tint)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
@@ -61,7 +63,7 @@ function AutomationCardMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete
             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-error-bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
             <Icon name="delete" size={15} color="var(--color-error)" /> Delete
           </button>
-        </div>
+        </PopIn>
       )}
     </div>
   );
@@ -237,7 +239,7 @@ export default function AutomationsScreen() {
       {confirmDelete && createPortal(
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}
           onClick={(e) => { if (e.target === e.currentTarget) setConfirmDelete(null); }}>
-          <div style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 380, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', padding: 24, animation: 'modalIn 280ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 380, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', padding: 24 }}>
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 8 }}>Delete "{confirmDelete.name}"?</div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: 20 }}>This can't be undone. Its run history will be deleted too.</div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
@@ -247,7 +249,7 @@ export default function AutomationsScreen() {
                 Delete
               </button>
             </div>
-          </div>
+          </ModalIn>
         </div>,
         document.body
       )}
