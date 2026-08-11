@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import Icon from './Icon';
 import MemberAvatar from './MemberAvatar';
+import MotionIn from './animate-ui/MotionIn';
+import MotionButton from './animate-ui/MotionButton';
 import type { AppNotification } from '../api/client';
 import { notificationVisual, relativeTime } from '../utils/notifications';
 
@@ -23,21 +25,21 @@ export default function NotificationItem({ notification: n, onActivate, onDismis
   const actorName = n.actor ? (n.actor.fullName || n.actor.username || 'Someone') : null;
 
   return (
-    <div
+    <MotionIn
       role="button"
       tabIndex={0}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       onClick={() => onActivate(n)}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onActivate(n); } }}
+      animate={{ background: hover ? 'var(--color-surface-tint-3)' : (n.read ? 'transparent' : 'var(--color-purple-pale-7)') }}
+      transition={{ duration: 0.12 }}
       style={{
         position: 'relative',
         display: 'flex', alignItems: 'flex-start', gap: 11,
         padding: compact ? '10px 12px' : '12px 16px',
         borderRadius: 12,
         cursor: 'pointer',
-        background: hover ? 'var(--color-surface-tint-3)' : (n.read ? 'transparent' : 'var(--color-purple-pale-7)'),
-        transition: 'background 120ms',
       }}
     >
       {/* Unread accent */}
@@ -85,20 +87,20 @@ export default function NotificationItem({ notification: n, onActivate, onDismis
 
       {/* Dismiss */}
       {onDismiss && (
-        <button
+        <MotionButton
           onClick={(e) => { e.stopPropagation(); onDismiss(n); }}
           title="Dismiss"
           style={{
             flexShrink: 0, width: 24, height: 24, borderRadius: 7, border: 'none', cursor: 'pointer',
             background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            opacity: hover ? 1 : 0, transition: 'opacity 120ms, background 120ms',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+          animate={{ opacity: hover ? 1 : 0 }}
+          whileHover={{ background: 'var(--color-surface-tint)' }}
+          transition={{ duration: 0.12 }}
         >
           <Icon name="close" size={14} color="var(--color-text-quaternary)" />
-        </button>
+        </MotionButton>
       )}
-    </div>
+    </MotionIn>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from '@/components/animate-ui/motion';
+import MotionButton from './animate-ui/MotionButton';
 import Icon from './Icon';
 import NotificationItem from './NotificationItem';
 import useNotificationsStore from '../store/useNotificationsStore';
@@ -114,7 +115,7 @@ export default function NotificationBell({ isMobile, onNavigate }: NotificationB
     <>
       {/* Bell button */}
       <div style={{ position: 'relative' }}>
-        <button
+        <MotionButton
           ref={bellBtnRef}
           onClick={() => setPanelOpen(!panelOpen)}
           title="Notifications"
@@ -124,13 +125,13 @@ export default function NotificationBell({ isMobile, onNavigate }: NotificationB
           data-touch={isMobile ? true : undefined}
           style={{
             width: isMobile ? 40 : 32, height: isMobile ? 40 : 32, borderRadius: isMobile ? 10 : '50%',
-            background: panelOpen ? 'var(--color-surface-tint)' : 'transparent',
             border: isMobile ? 'none' : `1px solid ${panelOpen ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`,
             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 150ms', position: 'relative', flexShrink: 0,
+            position: 'relative', flexShrink: 0,
           }}
-          onMouseEnter={(e) => { if (!panelOpen && !isMobile) { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-soft)'; } }}
-          onMouseLeave={(e) => { if (!panelOpen && !isMobile) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-border)'; } }}
+          animate={{ background: panelOpen ? 'var(--color-surface-tint)' : 'transparent' }}
+          whileHover={!panelOpen && !isMobile ? { background: 'var(--color-surface-tint)', borderColor: 'var(--color-accent-purple-soft)' } : undefined}
+          transition={{ duration: 0.15 }}
         >
           <Icon name={unreadCount > 0 ? 'notifications_active' : 'notifications'} size={isMobile ? 20 : 17} color={panelOpen ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
           {unreadCount > 0 && (
@@ -145,7 +146,7 @@ export default function NotificationBell({ isMobile, onNavigate }: NotificationB
               {badge}
             </span>
           )}
-        </button>
+        </MotionButton>
       </div>
 
       {/* Slide-in panel */}

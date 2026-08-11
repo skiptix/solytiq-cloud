@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import Icon from './Icon';
 import useAuthStore from '../store/useAuthStore';
 import ModalIn from './animate-ui/ModalIn';
+import { motion } from './animate-ui/motion';
+import { EASE_STANDARD } from './animate-ui/motionTokens';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import { apiGlobalSearch, apiKnowledgeSearch, type GlobalSearchResult } from '../api/client';
 
@@ -150,9 +152,12 @@ export default function CommandPalette({ onClose, onNavigate, onOpenAccountSetti
   let renderedGroups: string[] = [];
 
   return createPortal(
-    <div
+    <motion.div
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: 'fixed', inset: 0, zIndex: 1500, background: 'rgba(var(--color-black-rgb), 0.32)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'clamp(12px, 5vw, 24px)', animation: 'backdropIn 180ms ease both' }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.18, ease: EASE_STANDARD }}
+      style={{ position: 'fixed', inset: 0, zIndex: 1500, background: 'rgba(var(--color-black-rgb), 0.32)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'clamp(12px, 5vw, 24px)' }}
     >
       <ModalIn
         duration={220}
@@ -208,10 +213,12 @@ export default function CommandPalette({ onClose, onNavigate, onOpenAccountSetti
                     {GROUP_LABELS[r.type]}
                   </div>
                 )}
-                <div
+                <motion.div
                   onMouseEnter={() => setActiveIdx(i)}
                   onMouseDown={() => goTo(r)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: i === activeIdx ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', transition: 'background 100ms' }}
+                  animate={{ background: i === activeIdx ? 'var(--color-surface-tint)' : 'transparent' }}
+                  transition={{ duration: 0.1 }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, cursor: 'pointer' }}
                 >
                   <div style={{ width: 32, height: 32, borderRadius: 9, background: `${GROUP_COLORS[r.type]}12`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Icon name={r.type === 'setting' ? (r.icon ?? 'settings') : GROUP_ICONS[r.type]} size={15} color={GROUP_COLORS[r.type]} />
@@ -221,7 +228,7 @@ export default function CommandPalette({ onClose, onNavigate, onOpenAccountSetti
                     {r.sub && <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)', marginTop: 1 }}>{r.sub}</div>}
                   </div>
                   <span style={{ fontFamily: 'var(--font-body)', fontSize: 9.5, fontWeight: 600, color: GROUP_COLORS[r.type], background: `${GROUP_COLORS[r.type]}12`, borderRadius: 9999, padding: '2px 7px', textTransform: 'uppercase', flexShrink: 0 }}>{r.type}</span>
-                </div>
+                </motion.div>
               </div>
             );
           })}
@@ -238,7 +245,7 @@ export default function CommandPalette({ onClose, onNavigate, onOpenAccountSetti
           ))}
         </div>
       </ModalIn>
-    </div>,
+    </motion.div>,
     document.body
   );
 }
