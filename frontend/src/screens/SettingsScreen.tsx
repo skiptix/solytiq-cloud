@@ -1,7 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence } from '@/components/animate-ui/motion';
+import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import { useMobile } from '../hooks/useBreakpoint';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
@@ -17,6 +17,7 @@ import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import useAiSkillsStore from '../store/useAiSkillsStore';
 import PopIn from '../components/animate-ui/PopIn';
 import ModalIn from '../components/animate-ui/ModalIn';
+import MotionButton from '../components/animate-ui/MotionButton';
 
 interface UserEntry {
   id: string;
@@ -738,7 +739,7 @@ export default function SettingsScreen() {
                           <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: barColor, background: pct >= 90 ? 'var(--color-error-bg)' : pct >= 70 ? 'var(--color-yellow-tint-1)' : 'var(--color-surface-tint)', borderRadius: 9999, padding: '2px 9px' }}>{pct}% used</span>
                         </div>
                         <div style={{ background: 'var(--color-border-alt)', borderRadius: 99, height: 8, overflow: 'hidden', marginBottom: 12 }}>
-                          <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 99, transition: 'width 600ms ease' }} />
+                          <motion.div animate={{ width: `${pct}%` }} transition={{ duration: 0.6, ease: 'easeInOut' }} style={{ height: '100%', background: barColor, borderRadius: 99 }} />
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <div style={{ display: 'flex', gap: 20 }}>
@@ -812,24 +813,25 @@ export default function SettingsScreen() {
                         <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Enable AI Assistant</div>
                         <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>Show the AI assistant bubble for all users on this instance.</div>
                       </div>
-                      <button
+                      <MotionButton
                         onClick={() => { setAiEnabled(v => !v); setAiSaved(false); }}
                         style={{
                           width: 44, height: 24, borderRadius: 12,
-                          background: aiEnabled ? 'var(--color-primary)' : 'var(--color-border)',
                           border: 'none', cursor: 'pointer',
                           position: 'relative', flexShrink: 0,
-                          transition: 'background 200ms',
                         }}
+                        animate={{ background: aiEnabled ? 'var(--color-primary)' : 'var(--color-border)' }}
+                        transition={{ duration: 0.2 }}
                       >
-                        <span style={{
+                        <motion.span
+                          animate={{ left: aiEnabled ? 22 : 2 }}
+                          transition={{ duration: 0.2 }}
+                          style={{
                           position: 'absolute', top: 2,
-                          left: aiEnabled ? 22 : 2,
                           width: 20, height: 20, borderRadius: '50%',
                           background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)',
-                          transition: 'left 200ms',
                         }} />
-                      </button>
+                      </MotionButton>
                     </div>
 
                     <div style={{ height: 1, background: 'var(--color-surface-tint-2)' }} />
@@ -901,7 +903,7 @@ export default function SettingsScreen() {
                         onClick={() => { setKnowledgeSearchEnabled(v => !v); setKnowledgeSaved(false); }}
                         style={{ width: 44, height: 24, borderRadius: 12, background: knowledgeSearchEnabled ? 'var(--color-primary)' : 'var(--color-border)', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 200ms' }}
                       >
-                        <span style={{ position: 'absolute', top: 2, left: knowledgeSearchEnabled ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)', transition: 'left 200ms' }} />
+                        <motion.span animate={{ left: knowledgeSearchEnabled ? 22 : 2 }} transition={{ duration: 0.2 }} style={{ position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)' }} />
                       </button>
                     </div>
 
@@ -1008,25 +1010,26 @@ export default function SettingsScreen() {
                         <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Enable Claude MCP</div>
                         <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>Allow users to connect Claude via the MCP server. Disabling immediately revokes all active connections for all users.</div>
                       </div>
-                      <button
+                      <MotionButton
                         onClick={() => !mcpSaving && handleToggleMcp(!mcpEnabled)}
                         disabled={mcpSaving}
                         style={{
                           width: 44, height: 24, borderRadius: 12,
-                          background: mcpSaving ? 'var(--color-border-strong)' : mcpEnabled ? 'var(--color-primary)' : 'var(--color-border)',
                           border: 'none', cursor: mcpSaving ? 'wait' : 'pointer',
                           position: 'relative', flexShrink: 0,
-                          transition: 'background 200ms',
                         }}
+                        animate={{ background: mcpSaving ? 'var(--color-border-strong)' : mcpEnabled ? 'var(--color-primary)' : 'var(--color-border)' }}
+                        transition={{ duration: 0.2 }}
                       >
-                        <span style={{
+                        <motion.span
+                          animate={{ left: mcpEnabled ? 22 : 2 }}
+                          transition={{ duration: 0.2 }}
+                          style={{
                           position: 'absolute', top: 2,
-                          left: mcpEnabled ? 22 : 2,
                           width: 20, height: 20, borderRadius: '50%',
                           background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)',
-                          transition: 'left 200ms',
                         }} />
-                      </button>
+                      </MotionButton>
                     </div>
 
                     {/* Confirmation dialog — shown inline when admin clicks to disable */}
@@ -1151,10 +1154,11 @@ export default function SettingsScreen() {
                             return (
                               <g key={date}>
                                 {total > 0 ? (
-                                  <rect
+                                  <motion.rect
                                     x={x} y={y} width={barW} height={barH} rx={3}
-                                    fill={isHov ? 'var(--color-purple-mid-10)' : 'var(--color-primary)'}
-                                    style={{ cursor: 'pointer', transition: 'fill 100ms' }}
+                                    animate={{ fill: isHov ? 'var(--color-purple-mid-10)' : 'var(--color-primary)' }}
+                                    transition={{ duration: 0.1 }}
+                                    style={{ cursor: 'pointer' }}
                                     onMouseEnter={() => setHoveredBar({ x: x + barW / 2, y, date, total, prompt: data?.prompt ?? 0, completion: data?.completion ?? 0 })}
                                     onMouseLeave={() => setHoveredBar(null)}
                                   />
@@ -1306,7 +1310,7 @@ export default function SettingsScreen() {
                           onClick={(e) => { e.stopPropagation(); setAiSkillEnabled(skill.id, !skill.enabled); }}
                           style={{ width: 40, height: 22, borderRadius: 11, background: skill.enabled ? 'var(--color-primary)' : 'var(--color-border)', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 200ms' }}
                         >
-                          <span style={{ position: 'absolute', top: 2, left: skill.enabled ? 20 : 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)', transition: 'left 200ms' }} />
+                          <motion.span animate={{ left: skill.enabled ? 20 : 2 }} transition={{ duration: 0.2 }} style={{ position: 'absolute', top: 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)' }} />
                         </button>
                       </div>
                     ))}
@@ -1332,24 +1336,25 @@ export default function SettingsScreen() {
                         </div>
                       </div>
                     </div>
-                    <button
+                    <MotionButton
                       onClick={() => { setTwoFAFeatureEnabled(v => !v); setSecuritySaved(false); }}
                       style={{
                         width: 44, height: 24, borderRadius: 12,
-                        background: twoFAFeatureEnabled ? 'var(--color-primary)' : 'var(--color-border)',
                         border: 'none', cursor: 'pointer',
                         position: 'relative', flexShrink: 0,
-                        transition: 'background 200ms',
                       }}
+                      animate={{ background: twoFAFeatureEnabled ? 'var(--color-primary)' : 'var(--color-border)' }}
+                      transition={{ duration: 0.2 }}
                     >
-                      <span style={{
+                      <motion.span
+                        animate={{ left: twoFAFeatureEnabled ? 23 : 3 }}
+                        transition={{ duration: 0.2 }}
+                        style={{
                         position: 'absolute', top: 3,
-                        left: twoFAFeatureEnabled ? 23 : 3,
                         width: 18, height: 18, borderRadius: '50%',
                         background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.18)',
-                        transition: 'left 200ms',
                       }} />
-                    </button>
+                    </MotionButton>
                   </div>
                 </div>
 
@@ -1430,25 +1435,26 @@ export default function SettingsScreen() {
                         <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Allow mobile app connections</div>
                         <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>Let users connect the Solytiq Cloud iOS app to this instance and sign in. Disabling immediately signs out every connected device and blocks new mobile logins.</div>
                       </div>
-                      <button
+                      <MotionButton
                         onClick={() => !mobileSaving && handleToggleMobile(!mobileEnabled)}
                         disabled={mobileSaving}
                         style={{
                           width: 44, height: 24, borderRadius: 12,
-                          background: mobileSaving ? 'var(--color-border-strong)' : mobileEnabled ? 'var(--color-primary)' : 'var(--color-border)',
                           border: 'none', cursor: mobileSaving ? 'wait' : 'pointer',
                           position: 'relative', flexShrink: 0,
-                          transition: 'background 200ms',
                         }}
+                        animate={{ background: mobileSaving ? 'var(--color-border-strong)' : mobileEnabled ? 'var(--color-primary)' : 'var(--color-border)' }}
+                        transition={{ duration: 0.2 }}
                       >
-                        <span style={{
+                        <motion.span
+                          animate={{ left: mobileEnabled ? 22 : 2 }}
+                          transition={{ duration: 0.2 }}
+                          style={{
                           position: 'absolute', top: 2,
-                          left: mobileEnabled ? 22 : 2,
                           width: 20, height: 20, borderRadius: '50%',
                           background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)',
-                          transition: 'left 200ms',
                         }} />
-                      </button>
+                      </MotionButton>
                     </div>
 
                     {/* Confirmation dialog — shown inline when admin clicks to disable */}
