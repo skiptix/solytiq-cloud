@@ -12,4 +12,10 @@
 // (or a version bump with a breaking export change) touches this one file
 // instead of the ~20 call sites that consume it.
 export { motion, AnimatePresence, useDragControls, useReducedMotion, MotionConfig } from 'motion/react';
-export type { PanInfo, Variants } from 'motion/react';
+// `TargetAndTransition`/`Transition` are re-exported for the same reason as the
+// runtime values: a component that takes a Motion target as a PROP (e.g.
+// SlashCommandInput's `inputAnimate`, where the host owns the animated state)
+// still must not reach into 'motion/react' itself — the policy gate treats a
+// type-only import from there as a boundary violation just like a value one,
+// deliberately, since a type import is exactly how the boundary erodes first.
+export type { PanInfo, Variants, TargetAndTransition, Transition } from 'motion/react';
