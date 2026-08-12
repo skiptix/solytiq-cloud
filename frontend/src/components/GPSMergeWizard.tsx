@@ -4,6 +4,9 @@ import type { GpsFile, GapMode } from '../types';
 import { apiUploadGpsFile, apiMergeGpsFilesDownload, apiMergeGpsFilesSave } from '../api/client';
 import Icon from './Icon';
 import ModalIn from './animate-ui/ModalIn';
+import MotionButton from './animate-ui/MotionButton';
+import MotionIn from './animate-ui/MotionIn';
+import { motion } from './animate-ui/motion';
 
 function fmtDist(m?: number | null) {
   if (m == null) return null;
@@ -214,17 +217,17 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
                   const checked = selectedIds.includes(file.id);
                   const disabled = !checked && selectedIds.length >= 5;
                   return (
-                    <div
+                    <MotionIn
                       key={file.id}
                       onClick={() => !disabled && toggleSelect(file.id)}
+                      animate={{ background: checked ? 'var(--color-surface-tint-3)' : 'transparent' }}
+                      whileHover={!disabled && !checked ? { background: 'var(--color-purple-pale-5)' } : undefined}
+                      transition={{ duration: 0.12 }}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
                         borderBottom: '1px solid var(--color-surface-tint)', cursor: disabled ? 'default' : 'pointer',
-                        background: checked ? 'var(--color-surface-tint-3)' : 'transparent',
-                        opacity: disabled ? 0.45 : 1, transition: 'background 120ms',
+                        opacity: disabled ? 0.45 : 1,
                       }}
-                      onMouseEnter={e => { if (!disabled && !checked) e.currentTarget.style.background = 'var(--color-purple-pale-5)'; }}
-                      onMouseLeave={e => { if (!checked) e.currentTarget.style.background = 'transparent'; }}
                     >
                       {/* Checkbox */}
                       <div style={{
@@ -246,28 +249,28 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
                           {fmtDist(file.metadata.totalDistance)}
                         </span>
                       )}
-                    </div>
+                    </MotionIn>
                   );
                 })}
               </div>
 
               {/* Upload new */}
-              <button
+              <MotionButton
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading || selectedIds.length >= 5}
+                whileHover={selectedIds.length < 5 ? { background: 'var(--color-surface-tint-3)' } : undefined}
+                transition={{ duration: 0.15 }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 7, padding: '8px 14px',
                   borderRadius: 8, border: '1.5px dashed var(--color-accent-purple-soft)', background: 'transparent',
                   color: 'var(--color-primary)', fontSize: 12.5, fontWeight: 600, cursor: selectedIds.length < 5 ? 'pointer' : 'default',
                   fontFamily: 'var(--font-heading)', opacity: selectedIds.length >= 5 ? 0.4 : 1,
-                  transition: 'all 150ms', marginBottom: selectedIds.length > 0 ? 16 : 0,
+                  marginBottom: selectedIds.length > 0 ? 16 : 0,
                 }}
-                onMouseEnter={e => { if (selectedIds.length < 5) e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
               >
                 <Icon name="upload" size={14} color="var(--color-primary)" />
                 {uploading ? 'Uploading…' : 'Upload new .GPX or .FIT'}
-              </button>
+              </MotionButton>
               <input ref={fileInputRef} type="file" accept=".gpx,.fit" style={{ display: 'none' }} multiple onChange={e => handleUpload(e.target.files)} />
 
               {/* Selected order */}
@@ -367,22 +370,26 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
                           </div>
                           <div style={{ display: 'flex', gap: 8 }}>
                             {(['skip', 'straight'] as GapMode[]).map(mode => (
-                              <button
+                              <MotionButton
                                 key={mode}
                                 onClick={() => setGapModes(prev => { const a = [...prev]; a[idx] = mode; return a; })}
-                                style={{
-                                  padding: '5px 12px', borderRadius: 7, cursor: 'pointer',
-                                  border: `1.5px solid ${gapModes[idx] === mode ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                                animate={{
+                                  borderColor: gapModes[idx] === mode ? 'var(--color-primary)' : 'var(--color-border)',
                                   background: gapModes[idx] === mode ? 'var(--color-surface-tint-4)' : 'transparent',
                                   color: gapModes[idx] === mode ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                                }}
+                                transition={{ duration: 0.12 }}
+                                style={{
+                                  padding: '5px 12px', borderRadius: 7, cursor: 'pointer',
+                                  borderWidth: 1.5, borderStyle: 'solid',
                                   fontSize: 12, fontWeight: gapModes[idx] === mode ? 600 : 400,
-                                  fontFamily: 'var(--font-body)', transition: 'all 120ms',
+                                  fontFamily: 'var(--font-body)',
                                   display: 'flex', alignItems: 'center', gap: 5,
                                 }}
                               >
                                 <Icon name={mode === 'skip' ? 'remove' : 'timeline'} size={12} color={gapModes[idx] === mode ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
                                 {mode === 'skip' ? 'Skip gap' : 'Straight line'}
-                              </button>
+                              </MotionButton>
                             ))}
                           </div>
                           <div style={{ marginTop: 4, fontSize: 10.5, color: 'var(--color-border-strong)', fontFamily: 'var(--font-body)', lineHeight: 1.5 }}>
@@ -411,20 +418,19 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
                 </div>
               </div>
 
-              <input
+              <motion.input
                 value={outputName}
                 onChange={e => setOutputName(e.target.value)}
                 placeholder="Route name…"
                 autoFocus
+                whileFocus={{ borderColor: 'var(--color-primary)' }}
+                transition={{ duration: 0.2 }}
                 style={{
                   width: '100%', boxSizing: 'border-box', padding: '10px 14px',
-                  border: '1.5px solid var(--color-accent-purple-soft)', borderRadius: 10, fontSize: 14,
+                  borderWidth: 1.5, borderStyle: 'solid', borderColor: 'var(--color-accent-purple-soft)', borderRadius: 10, fontSize: 14,
                   fontFamily: 'var(--font-heading)', color: 'var(--color-text-primary)',
                   outline: 'none', background: 'var(--color-surface-tint-3)', marginBottom: 20,
-                  transition: 'border-color 200ms',
                 }}
-                onFocus={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-                onBlur={e => { e.currentTarget.style.borderColor = 'var(--color-accent-purple-soft)'; }}
               />
 
               {/* Summary */}
@@ -465,66 +471,66 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
 
         {/* Footer */}
         <div style={{ padding: '14px 24px', borderTop: '1px solid var(--color-purple-pale-18)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-purple-pale-1)', flexShrink: 0 }}>
-          <button
+          <MotionButton
             onClick={() => { if (step === 1) onClose(); else setStep(s => (s - 1) as 1 | 2 | 3); }}
-            style={{ padding: '9px 18px', borderRadius: 9, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-heading)', transition: 'all 150ms' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            whileHover={{ background: 'var(--color-surface-tint)' }}
+            transition={{ duration: 0.15 }}
+            style={{ padding: '9px 18px', borderRadius: 9, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-heading)' }}
           >
             {step === 1 ? 'Cancel' : '← Back'}
-          </button>
+          </MotionButton>
 
           <div style={{ display: 'flex', gap: 8 }}>
             {step < 3 ? (
-              <button
+              <MotionButton
                 onClick={() => canAdvance && setStep(s => (s + 1) as 2 | 3)}
                 disabled={!canAdvance}
+                animate={{ background: canAdvance ? 'var(--color-primary)' : 'var(--color-border)' }}
+                whileHover={canAdvance ? { background: 'var(--color-purple-mid-11)' } : undefined}
+                transition={{ duration: 0.15 }}
                 style={{
                   padding: '9px 22px', borderRadius: 9, border: 'none',
-                  background: canAdvance ? 'var(--color-primary)' : 'var(--color-border)',
                   color: canAdvance ? 'var(--color-white)' : 'var(--color-text-quaternary)',
                   fontSize: 13, fontWeight: 600, cursor: canAdvance ? 'pointer' : 'default',
-                  fontFamily: 'var(--font-heading)', transition: 'all 150ms',
+                  fontFamily: 'var(--font-heading)',
                 }}
-                onMouseEnter={e => { if (canAdvance) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
-                onMouseLeave={e => { if (canAdvance) e.currentTarget.style.background = 'var(--color-primary)'; }}
               >
                 {step === 1 ? `Next → (${selectedIds.length} route${selectedIds.length !== 1 ? 's' : ''})` : 'Next →'}
-              </button>
+              </MotionButton>
             ) : (
               <>
-                <button
+                <MotionButton
                   onClick={() => handleMerge(false)}
                   disabled={!outputName.trim() || merging}
+                  whileHover={outputName.trim() && !merging ? { background: 'var(--color-surface-tint)' } : undefined}
+                  transition={{ duration: 0.15 }}
                   style={{
                     padding: '9px 18px', borderRadius: 9, border: '1px solid var(--color-border)',
                     background: 'transparent', color: 'var(--color-text-secondary)',
                     fontSize: 13, fontWeight: 600, cursor: outputName.trim() && !merging ? 'pointer' : 'default',
-                    fontFamily: 'var(--font-heading)', transition: 'all 150ms', display: 'flex', alignItems: 'center', gap: 6,
+                    fontFamily: 'var(--font-heading)', display: 'flex', alignItems: 'center', gap: 6,
                     opacity: !outputName.trim() || merging ? 0.5 : 1,
                   }}
-                  onMouseEnter={e => { if (outputName.trim() && !merging) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                 >
                   <Icon name="download" size={14} color="var(--color-text-secondary)" />
                   Download GPX
-                </button>
-                <button
+                </MotionButton>
+                <MotionButton
                   onClick={() => handleMerge(true)}
                   disabled={!outputName.trim() || merging}
+                  animate={{ background: outputName.trim() && !merging ? 'var(--color-primary)' : 'var(--color-border)' }}
+                  whileHover={outputName.trim() && !merging ? { background: 'var(--color-purple-mid-11)' } : undefined}
+                  transition={{ duration: 0.15 }}
                   style={{
                     padding: '9px 22px', borderRadius: 9, border: 'none',
-                    background: outputName.trim() && !merging ? 'var(--color-primary)' : 'var(--color-border)',
                     color: outputName.trim() && !merging ? 'var(--color-white)' : 'var(--color-text-quaternary)',
                     fontSize: 13, fontWeight: 600, cursor: outputName.trim() && !merging ? 'pointer' : 'default',
-                    fontFamily: 'var(--font-heading)', transition: 'all 150ms', display: 'flex', alignItems: 'center', gap: 6,
+                    fontFamily: 'var(--font-heading)', display: 'flex', alignItems: 'center', gap: 6,
                   }}
-                  onMouseEnter={e => { if (outputName.trim() && !merging) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
-                  onMouseLeave={e => { if (outputName.trim() && !merging) e.currentTarget.style.background = 'var(--color-primary)'; }}
                 >
                   <Icon name="save" size={14} color={outputName.trim() && !merging ? 'var(--color-white)' : 'var(--color-text-quaternary)'} />
                   {merging ? 'Saving…' : 'Save to Library'}
-                </button>
+                </MotionButton>
               </>
             )}
           </div>

@@ -6,6 +6,10 @@ import type { WorkspaceMember } from '../types';
 import { EmojiGrid } from '../components/EmojiSelector';
 import Spinner from '@/components/animate-ui/Spinner';
 import PopIn from '@/components/animate-ui/PopIn';
+import MotionButton from '@/components/animate-ui/MotionButton';
+import MotionIn from '@/components/animate-ui/MotionIn';
+import { motion } from '@/components/animate-ui/motion';
+import { EASE_SETTLE, EASE_STANDARD } from '@/components/animate-ui/motionTokens';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -100,31 +104,33 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
     }
   };
 
-  const panelAnim = closing
-    ? 'settingsModalOut 190ms ease-in both'
-    : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both';
-  const backdropAnim = closing
-    ? 'backdropOut 190ms ease both'
-    : 'backdropIn 220ms ease both';
-
   return createPortal(
-    <div
+    <motion.div
       onClick={e => { if (e.target === e.currentTarget && !forced) handleClose(); }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: backdropAnim }}>
-      <div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: closing ? 0 : 1 }}
+      transition={{ duration: closing ? 0.19 : 0.22, ease: EASE_STANDARD }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}>
+      <MotionIn
         onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 500, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', animation: panelAnim, overflow: 'hidden', position: 'relative' }}>
+        initial={{ opacity: 0, y: 22, scale: 0.96 }}
+        animate={closing ? { opacity: 0, y: 14, scale: 0.97 } : { opacity: 1, y: 0, scale: 1 }}
+        transition={closing ? { duration: 0.19, ease: 'easeIn' } : { duration: 0.36, ease: EASE_SETTLE }}
+        style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 500, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden', position: 'relative' }}>
 
         {/* Step indicator */}
         <div style={{ padding: '20px 24px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
           {[0, 1].map(i => (
-            <div key={i} style={{ height: 3, flex: 1, borderRadius: 9999, background: step > i ? 'var(--color-primary)' : step === i ? 'var(--color-accent-purple-light)' : 'var(--color-border)', transition: 'background 300ms' }} />
+            <motion.div key={i}
+              animate={{ background: step > i ? 'var(--color-primary)' : step === i ? 'var(--color-accent-purple-light)' : 'var(--color-border)' }}
+              transition={{ duration: 0.3 }}
+              style={{ height: 3, flex: 1, borderRadius: 9999 }} />
           ))}
         </div>
 
         {/* ── Step 0: Details ── */}
         {step === 0 && (
-          <div style={{ padding: '20px 24px 24px', animation: 'wizardStepIn 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
+          <MotionIn initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: EASE_SETTLE }} style={{ padding: '20px 24px 24px' }}>
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>{forced ? 'Create your first workspace' : 'Create workspace'}</div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: 22 }}>{forced ? 'You need a workspace to get started. Give it a name and identity.' : 'Give your workspace a name and identity.'}</div>
 
@@ -141,8 +147,14 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
                 </div>
                 {/* Toggle tabs */}
                 <div style={{ display: 'flex', background: 'var(--color-surface-tint-2)', borderRadius: 8, padding: 2, gap: 2 }}>
-                  <button onClick={() => setUseImage(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', background: !useImage ? 'var(--color-primary)' : 'transparent', color: !useImage ? 'var(--color-white)' : 'var(--color-text-tertiary)', transition: 'all 150ms' }}>Emoji</button>
-                  <button onClick={() => { setUseImage(true); }} style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', background: useImage ? 'var(--color-primary)' : 'transparent', color: useImage ? 'var(--color-white)' : 'var(--color-text-tertiary)', transition: 'all 150ms' }}>Image</button>
+                  <MotionButton onClick={() => setUseImage(false)}
+                    animate={{ background: !useImage ? 'var(--color-primary)' : 'transparent', color: !useImage ? 'var(--color-white)' : 'var(--color-text-tertiary)' }}
+                    transition={{ duration: 0.15 }}
+                    style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6, border: 'none', cursor: 'pointer' }}>Emoji</MotionButton>
+                  <MotionButton onClick={() => { setUseImage(true); }}
+                    animate={{ background: useImage ? 'var(--color-primary)' : 'transparent', color: useImage ? 'var(--color-white)' : 'var(--color-text-tertiary)' }}
+                    transition={{ duration: 0.15 }}
+                    style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6, border: 'none', cursor: 'pointer' }}>Image</MotionButton>
                 </div>
               </div>
 
@@ -176,18 +188,20 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
 
             {/* Image upload */}
             {useImage && (
-              <div
+              <MotionIn
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) processFile(f); }}
                 onClick={() => fileInputRef.current?.click()}
-                style={{ border: `2px dashed ${dragOver ? 'var(--color-primary)' : 'var(--color-accent-purple-soft-alt)'}`, borderRadius: 12, padding: '20px', textAlign: 'center', cursor: 'pointer', marginBottom: 14, background: dragOver ? 'var(--color-surface-tint-alt)' : 'var(--color-blue-pale-1)', transition: 'all 150ms' }}>
+                animate={{ borderColor: dragOver ? 'var(--color-primary)' : 'var(--color-accent-purple-soft-alt)', background: dragOver ? 'var(--color-surface-tint-alt)' : 'var(--color-blue-pale-1)' }}
+                transition={{ duration: 0.15 }}
+                style={{ borderWidth: 2, borderStyle: 'dashed', borderRadius: 12, padding: '20px', textAlign: 'center', cursor: 'pointer', marginBottom: 14 }}>
                 <Icon name="upload" size={24} color="var(--color-accent-purple-light)" />
                 <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
                   {pendingImage ? 'Click to change image' : 'Drop image here or click to upload'}
                 </div>
                 {imgError && <div style={{ color: 'var(--color-error)', fontSize: 12, marginTop: 4 }}>{imgError}</div>}
-              </div>
+              </MotionIn>
             )}
             <input ref={fileInputRef} type="file" accept={ACCEPTED_TYPES.join(',')} style={{ display: 'none' }}
               onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = ''; }} />
@@ -197,8 +211,14 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Visibility</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 {(['private', 'public'] as const).map(v => (
-                  <button key={v} onClick={() => setVisibility(v)}
-                    style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${visibility === v ? 'var(--color-primary)' : 'var(--color-border)'}`, background: visibility === v ? 'var(--color-surface-tint)' : 'var(--color-surface-neutral)', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: visibility === v ? 600 : 450, color: visibility === v ? 'var(--color-primary)' : 'var(--color-text-secondary)', transition: 'all 150ms' }}>
+                  <MotionButton key={v} onClick={() => setVisibility(v)}
+                    animate={{
+                      borderColor: visibility === v ? 'var(--color-primary)' : 'var(--color-border)',
+                      background: visibility === v ? 'var(--color-surface-tint)' : 'var(--color-surface-neutral)',
+                      color: visibility === v ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                    }}
+                    transition={{ duration: 0.15 }}
+                    style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, borderWidth: 1.5, borderStyle: 'solid', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: visibility === v ? 600 : 450 }}>
                     <Icon name={v === 'private' ? 'lock' : 'public'} size={16} color={visibility === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                     <div style={{ textAlign: 'left' }}>
                       <div>{v === 'private' ? 'Private' : 'Public'}</div>
@@ -206,7 +226,7 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
                         {v === 'private' ? 'Invited members only' : 'Visible to all users'}
                       </div>
                     </div>
-                  </button>
+                  </MotionButton>
                 ))}
               </div>
             </div>
@@ -215,16 +235,19 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
               {!forced && (
                 <button onClick={handleClose} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: 'pointer' }}>Cancel</button>
               )}
-              <button onClick={() => setStep(1)} disabled={!name.trim()} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: name.trim() ? 'var(--color-primary)' : 'var(--color-accent-purple-soft-alt)', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: name.trim() ? 'pointer' : 'default', transition: 'background 150ms' }}>
+              <MotionButton onClick={() => setStep(1)} disabled={!name.trim()}
+                animate={{ background: name.trim() ? 'var(--color-primary)' : 'var(--color-accent-purple-soft-alt)' }}
+                transition={{ duration: 0.15 }}
+                style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', border: 'none', borderRadius: 10, padding: '10px 20px', cursor: name.trim() ? 'pointer' : 'default' }}>
                 Next <Icon name="arrow_forward" size={15} color="var(--color-white)" />
-              </button>
+              </MotionButton>
             </div>
-          </div>
+          </MotionIn>
         )}
 
         {/* ── Step 1: Invite members ── */}
         {step === 1 && (
-          <div style={{ padding: '20px 24px 24px', animation: 'wizardStepIn 220ms cubic-bezier(0.22,1,0.36,1) both' }}>
+          <MotionIn initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: EASE_SETTLE }} style={{ padding: '20px 24px 24px' }}>
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>Invite members</div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: 20 }}>Add people to your workspace. You can skip this and invite later.</div>
 
@@ -240,10 +263,12 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
                   style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-primary)' }}
                 />
               </div>
-              <button onClick={handleAddMember} disabled={memberLoading || !memberUsername.trim()}
-                style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, padding: '0 16px', borderRadius: 10, border: 'none', background: memberUsername.trim() ? 'var(--color-primary)' : 'var(--color-border)', color: memberUsername.trim() ? 'var(--color-white)' : 'var(--color-text-quaternary)', cursor: memberUsername.trim() ? 'pointer' : 'default', flexShrink: 0, height: 40, transition: 'all 150ms' }}>
+              <MotionButton onClick={handleAddMember} disabled={memberLoading || !memberUsername.trim()}
+                animate={{ background: memberUsername.trim() ? 'var(--color-primary)' : 'var(--color-border)', color: memberUsername.trim() ? 'var(--color-white)' : 'var(--color-text-quaternary)' }}
+                transition={{ duration: 0.15 }}
+                style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, padding: '0 16px', borderRadius: 10, border: 'none', cursor: memberUsername.trim() ? 'pointer' : 'default', flexShrink: 0, height: 40 }}>
                 Add
-              </button>
+              </MotionButton>
             </div>
             {memberError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginBottom: 8 }}>{memberError}</div>}
 
@@ -286,12 +311,12 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
                 }
               </button>
             </div>
-          </div>
+          </MotionIn>
         )}
 
         {/* ── Step 2: Done ── */}
         {step === 2 && (
-          <div style={{ padding: '40px 24px', textAlign: 'center', animation: 'wizardStepIn 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
+          <MotionIn initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: EASE_SETTLE }} style={{ padding: '40px 24px', textAlign: 'center' }}>
             <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 32 }}>
               {useImage && pendingImage
                 ? <img src={pendingImage} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
@@ -308,10 +333,10 @@ export default function WorkspaceWizard({ onClose, onCreated, forced }: Props) {
               style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '11px 28px', cursor: 'pointer' }}>
               Go to workspace
             </button>
-          </div>
+          </MotionIn>
         )}
-      </div>
-    </div>,
+      </MotionIn>
+    </motion.div>,
     document.body
   );
 }

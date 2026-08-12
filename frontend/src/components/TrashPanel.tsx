@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from '@/components/animate-ui/motion';
+import MotionButton from '@/components/animate-ui/MotionButton';
 import useAppStore, { apiEmptyTrash } from '../store/useAppStore';
 import Icon from './Icon';
 import { listItemVariants, modalVariants, LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
@@ -126,17 +127,19 @@ export default function TrashPanel() {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
         {TABS.filter(t => t.id === 'all' || t.count > 0).map(t => (
-          <button
+          <MotionButton
             key={t.id}
             onClick={() => setTab(t.id)}
-            style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 9999, padding: '5px 12px', cursor: 'pointer', background: tab === t.id ? 'var(--color-primary)' : 'var(--color-surface-tint-2)', color: tab === t.id ? 'var(--color-white)' : 'var(--color-text-tertiary)', transition: 'all 150ms' }}>
+            animate={{ background: tab === t.id ? 'var(--color-primary)' : 'var(--color-surface-tint-2)', color: tab === t.id ? 'var(--color-white)' : 'var(--color-text-tertiary)' }}
+            transition={{ duration: 0.15 }}
+            style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 9999, padding: '5px 12px', cursor: 'pointer' }}>
             {t.label}
-          </button>
+          </MotionButton>
         ))}
         {totalCount > 0 && (
           <button
             onClick={() => setConfirmEmpty(true)}
-            style={{ marginLeft: 'auto', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: '1px solid var(--color-error-bg)', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
+            style={{ marginLeft: 'auto', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: '1px solid var(--color-error-bg)', borderRadius: 8, padding: '5px 12px', cursor: 'pointer' }}>
             Empty Trash
           </button>
         )}
@@ -258,12 +261,14 @@ function ActionButtons({ onRestore, onDelete, hov }: { onRestore: () => void; on
         style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
         <Icon name="restore" size={13} color="var(--color-primary)" /> Restore
       </button>
-      <button
+      <MotionButton
         onClick={onDelete}
         title="Delete permanently"
-        style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: hov ? 'var(--color-error-bg)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 150ms' }}>
+        animate={{ background: hov ? 'var(--color-error-bg)' : 'transparent' }}
+        transition={{ duration: 0.15 }}
+        style={{ width: 28, height: 28, borderRadius: 7, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <Icon name="delete_forever" size={15} color="var(--color-error)" />
-      </button>
+      </MotionButton>
     </div>
   );
 }
@@ -277,11 +282,11 @@ function TaskTrashRow({ item, onRestore, onDelete }: { item: TrashedTask; onRest
       layout
       variants={listItemVariants}
       initial="initial"
-      animate="animate"
+      animate={{ opacity: 1, y: 0, background: hov ? 'var(--color-error-bg-alt)' : 'var(--color-surface-neutral)', borderColor: hov ? 'var(--color-error-bg)' : 'var(--color-surface-tint-2)' }}
       exit="exit"
-      transition={LAYOUT_TRANSITION}
+      transition={{ ...LAYOUT_TRANSITION, background: { duration: 0.15 }, borderColor: { duration: 0.15 } }}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: hov ? 'var(--color-error-bg-alt)' : 'var(--color-surface-neutral)', border: `1px solid ${hov ? 'var(--color-error-bg)' : 'var(--color-surface-tint-2)'}`, transition: 'all 150ms' }}>
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, borderWidth: 1, borderStyle: 'solid' }}>
       <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         <Icon name="task_alt" size={15} color="var(--color-error)" />
       </div>
@@ -312,11 +317,11 @@ function ListTrashRow({ item, onRestore, onDelete }: { item: TrashedList; onRest
       layout
       variants={listItemVariants}
       initial="initial"
-      animate="animate"
+      animate={{ opacity: 1, y: 0, background: hov ? 'var(--color-surface-tint)' : 'var(--color-surface-neutral)', borderColor: hov ? 'var(--color-purple-pale-38)' : 'var(--color-surface-tint-2)' }}
       exit="exit"
-      transition={LAYOUT_TRANSITION}
+      transition={{ ...LAYOUT_TRANSITION, background: { duration: 0.15 }, borderColor: { duration: 0.15 } }}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: hov ? 'var(--color-surface-tint)' : 'var(--color-surface-neutral)', border: `1px solid ${hov ? 'var(--color-purple-pale-38)' : 'var(--color-surface-tint-2)'}`, transition: 'all 150ms' }}>
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, borderWidth: 1, borderStyle: 'solid' }}>
       <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--color-purple-pale-21)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {item.list.emoji
           ? <span style={{ fontSize: 16 }}>{item.list.emoji}</span>
@@ -345,11 +350,11 @@ function TimelineTrashRow({ item, onRestore, onDelete }: { item: TrashedTimeline
       layout
       variants={listItemVariants}
       initial="initial"
-      animate="animate"
+      animate={{ opacity: 1, y: 0, background: hov ? 'var(--color-blue-pale-2)' : 'var(--color-surface-neutral)', borderColor: hov ? 'var(--color-blue-tint-2)' : 'var(--color-surface-tint-2)' }}
       exit="exit"
-      transition={LAYOUT_TRANSITION}
+      transition={{ ...LAYOUT_TRANSITION, background: { duration: 0.15 }, borderColor: { duration: 0.15 } }}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: hov ? 'var(--color-blue-pale-2)' : 'var(--color-surface-neutral)', border: `1px solid ${hov ? 'var(--color-blue-tint-2)' : 'var(--color-surface-tint-2)'}`, transition: 'all 150ms' }}>
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, borderWidth: 1, borderStyle: 'solid' }}>
       <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--color-blue-pale-9)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {item.timeline.emoji
           ? <span style={{ fontSize: 16 }}>{item.timeline.emoji}</span>
@@ -379,11 +384,11 @@ function MilestoneTrashRow({ item, onRestore, onDelete }: { item: TrashedMilesto
       layout
       variants={listItemVariants}
       initial="initial"
-      animate="animate"
+      animate={{ opacity: 1, y: 0, background: hov ? 'var(--color-blue-pale-3)' : 'var(--color-surface-neutral)', borderColor: hov ? 'var(--color-blue-tint-1)' : 'var(--color-surface-tint-2)' }}
       exit="exit"
-      transition={LAYOUT_TRANSITION}
+      transition={{ ...LAYOUT_TRANSITION, background: { duration: 0.15 }, borderColor: { duration: 0.15 } }}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: hov ? 'var(--color-blue-pale-3)' : 'var(--color-surface-neutral)', border: `1px solid ${hov ? 'var(--color-blue-tint-1)' : 'var(--color-surface-tint-2)'}`, transition: 'all 150ms' }}>
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, borderWidth: 1, borderStyle: 'solid' }}>
       <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--color-blue-pale-7)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {item.milestone.emoji
           ? <span style={{ fontSize: 16 }}>{item.milestone.emoji}</span>
@@ -412,11 +417,11 @@ function FolderTrashRow({ item, onRestore, onDelete }: { item: TrashedFolder; on
       layout
       variants={listItemVariants}
       initial="initial"
-      animate="animate"
+      animate={{ opacity: 1, y: 0, background: hov ? 'var(--color-yellow-pale-1)' : 'var(--color-surface-neutral)', borderColor: hov ? 'var(--color-yellow-tint-2)' : 'var(--color-surface-tint-2)' }}
       exit="exit"
-      transition={LAYOUT_TRANSITION}
+      transition={{ ...LAYOUT_TRANSITION, background: { duration: 0.15 }, borderColor: { duration: 0.15 } }}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: hov ? 'var(--color-yellow-pale-1)' : 'var(--color-surface-neutral)', border: `1px solid ${hov ? 'var(--color-yellow-tint-2)' : 'var(--color-surface-tint-2)'}`, transition: 'all 150ms' }}>
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, borderWidth: 1, borderStyle: 'solid' }}>
       <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--color-yellow-tint-1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {item.folder.emoji
           ? <span style={{ fontSize: 16 }}>{item.folder.emoji}</span>

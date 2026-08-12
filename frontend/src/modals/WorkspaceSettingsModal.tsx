@@ -17,6 +17,10 @@ import { deriveWorkspacePermissions } from '../utils/workspacePermissions';
 import Spinner from '@/components/animate-ui/Spinner';
 import PopIn from '@/components/animate-ui/PopIn';
 import ModalIn from '@/components/animate-ui/ModalIn';
+import MotionButton from '@/components/animate-ui/MotionButton';
+import MotionIn from '@/components/animate-ui/MotionIn';
+import { motion } from '@/components/animate-ui/motion';
+import { EASE_SETTLE, EASE_STANDARD, EASE_SPRING } from '@/components/animate-ui/motionTokens';
 
 interface UserSuggestion { id: string; username: string; fullName: string | null; profileImage: string | null; }
 
@@ -125,12 +129,13 @@ function WorkspaceImagePicker({ onSelect, onClose }: { onSelect: (dataUrl: strin
             </div>
           ) : (
             filtered.map(f => (
-              <button key={f.id}
+              <MotionButton key={f.id}
                 disabled={!!fetchingId}
                 onClick={() => handleSelect(f)}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 10px', borderRadius: 10, border: 'none', background: fetchingId === f.id ? 'var(--color-surface-tint)' : 'transparent', cursor: fetchingId ? 'default' : 'pointer', textAlign: 'left', transition: 'background 120ms' }}
-                onMouseEnter={e => { if (!fetchingId) e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = fetchingId === f.id ? 'var(--color-surface-tint)' : 'transparent'; }}
+                animate={{ background: fetchingId === f.id ? 'var(--color-surface-tint)' : 'transparent' }}
+                whileHover={!fetchingId ? { background: 'var(--color-surface-tint-3)' } : undefined}
+                transition={{ duration: 0.12 }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 10px', borderRadius: 10, border: 'none', cursor: fetchingId ? 'default' : 'pointer', textAlign: 'left' }}
               >
                 <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--color-surface-tint)', border: '1px solid var(--color-purple-pale-21)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <span style={{ fontFamily: 'var(--font-body)', fontSize: 9.5, fontWeight: 700, color: 'var(--color-primary)', letterSpacing: '0.03em' }}>{extBadge(f.mimeType)}</span>
@@ -143,7 +148,7 @@ function WorkspaceImagePicker({ onSelect, onClose }: { onSelect: (dataUrl: strin
                   ? <Spinner size={14} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} flexShrink={0} />
                   : <Icon name="add_photo_alternate" size={16} color="var(--color-border-strong)" />
                 }
-              </button>
+              </MotionButton>
             ))
           )}
         </div>
@@ -375,12 +380,6 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
     }, 550);
   };
 
-  const panelAnim = closing
-    ? 'settingsModalOut 190ms ease-in both'
-    : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both';
-  const backdropAnim = closing
-    ? 'backdropOut 190ms ease both'
-    : 'backdropIn 220ms ease both';
 
   const TABS: { id: Tab; label: string; icon: string }[] = [
     { id: 'general', label: 'General',  icon: 'settings'     },
@@ -396,12 +395,18 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
   // the topbar no matter how high its z-index is set.
   return createPortal(
     <>
-    <div
+    <motion.div
       onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: backdropAnim }}>
-      <div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: closing ? 0 : 1 }}
+      transition={{ duration: closing ? 0.19 : 0.22, ease: EASE_STANDARD }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}>
+      <MotionIn
         onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 780, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', animation: panelAnim, overflow: 'hidden' }}>
+        initial={{ opacity: 0, y: 22, scale: 0.96 }}
+        animate={closing ? { opacity: 0, y: 14, scale: 0.97 } : { opacity: 1, y: 0, scale: 1 }}
+        transition={closing ? { duration: 0.19, ease: 'easeIn' } : { duration: 0.36, ease: EASE_SETTLE }}
+        style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 780, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}>
 
         {/* Header */}
         <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
@@ -427,11 +432,17 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
           {/* Tab bar */}
           <div style={{ display: 'flex', gap: 4, background: 'var(--color-surface-tint)', borderRadius: 10, padding: 4 }}>
             {TABS.map(t => (
-              <button key={t.id} onClick={() => setActiveTab(t.id)}
-                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: activeTab === t.id ? 700 : 500, background: activeTab === t.id ? 'var(--color-white)' : 'transparent', color: activeTab === t.id ? (t.id === 'danger' ? 'var(--color-error)' : 'var(--color-primary)') : 'var(--color-text-tertiary)', boxShadow: activeTab === t.id ? '0 1px 4px rgba(var(--color-black-rgb), 0.08)' : 'none', transition: 'all 150ms' }}>
+              <MotionButton key={t.id} onClick={() => setActiveTab(t.id)}
+                animate={{
+                  background: activeTab === t.id ? 'var(--color-white)' : 'transparent',
+                  color: activeTab === t.id ? (t.id === 'danger' ? 'var(--color-error)' : 'var(--color-primary)') : 'var(--color-text-tertiary)',
+                  boxShadow: activeTab === t.id ? '0 1px 4px rgba(var(--color-black-rgb), 0.08)' : '0 0 0 0 transparent',
+                }}
+                transition={{ duration: 0.15 }}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: activeTab === t.id ? 700 : 500 }}>
                 <Icon name={t.icon} size={14} color={activeTab === t.id ? (t.id === 'danger' ? 'var(--color-error)' : 'var(--color-primary)') : 'var(--color-text-tertiary)'} />
                 {t.label}
-              </button>
+              </MotionButton>
             ))}
           </div>
         </div>
@@ -441,7 +452,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
 
           {/* ── General ── */}
           {activeTab === 'general' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18, animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: EASE_SETTLE }} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               {/* Icon */}
               <div>
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Icon</div>
@@ -455,8 +466,14 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <div style={{ display: 'flex', background: 'var(--color-surface-tint-2)', borderRadius: 8, padding: 2, gap: 2 }}>
-                      <button onClick={() => setUseImage(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: !useImage ? 'var(--color-primary)' : 'transparent', color: !useImage ? 'var(--color-white)' : 'var(--color-text-tertiary)', transition: 'all 150ms' }}>Emoji</button>
-                      <button onClick={() => setUseImage(true)} style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer', background: useImage ? 'var(--color-primary)' : 'transparent', color: useImage ? 'var(--color-white)' : 'var(--color-text-tertiary)', transition: 'all 150ms' }}>Image</button>
+                      <MotionButton onClick={() => setUseImage(false)}
+                        animate={{ background: !useImage ? 'var(--color-primary)' : 'transparent', color: !useImage ? 'var(--color-white)' : 'var(--color-text-tertiary)' }}
+                        transition={{ duration: 0.15 }}
+                        style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer' }}>Emoji</MotionButton>
+                      <MotionButton onClick={() => setUseImage(true)}
+                        animate={{ background: useImage ? 'var(--color-primary)' : 'transparent', color: useImage ? 'var(--color-white)' : 'var(--color-text-tertiary)' }}
+                        transition={{ duration: 0.15 }}
+                        style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer' }}>Image</MotionButton>
                     </div>
                     {useImage && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -471,15 +488,17 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                   </div>
                 </div>
                 {useImage && (
-                  <div
+                  <MotionIn
                     onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={() => setDragOver(false)}
                     onDrop={e => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) processFile(f); }}
                     onClick={() => fileInputRef.current?.click()}
-                    style={{ marginTop: 10, border: `2px dashed ${dragOver ? 'var(--color-primary)' : 'var(--color-accent-purple-soft-alt)'}`, borderRadius: 10, padding: '14px', textAlign: 'center', cursor: 'pointer', background: dragOver ? 'var(--color-surface-tint-alt)' : 'var(--color-blue-pale-1)', transition: 'all 150ms' }}>
+                    animate={{ borderColor: dragOver ? 'var(--color-primary)' : 'var(--color-accent-purple-soft-alt)', background: dragOver ? 'var(--color-surface-tint-alt)' : 'var(--color-blue-pale-1)' }}
+                    transition={{ duration: 0.15 }}
+                    style={{ marginTop: 10, borderWidth: 2, borderStyle: 'dashed', borderRadius: 10, padding: '14px', textAlign: 'center', cursor: 'pointer' }}>
                     <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>Drop image or click to upload</div>
                     {imgError && <div style={{ color: 'var(--color-error)', fontSize: 11, marginTop: 4 }}>{imgError}</div>}
-                  </div>
+                  </MotionIn>
                 )}
                 {!useImage && showEmojiPicker && emojiPopPos && createPortal(
                   <ModalIn
@@ -515,33 +534,49 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Visibility</div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {(['private', 'public'] as const).map(v => (
-                    <button key={v} onClick={() => setVisibility(v)}
-                      style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${visibility === v ? 'var(--color-primary)' : 'var(--color-border)'}`, background: visibility === v ? 'var(--color-surface-tint)' : 'var(--color-surface-neutral)', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: visibility === v ? 600 : 450, color: visibility === v ? 'var(--color-primary)' : 'var(--color-text-secondary)', transition: 'all 150ms' }}>
+                    <MotionButton key={v} onClick={() => setVisibility(v)}
+                      animate={{
+                        borderColor: visibility === v ? 'var(--color-primary)' : 'var(--color-border)',
+                        background: visibility === v ? 'var(--color-surface-tint)' : 'var(--color-surface-neutral)',
+                        color: visibility === v ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                      }}
+                      transition={{ duration: 0.15 }}
+                      style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, borderWidth: 1.5, borderStyle: 'solid', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: visibility === v ? 600 : 450 }}>
                       <Icon name={v === 'private' ? 'lock' : 'public'} size={15} color={visibility === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                       {v === 'private' ? 'Private' : 'Public'}
-                    </button>
+                    </MotionButton>
                   ))}
                 </div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10 }}>
-                {saved && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-green-deep-3)', animation: 'savedPop 300ms ease both', display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="check_circle" size={14} color="var(--color-green-deep-3)" /> Saved</div>}
+                {saved && (
+                  <MotionIn
+                    initial={{ opacity: 0, scale: 0.7 }}
+                    animate={{ opacity: [0, 1, 1], scale: [0.7, 1.15, 1] }}
+                    transition={{ duration: 0.3, times: [0, 0.6, 1], ease: EASE_SPRING }}
+                    style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-green-deep-3)', display: 'flex', alignItems: 'center', gap: 4 }}
+                  ><Icon name="check_circle" size={14} color="var(--color-green-deep-3)" /> Saved</MotionIn>
+                )}
                 <button onClick={() => handleSave()} disabled={saving || !canManageWorkspace}
                   style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '10px 22px', cursor: (saving || !canManageWorkspace) ? 'default' : 'pointer', opacity: !canManageWorkspace ? 0.5 : 1 }}>
                   {saving ? 'Saving…' : 'Save changes'}
                 </button>
               </div>
-            </div>
+            </MotionIn>
           )}
 
           {/* ── Members ── */}
           {activeTab === 'members' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: EASE_SETTLE }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {canInviteMembers && (
                 <div>
                   <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Invite member</div>
                   <div style={{ position: 'relative' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--color-purple-pale-11)', borderRadius: 10, padding: '8px 14px', border: `1.5px solid ${showSuggestions && suggestions.length > 0 ? 'var(--color-accent-purple-soft-alt)' : 'transparent'}`, transition: 'border-color 150ms' }}>
+                    <MotionIn
+                      animate={{ borderColor: showSuggestions && suggestions.length > 0 ? 'var(--color-accent-purple-soft-alt)' : 'transparent' }}
+                      transition={{ duration: 0.15 }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--color-purple-pale-11)', borderRadius: 10, padding: '8px 14px', borderWidth: 1.5, borderStyle: 'solid' }}>
                       <Icon name="person_search" size={16} color="var(--color-text-tertiary)" />
                       <input
                         ref={inviteInputRef}
@@ -562,15 +597,17 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                         style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-primary)' }}
                       />
                       {inviteLoading && <Spinner size={14} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} flexShrink={0} />}
-                    </div>
+                    </MotionIn>
 
                     {showSuggestions && suggestions.length > 0 && (
                       <PopIn ref={suggestionsRef} duration={140} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 4px 20px rgba(var(--color-black-rgb), 0.13)', border: '1px solid var(--color-border)', overflow: 'hidden', zIndex: 50 }}>
                         {suggestions.map((u, i) => (
-                          <button key={u.id}
+                          <MotionButton key={u.id}
                             tabIndex={0}
                             onMouseDown={e => { e.preventDefault(); handleInviteUser(u.username); }}
-                            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', background: i === suggestionIndex ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 100ms' }}
+                            animate={{ background: i === suggestionIndex ? 'var(--color-surface-tint)' : 'transparent' }}
+                            transition={{ duration: 0.1 }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', cursor: 'pointer', textAlign: 'left' }}
                             onMouseEnter={() => setSuggestionIndex(i)}
                             onMouseLeave={() => setSuggestionIndex(-1)}
                           >
@@ -585,7 +622,7 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                               <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)' }}>@{u.username}</div>
                             </div>
                             <Icon name="person_add" size={14} color="var(--color-accent-purple-light)" />
-                          </button>
+                          </MotionButton>
                         ))}
                       </PopIn>
                     )}
@@ -630,13 +667,13 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                     )
                 }
               </div>
-            </div>
+            </MotionIn>
           )}
 
 
           {/* ── Agent ── */}
           {activeTab === 'agent' && canManageWorkspace && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: EASE_SETTLE }} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Autonomy</div>
                 <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-tertiary)', marginBottom: 12 }}>
@@ -672,7 +709,14 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                 </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10 }}>
-                {agentSaved && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-green-deep-3)', animation: 'savedPop 300ms ease both', display: 'flex', alignItems: 'center', gap: 4 }}><Icon name="check_circle" size={14} color="var(--color-green-deep-3)" /> Saved</div>}
+                {agentSaved && (
+                  <MotionIn
+                    initial={{ opacity: 0, scale: 0.7 }}
+                    animate={{ opacity: [0, 1, 1], scale: [0.7, 1.15, 1] }}
+                    transition={{ duration: 0.3, times: [0, 0.6, 1], ease: EASE_SPRING }}
+                    style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-green-deep-3)', display: 'flex', alignItems: 'center', gap: 4 }}
+                  ><Icon name="check_circle" size={14} color="var(--color-green-deep-3)" /> Saved</MotionIn>
+                )}
                 <button onClick={handleSaveAgent} disabled={agentSaving}
                   style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '10px 22px', cursor: agentSaving ? 'default' : 'pointer', opacity: agentSaving ? 0.6 : 1 }}>
                   {agentSaving ? 'Saving…' : 'Save changes'}
@@ -708,12 +752,12 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                   </div>
                 )}
               </div>
-            </div>
+            </MotionIn>
           )}
 
           {/* ── Admin ── */}
           {activeTab === 'admin' && isAdmin && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: EASE_SETTLE }} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div>
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Workspace ID</div>
                 <div style={{ background: 'var(--color-surface-tint)', border: '1px solid var(--color-border)', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -741,31 +785,37 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                   ))}
                 </div>
               </div>
-            </div>
+            </MotionIn>
           )}
 
           {/* ── Trash & Archived ── */}
           {activeTab === 'trash' && (
-            <div style={{ animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: EASE_SETTLE }}>
               <div style={{ display: 'flex', gap: 4, background: 'var(--color-surface-tint)', borderRadius: 10, padding: 4, marginBottom: 16 }}>
                 {([
                   { id: 'trash' as const, label: 'Trash', icon: 'delete' },
                   { id: 'archived' as const, label: 'Archived', icon: 'archive' },
                 ]).map(t => (
-                  <button key={t.id} onClick={() => setTrashSubTab(t.id)}
-                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: trashSubTab === t.id ? 700 : 500, background: trashSubTab === t.id ? 'var(--color-white)' : 'transparent', color: trashSubTab === t.id ? 'var(--color-primary)' : 'var(--color-text-tertiary)', boxShadow: trashSubTab === t.id ? '0 1px 4px rgba(var(--color-black-rgb), 0.08)' : 'none', transition: 'all 150ms' }}>
+                  <MotionButton key={t.id} onClick={() => setTrashSubTab(t.id)}
+                    animate={{
+                      background: trashSubTab === t.id ? 'var(--color-white)' : 'transparent',
+                      color: trashSubTab === t.id ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                      boxShadow: trashSubTab === t.id ? '0 1px 4px rgba(var(--color-black-rgb), 0.08)' : '0 0 0 0 transparent',
+                    }}
+                    transition={{ duration: 0.15 }}
+                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '7px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: trashSubTab === t.id ? 700 : 500 }}>
                     <Icon name={t.icon} size={14} color={trashSubTab === t.id ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                     {t.label}
-                  </button>
+                  </MotionButton>
                 ))}
               </div>
               {trashSubTab === 'trash' ? <TrashPanel /> : <ArchivedPanel workspaceId={workspace.id} />}
-            </div>
+            </MotionIn>
           )}
 
           {/* ── Danger ── */}
           {activeTab === 'danger' && (
-            <div style={{ animation: 'sectionFadeUp 280ms cubic-bezier(0.22,1,0.36,1) both' }}>
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: EASE_SETTLE }}>
               {!canManageWorkspace
                 ? <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)', fontSize: 13 }}>Only the workspace owner{isAdmin ? '' : ' or an instance admin'} can perform these actions.</div>
                 : confirmDelete
@@ -800,11 +850,11 @@ export default function WorkspaceSettingsModal({ workspace, onClose }: Props) {
                     </div>
                   )
               }
-            </div>
+            </MotionIn>
           )}
         </div>
-      </div>
-    </div>
+      </MotionIn>
+    </motion.div>
 
     {showImagePicker && (
       <WorkspaceImagePicker
