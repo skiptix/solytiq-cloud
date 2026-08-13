@@ -20,6 +20,12 @@ concurrency:
 # runs with a checkout of the repository and access to the job's environment.
 # The comment after each SHA records which release it is, so the pin stays
 # readable and reviewable.
+#
+# These two pins currently emit a "Node.js 20 is deprecated" warning — the
+# runner force-runs them on Node 24, so they work, but they should move to
+# checkout v5 / setup-node v5 when someone can verify the new SHAs against
+# the upstream repos. Deliberately not guessing: a wrong SHA does not
+# degrade, it fails every job.
 env:
   NODE_VERSION: '22'
 
@@ -127,7 +133,16 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Environment-neutral: no DB, no network, mock QueryExec throughout.
+      # UPLOAD_DIR is required, not optional: routes/files.ts creates it at
+      # MODULE LOAD, and its default is the container path /app/uploads, which
+      # a runner cannot mkdir. Without this, 8 suites fail at import with
+      # EACCES before a single assertion runs. (The sprint brief's own
+      # verification sequence sets it for exactly this reason — I ran the
+      # suite locally with it and left it out of this workflow.)
+      - name: Prepare a writable upload dir
+        run: echo "UPLOAD_DIR=$(mktemp -d -p "$RUNNER_TEMP" uploads-XXXXXX)" >> "$GITHUB_ENV"
+
+      # Otherwise environment-neutral: no DB, no network, mock QueryExec.
       - name: Unit tests
         run: npm test
         env:

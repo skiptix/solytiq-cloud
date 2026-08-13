@@ -29,6 +29,7 @@
 // matching check-bundle.mjs / run-a11y-tests.mjs.)
 
 import { chromium } from 'playwright';
+import { existsSync } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { resolve, dirname, join } from 'node:path';
@@ -37,7 +38,21 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 const PORT = 4446;
-const CHROMIUM_PATH = process.env.PLAYWRIGHT_CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const SANDBOX_CHROMIUM = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+// How to find Chromium, in priority order:
+//   1. PLAYWRIGHT_CHROMIUM_PATH, if someone set it explicitly.
+//   2. The dev sandbox's pre-installed browser, IF it is actually there.
+//   3. Nothing — let Playwright resolve its own download.
+//
+// That last case is the one that matters. Passing a hardcoded
+// `executablePath` made this script work in exactly one environment: a
+// GitHub runner installs Chromium under ~/.cache/ms-playwright, so every
+// browser gate failed on its first CI run with "executable doesn't exist at
+// /opt/pw-browsers/...". Omitting the option entirely is what makes
+// Playwright look where it actually put the browser.
+const CHROMIUM_PATH = process.env.PLAYWRIGHT_CHROMIUM_PATH
+  || (existsSync(SANDBOX_CHROMIUM) ? SANDBOX_CHROMIUM : undefined);
+const LAUNCH_OPTIONS = CHROMIUM_PATH ? { executablePath: CHROMIUM_PATH } : {};
 
 // The widths CLAUDE.md's rules and the app's own breakpoints actually name.
 // 320 is the narrowest phone still in circulation; 390 is the iPhone 15 Pro
@@ -95,7 +110,7 @@ try {
   for (let i = 0; i < 50 && !serverReady; i++) await sleep(200);
   if (!serverReady) throw new Error('vite preview server did not start within 10s');
 
-  const browser = await chromium.launch({ executablePath: CHROMIUM_PATH });
+  const browser = await chromium.launch(LAUNCH_OPTIONS);
 
   for (const { path, label, seed, ready } of PAGES) {
     console.log(`\n[test:responsive] ${label} (${path})`);
