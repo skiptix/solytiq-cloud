@@ -62,6 +62,15 @@ jobs:
 
       - name: Accessibility
         run: npm run test:a11y
+        env:
+          A11Y_SKIP_BUILD: '1'
+
+      # CLAUDE.md's mobile rules promise the page body never scrolls
+      # horizontally. This asserts it at every width those rules name.
+      - name: Responsive breakpoints
+        run: npm run test:responsive
+        env:
+          RESPONSIVE_SKIP_BUILD: '1'
 
       # Real Chromium against the real production build. Reuses the dist/
       # produced above rather than rebuilding, matching the convention

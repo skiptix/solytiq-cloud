@@ -627,6 +627,7 @@ Rules:
 - Pickers (`CalendarPicker`, `TimePicker`) use `Math.min(N, window.innerWidth - 32)` for their width to stay on-screen.
 - Use `padding: 'var(--modal-pad)'` (defined in `index.css`) for modal backdrops so padding shrinks on mobile without JS.
 - Test both 390px (mobile) and 1440px (desktop) after every change — desktop must remain unchanged.
+- **`npm run test:responsive` enforces the no-horizontal-scroll rule** in a real browser at 320/375/390/639/640/768/1024/1440, on every route reachable without a backend, and names the offending element when it fails. It is deliberately not a screenshot diff: a pixel baseline goes stale on any intentional design change and reports "something moved", where this reports "the page scrolls sideways at 320px". Same no-backend scope as `test:a11y` — screens behind `<Protected>` are not covered, and that gap is stated rather than hidden.
 
 ### Home Screen Install (iOS "Add to Home Screen")
 
