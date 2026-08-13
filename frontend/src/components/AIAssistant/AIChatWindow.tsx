@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { motion, useDragControls, type PanInfo } from '@/components/animate-ui/motion';
+import { useReducedMotion, motion, useDragControls, type PanInfo } from '@/components/animate-ui/motion';
 import type { AIChatMessage, AISession } from '../../store/useAIStore';
 import type { AIFile } from '../../types';
 import Icon from '../Icon';
 import AIRecentChats from './AIRecentChats';
 import { apiUploadAIFile, apiDeleteAIFile } from '../../api/client';
-import { backdropVariants, sheetVariants, desktopWindowVariants, SWIPE_DISMISS_DISTANCE, SWIPE_DISMISS_VELOCITY } from '@/components/animate-ui/motionTokens';
+import { EASE_STANDARD, SWIPE_DISMISS_DISTANCE, SWIPE_DISMISS_VELOCITY, backdropVariants, desktopWindowVariants, sheetVariants } from '@/components/animate-ui/motionTokens';
+import MotionButton from '../animate-ui/MotionButton';
+import MotionIn from '../animate-ui/MotionIn';
 
 interface Props {
   messages: AIChatMessage[];
@@ -82,18 +84,19 @@ function fileIcon(mime: string, name: string): string {
 }
 
 function ThinkingDots() {
+  // Continuous decorative motion — paused explicitly under reduced motion.
+  const reduceMotion = useReducedMotion();
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '10px 14px' }}>
       {[0, 1, 2].map((i) => (
-        <span
+        <motion.span
           key={i}
-          style={{
+          animate={reduceMotion ? undefined : { y: [0, -6, 0], opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.2, delay: i * 0.2, ease: 'easeInOut', repeat: Infinity }} style={{
             width: 7,
             height: 7,
             borderRadius: '50%',
             background: 'var(--color-accent-purple-light)',
             display: 'inline-block',
-            animation: `aiDotBounce 1.2s ease-in-out ${i * 0.2}s infinite`,
           }}
         />
       ))}
@@ -128,8 +131,8 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
   if (msg.isThinking) {
     return (
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginBottom: 10 }}>
-        <div
-          style={{
+        <MotionIn
+          animate={{ rotate: 360 }} transition={{ duration: 0.7, ease: 'linear', repeat: Infinity }} style={{
             width: 28,
             height: 28,
             borderRadius: '50%',
@@ -142,7 +145,7 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
           }}
         >
           <span style={{ fontSize: 14 }}>✦</span>
-        </div>
+        </MotionIn>
         <div
           style={{
             background: 'var(--color-surface-tint)',
@@ -176,8 +179,8 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
       </div>
       <div style={{ maxWidth: 'calc(100% - 36px)', display: 'flex', flexDirection: 'column', gap: 4 }}>
         {msg.actionSummary && (
-          <div
-            style={{
+          <MotionIn
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3, ease: EASE_STANDARD }} style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: 5,
@@ -189,16 +192,15 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
               fontSize: 11.5,
               fontWeight: 600,
               color: 'var(--color-teal-deep-3)',
-              animation: 'aiFadeIn 300ms ease both',
             }}
           >
             <Icon name="check_circle" size={13} color="var(--color-teal-deep-3)" />
             {msg.actionSummary}
-          </div>
+          </MotionIn>
         )}
         {msg.content && (
-          <div
-            style={{
+          <MotionIn
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, ease: EASE_STANDARD }} style={{
               background: msg.error ? 'var(--color-error-bg-alt)' : 'var(--color-surface-tint)',
               border: `1px solid ${msg.error ? 'var(--color-error-bg)' : 'var(--color-border)'}`,
               borderRadius: '4px 18px 18px 18px',
@@ -208,7 +210,6 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
               lineHeight: 1.6,
               color: msg.error ? 'var(--color-error)' : 'var(--color-text-primary)',
               wordBreak: 'break-word',
-              animation: 'aiFadeIn 200ms ease both',
             }}
           >
             <ReactMarkdown
@@ -239,7 +240,7 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
             >
               {msg.content}
             </ReactMarkdown>
-          </div>
+          </MotionIn>
         )}
       </div>
     </div>
@@ -271,6 +272,8 @@ export default function AIChatWindow({
   sessionId,
   isMobile,
 }: Props) {
+  // Continuous decorative motion — paused explicitly under reduced motion.
+  const reduceMotion = useReducedMotion();
   const [input, setInput] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -412,7 +415,6 @@ export default function AIChatWindow({
         overflow: 'hidden',
         border: `1.5px solid ${isDragOver ? 'rgba(var(--color-purple-mid-8-rgb), 0.5)' : 'rgba(var(--color-primary-rgb), 0.12)'}`,
         borderBottom: 'none',
-        transition: 'border-color 200ms ease',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         zIndex: 9001,
       }
@@ -430,7 +432,6 @@ export default function AIChatWindow({
         overflow: 'hidden',
         transformOrigin: 'bottom right',
         border: `1.5px solid ${isDragOver ? 'rgba(var(--color-purple-mid-8-rgb), 0.5)' : 'rgba(var(--color-primary-rgb), 0.12)'}`,
-        transition: 'border-color 200ms ease',
       };
 
   return (
@@ -533,48 +534,45 @@ export default function AIChatWindow({
             {viewLabel} context
           </div>
         </div>
-        <button
+        <MotionButton
           onClick={onShowRecentChats}
           title="Recent chats"
           style={{
             width: 30, height: 30, borderRadius: 8,
             background: 'rgba(var(--color-white-rgb), 0.12)', border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'background 180ms ease, transform 150ms ease',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(var(--color-white-rgb), 0.24)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(var(--color-white-rgb), 0.12)'; e.currentTarget.style.transform = 'scale(1)'; }}
+          whileHover={{ background: 'rgba(var(--color-white-rgb), 0.24)', transform: 'scale(1.08)' }}
+          transition={{ duration: 0.18 }}
         >
           <Icon name="history" size={15} color="rgba(var(--color-white-rgb), 0.85)" />
-        </button>
-        <button
+        </MotionButton>
+        <MotionButton
           onClick={() => setShowClearConfirm(true)}
           title="Clear chat"
           style={{
             width: 30, height: 30, borderRadius: 8,
             background: 'rgba(var(--color-white-rgb), 0.12)', border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'background 180ms ease, transform 150ms ease',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(var(--color-white-rgb), 0.24)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(var(--color-white-rgb), 0.12)'; e.currentTarget.style.transform = 'scale(1)'; }}
+          whileHover={{ background: 'rgba(var(--color-white-rgb), 0.24)', transform: 'scale(1.08)' }}
+          transition={{ duration: 0.18 }}
         >
           <Icon name="delete_sweep" size={15} color="rgba(var(--color-white-rgb), 0.85)" />
-        </button>
-        <button
+        </MotionButton>
+        <MotionButton
           onClick={onClose}
           title="Close"
           style={{
             width: 30, height: 30, borderRadius: 8,
             background: 'rgba(var(--color-white-rgb), 0.12)', border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'background 180ms ease, transform 150ms ease',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(var(--color-white-rgb), 0.24)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(var(--color-white-rgb), 0.12)'; e.currentTarget.style.transform = 'scale(1)'; }}
+          whileHover={{ background: 'rgba(var(--color-white-rgb), 0.24)', transform: 'scale(1.08)' }}
+          transition={{ duration: 0.18 }}
         >
           <Icon name="close" size={15} color="rgba(var(--color-white-rgb), 0.85)" />
-        </button>
+        </MotionButton>
       </div>
 
       {/* Messages */}
@@ -589,8 +587,8 @@ export default function AIChatWindow({
         }}
       >
         {messages.length === 0 && (
-          <div
-            style={{
+          <MotionIn
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3, ease: EASE_STANDARD }} style={{
               flex: 1,
               display: 'flex',
               flexDirection: 'column',
@@ -598,7 +596,6 @@ export default function AIChatWindow({
               justifyContent: 'center',
               gap: 10,
               padding: '20px 10px',
-              animation: 'aiFadeIn 300ms ease both',
             }}
           >
             <div
@@ -638,24 +635,28 @@ export default function AIChatWindow({
                 contextView === 'calendar' ? 'Schedule the top priority task for tomorrow' : 'Mark all overdue tasks as done',
                 "Drop a PDF here and I'll create todos from it",
               ].map((hint, i) => (
-                <button
+                <MotionButton
                   key={hint}
                   onClick={() => { setInput(hint); inputRef.current?.focus(); }}
-                  style={{
+                  initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: (i * 60) / 1000, ease: EASE_STANDARD }} style={{
                     fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-primary)',
                     background: 'var(--color-surface-tint)', border: '1px solid rgba(var(--color-primary-rgb), 0.12)',
                     borderRadius: 10, padding: '8px 12px', cursor: 'pointer', textAlign: 'left',
-                    transition: 'background 180ms ease, transform 150ms ease, box-shadow 180ms ease',
-                    animation: `aiItemIn 300ms ease ${i * 60}ms both`,
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-tint-4)'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(var(--color-primary-rgb), 0.12)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+                  whileHover={{
+                    background: 'var(--color-surface-tint-4)',
+                    y: -1,
+                    boxShadow: '0 2px 8px rgba(var(--color-primary-rgb), 0.12)',
+                    // Own timing, so the staggered entrance delay above never
+                    // leaks into the hover response.
+                    transition: { duration: 0.18, delay: 0 },
+                  }}
                 >
                   {hint}
-                </button>
+                </MotionButton>
               ))}
             </div>
-          </div>
+          </MotionIn>
         )}
         {messages.map((msg) =>
           msg.role === 'user' ? (
@@ -668,19 +669,18 @@ export default function AIChatWindow({
 
       {/* File chips */}
       {hasFiles && (
-        <div
-          style={{
+        <MotionIn
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, ease: EASE_STANDARD }} style={{
             padding: '6px 12px 0',
             display: 'flex',
             flexWrap: 'wrap',
             gap: 6,
-            animation: 'aiFadeIn 200ms ease both',
           }}
         >
           {uploadedFiles.map((f) => (
-            <div
+            <MotionIn
               key={f.id}
-              style={{
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: EASE_STANDARD }} style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 5,
@@ -692,7 +692,6 @@ export default function AIChatWindow({
                 fontSize: 11.5,
                 color: 'var(--color-primary)',
                 fontWeight: 500,
-                animation: 'aiItemIn 200ms ease both',
                 maxWidth: 160,
               }}
             >
@@ -701,25 +700,25 @@ export default function AIChatWindow({
                 {f.filename}
               </span>
               <span style={{ color: 'var(--color-accent-purple-light)', fontSize: 10, flexShrink: 0 }}>{formatFileSize(f.size)}</span>
-              <button
+              <MotionButton
                 onClick={() => handleRemoveFile(f.id)}
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: 'none', border: 'none', cursor: 'pointer',
-                  padding: 2, borderRadius: 4, transition: 'background 150ms',
+                  padding: 2, borderRadius: 4,
                   flexShrink: 0,
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(var(--color-primary-rgb), 0.12)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
+                whileHover={{ background: 'rgba(var(--color-primary-rgb), 0.12)' }}
+                transition={{ duration: 0.15 }}
               >
                 <Icon name="close" size={11} color="var(--color-accent-purple-light)" />
-              </button>
-            </div>
+              </MotionButton>
+            </MotionIn>
           ))}
           {uploadingFiles.map((u) => (
-            <div
+            <MotionIn
               key={u.id}
-              style={{
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: EASE_STANDARD }} style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 5,
@@ -730,7 +729,6 @@ export default function AIChatWindow({
                 fontFamily: 'var(--font-body)',
                 fontSize: 11.5,
                 color: 'var(--color-accent-purple-light)',
-                animation: 'aiItemIn 200ms ease both',
                 maxWidth: 160,
               }}
             >
@@ -738,22 +736,22 @@ export default function AIChatWindow({
                 style={{
                   width: 10, height: 10, border: '1.5px solid var(--color-border-strong)',
                   borderTopColor: 'var(--color-purple-mid-1)', borderRadius: '50%',
-                  animation: 'aiSpin 700ms linear infinite', flexShrink: 0,
+                  flexShrink: 0,
                 }}
               />
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 100 }}>
                 {u.name}
               </span>
               <span style={{ fontSize: 10, flexShrink: 0 }}>{u.progress}%</span>
-            </div>
+            </MotionIn>
           ))}
-        </div>
+        </MotionIn>
       )}
 
       {/* Upload error */}
       {uploadError && (
-        <div
-          style={{
+        <MotionIn
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, ease: EASE_STANDARD }} style={{
             margin: '4px 12px 0',
             background: 'var(--color-error-bg-alt)',
             border: '1px solid var(--color-error-bg)',
@@ -762,7 +760,6 @@ export default function AIChatWindow({
             fontFamily: 'var(--font-body)',
             fontSize: 11.5,
             color: 'var(--color-error)',
-            animation: 'aiFadeIn 200ms ease both',
             display: 'flex',
             alignItems: 'center',
             gap: 5,
@@ -770,7 +767,7 @@ export default function AIChatWindow({
         >
           <Icon name="error" size={12} color="var(--color-error)" />
           {uploadError}
-        </div>
+        </MotionIn>
       )}
 
       {/* Input */}
@@ -781,8 +778,8 @@ export default function AIChatWindow({
           flexShrink: 0,
         }}
       >
-        <div
-          style={{
+        <MotionIn
+          transition={{ duration: 0.2 }} style={{
             display: 'flex',
             alignItems: 'center',
             gap: 8,
@@ -790,7 +787,6 @@ export default function AIChatWindow({
             border: '1.5px solid var(--color-border)',
             borderRadius: 14,
             padding: '8px 8px 8px 12px',
-            transition: 'border-color 200ms ease, box-shadow 200ms ease',
           }}
           onFocusCapture={(e) => { e.currentTarget.style.borderColor = 'rgba(var(--color-primary-rgb), 0.35)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(var(--color-primary-rgb), 0.06)'; }}
           onBlurCapture={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.boxShadow = 'none'; }}
@@ -804,7 +800,7 @@ export default function AIChatWindow({
               width: 26, height: 26, borderRadius: 8,
               background: 'none', border: 'none', cursor: isThinking ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0, transition: 'background 180ms ease',
+              flexShrink: 0,
               opacity: isThinking ? 0.4 : 1,
             }}
             onMouseEnter={(e) => { if (!isThinking) e.currentTarget.style.background = 'rgba(var(--color-primary-rgb), 0.08)'; }}
@@ -812,7 +808,7 @@ export default function AIChatWindow({
           >
             <Icon name="attach_file" size={16} color="var(--color-accent-purple-light)" />
           </button>
-          <textarea
+          <motion.textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -820,7 +816,7 @@ export default function AIChatWindow({
             placeholder="Message Sol…"
             rows={1}
             disabled={isThinking}
-            style={{
+            transition={{ duration: 0.2 }} style={{
               flex: 1,
               fontFamily: 'var(--font-body)',
               fontSize: 13.5,
@@ -833,7 +829,6 @@ export default function AIChatWindow({
               maxHeight: 96,
               overflowY: 'auto',
               opacity: isThinking ? 0.5 : 1,
-              transition: 'opacity 200ms ease',
             }}
             onInput={(e) => {
               const t = e.currentTarget;
@@ -852,7 +847,7 @@ export default function AIChatWindow({
               border: 'none',
               cursor: !input.trim() || isThinking ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0, transition: 'all 200ms ease',
+              flexShrink: 0,
               transform: !input.trim() || isThinking ? 'scale(0.95)' : 'scale(1)',
               boxShadow: !input.trim() || isThinking ? 'none' : '0 2px 8px rgba(var(--color-purple-mid-8-rgb), 0.35)',
             }}
@@ -863,7 +858,7 @@ export default function AIChatWindow({
               color={!input.trim() || isThinking ? 'var(--color-text-quaternary)' : 'var(--color-white)'}
             />
           </button>
-        </div>
+        </MotionIn>
         <div
           style={{
             fontFamily: 'var(--font-body)',
@@ -889,8 +884,8 @@ export default function AIChatWindow({
 
       {/* Drag-over overlay */}
       {isDragOver && (
-        <div
-          style={{
+        <MotionIn
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.15, ease: EASE_STANDARD }} style={{
             position: 'absolute',
             inset: 0,
             background: 'rgba(var(--color-purple-mid-8-rgb), 0.06)',
@@ -902,22 +897,20 @@ export default function AIChatWindow({
             gap: 12,
             zIndex: 30,
             borderRadius: 18,
-            animation: 'aiFadeIn 150ms ease both',
             border: '2px dashed rgba(var(--color-purple-mid-8-rgb), 0.4)',
             pointerEvents: 'none',
           }}
         >
-          <div
-            style={{
+          <MotionIn
+            animate={reduceMotion ? undefined : { y: [0, -4, 0], scale: [1, 1.04, 1] }} transition={{ duration: 1.2, ease: 'easeInOut', repeat: Infinity }} style={{
               width: 64, height: 64, borderRadius: '50%',
               background: 'linear-gradient(135deg, var(--color-surface-tint-4) 0%, var(--color-purple-pale-40) 100%)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               boxShadow: '0 8px 24px rgba(var(--color-purple-mid-8-rgb), 0.2)',
-              animation: 'aiFloatPulse 1.2s ease-in-out infinite',
             }}
           >
             <Icon name="upload_file" size={28} color="var(--color-purple-mid-8)" />
-          </div>
+          </MotionIn>
           <div
             style={{
               fontFamily: 'var(--font-heading)',
@@ -938,7 +931,7 @@ export default function AIChatWindow({
           >
             PDF, XLSX, CSV, HTML, Markdown, TypeScript, images · max 25 MB
           </div>
-        </div>
+        </MotionIn>
       )}
 
       {/* Recent chats overlay */}
@@ -953,15 +946,14 @@ export default function AIChatWindow({
 
       {/* Clear history confirmation */}
       {showClearConfirm && (
-        <div
-          style={{
+        <MotionIn
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18, ease: EASE_STANDARD }} style={{
             position: 'absolute', inset: 0,
             background: 'rgba(var(--color-white-rgb), 0.92)',
             backdropFilter: 'blur(6px)',
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
             gap: 14, padding: 24, borderRadius: 20, zIndex: 20,
-            animation: 'aiFadeIn 180ms ease both',
           }}
         >
           <div
@@ -993,34 +985,32 @@ export default function AIChatWindow({
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-            <button
+            <MotionButton
               onClick={() => setShowClearConfirm(false)}
               style={{
                 flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13,
                 fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)',
                 border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer',
-                transition: 'background 180ms ease, transform 150ms ease',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-border)'; e.currentTarget.style.transform = 'scale(1.02)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; e.currentTarget.style.transform = 'scale(1)'; }}
+              whileHover={{ background: 'var(--color-border)', transform: 'scale(1.02)' }}
+              transition={{ duration: 0.18 }}
             >
               Cancel
-            </button>
-            <button
+            </MotionButton>
+            <MotionButton
               onClick={() => { setShowClearConfirm(false); onClearHistory(); }}
               style={{
                 flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13,
                 fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)',
                 border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer',
-                transition: 'background 180ms ease, transform 150ms ease',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-red-deep-2)'; e.currentTarget.style.transform = 'scale(1.02)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--color-error)'; e.currentTarget.style.transform = 'scale(1)'; }}
+              whileHover={{ background: 'var(--color-red-deep-2)', transform: 'scale(1.02)' }}
+              transition={{ duration: 0.18 }}
             >
               Clear
-            </button>
+            </MotionButton>
           </div>
-        </div>
+        </MotionIn>
       )}
       </motion.div>
     </>

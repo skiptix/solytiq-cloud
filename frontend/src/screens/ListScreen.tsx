@@ -1,7 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from '@/components/animate-ui/motion';
-import { listItemVariants, LAYOUT_TRANSITION, EASE_SPRING } from '@/components/animate-ui/motionTokens';
+import { EASE_SETTLE, EASE_SPRING, EASE_STANDARD, LAYOUT_TRANSITION, listItemVariants } from '@/components/animate-ui/motionTokens';
 import { useMobile } from '../hooks/useBreakpoint';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -22,7 +22,6 @@ import Spinner from '@/components/animate-ui/Spinner';
 import MotionIn from '../components/animate-ui/MotionIn';
 import MotionButton from '../components/animate-ui/MotionButton';
 import MotionDraggable from '../components/animate-ui/MotionDraggable';
-import { EASE_SETTLE, EASE_STANDARD } from '../components/animate-ui/motionTokens';
 
 // ── Pull-to-refresh indicator (mobile only) ────────────────────────
 // Purely presentational: height/opacity/rotation driven by usePullToRefresh's
