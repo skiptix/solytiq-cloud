@@ -29,7 +29,18 @@ html, body, #root { height: 100%; width: 100%; }
   --color-surface-neutral: #fafafa;
   --color-text-primary: #1c1b22;
   --color-text-secondary: #484552;
-  --color-text-tertiary: #787584;
+  /* Was #787584 — 4.491:1 on white, missing WCAG AA's 4.5:1 by 0.009, and
+     4.213:1 on the app's own --color-surface-* backgrounds. This is the app's
+     workhorse secondary-text colour, so that one hundredth failed on nearly
+     every screen at once. #73707f is the smallest darkening that clears 4.5:1
+     against BOTH white and the tinted surfaces (4.824 / 4.526) — visually
+     indistinguishable, correct everywhere. */
+  --color-text-tertiary: #73707f;
+  /* 2.07:1 on white. Deliberately left as-is: this is the de-emphasis token
+     (placeholders, disabled hints, decorative captions), and darkening it to
+     pass AA would collapse the distinction from --color-text-tertiary. Any
+     element carrying real, informational body text must use tertiary or
+     secondary instead — test:a11y enforces that per screen. */
   --color-text-quaternary: #b0acbe;
   --color-border: #e8e4f0;
   --color-border-alt: #e5e7eb;

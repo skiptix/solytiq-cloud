@@ -647,7 +647,9 @@ The app is installable to an iPhone's Home Screen and launches standalone (no Sa
 
 - Tailwind CSS v4 provides base styles (`src/index.css`), but components predominantly use **inline `style={{}}` objects** with the design tokens below. Match the surrounding component's approach when editing.
 - Aesthetic: glassmorphism, soft purples, rounded cards, springy modal animations.
-- **Palette:** primary `#5e4dbb`; light purple surfaces `#F5F3FF`/`#f0edff`; text `#1c1b22` (primary) / `#484552` / `#787584` / `#b0acbe`; borders `#e8e4f0`/`#E5E7EB`; dividers `#f0ecf8`; success `#10B981`; error `#ba1a1a`; warning `#d97706`.
+- **Palette:** primary `#5e4dbb`; light purple surfaces `#F5F3FF`/`#f0edff`; text `#1c1b22` (primary) / `#484552` (secondary) / `#73707f` (tertiary) / `#b0acbe` (quaternary); borders `#e8e4f0`/`#E5E7EB`; dividers `#f0ecf8`; success `#10B981`; error `#ba1a1a`; warning `#d97706`.
+  - **`--color-text-tertiary` is the AA floor.** It was `#787584` — 4.491:1 on white, missing WCAG AA's 4.5:1 by 0.009, and 4.213:1 on the app's own tinted surfaces. As the workhorse secondary-text colour that failed on nearly every screen at once; `#73707f` is the smallest darkening that clears 4.5:1 against both.
+  - **`--color-text-quaternary` is de-emphasis only** (placeholders, disabled hints, decorative captions) and is 2.07:1 on white by design. Never use it for text that carries information — `npm run test:a11y` fails the build when it appears on real content.
 - **Type:** Hanken Grotesk for headings/labels/UI, Inter for body.
 - **Radii:** buttons 8–10, cards/modals 14–20, pills 9999. **Shadows:** subtle purple-tinted (`0 8px 32px rgba(0,0,0,0.14)`, `0 8px 40px rgba(94,77,187,0.10)`).
 - **Animations live in the central Animate-UI layer, never in CSS.** `src/components/animate-ui/` is the ONE place permitted to import `motion/react` (values *and* types), and `npm run check:animations` fails the build on any `@keyframes`, CSS `animation`/`transition` declaration, `requestAnimationFrame`, injected `<style>` block, or raw `motion.*` import outside it. Its allowlist is empty by design — an exception is a reviewed entry, never a silent one.

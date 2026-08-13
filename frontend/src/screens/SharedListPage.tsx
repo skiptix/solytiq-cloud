@@ -160,7 +160,7 @@ export default function SharedListPage() {
         {state === 'loading' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px 0' }}>
             <Spinner size={36} thickness={3} durationMs={700} />
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-quaternary)' }}>Loading…</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)' }}>Loading…</div>
           </div>
         )}
 
@@ -239,7 +239,7 @@ export default function SharedListPage() {
             {/* Content — layout follows the owner's "Shared view" setting */}
             <div style={{ padding: '24px 32px 32px' }}>
               {content.sections.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-quaternary)' }}>This board is empty.</div>
+                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)' }}>This board is empty.</div>
               ) : content.list.viewMode === 'kanban' ? (
                 <SharedKanbanView sections={content.sections} accent={accent} onTaskClick={handleTaskClick} />
               ) : content.list.viewMode === 'timeline' ? (
@@ -255,7 +255,7 @@ export default function SharedListPage() {
                       </div>
                       <div style={{ background: 'var(--color-surface-gray)', borderRadius: 12, border: '1px solid var(--color-border-alt)', overflow: 'hidden' }}>
                         {section.tasks.length === 0 ? (
-                          <div style={{ padding: '14px 16px', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', textAlign: 'center' }}>No items.</div>
+                          <div style={{ padding: '14px 16px', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', textAlign: 'center' }}>No items.</div>
                         ) : (
                           <div style={{ padding: 4 }}>
                             {section.tasks.map(task => <SharedTaskRow key={task.id} task={task} accent={accent} onClick={handleTaskClick} />)}
@@ -275,7 +275,7 @@ export default function SharedListPage() {
         <div style={{ marginTop: 16, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-warning)', background: 'var(--color-yellow-tint-1)', borderRadius: 99, padding: '4px 12px' }}>Link expires {fmtDate(meta.expiresAt)}</div>
       )}
 
-      <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>
+      <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
         Shared via <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Solytiq</span>
       </div>
 

@@ -190,8 +190,11 @@ export default function LoginScreen() {
                     transition={{ duration: 0.2 }}
                     style={{ ...s.input, paddingRight: 32 }}
                     onFocus={() => setPassFocus(true)} onBlur={() => setPassFocus(false)} />
+                  {/* --color-text-secondary, not -tertiary: tertiary on white is
+                      4.49:1, just under WCAG AA's 4.5:1 at this size — the same
+                      finding, and the same fix, as the `sub` style above. */}
                   <MotionButton type="button" onClick={() => setShowPw(v => !v)} aria-label={showPw ? 'Hide password' : 'Show password'} aria-pressed={showPw}
-                    style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)', fontSize: 11.5, fontWeight: 600 }}>
+                    style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)', fontSize: 11.5, fontWeight: 600 }}>
                     {showPw ? 'Hide' : 'Show'}
                   </MotionButton>
                 </MotionIn>
@@ -213,7 +216,9 @@ export default function LoginScreen() {
                 <MotionLink to="/admin-reset"
                   whileHover={{ color: 'var(--color-primary)' }}
                   transition={{ duration: 0.15 }}
-                  style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)', textDecoration: 'none' }}>
+                  // -quaternary was 2.21:1 on white — less than half the AA
+                  // threshold, and this is a real recovery affordance.
+                  style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-secondary)', textDecoration: 'none' }}>
                   Forgot admin password?
                 </MotionLink>
               </MotionIn>

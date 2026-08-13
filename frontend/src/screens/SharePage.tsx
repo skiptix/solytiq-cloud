@@ -313,7 +313,7 @@ export default function SharePage() {
         {state === 'loading' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px 0' }}>
             <Spinner size={36} thickness={3} durationMs={700} />
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-quaternary)' }}>Loading…</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)' }}>Loading…</div>
           </div>
         )}
 
@@ -358,9 +358,9 @@ export default function SharePage() {
 
             {/* Meta */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: info.note ? 18 : 28, flexWrap: 'wrap', justifyContent: 'center' }}>
-              <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>{fmtSize(info.size)}</span>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)' }}>{fmtSize(info.size)}</span>
               <span style={{ color: 'var(--color-border)' }}>·</span>
-              <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Shared {fmtDate(info.createdAt)}</span>
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)' }}>Shared {fmtDate(info.createdAt)}</span>
               {info.expiresAt && (
                 <>
                   <span style={{ color: 'var(--color-border)' }}>·</span>
@@ -390,7 +390,7 @@ export default function SharePage() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bundleFile.name}</div>
-                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', marginTop: 1 }}>{fmtSize(bundleFile.size)}</div>
+                      <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 1 }}>{fmtSize(bundleFile.size)}</div>
                     </div>
                     <button onClick={() => handleDownload(bundleFile)} disabled={downloading}
                       style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '7px 10px', cursor: downloading ? 'not-allowed' : 'pointer' }}>
@@ -406,7 +406,7 @@ export default function SharePage() {
               <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '28px 0', marginBottom: 20, borderRadius: 14, border: '1.5px solid var(--color-border-alt)', background: 'var(--color-surface-gray)' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
                   <Spinner size={28} thickness={3} durationMs={700} />
-                  <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Loading preview…</span>
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)' }}>Loading preview…</span>
                 </div>
               </div>
             )}
@@ -483,7 +483,7 @@ export default function SharePage() {
             {previewError && !previewLoading && (
               <div style={{ width: '100%', marginBottom: 24, borderRadius: 14, border: '1.5px solid var(--color-border-alt)', background: 'var(--color-surface-gray)', padding: '20px', display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
                 <Icon name="visibility_off" size={18} color="var(--color-text-quaternary)" />
-                <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Preview not available</span>
+                <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)' }}>Preview not available</span>
               </div>
             )}
 
@@ -538,7 +538,7 @@ export default function SharePage() {
         )}
       </MotionIn>
 
-      <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>
+      <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
         Shared via <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Solytiq</span>
       </div>
 

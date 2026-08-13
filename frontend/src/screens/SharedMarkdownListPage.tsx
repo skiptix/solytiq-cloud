@@ -231,7 +231,7 @@ export default function SharedMarkdownListPage() {
         {state === 'loading' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px 0' }}>
             <Spinner size={36} thickness={3} durationMs={700} />
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-quaternary)' }}>Loading…</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)' }}>Loading…</div>
           </div>
         )}
 
@@ -301,7 +301,7 @@ export default function SharedMarkdownListPage() {
             {/* Blocks */}
             <div style={{ padding: '24px 32px 32px', display: 'flex', flexDirection: 'column', gap: 12 }}>
               {content.content.blocks.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-quaternary)' }}>This markdown page is empty.</div>
+                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)' }}>This markdown page is empty.</div>
               )}
               {rows}
             </div>
@@ -313,7 +313,7 @@ export default function SharedMarkdownListPage() {
         <div style={{ marginTop: 16, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-warning)', background: 'var(--color-yellow-tint-1)', borderRadius: 99, padding: '4px 12px' }}>Link expires {fmtDate(meta.expiresAt)}</div>
       )}
 
-      <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>
+      <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
         Shared via <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Solytiq</span>
       </div>
 
@@ -354,7 +354,7 @@ function SharedBlockView({ block, accent, number, token, session }: { block: Sha
             <Icon name="link" size={14} color="var(--color-primary)" /> {block.title || block.url}
           </span>
           {block.description && <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>{block.description}</span>}
-          <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{block.url}</span>
+          <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{block.url}</span>
         </a>
       </div>
     );

@@ -160,7 +160,7 @@ export default function SharedFolderPage() {
         {state === 'loading' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px 0' }}>
             <Spinner size={36} thickness={3} durationMs={700} />
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-quaternary)' }}>Loading…</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)' }}>Loading…</div>
           </div>
         )}
 
@@ -238,7 +238,7 @@ export default function SharedFolderPage() {
             {/* Item grid */}
             <div style={{ padding: '24px 32px 32px' }}>
               {content.items.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-quaternary)' }}>
+                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)' }}>
                   Nothing has been shared in this folder yet.
                 </div>
               ) : (
@@ -263,7 +263,7 @@ export default function SharedFolderPage() {
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</div>
-                            <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{im.label}</div>
+                            <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{im.label}</div>
                           </div>
                           <Icon name="arrow_forward" size={16} color="var(--color-text-quaternary)" />
                         </div>
@@ -292,7 +292,7 @@ export default function SharedFolderPage() {
         <div style={{ marginTop: 16, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-warning)', background: 'var(--color-yellow-tint-1)', borderRadius: 99, padding: '4px 12px' }}>Link expires {fmtDate(meta.expiresAt)}</div>
       )}
 
-      <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>
+      <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
         Shared via <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Solytiq</span>
       </div>
 

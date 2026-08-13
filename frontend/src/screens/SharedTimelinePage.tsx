@@ -197,7 +197,7 @@ export default function SharedTimelinePage() {
         {state === 'loading' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px 0' }}>
             <Spinner size={36} thickness={3} durationMs={700} />
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-quaternary)' }}>Loading…</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)' }}>Loading…</div>
           </div>
         )}
 
@@ -282,7 +282,7 @@ export default function SharedTimelinePage() {
             {/* Milestones */}
             <div style={{ padding: '28px 36px 36px' }}>
               {total === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-quaternary)' }}>This timeline has no milestones yet.</div>
+                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)' }}>This timeline has no milestones yet.</div>
               ) : (
                 <div style={{ position: 'relative', paddingLeft: 8 }}>
                   <div style={{ position: 'absolute', left: 8 + 8 - 1, top: 8, bottom: 8, width: 2, background: 'var(--color-border)', borderRadius: 2 }} />
@@ -357,7 +357,7 @@ export default function SharedTimelinePage() {
         <div style={{ marginTop: 16, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-warning)', background: 'var(--color-yellow-tint-1)', borderRadius: 99, padding: '4px 12px' }}>Link expires {fmtDate(meta.expiresAt)}</div>
       )}
 
-      <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>
+      <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
         Shared via <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Solytiq</span>
       </div>
 
