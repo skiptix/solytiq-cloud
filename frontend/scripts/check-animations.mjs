@@ -131,14 +131,48 @@ const PATTERNS = [
   { kind: 'animated-svg-attr', re: /<animate(Transform|Motion)?[\s>]|stroke-dashoffset/g, category: (rel) => classify(rel) },
 ];
 
+/**
+ * Character ranges covered by a `@media (prefers-reduced-motion: reduce)`
+ * block. Declarations inside one are the SUPPRESSION of motion, not motion —
+ * the global fallback in index.css exists precisely to shorten animations and
+ * transitions that this repo does not author (Leaflet, XYFlow, sigma). It is
+ * spelled with the same property names as the thing it disables, so a
+ * property-name regex cannot tell the two apart on its own.
+ *
+ * Scoped deliberately to `reduce` blocks only: an ordinary `@media` query is
+ * still a perfectly good place to hide a real CSS animation, and must keep
+ * being flagged.
+ */
+function reducedMotionRanges(text) {
+  const ranges = [];
+  const at = /@media[^{]*prefers-reduced-motion\s*:\s*reduce[^{]*\{/g;
+  let m;
+  while ((m = at.exec(text))) {
+    let depth = 1;
+    let i = at.lastIndex;
+    while (i < text.length && depth > 0) {
+      if (text[i] === '{') depth++;
+      else if (text[i] === '}') depth--;
+      i++;
+    }
+    ranges.push([m.index, i]);
+  }
+  return ranges;
+}
+
 for (const abs of files) {
   const rel = relative(root, abs).replace(/\\/g, '/');
   const central = isCentral(abs);
   const content = stripComments(readFileSync(abs, 'utf8'));
+  const rmRanges = reducedMotionRanges(content);
   for (const { kind, re, category } of PATTERNS) {
     re.lastIndex = 0;
     let m;
     while ((m = re.exec(content))) {
+      if ((kind === 'animation-prop' || kind === 'transition-prop') &&
+          rmRanges.some(([a, b]) => m.index >= a && m.index < b)) {
+        continue;
+      }
       const upto = content.slice(0, m.index);
       const line = upto.split('\n').length;
       findings.push({
