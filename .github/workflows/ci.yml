@@ -1,0 +1,118 @@
+name: CI
+
+# Runs on every pull request and on pushes to main. Jobs are split so a
+# failure names the thing that broke rather than "CI failed" — and so the
+# frontend and backend suites run in parallel instead of one waiting on the
+# other.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  # A new push to the same branch cancels the previous run — nobody needs the
+  # results of a commit that has already been superseded.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc -b --noEmit
+
+      # `--quiet` on purpose: errors gate, warnings do not. See the rationale
+      # on `react-hooks/set-state-in-effect` in eslint.config.js — it is
+      # downgraded to a warning because it flags a correct async-fetch shape,
+      # and the findings stay visible in a full `npm run lint` locally.
+      - name: Lint
+        run: npx eslint . --quiet
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # The `playwright` package is a dependency, but the browser binary is
+      # not — a11y and E2E both drive real Chromium and would fail on a bare
+      # `npm ci` without this.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Every gate below consumes the build above, so they run after it.
+      - name: Animation policy
+        run: npm run check:animations
+
+      - name: Bundle budget
+        run: npm run check:bundle
+
+      - name: Accessibility
+        run: npm run test:a11y
+
+      # Real Chromium against the real production build. Reuses the dist/
+      # produced above rather than rebuilding, matching the convention
+      # check-bundle.mjs and run-a11y-tests.mjs already follow.
+      - name: E2E regression
+        run: npm run test:e2e
+        env:
+          E2E_SKIP_BUILD: '1'
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      # isolated-vm (the Automation Hub's code sandbox) is a native module and
+      # compiles from source here — the same reason backend/Dockerfile is a
+      # multi-stage build. ubuntu-latest ships the toolchain it needs.
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        run: npm test
+
+  n8n-node:
+    name: n8n community node
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: n8n
+    # CLAUDE.md requires this node and backend/src/routes/adminReadApi.ts stay
+    # in sync; its smoke test exercises execute()/poll()/loadOptions against a
+    # mock Admin API, so this is where that drift shows up.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: n8n/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Smoke test
+        run: npm test
