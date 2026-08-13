@@ -135,19 +135,30 @@ export default function MarkdownListScreen() {
     if (!mdId) return;
     if (savingRef.current) { pendingSaveRef.current = nextBlocks; return; }
     savingRef.current = true;
-    setSaveState('saving');
     try {
-      const res = await update(mdId, { content: { version: 1, blocks: nextBlocks } });
-      setTodoListId(res.todoListId ?? null);
-      setBlocks(res.content.blocks.length > 0 ? res.content.blocks : [makeEmptyBlock('paragraph')]);
-      setSaveState('saved');
-    } catch (e) {
-      console.error('markdown page save failed', e);
-      setSaveState('error');
+      // Drains with a loop rather than recursing back into this callback:
+      // same coalescing (a save requested mid-flight replaces any earlier
+      // queued one, so there is never a backlog), but a useCallback that
+      // calls itself cannot have its memoization preserved.
+      let queued: MarkdownBlock[] | null = nextBlocks;
+      while (queued) {
+        const current = queued;
+        queued = null;
+        setSaveState('saving');
+        try {
+          const res = await update(mdId, { content: { version: 1, blocks: current } });
+          setTodoListId(res.todoListId ?? null);
+          setBlocks(res.content.blocks.length > 0 ? res.content.blocks : [makeEmptyBlock('paragraph')]);
+          setSaveState('saved');
+        } catch (e) {
+          console.error('markdown page save failed', e);
+          setSaveState('error');
+        }
+        queued = pendingSaveRef.current;
+        pendingSaveRef.current = null;
+      }
     } finally {
       savingRef.current = false;
-      const queued = pendingSaveRef.current;
-      if (queued) { pendingSaveRef.current = null; void persist(queued); }
     }
   }, [mdId, update]);
 

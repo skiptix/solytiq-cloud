@@ -138,17 +138,6 @@ export default function SharePage() {
   }, [token]);
 
   useEffect(() => {
-    if (state === 'ready' && info && !info.hasPassword) {
-      const kind = getPreviewKind(info.mimeType);
-      if (kind !== 'none') {
-        setPreviewKind(kind);
-        triggerPreviewLoad(kind, undefined);
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, info]);
-
-  useEffect(() => {
     return () => {
       if (fontBlobRef.current) URL.revokeObjectURL(fontBlobRef.current);
     };
@@ -222,6 +211,21 @@ export default function SharePage() {
       setPreviewLoading(false);
     }
   };
+
+  // Declared AFTER triggerPreviewLoad on purpose: an effect that closes over a
+  // `const` arrow function defined further down works at runtime (the effect
+  // runs post-mount) but reads as a use-before-declare, which is exactly what
+  // react-hooks/immutability flags.
+  useEffect(() => {
+    if (state === 'ready' && info && !info.hasPassword) {
+      const kind = getPreviewKind(info.mimeType);
+      if (kind !== 'none') {
+        setPreviewKind(kind);
+        triggerPreviewLoad(kind, undefined);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, info]);
 
   const handlePreview = async () => {
     if (!info) return;
