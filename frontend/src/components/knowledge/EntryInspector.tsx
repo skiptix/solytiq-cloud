@@ -66,26 +66,16 @@ export default function EntryInspector({
   const [imagesReady, setImagesReady] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Switching to a different entry rebuilds the buffer. Keyed on id rather than
-  // on the whole entry so a background sync refresh can't wipe an in-progress
-  // edit of the entry currently open.
+  // Switching to a different entry rebuilds the buffer by REMOUNTING — the
+  // caller keys this component on `entry.id` (see KnowledgeScreen), so every
+  // useState above already initialises from the right entry and there is no
+  // re-set-everything effect to keep in sync with the field list.
   useEffect(() => {
-    setTerm(entry.term);
-    setSummary(entry.summary ?? '');
-    setEntryType(entry.entryType);
-    setAliases(entry.aliases);
-    setAliasDraft('');
-    setBlocks(entry.content.blocks.length > 0 ? (entry.content.blocks as MarkdownBlock[]) : [makeEmptyBlock('paragraph')]);
-    setMetaDirty(false);
-    setError('');
-    setConfirmDelete(false);
-    setImagesReady(false);
     let cancelled = false;
     ensureAssetTicket(`kbimg:${entry.id}`)
       .catch(() => { /* best-effort — an entry with no images doesn't need one */ })
       .finally(() => { if (!cancelled) setImagesReady(true); });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry.id]);
 
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);

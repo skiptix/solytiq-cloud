@@ -550,7 +550,13 @@ export default function KnowledgeScreen() {
         <AnimatePresence>
           {selectedEntry && (
             <EntryInspector
-              key="entry-inspector"
+              // Keyed on the ENTRY, not a constant: switching terms should
+              // rebuild the whole editing buffer, which React does for free by
+              // remounting. The effect that used to re-set ten pieces of state
+              // by hand is gone with it. Still not keyed on the whole entry
+              // object — a background sync refresh must not wipe an
+              // in-progress edit of the entry currently open.
+              key={selectedEntry.id}
               entry={selectedEntry}
               relations={relations}
               canWrite={canWrite}

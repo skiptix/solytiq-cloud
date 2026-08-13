@@ -54,6 +54,7 @@ export default function CommandPalette({ onClose, onNavigate, onOpenAccountSetti
   const { setCurrentWorkspace } = useWorkspaceStore();
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
+  const [lastQuery, setLastQuery] = useState(query);
   const [serverResults, setServerResults] = useState<GlobalSearchResult[]>([]);
   const [knowledgeResults, setKnowledgeResults] = useState<Extract<Result, { type: 'knowledge' }>[]>([]);
   const [loading, setLoading] = useState(false);
@@ -120,7 +121,16 @@ export default function CommandPalette({ onClose, onNavigate, onOpenAccountSetti
     ];
   }, [q, serverResults, knowledgeResults]);
 
-  useEffect(() => { setActiveIdx(0); }, [query, serverResults]);
+  // Adjusted during render rather than in an effect. `activeIdx` is
+  // keyboard-navigable so it cannot simply be derived, but a new result set
+  // must not leave the highlight pointing at a row that has moved or gone —
+  // and an effect would paint one frame with the stale index first.
+  const [lastResultSet, setLastResultSet] = useState<unknown>(null);
+  if (lastResultSet !== serverResults || lastQuery !== query) {
+    setLastResultSet(serverResults);
+    setLastQuery(query);
+    setActiveIdx(0);
+  }
 
   const goTo = useCallback((result: Result) => {
     onClose();
