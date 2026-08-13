@@ -18,6 +18,7 @@ import useAiSkillsStore from '../store/useAiSkillsStore';
 import PopIn from '../components/animate-ui/PopIn';
 import ModalIn from '../components/animate-ui/ModalIn';
 import MotionButton from '../components/animate-ui/MotionButton';
+import MotionIn from '../components/animate-ui/MotionIn';
 
 interface UserEntry {
   id: string;
@@ -616,7 +617,7 @@ export default function SettingsScreen() {
   );
 
   const SaveButton = ({ onClick, saving, saved, disabled }: { onClick: () => void; saving: boolean; saved: boolean; disabled?: boolean }) => (
-    <button
+    <MotionButton
       onClick={onClick}
       disabled={saving || disabled}
       style={{
@@ -627,14 +628,13 @@ export default function SettingsScreen() {
         border: saved ? '1.5px solid rgba(var(--color-success-rgb), 0.3)' : 'none',
         borderRadius: 10, padding: '9px 20px',
         cursor: (saving || disabled) ? 'not-allowed' : 'pointer',
-        transition: 'all 150ms',
       }}
-      onMouseEnter={e => { if (!saving && !saved && !disabled) e.currentTarget.style.background = 'var(--color-purple-mid-10)'; }}
-      onMouseLeave={e => { if (!saving && !saved && !disabled) e.currentTarget.style.background = 'var(--color-primary)'; }}
+      whileHover={!saving && !saved && !disabled ? { background: 'var(--color-purple-mid-10)' } : undefined}
+      transition={{ duration: 0.15 }}
     >
       <Icon name={saved ? 'check' : 'save'} size={14} color={saved ? 'var(--color-success)' : 'var(--color-white)'} />
       {saved ? 'Saved' : saving ? 'Saving…' : 'Save'}
-    </button>
+    </MotionButton>
   );
 
   const TABS: { id: TabId; label: string; icon: string }[] = [
@@ -672,7 +672,6 @@ export default function SettingsScreen() {
                       border: 'none', borderRadius: 10,
                       padding: '7px 14px',
                       cursor: 'pointer',
-                      transition: 'all 150ms',
                       flex: '1 1 auto',
                       justifyContent: 'center',
                       minWidth: 0,
@@ -701,15 +700,15 @@ export default function SettingsScreen() {
                         {' '}Optional features stay hidden from every user until you install them here.
                       </div>
                     </div>
-                    <button
+                    <MotionButton
                       onClick={() => setShowAppsStore(true)}
                       style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0, boxShadow: '0 4px 14px rgba(var(--color-primary-rgb), 0.28)' }}
-                      onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(0.92)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.filter = 'none'; }}
+                      whileHover={{ filter: 'brightness(0.92)' }}
+                      transition={{ duration: 0.15 }}
                     >
                       <Icon name="apps" size={16} color="var(--color-white)" />
                       Discover Apps
-                    </button>
+                    </MotionButton>
                   </div>
                 </div>
 
@@ -771,7 +770,7 @@ export default function SettingsScreen() {
                         <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Storage limit per user</div>
                         <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>Admins are exempt and always have unlimited storage.</div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', background: 'var(--color-white)', border: `1.5px solid ${quotaInputFocus ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color 200ms' }}>
+                      <MotionIn animate={{ borderColor: quotaInputFocus ? 'var(--color-primary)' : 'var(--color-border-alt)' }} transition={{ duration: 0.2 }} style={{ display: 'flex', alignItems: 'center', background: 'var(--color-white)', borderWidth: 1.5, borderStyle: 'solid', borderRadius: 10, overflow: 'hidden' }}>
                         <input
                           type="number"
                           min="1"
@@ -784,7 +783,7 @@ export default function SettingsScreen() {
                           style={{ width: 64, fontFamily: 'var(--font-body)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', outline: 'none', padding: '8px 10px', textAlign: 'right' }}
                         />
                         <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', paddingRight: 10, paddingLeft: 2, userSelect: 'none' }}>GB</span>
-                      </div>
+                      </MotionIn>
                     </div>
                   </div>
                 </div>
@@ -843,24 +842,32 @@ export default function SettingsScreen() {
                         {AI_MODELS.map(m => {
                           const selected = aiModel === m.value;
                           return (
-                            <button
+                            <MotionButton
                               key={m.value}
                               onClick={() => { setAiModel(m.value); setAiSaved(false); }}
                               style={{
                                 display: 'flex', alignItems: 'center', gap: 10,
                                 padding: '9px 12px', borderRadius: 10, cursor: 'pointer',
-                                border: selected ? '1.5px solid var(--color-primary)' : '1.5px solid var(--color-border)',
-                                background: selected ? 'var(--color-purple-pale-14)' : 'var(--color-surface-neutral)',
+                                borderWidth: 1.5, borderStyle: 'solid',
                                 textAlign: 'left', width: '100%',
-                                transition: 'border-color 150ms, background 150ms',
                               }}
+                              animate={{
+                                borderColor: selected ? 'var(--color-primary)' : 'var(--color-border)',
+                                background: selected ? 'var(--color-purple-pale-14)' : 'var(--color-surface-neutral)',
+                              }}
+                              transition={{ duration: 0.15 }}
                             >
-                              <span style={{
-                                width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
-                                border: selected ? '4px solid var(--color-primary)' : '2px solid var(--color-purple-tint-8)',
-                                background: selected ? 'var(--color-white)' : 'transparent',
-                                transition: 'border 150ms',
-                              }} />
+                              <motion.span
+                                animate={{
+                                  borderWidth: selected ? 4 : 2,
+                                  borderColor: selected ? 'var(--color-primary)' : 'var(--color-purple-tint-8)',
+                                  background: selected ? 'var(--color-white)' : 'transparent',
+                                }}
+                                transition={{ duration: 0.15 }}
+                                style={{
+                                  width: 14, height: 14, borderRadius: '50%', flexShrink: 0,
+                                  borderStyle: 'solid',
+                                }} />
                               <span style={{ flex: 1, minWidth: 0 }}>
                                 <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', display: 'block' }}>{m.label}</span>
                                 <span style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-purple-mid-7)' }}>{m.sub}</span>
@@ -875,7 +882,7 @@ export default function SettingsScreen() {
                                   {m.badge}
                                 </span>
                               )}
-                            </button>
+                            </MotionButton>
                           );
                         })}
                       </div>
@@ -899,12 +906,12 @@ export default function SettingsScreen() {
                         <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Enable Knowledge Search</div>
                         <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>Search over the CONTENT of notes, pages, milestones, and meetings — not just titles. Works lexically (trigram) with zero setup; add an embedding provider below for semantic (meaning-based) results too.</div>
                       </div>
-                      <button
+                      <MotionButton
                         onClick={() => { setKnowledgeSearchEnabled(v => !v); setKnowledgeSaved(false); }}
-                        style={{ width: 44, height: 24, borderRadius: 12, background: knowledgeSearchEnabled ? 'var(--color-primary)' : 'var(--color-border)', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 200ms' }}
+                        animate={{ background: knowledgeSearchEnabled ? 'var(--color-primary)' : 'var(--color-border)' }} transition={{ duration: 0.2 }} style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}
                       >
                         <motion.span animate={{ left: knowledgeSearchEnabled ? 22 : 2 }} transition={{ duration: 0.2 }} style={{ position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)' }} />
-                      </button>
+                      </MotionButton>
                     </div>
 
                     <div style={{ height: 1, background: 'var(--color-surface-tint-2)' }} />
@@ -1254,15 +1261,15 @@ export default function SettingsScreen() {
                         {' '}Admin-curated context that personalizes Sol, the workspace Agent, and MCP clients.
                       </div>
                     </div>
-                    <button
+                    <MotionButton
                       onClick={() => setShowSkillUploadModal(true)}
                       style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0, boxShadow: '0 4px 14px rgba(var(--color-primary-rgb), 0.28)' }}
-                      onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(0.92)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.filter = 'none'; }}
+                      whileHover={{ filter: 'brightness(0.92)' }}
+                      transition={{ duration: 0.15 }}
                     >
                       <Icon name="add" size={16} color="var(--color-white)" />
                       Add Skill
-                    </button>
+                    </MotionButton>
                   </div>
                 </div>
 
@@ -1283,12 +1290,12 @@ export default function SettingsScreen() {
                 ) : (
                   <div style={card}>
                     {aiSkills.map((skill, i) => (
-                      <div
+                      <MotionIn
                         key={skill.id}
                         onClick={() => setEditingSkillId(skill.id)}
-                        style={{ ...row, borderBottom: i < aiSkills.length - 1 ? '1px solid var(--color-border-alt)' : 'none', cursor: 'pointer', opacity: skill.enabled ? 1 : 0.6, transition: 'background 120ms' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                        style={{ ...row, borderBottom: i < aiSkills.length - 1 ? '1px solid var(--color-border-alt)' : 'none', cursor: 'pointer', opacity: skill.enabled ? 1 : 0.6 }}
+                        whileHover={{ background: 'var(--color-surface-tint-4)' }}
+                        transition={{ duration: 0.12 }}
                       >
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1306,13 +1313,13 @@ export default function SettingsScreen() {
                             {skill.description || 'No description'}
                           </div>
                         </div>
-                        <button
+                        <MotionButton
                           onClick={(e) => { e.stopPropagation(); setAiSkillEnabled(skill.id, !skill.enabled); }}
-                          style={{ width: 40, height: 22, borderRadius: 11, background: skill.enabled ? 'var(--color-primary)' : 'var(--color-border)', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 200ms' }}
+                          animate={{ background: skill.enabled ? 'var(--color-primary)' : 'var(--color-border)' }} transition={{ duration: 0.2 }} style={{ width: 40, height: 22, borderRadius: 11, border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}
                         >
                           <motion.span animate={{ left: skill.enabled ? 20 : 2 }} transition={{ duration: 0.2 }} style={{ position: 'absolute', top: 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)' }} />
-                        </button>
-                      </div>
+                        </MotionButton>
+                      </MotionIn>
                     ))}
                   </div>
                 )}
@@ -1369,15 +1376,15 @@ export default function SettingsScreen() {
             {activeTab === 'api' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 {sectionLabel('Admin API',
-                  <button
+                  <MotionButton
                     onClick={() => setShowApiKeyWizard(true)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'background 150ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer' }}
+                    whileHover={{ background: 'var(--color-surface-tint-4)' }}
+                    transition={{ duration: 0.15 }}
                   >
                     <Icon name="add" size={14} color="var(--color-primary)" />
                     New API key
-                  </button>
+                  </MotionButton>
                 )}
                 <div style={card}>
                   <div style={{ padding: '16px 18px' }}>
@@ -1498,15 +1505,15 @@ export default function SettingsScreen() {
             {activeTab === 'users' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 {sectionLabel('Users',
-                  <button
+                  <MotionButton
                     onClick={openAddUser}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer', transition: 'background 150ms' }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer' }}
+                    whileHover={{ background: 'var(--color-surface-tint-4)' }}
+                    transition={{ duration: 0.15 }}
                   >
                     <Icon name="person_add" size={14} color="var(--color-primary)" />
                     Add User
-                  </button>
+                  </MotionButton>
                 )}
                 <div style={card}>
                   {usersLoading ? (
@@ -1545,39 +1552,39 @@ export default function SettingsScreen() {
                                 {relativeTime(u.lastOnline)}
                               </span>
                             </div>
-                            <button
+                            <MotionButton
                               onClick={() => openEditUser(u)}
                               title="Edit user"
-                              style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
-                              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                              style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                              whileHover={{ background: 'var(--color-surface-tint)' }}
+                              transition={{ duration: 0.12 }}
                             >
                               <Icon name="edit" size={15} color="var(--color-text-tertiary)" />
-                            </button>
+                            </MotionButton>
                             {u.id !== userId && (
-                              <button
+                              <MotionButton
                                 onClick={() => setDeleteTarget(u)}
                                 title="Remove user"
-                                style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
-                                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
-                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                                style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                                whileHover={{ background: 'var(--color-error-bg-alt)' }}
+                                transition={{ duration: 0.12 }}
                               >
                                 <Icon name="delete" size={15} color="var(--color-error)" />
-                              </button>
+                              </MotionButton>
                             )}
                           </div>
                         </div>
                       ))}
                       {hasMore && (
-                        <button
+                        <MotionButton
                           onClick={() => { setSearchQuery(''); setRoleFilter('all'); setAllUsersOpen(true); }}
-                          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px 18px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', transition: 'background 150ms' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '12px 18px', background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)' }}
+                          whileHover={{ background: 'var(--color-surface-tint)' }}
+                          transition={{ duration: 0.15 }}
                         >
                           <Icon name="group" size={15} color="var(--color-primary)" />
                           Show all {users.length} users
-                        </button>
+                        </MotionButton>
                       )}
                     </>
                   )}
@@ -1595,14 +1602,14 @@ export default function SettingsScreen() {
                       <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-error)' }}>Nuke Everything</div>
                       <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>Permanently delete all data. This cannot be undone.</div>
                     </div>
-                    <button
+                    <MotionButton
                       onClick={() => setNukeStep(1)}
-                      style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', flexShrink: 0, transition: 'background 150ms' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-red-deep-2)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-error)'; }}
+                      style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', flexShrink: 0 }}
+                      whileHover={{ background: 'var(--color-red-deep-2)' }}
+                      transition={{ duration: 0.15 }}
                     >
                       Nuke
-                    </button>
+                    </MotionButton>
                   </div>
                 </div>
               </div>
@@ -1637,16 +1644,16 @@ export default function SettingsScreen() {
                     <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>{users.length} {users.length === 1 ? 'user' : 'users'} total</div>
                   </div>
                 </div>
-                <button
+                <MotionButton
                   onClick={() => setAllUsersOpen(false)}
                   style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
+                  whileHover={{ background: 'var(--color-border)' }}
+                  transition={{ duration: 0.15 }}
                 >
                   <Icon name="close" size={15} color="var(--color-text-secondary)" />
-                </button>
+                </MotionButton>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--color-surface-gray)', border: `1.5px solid ${searchFocus ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, borderRadius: 10, padding: '8px 14px', marginBottom: 14, transition: 'border-color 200ms' }}>
+              <MotionIn animate={{ borderColor: searchFocus ? 'var(--color-primary)' : 'var(--color-border-alt)' }} transition={{ duration: 0.2 }} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--color-surface-gray)', borderWidth: 1.5, borderStyle: 'solid', borderRadius: 10, padding: '8px 14px', marginBottom: 14 }}>
                 <Icon name="search" size={16} color="var(--color-text-quaternary)" />
                 <input
                   value={searchQuery}
@@ -1662,18 +1669,17 @@ export default function SettingsScreen() {
                     <Icon name="close" size={14} color="var(--color-text-quaternary)" />
                   </button>
                 )}
-              </div>
+              </MotionIn>
               <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
                 {(['all', 'admin', 'user'] as const).map(f => (
-                  <button
+                  <MotionButton
                     key={f}
                     onClick={() => setRoleFilter(f)}
-                    style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 9999, border: 'none', cursor: 'pointer', transition: 'all 150ms', background: roleFilter === f ? 'var(--color-primary)' : 'var(--color-surface-tint)', color: roleFilter === f ? 'var(--color-white)' : 'var(--color-primary)' }}
-                    onMouseEnter={e => { if (roleFilter !== f) e.currentTarget.style.background = 'var(--color-surface-tint-4)'; }}
-                    onMouseLeave={e => { if (roleFilter !== f) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                    animate={{ background: roleFilter === f ? 'var(--color-primary)' : 'var(--color-surface-tint)' }} transition={{ duration: 0.15 }} style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 9999, border: 'none', cursor: 'pointer', color: roleFilter === f ? 'var(--color-white)' : 'var(--color-primary)' }}
+                    whileHover={roleFilter !== f ? { background: 'var(--color-surface-tint-4)' } : undefined}
                   >
                     {f === 'all' ? `All (${users.length})` : f === 'admin' ? `Admins (${users.filter(u => u.isAdmin).length})` : `Users (${users.filter(u => !u.isAdmin).length})`}
-                  </button>
+                  </MotionButton>
                 ))}
               </div>
             </div>
@@ -1709,25 +1715,25 @@ export default function SettingsScreen() {
                           {relativeTime(u.lastOnline)}
                         </span>
                       </div>
-                      <button
+                      <MotionButton
                         onClick={() => { setAllUsersOpen(false); openEditUser(u); }}
                         title="Edit user"
-                        style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                        style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                        whileHover={{ background: 'var(--color-surface-tint)' }}
+                        transition={{ duration: 0.12 }}
                       >
                         <Icon name="edit" size={15} color="var(--color-text-tertiary)" />
-                      </button>
+                      </MotionButton>
                       {u.id !== userId && (
-                        <button
+                        <MotionButton
                           onClick={() => { setAllUsersOpen(false); setDeleteTarget(u); }}
                           title="Remove user"
-                          style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                          style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                          whileHover={{ background: 'var(--color-error-bg-alt)' }}
+                          transition={{ duration: 0.12 }}
                         >
                           <Icon name="delete" size={15} color="var(--color-error)" />
-                        </button>
+                        </MotionButton>
                       )}
                     </div>
                   </div>
@@ -1757,29 +1763,29 @@ export default function SettingsScreen() {
                 </div>
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)' }}>Add New User</div>
               </div>
-              <button
+              <MotionButton
                 onClick={closeAddUser}
                 style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
+                whileHover={{ background: 'var(--color-border)' }}
+                transition={{ duration: 0.15 }}
               >
                 <Icon name="close" size={15} color="var(--color-text-secondary)" />
-              </button>
+              </MotionButton>
             </div>
             <div style={{ padding: '20px 24px' }}>
-              <div style={{ borderBottom: `${fullNameFocus ? 2 : 1}px solid ${fullNameFocus ? 'var(--color-primary)' : 'var(--color-border)'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
+              <MotionIn animate={{ borderBottomWidth: fullNameFocus ? 2 : 1, borderBottomColor: fullNameFocus ? 'var(--color-primary)' : 'var(--color-border)' }} transition={{ duration: 0.15 }} style={{ borderBottomStyle: 'solid', paddingBottom: 10, marginBottom: 16 }}>
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Full Name</div>
                 <input value={newFullName} onChange={e => setNewFullName(e.target.value)} placeholder="Jane Doe" style={fi} onFocus={() => setFullNameFocus(true)} onBlur={() => setFullNameFocus(false)} />
-              </div>
-              <div style={{ borderBottom: `${usernameFocus ? 2 : 1}px solid ${usernameFocus ? 'var(--color-primary)' : 'var(--color-border)'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
+              </MotionIn>
+              <MotionIn animate={{ borderBottomWidth: usernameFocus ? 2 : 1, borderBottomColor: usernameFocus ? 'var(--color-primary)' : 'var(--color-border)' }} transition={{ duration: 0.15 }} style={{ borderBottomStyle: 'solid', paddingBottom: 10, marginBottom: 16 }}>
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Username <span style={{ color: 'var(--color-error)' }}>*</span></div>
                 <input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="janedoe" style={fi} onFocus={() => setUsernameFocus(true)} onBlur={() => setUsernameFocus(false)} />
-              </div>
-              <div style={{ borderBottom: `${emailFocus ? 2 : 1}px solid ${emailFocus ? 'var(--color-primary)' : 'var(--color-border)'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
+              </MotionIn>
+              <MotionIn animate={{ borderBottomWidth: emailFocus ? 2 : 1, borderBottomColor: emailFocus ? 'var(--color-primary)' : 'var(--color-border)' }} transition={{ duration: 0.15 }} style={{ borderBottomStyle: 'solid', paddingBottom: 10, marginBottom: 16 }}>
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Email</div>
                 <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="jane@example.com" style={fi} onFocus={() => setEmailFocus(true)} onBlur={() => setEmailFocus(false)} />
-              </div>
-              <div style={{ borderBottom: `${passwordFocus ? 2 : 1}px solid ${passwordFocus ? 'var(--color-primary)' : 'var(--color-border)'}`, paddingBottom: 10, marginBottom: 20, transition: 'border-color 200ms' }}>
+              </MotionIn>
+              <MotionIn animate={{ borderBottomWidth: passwordFocus ? 2 : 1, borderBottomColor: passwordFocus ? 'var(--color-primary)' : 'var(--color-border)' }} transition={{ duration: 0.15 }} style={{ borderBottomStyle: 'solid', paddingBottom: 10, marginBottom: 20 }}>
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Password <span style={{ color: 'var(--color-error)' }}>*</span></div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <input
@@ -1792,14 +1798,14 @@ export default function SettingsScreen() {
                     onBlur={() => setPasswordFocus(false)}
                     onKeyDown={e => { if (e.key === 'Enter') handleCreateUser(); }}
                   />
-                  <button type="button" onClick={generatePassword} title="Generate random password" style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                  <MotionButton type="button" onClick={generatePassword} title="Generate random password" transition={{ duration: 0.12 }} style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                     <Icon name="casino" size={16} color="var(--color-text-tertiary)" />
-                  </button>
-                  <button type="button" onClick={copyPassword} disabled={!newPassword} title={passwordCopied ? 'Copied!' : 'Copy password'} style={{ width: 28, height: 28, borderRadius: 7, background: passwordCopied ? 'rgba(var(--color-success-rgb), 0.10)' : 'transparent', border: 'none', cursor: newPassword ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { if (newPassword && !passwordCopied) e.currentTarget.style.background = 'var(--color-surface-tint)'; }} onMouseLeave={e => { if (!passwordCopied) e.currentTarget.style.background = 'transparent'; }}>
+                  </MotionButton>
+                  <MotionButton type="button" onClick={copyPassword} disabled={!newPassword} title={passwordCopied ? 'Copied!' : 'Copy password'} transition={{ duration: 0.12 }} style={{ width: 28, height: 28, borderRadius: 7, background: passwordCopied ? 'rgba(var(--color-success-rgb), 0.10)' : 'transparent', border: 'none', cursor: newPassword ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} onMouseEnter={e => { if (newPassword && !passwordCopied) e.currentTarget.style.background = 'var(--color-surface-tint)'; }} onMouseLeave={e => { if (!passwordCopied) e.currentTarget.style.background = 'transparent'; }}>
                     <Icon name={passwordCopied ? 'check' : 'content_copy'} size={15} color={passwordCopied ? 'var(--color-success)' : newPassword ? 'var(--color-text-tertiary)' : 'var(--color-border)'} />
-                  </button>
+                  </MotionButton>
                 </div>
-              </div>
+              </MotionIn>
               {createError && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: 'var(--color-error-bg-alt)', borderRadius: 8, border: '1px solid var(--color-error-bg)' }}>
                   <Icon name="error" size={15} color="var(--color-error)" />
@@ -1808,9 +1814,9 @@ export default function SettingsScreen() {
               )}
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={closeAddUser} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}>Cancel</button>
-                <button onClick={handleCreateUser} disabled={creating || !newUsername.trim() || !newPassword.trim()} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: creating || !newUsername.trim() || !newPassword.trim() ? 'var(--color-border-strong)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: creating || !newUsername.trim() || !newPassword.trim() ? 'not-allowed' : 'pointer', transition: 'background 150ms' }} onMouseEnter={e => { if (!creating && newUsername.trim() && newPassword.trim()) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }} onMouseLeave={e => { if (!creating && newUsername.trim() && newPassword.trim()) e.currentTarget.style.background = 'var(--color-primary)'; }}>
+                <MotionButton onClick={handleCreateUser} disabled={creating || !newUsername.trim() || !newPassword.trim()} transition={{ duration: 0.15 }} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: creating || !newUsername.trim() || !newPassword.trim() ? 'var(--color-border-strong)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: creating || !newUsername.trim() || !newPassword.trim() ? 'not-allowed' : 'pointer' }} onMouseEnter={e => { if (!creating && newUsername.trim() && newPassword.trim()) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }} onMouseLeave={e => { if (!creating && newUsername.trim() && newPassword.trim()) e.currentTarget.style.background = 'var(--color-primary)'; }}>
                   {creating ? 'Creating…' : 'Create User'}
-                </button>
+                </MotionButton>
               </div>
             </div>
           </ModalIn>
@@ -1844,11 +1850,11 @@ export default function SettingsScreen() {
               </button>
             </div>
             <div style={{ padding: '20px 24px' }}>
-              <div style={{ borderBottom: `${editUsernameFocus ? 2 : 1}px solid ${editUsernameFocus ? 'var(--color-primary)' : 'var(--color-border)'}`, paddingBottom: 10, marginBottom: 16, transition: 'border-color 200ms' }}>
+              <MotionIn animate={{ borderBottomWidth: editUsernameFocus ? 2 : 1, borderBottomColor: editUsernameFocus ? 'var(--color-primary)' : 'var(--color-border)' }} transition={{ duration: 0.15 }} style={{ borderBottomStyle: 'solid', paddingBottom: 10, marginBottom: 16 }}>
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Username</div>
                 <input value={editUsername} onChange={e => setEditUsername(e.target.value)} placeholder={editTarget.username} style={fi} onFocus={() => setEditUsernameFocus(true)} onBlur={() => setEditUsernameFocus(false)} />
-              </div>
-              <div style={{ borderBottom: `${editPasswordFocus ? 2 : 1}px solid ${editPasswordFocus ? 'var(--color-primary)' : 'var(--color-border)'}`, paddingBottom: 10, marginBottom: 20, transition: 'border-color 200ms' }}>
+              </MotionIn>
+              <MotionIn animate={{ borderBottomWidth: editPasswordFocus ? 2 : 1, borderBottomColor: editPasswordFocus ? 'var(--color-primary)' : 'var(--color-border)' }} transition={{ duration: 0.15 }} style={{ borderBottomStyle: 'solid', paddingBottom: 10, marginBottom: 20 }}>
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>New Password <span style={{ color: 'var(--color-text-quaternary)', fontWeight: 400 }}>(optional)</span></div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <input
@@ -1861,14 +1867,14 @@ export default function SettingsScreen() {
                     onBlur={() => setEditPasswordFocus(false)}
                     onKeyDown={e => { if (e.key === 'Enter') handleEditUser(); }}
                   />
-                  <button type="button" onClick={generateEditPassword} title="Generate random password" style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                  <MotionButton type="button" onClick={generateEditPassword} title="Generate random password" transition={{ duration: 0.12 }} style={{ width: 28, height: 28, borderRadius: 7, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                     <Icon name="casino" size={16} color="var(--color-text-tertiary)" />
-                  </button>
-                  <button type="button" onClick={copyEditPassword} disabled={!editPassword} title={editPasswordCopied ? 'Copied!' : 'Copy password'} style={{ width: 28, height: 28, borderRadius: 7, background: editPasswordCopied ? 'rgba(var(--color-success-rgb), 0.10)' : 'transparent', border: 'none', cursor: editPassword ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 120ms' }} onMouseEnter={e => { if (editPassword && !editPasswordCopied) e.currentTarget.style.background = 'var(--color-surface-tint)'; }} onMouseLeave={e => { if (!editPasswordCopied) e.currentTarget.style.background = 'transparent'; }}>
+                  </MotionButton>
+                  <MotionButton type="button" onClick={copyEditPassword} disabled={!editPassword} title={editPasswordCopied ? 'Copied!' : 'Copy password'} transition={{ duration: 0.12 }} style={{ width: 28, height: 28, borderRadius: 7, background: editPasswordCopied ? 'rgba(var(--color-success-rgb), 0.10)' : 'transparent', border: 'none', cursor: editPassword ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} onMouseEnter={e => { if (editPassword && !editPasswordCopied) e.currentTarget.style.background = 'var(--color-surface-tint)'; }} onMouseLeave={e => { if (!editPasswordCopied) e.currentTarget.style.background = 'transparent'; }}>
                     <Icon name={editPasswordCopied ? 'check' : 'content_copy'} size={15} color={editPasswordCopied ? 'var(--color-success)' : editPassword ? 'var(--color-text-tertiary)' : 'var(--color-border)'} />
-                  </button>
+                  </MotionButton>
                 </div>
-              </div>
+              </MotionIn>
               {editError && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: 'var(--color-error-bg-alt)', borderRadius: 8, border: '1px solid var(--color-error-bg)' }}>
                   <Icon name="error" size={15} color="var(--color-error)" />
@@ -1877,9 +1883,9 @@ export default function SettingsScreen() {
               )}
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={closeEditUser} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}>Cancel</button>
-                <button onClick={handleEditUser} disabled={editing} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: editing ? 'var(--color-border-strong)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: editing ? 'not-allowed' : 'pointer', transition: 'background 150ms' }} onMouseEnter={e => { if (!editing) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }} onMouseLeave={e => { if (!editing) e.currentTarget.style.background = 'var(--color-primary)'; }}>
+                <MotionButton onClick={handleEditUser} disabled={editing} transition={{ duration: 0.15 }} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: editing ? 'var(--color-border-strong)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: editing ? 'not-allowed' : 'pointer' }} onMouseEnter={e => { if (!editing) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }} onMouseLeave={e => { if (!editing) e.currentTarget.style.background = 'var(--color-primary)'; }}>
                   {editing ? 'Saving…' : 'Save Changes'}
-                </button>
+                </MotionButton>
               </div>
             </div>
           </ModalIn>
@@ -1907,9 +1913,9 @@ export default function SettingsScreen() {
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setDeleteTarget(null)} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}>Cancel</button>
-              <button onClick={handleDeleteUser} disabled={deleting} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: deleting ? 'var(--color-border-strong)' : 'var(--color-error)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: deleting ? 'not-allowed' : 'pointer', transition: 'background 150ms' }} onMouseEnter={e => { if (!deleting) e.currentTarget.style.background = 'var(--color-red-deep-2)'; }} onMouseLeave={e => { if (!deleting) e.currentTarget.style.background = 'var(--color-error)'; }}>
+              <MotionButton onClick={handleDeleteUser} disabled={deleting} transition={{ duration: 0.15 }} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: deleting ? 'var(--color-border-strong)' : 'var(--color-error)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: deleting ? 'not-allowed' : 'pointer' }} onMouseEnter={e => { if (!deleting) e.currentTarget.style.background = 'var(--color-red-deep-2)'; }} onMouseLeave={e => { if (!deleting) e.currentTarget.style.background = 'var(--color-error)'; }}>
                 {deleting ? 'Removing…' : 'Remove User'}
-              </button>
+              </MotionButton>
             </div>
           </ModalIn>
         </div>,
