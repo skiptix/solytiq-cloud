@@ -20,6 +20,8 @@ import PopIn from '../components/animate-ui/PopIn';
 import ModalIn from '../components/animate-ui/ModalIn';
 import { motion } from '../components/animate-ui/motion';
 import { EASE_STANDARD } from '../components/animate-ui/motionTokens';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 export default function MarkdownListScreen() {
@@ -214,7 +216,7 @@ export default function MarkdownListScreen() {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center', padding: isMobile ? '20px 16px 80px' : '40px 24px 120px' }}>
-      <div style={{ width: '100%', maxWidth: fullWidth ? 1400 : 760, transition: 'max-width 320ms cubic-bezier(0.22,1,0.36,1)' }}>
+      <MotionIn transition={{ duration: 0.32 }} style={{ width: '100%', maxWidth: fullWidth ? 1400 : 760, }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 24 }}>
           <span style={{ fontSize: 34, lineHeight: 1.2 }}>{emoji || '📝'}</span>
@@ -235,26 +237,33 @@ export default function MarkdownListScreen() {
             {subtitle && <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', marginTop: 4 }}>{subtitle}</div>}
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexShrink: 0 }}>
-          <button
+          <MotionButton
             onClick={() => setReorderMode(r => !r)}
             title={reorderMode ? 'Done reordering' : 'Reorder blocks'}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: 32, width: isMobile ? 32 : undefined, padding: isMobile ? 0 : '0 11px', borderRadius: 8, border: `1px solid ${reorderMode ? 'var(--color-primary)' : 'var(--color-border)'}`, background: reorderMode ? 'var(--color-primary)' : 'var(--color-white)', cursor: 'pointer', transition: 'all 120ms', flexShrink: 0 }}
+            transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: 32, width: isMobile ? 32 : undefined, padding: isMobile ? 0 : '0 11px', borderRadius: 8, border: `1px solid ${reorderMode ? 'var(--color-primary)' : 'var(--color-border)'}`, background: reorderMode ? 'var(--color-primary)' : 'var(--color-white)', cursor: 'pointer', flexShrink: 0 }}
             onMouseEnter={e => { if (!reorderMode) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
             onMouseLeave={e => { if (!reorderMode) e.currentTarget.style.background = 'var(--color-white)'; }}>
             <Icon name="swap_vert" size={15} color={reorderMode ? 'var(--color-white)' : 'var(--color-primary)'} />
             {!isMobile && <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: reorderMode ? 'var(--color-white)' : 'var(--color-primary)' }}>{reorderMode ? 'Done' : 'Reorder'}</span>}
-          </button>
+          </MotionButton>
           {mdId && <AutomationsButton ownerType="markdownList" ownerId={mdId} isMobile={isMobile} />}
           {todoListId && (
             <motion.button
               initial={{ opacity: 0, scale: 0.88, y: -6 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ duration: 0.16, ease: EASE_STANDARD }}
+              transition={{
+                // Entrance timing for the pop-in above; the hover tint below
+                // carries its own so the two never share a duration.
+                default: { duration: 0.16, ease: EASE_STANDARD },
+              }}
               onClick={() => navigate(`/list/${todoListId}`)}
               title="Open this page's Todo list"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: 32, width: isMobile ? 32 : undefined, padding: isMobile ? 0 : '0 11px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer', transition: 'all 120ms', flexShrink: 0 }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-green-pale-1)'; e.currentTarget.style.borderColor = 'var(--color-success)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}>
+              whileHover={{
+                background: 'var(--color-green-pale-1)',
+                borderColor: 'var(--color-success)',
+                transition: { duration: 0.12 },
+              }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: 32, width: isMobile ? 32 : undefined, padding: isMobile ? 0 : '0 11px', borderRadius: 8, borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--color-border)', background: 'var(--color-white)', cursor: 'pointer', flexShrink: 0 }}>
               <Icon name="checklist" size={15} color="var(--color-success)" />
               {!isMobile && <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-success)' }}>Todo list</span>}
             </motion.button>
@@ -322,7 +331,7 @@ export default function MarkdownListScreen() {
           reorderMode={reorderMode}
           mentionMembers={mentionMembers}
         />
-      </div>
+      </MotionIn>
 
       {showSettings && mdId && (
         <ItemSettingsModal
@@ -343,7 +352,7 @@ export default function MarkdownListScreen() {
 
 
       {showDeleteDialog && createPortal(
-        <div onClick={() => setShowDeleteDialog(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+        <MotionIn onClick={() => setShowDeleteDialog(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18, ease: EASE_STANDARD }}>
           <ModalIn duration={280} onClick={e => e.stopPropagation()} style={{ background: 'var(--color-white)', borderRadius: 14, padding: '28px 32px', maxWidth: 380, width: '100%', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)' }}>
             <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--color-error-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
               <Icon name="delete" size={20} color="var(--color-error)" />
@@ -357,7 +366,7 @@ export default function MarkdownListScreen() {
               <button onClick={handleDelete} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
             </div>
           </ModalIn>
-        </div>,
+        </MotionIn>,
         document.body
       )}
 

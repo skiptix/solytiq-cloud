@@ -4,6 +4,7 @@ import { apiGetTaskChangelog } from '../api/client';
 import Icon from './Icon';
 import CreatorBubble from './CreatorBubble';
 import Spinner from '@/components/animate-ui/Spinner';
+import MotionIn from './animate-ui/MotionIn';
 
 interface TaskChangeHistoryProps {
   task: Task;
@@ -186,12 +187,12 @@ export default function TaskChangeHistory({ task, listId, open, variant }: TaskC
   // can't target it) rather than the fixed-pixel width transition the
   // desktop panel uses.
   return (
-    <div style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', transition: 'grid-template-rows 320ms cubic-bezier(0.4,0,0.2,1)' }}>
+    <MotionIn transition={{ duration: 0.32 }} style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', }}>
       <div style={{ overflow: 'hidden' }}>
         <div style={{ borderTop: '1px solid var(--color-purple-pale-23)', marginTop: 4, paddingTop: 8 }}>
           {body}
         </div>
       </div>
-    </div>
+    </MotionIn>
   );
 }

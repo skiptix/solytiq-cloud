@@ -5,6 +5,8 @@ import Icon from '../components/Icon';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import { apiGetTimelines } from '../api/client';
 import ModalIn from '../components/animate-ui/ModalIn';
+import { EASE_STANDARD } from '../components/animate-ui/motionTokens';
+import MotionIn from '../components/animate-ui/MotionIn';
 
 interface MoveMilestoneModalProps {
   milestone: Milestone;
@@ -46,9 +48,9 @@ export default function MoveMilestoneModal({ milestone, currentTimelineId, onPic
   }, [filtered, workspaceName]);
 
   return createPortal(
-    <div
+    <MotionIn
       onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.24)', backdropFilter: 'blur(5px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 220ms ease both' }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.24)', backdropFilter: 'blur(5px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.22, ease: EASE_STANDARD }}>
       <ModalIn
         duration={280}
         onClick={e => e.stopPropagation()}
@@ -117,7 +119,7 @@ export default function MoveMilestoneModal({ milestone, currentTimelineId, onPic
           </button>
         </div>
       </ModalIn>
-    </div>,
+    </MotionIn>,
     document.body
   );
 }

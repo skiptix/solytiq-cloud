@@ -8,6 +8,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { GraphNode } from '../../types';
 import Icon from '../Icon';
 import { nodeColor, nodeIcon, nodeSize } from '../../utils/graphLayout';
+import MotionIn from '../animate-ui/MotionIn';
 
 export function EntityNode({ data }: NodeProps) {
   const node = data as unknown as { node: GraphNode; focused?: boolean; onRemove?: () => void; onOpen?: () => void };
@@ -17,16 +18,15 @@ export function EntityNode({ data }: NodeProps) {
   return (
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'grab', opacity: n.isArchived ? 0.5 : 1 }}>
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-      <div
-        style={{
+      <MotionIn
+        transition={{ duration: 0.15 }} style={{
           width: dotSize, height: dotSize, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: color, border: `2px solid ${node.focused ? 'var(--color-text-primary)' : 'rgba(255,255,255,0.6)'}`,
           boxShadow: node.focused ? `0 0 0 3px ${color}33, 0 4px 14px rgba(0,0,0,0.16)` : '0 2px 8px rgba(0,0,0,0.12)',
-          transition: 'box-shadow 150ms',
         }}
       >
         <Icon name={nodeIcon(n.type)} size={Math.round(dotSize * 0.52)} color="#fff" />
-      </div>
+      </MotionIn>
       <span style={{
         maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center',
         fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 11.5, color: 'var(--color-text-primary)',

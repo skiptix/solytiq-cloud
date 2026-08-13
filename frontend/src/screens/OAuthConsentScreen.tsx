@@ -4,6 +4,7 @@ import useAuthStore from '../store/useAuthStore';
 import { useEffect, useState } from 'react';
 import { apiOAuthApprove, apiOAuthClientInfo, type OAuthClientInfo } from '../api/client';
 import Icon from '../components/Icon';
+import MotionButton from '../components/animate-ui/MotionButton';
 
 // SECURITY (S3): this screen used to hardcode "Claude" as the requesting
 // client's name, unconditionally, regardless of which client_id was in the
@@ -166,15 +167,15 @@ export default function OAuthConsentScreen() {
         )}
 
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <button
+          <MotionButton
             onClick={handleAllow}
             disabled={loading || !clientInfo}
-            style={{ width: '100%', padding: '14px 24px', background: 'var(--color-primary)', color: 'var(--color-white)', border: 'none', borderRadius: 10, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, cursor: loading || !clientInfo ? 'wait' : 'pointer', transition: 'background 0.2s' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--color-purple-mid-14)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'var(--color-primary)'}
+            style={{ width: '100%', padding: '14px 24px', background: 'var(--color-primary)', color: 'var(--color-white)', border: 'none', borderRadius: 10, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, cursor: loading || !clientInfo ? 'wait' : 'pointer' }}
+            whileHover={{ background: 'var(--color-purple-mid-14)' }}
+            transition={{ duration: 0.15 }}
           >
             {loading ? 'Connecting...' : 'Allow Access'}
-          </button>
+          </MotionButton>
 
           <button
             onClick={handleDeny}

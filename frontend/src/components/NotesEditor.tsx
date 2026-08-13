@@ -12,6 +12,7 @@ import { useEntitySearch } from '../hooks/useEntitySearch';
 import useAIStore from '../store/useAIStore';
 import { apiGetAISettings, apiAIChat } from '../api/client';
 import type { EntityIndexEntry } from '../types';
+import MotionButton from './animate-ui/MotionButton';
 
 // ── Shared Notes editor ─────────────────────────────────────────────────────
 // Used by the item dialog (TaskDialog) and the milestone editor so both get
@@ -105,14 +106,14 @@ function AiAssistButton({ aiContext, value, onApply }: AiAssistButtonProps) {
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
-      <button
+      <MotionButton
         type="button"
         title="Ask AI"
         onClick={() => setOpen((o) => !o)}
-        style={{ display: 'flex', alignItems: 'center', gap: 4, height: 26, padding: '0 9px', borderRadius: 7, border: `1px solid ${open ? 'var(--color-primary)' : 'var(--color-purple-pale-23)'}`, background: open ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', transition: 'all 120ms' }}>
+        transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', gap: 4, height: 26, padding: '0 9px', borderRadius: 7, border: `1px solid ${open ? 'var(--color-primary)' : 'var(--color-purple-pale-23)'}`, background: open ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', }}>
         <Icon name="auto_awesome" size={14} color="var(--color-primary)" />
         <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-primary)' }}>Ask AI</span>
-      </button>
+      </MotionButton>
 
       {open && (
         <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 60, width: Math.min(280, window.innerWidth - 32), background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 12 }}>
@@ -284,17 +285,17 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
   const mod = isMac ? '⌘' : 'Ctrl+';
 
   const fmtBtn = (icon: string, title: string, marker: Marker) => (
-    <button
+    <MotionButton
       type="button"
       title={title}
       disabled={showPreview}
       onMouseDown={e => e.preventDefault() /* keep the textarea selection */}
       onClick={() => applyFormat(marker)}
-      style={{ width: 26, height: 26, borderRadius: 7, border: 'none', background: 'transparent', cursor: showPreview ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: showPreview ? 0.35 : 1, transition: 'background 120ms' }}
+      transition={{ duration: 0.12 }} style={{ width: 26, height: 26, borderRadius: 7, border: 'none', background: 'transparent', cursor: showPreview ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: showPreview ? 0.35 : 1, }}
       onMouseEnter={e => { if (!showPreview) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
       <Icon name={icon} size={16} color="var(--color-text-tertiary)" />
-    </button>
+    </MotionButton>
   );
 
   return (
@@ -305,13 +306,13 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
           <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-border-strong)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</div>
           <div style={{ display: 'inline-flex', background: 'var(--color-surface-tint-3)', border: '1px solid var(--color-purple-pale-23)', borderRadius: 8, padding: 2 }}>
             {(['write', 'preview'] as const).map(t => (
-              <button
+              <MotionButton
                 key={t}
                 type="button"
                 onClick={() => setTab(t)}
-                style={{ padding: '3px 10px', borderRadius: 6, border: 'none', background: tab === t ? 'var(--color-white)' : 'transparent', boxShadow: tab === t ? '0 1px 3px rgba(var(--color-black-rgb), 0.08)' : 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: tab === t ? 'var(--color-primary)' : 'var(--color-text-tertiary)', transition: 'all 120ms', textTransform: 'capitalize' }}>
+                transition={{ duration: 0.12 }} style={{ padding: '3px 10px', borderRadius: 6, border: 'none', background: tab === t ? 'var(--color-white)' : 'transparent', boxShadow: tab === t ? '0 1px 3px rgba(var(--color-black-rgb), 0.08)' : 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: tab === t ? 'var(--color-primary)' : 'var(--color-text-tertiary)', textTransform: 'capitalize' }}>
                 {t}
-              </button>
+              </MotionButton>
             ))}
           </div>
         </div>

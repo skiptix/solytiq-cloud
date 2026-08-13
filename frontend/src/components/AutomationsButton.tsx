@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import type { AutomationOwnerEntityType } from '../types';
 import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import Icon from './Icon';
+import MotionButton from './animate-ui/MotionButton';
 
 interface AutomationsButtonProps {
   ownerType: AutomationOwnerEntityType;
@@ -20,14 +21,14 @@ export default function AutomationsButton({ ownerType, ownerId, isMobile }: Auto
   if (!installed) return null;
 
   return (
-    <button
+    <MotionButton
       onClick={() => navigate(`/automations?ownerType=${ownerType}&ownerId=${ownerId}`)}
       title="Automations"
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: 32, width: isMobile ? 32 : undefined, padding: isMobile ? 0 : '0 11px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer', transition: 'all 120ms', flexShrink: 0 }}
+      transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: 32, width: isMobile ? 32 : undefined, padding: isMobile ? 0 : '0 11px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer', flexShrink: 0 }}
       onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-orange-pale-5)'; e.currentTarget.style.borderColor = 'var(--color-warning-alt)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--color-white)'; e.currentTarget.style.borderColor = 'var(--color-border)'; }}>
       <Icon name="bolt" size={15} color="var(--color-warning-alt)" />
       {!isMobile && <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-warning-alt)' }}>Automations</span>}
-    </button>
+    </MotionButton>
   );
 }

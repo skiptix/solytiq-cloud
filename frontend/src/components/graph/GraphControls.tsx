@@ -2,6 +2,7 @@ import type { GraphEntityType } from '../../types';
 import Icon from '../Icon';
 import useGraphStore from '../../store/useGraphStore';
 import { nodeColor, ENTITY_TYPE_LABEL_PLURAL as TYPE_LABELS } from '../../utils/graphLayout';
+import MotionIn from '../animate-ui/MotionIn';
 
 const ALL_TYPES = Object.keys(TYPE_LABELS) as GraphEntityType[];
 
@@ -11,9 +12,9 @@ function CheckRow({ checked, label, onToggle }: { checked: boolean; label: strin
       onClick={onToggle}
       style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 2px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', width: '100%' }}
     >
-      <div style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${checked ? 'var(--color-primary)' : 'var(--color-purple-tint-7, #d8d3ec)'}`, background: checked ? 'var(--color-primary)' : 'var(--color-white)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 120ms' }}>
+      <MotionIn transition={{ duration: 0.12 }} style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${checked ? 'var(--color-primary)' : 'var(--color-purple-tint-7, #d8d3ec)'}`, background: checked ? 'var(--color-primary)' : 'var(--color-white)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, }}>
         {checked && <Icon name="check" size={13} color="var(--color-white)" />}
-      </div>
+      </MotionIn>
       <span style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)' }}>{label}</span>
     </button>
   );

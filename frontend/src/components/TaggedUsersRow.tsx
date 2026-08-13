@@ -12,6 +12,7 @@ import {
   type TaskTag,
 } from '../api/client';
 import type { WorkspaceMember } from '../types';
+import MotionButton from './animate-ui/MotionButton';
 
 // ── Item "Tag" row ────────────────────────────────────────────────────────────
 // Replaces the old badge chips AND the Owner row. Shows the item creator (the
@@ -157,14 +158,14 @@ export default function TaggedUsersRow({ taskId, workspaceId, listId, creatorId,
 
       {canEdit && (
         <div style={{ position: 'relative' }}>
-          <button
+          <MotionButton
             onClick={() => { setAdding((v) => !v); loadUsers(); }}
             title="Tag a person"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 9999, border: '1px dashed var(--color-purple-pale-44)', background: adding ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', transition: 'all 120ms' }}
+            transition={{ duration: 0.12 }} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 9999, border: '1px dashed var(--color-purple-pale-44)', background: adding ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', }}
             onMouseEnter={(e) => { if (!adding) e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
             onMouseLeave={(e) => { if (!adding) e.currentTarget.style.background = 'transparent'; }}>
             <Icon name="add" size={13} color="var(--color-primary)" /> Tag
-          </button>
+          </MotionButton>
 
           {adding && (
             <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 60, width: Math.min(260, window.innerWidth - 32), background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 8 }}>

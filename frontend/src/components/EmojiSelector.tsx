@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icon';
 import ModalIn from './animate-ui/ModalIn';
+import MotionButton from './animate-ui/MotionButton';
 
 const EMOJI_GROUPS = [
   { label: 'Work', emojis: ['📋','📁','💼','🗂️','📊','📈','✅','🎯','🔖','📌'] },
@@ -31,11 +32,11 @@ export function EmojiGrid({ value, onSelect, onRemove }: { value?: string; onSel
           <div style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{group.label}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 24px)', gap: 2, justifyContent: 'space-between' }}>
             {group.emojis.map(em => (
-              <button key={em} onClick={() => onSelect(em)}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 4, border: 'none', background: value === em ? 'var(--color-surface-tint-alt)' : 'transparent', cursor: 'pointer', fontSize: 15, transition: 'background 100ms, transform 120ms cubic-bezier(0.34,1.56,0.64,1)' }}
+              <MotionButton key={em} onClick={() => onSelect(em)}
+                transition={{ duration: 0.1 }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 4, border: 'none', background: value === em ? 'var(--color-surface-tint-alt)' : 'transparent', cursor: 'pointer', fontSize: 15, }}
                 onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.transform = 'scale(1.25)'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = value === em ? 'var(--color-surface-tint-alt)' : 'transparent'; e.currentTarget.style.transform = 'scale(1)'; }}
-              >{em}</button>
+              >{em}</MotionButton>
             ))}
           </div>
         </div>
@@ -95,15 +96,15 @@ export default function EmojiSelector({ value, onChange, direction = 'down', siz
 
   return (
     <div style={{ display: 'inline-flex', flexShrink: 0 }} onMouseDown={e => e.preventDefault()}>
-      <button
+      <MotionButton
         ref={btnRef}
         type="button"
         onClick={toggle}
         title="Choose emoji"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, borderRadius: 8, border: `1.5px solid ${open ? 'var(--color-primary)' : 'var(--color-purple-pale-42)'}`, background: open ? 'var(--color-surface-tint)' : 'var(--color-purple-pale-7)', cursor: 'pointer', fontSize: size / 2, transition: 'all 150ms' }}
+        transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, borderRadius: 8, border: `1.5px solid ${open ? 'var(--color-primary)' : 'var(--color-purple-pale-42)'}`, background: open ? 'var(--color-surface-tint)' : 'var(--color-purple-pale-7)', cursor: 'pointer', fontSize: size / 2, }}
       >
         {value || <Icon name="tag" size={size * 0.45} color="var(--color-text-quaternary)" />}
-      </button>
+      </MotionButton>
       {open && pos && createPortal(
         // Portaled to <body>: ancestors with backdrop-filter (modal overlays)
         // hijack position: fixed and their overflow: hidden clips the popup.

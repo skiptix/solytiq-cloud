@@ -7,6 +7,8 @@ import { apiCreateList, apiCreateSection } from '../api/client';
 import Icon from '../components/Icon';
 import EmojiSelector from '../components/EmojiSelector';
 import ModalIn from '../components/animate-ui/ModalIn';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
 
 const COLORS = [
   { color: 'var(--color-primary)', bg: 'var(--color-surface-tint)' },
@@ -89,7 +91,7 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
 
         {/* Progress */}
         <div style={{ display: 'flex', gap: 4, padding: '12px 24px 0' }}>
-          {[0,1,2].map(i => <div key={i} style={{ flex: 1, height: 3, borderRadius: 9999, background: i <= step ? 'var(--color-primary)' : 'var(--color-border)', transition: 'background 300ms' }} />)}
+          {[0,1,2].map(i => <MotionIn key={i} transition={{ duration: 0.3 }} style={{ flex: 1, height: 3, borderRadius: 9999, background: i <= step ? 'var(--color-primary)' : 'var(--color-border)', }} />)}
         </div>
 
         <div style={{ padding: '20px 24px 24px' }}>
@@ -123,16 +125,16 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
               <div>
                 <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 8 }}>Privacy</label>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => setIsPublic(false)}
-                    style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${!isPublic ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: !isPublic ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 150ms' }}>
+                  <MotionButton onClick={() => setIsPublic(false)}
+                    transition={{ duration: 0.15 }} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${!isPublic ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: !isPublic ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, }}>
                     <Icon name="lock" size={16} color={!isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                     <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: !isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>Private</span>
-                  </button>
-                  <button onClick={() => setIsPublic(true)}
-                    style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${isPublic ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: isPublic ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 150ms' }}>
+                  </MotionButton>
+                  <MotionButton onClick={() => setIsPublic(true)}
+                    transition={{ duration: 0.15 }} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${isPublic ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: isPublic ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, }}>
                     <Icon name="public" size={16} color={isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                     <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>Public</span>
-                  </button>
+                  </MotionButton>
                 </div>
                 <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
                   {isPublic ? 'Everyone in this workspace can see this board.' : 'Only you can see and edit this board.'}
@@ -143,8 +145,8 @@ export default function AddListWizard({ onClose, onCreated }: AddListWizardProps
                 <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 8 }}>Accent Color</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {COLORS.map((c, i) => (
-                    <button key={i} onClick={() => setColorIdx(i)}
-                      style={{ width: 32, height: 32, borderRadius: '50%', background: c.color, border: `3px solid ${colorIdx === i ? 'var(--color-text-primary)' : 'transparent'}`, cursor: 'pointer', transition: 'all 150ms' }} />
+                    <MotionButton key={i} onClick={() => setColorIdx(i)}
+                      transition={{ duration: 0.15 }} style={{ width: 32, height: 32, borderRadius: '50%', background: c.color, border: `3px solid ${colorIdx === i ? 'var(--color-text-primary)' : 'transparent'}`, cursor: 'pointer', }} />
                   ))}
                 </div>
               </div>

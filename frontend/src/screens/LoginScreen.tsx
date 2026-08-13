@@ -5,6 +5,9 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import { apiLogin, api2FAVerify } from '../api/client';
 import Icon from '../components/Icon';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
+import { motion } from '../components/animate-ui/motion';
 
 const s: Record<string, CSSProperties> = {
   wrap:  { minHeight: '100vh', background: 'linear-gradient(135deg, var(--color-page-bg) 0%, var(--color-purple-pale-12) 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, padding: 24 },
@@ -18,6 +21,8 @@ const s: Record<string, CSSProperties> = {
   label: { fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' },
   input: { fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', padding: '8px 0', outline: 'none', width: '100%', transition: 'border-color 200ms' },
 };
+
+const MotionLink = motion.create(Link);
 
 export default function LoginScreen() {
   usePageTitle("Login");
@@ -151,50 +156,54 @@ export default function LoginScreen() {
           <>
             <div style={{ textAlign: 'center' }}>
               <div style={s.title}>Welcome Back</div>
-              <div style={{ ...s.sub, marginTop: 6 }}>Sign in to continue.</div>
+              <MotionIn style={{ ...s.sub, marginTop: 6 }}>Sign in to continue.</MotionIn>
             </div>
             <form style={{ display: 'flex', flexDirection: 'column', gap: 20 }} onSubmit={handleSubmit}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label htmlFor="login-username" style={s.label}>Username</label>
-                <input id="login-username" type="text" value={username} onChange={e => setUsername(e.target.value)}
+              <MotionIn style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <motion.label htmlFor="login-username" style={s.label}>Username</motion.label>
+                <motion.input id="login-username" type="text" value={username} onChange={e => setUsername(e.target.value)}
                   placeholder="Enter your username…" autoFocus autoComplete="username"
                   aria-invalid={!!error || undefined}
                   aria-describedby={error ? 'login-error' : undefined}
                   style={{ ...s.input, borderBottom: `${userFocus ? 2 : 1.5}px solid ${userFocus ? 'var(--color-primary)' : 'var(--color-border-alt)'}` }}
                   onFocus={() => setUserFocus(true)} onBlur={() => setUserFocus(false)} />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label htmlFor="login-password" style={s.label}>Password</label>
-                <div style={{ position: 'relative' }}>
-                  <input id="login-password" type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
+              </MotionIn>
+              <MotionIn style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <motion.label htmlFor="login-password" style={s.label}>Password</motion.label>
+                <MotionIn style={{ position: 'relative' }}>
+                  <motion.input id="login-password" type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
                     placeholder="••••••••" autoComplete="current-password"
                     aria-invalid={!!error || undefined}
                     aria-describedby={error ? 'login-error' : undefined}
                     style={{ ...s.input, borderBottom: `${passFocus ? 2 : 1.5}px solid ${passFocus ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, paddingRight: 32 }}
                     onFocus={() => setPassFocus(true)} onBlur={() => setPassFocus(false)} />
-                  <button type="button" onClick={() => setShowPw(v => !v)} aria-label={showPw ? 'Hide password' : 'Show password'} aria-pressed={showPw}
+                  <MotionButton type="button" onClick={() => setShowPw(v => !v)} aria-label={showPw ? 'Hide password' : 'Show password'} aria-pressed={showPw}
                     style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)', fontSize: 11.5, fontWeight: 600 }}>
                     {showPw ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-              </div>
+                  </MotionButton>
+                </MotionIn>
+              </MotionIn>
               {/* role="alert" (a dedicated, always-mounted live region) means a
                   screen reader announces a login failure the moment it
                   appears — without it, text that only exists once an error
                   occurs is easy to miss entirely for a non-sighted user who
                   isn't focused on this part of the page when it shows up. */}
-              {error && <div id="login-error" role="alert" style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: -8 }}>{error}</div>}
-              <button type="submit" disabled={loading}
-                style={{ width: '100%', background: loading ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 10, border: 'none', cursor: loading ? 'wait' : 'pointer', transition: 'all 180ms', marginTop: 4 }}>
+              {error && <MotionIn id="login-error" role="alert" style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: -8 }}>{error}</MotionIn>}
+              <MotionButton type="submit" disabled={loading}
+                transition={{ duration: 0.18 }} style={{ width: '100%', background: loading ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 10, border: 'none', cursor: loading ? 'wait' : 'pointer', marginTop: 4 }}>
                 {loading ? 'Signing in…' : 'Sign In'}
-              </button>
-              <div style={{ textAlign: 'center', marginTop: 4 }}>
-                <Link to="/admin-reset" style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)', textDecoration: 'none', transition: 'color 150ms' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--color-primary)'; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--color-text-quaternary)'; }}>
+              </MotionButton>
+              <MotionIn style={{ textAlign: 'center', marginTop: 4 }}>
+                {/* `motion.create` wraps react-router's Link so the hover tint
+                    is a Motion target rather than two imperative handlers,
+                    while keeping client-side navigation. */}
+                <MotionLink to="/admin-reset"
+                  whileHover={{ color: 'var(--color-primary)' }}
+                  transition={{ duration: 0.15 }}
+                  style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-quaternary)', textDecoration: 'none' }}>
                   Forgot admin password?
-                </Link>
-              </div>
+                </MotionLink>
+              </MotionIn>
             </form>
           </>
         )}
@@ -239,22 +248,22 @@ export default function LoginScreen() {
 
               {error && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', textAlign: 'center', marginTop: -8 }}>{error}</div>}
 
-              <button
+              <MotionButton
                 onClick={handleVerify}
                 disabled={loading || !otpComplete}
-                style={{ width: '100%', background: loading || !otpComplete ? 'var(--color-border-strong)' : 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 10, border: 'none', cursor: loading || !otpComplete ? 'not-allowed' : 'pointer', transition: 'all 180ms' }}>
+                transition={{ duration: 0.18 }} style={{ width: '100%', background: loading || !otpComplete ? 'var(--color-border-strong)' : 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, padding: '12px 0', borderRadius: 10, border: 'none', cursor: loading || !otpComplete ? 'not-allowed' : 'pointer', }}>
                 {loading ? 'Verifying…' : 'Verify'}
-              </button>
+              </MotionButton>
 
-              <button
+              <MotionButton
                 type="button"
                 onClick={() => { setStep('creds'); setError(''); setOtp(Array(6).fill('')); }}
-                style={{ background: 'none', border: 'none', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'transparent', transition: 'color 150ms' }}
-                onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-primary)'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-tertiary)'; }}
+                style={{ background: 'none', border: 'none', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'transparent' }}
+                whileHover={{ color: 'var(--color-primary)' }}
+                transition={{ duration: 0.15 }}
               >
                 ← Back to login
-              </button>
+              </MotionButton>
             </div>
           </>
         )}

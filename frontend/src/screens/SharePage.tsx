@@ -4,6 +4,8 @@ import { useParams } from 'react-router-dom';
 import Icon from '../components/Icon';
 import { verifySharePassword, ShareSessionError } from '../utils/shareSession';
 import Spinner from '@/components/animate-ui/Spinner';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -301,7 +303,7 @@ export default function SharePage() {
         </div>
       )}
 
-      <div style={{ background: 'var(--color-white)', borderRadius: 20, boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.10)', padding: '40px 40px 36px', width: '100%', maxWidth: cardMaxWidth, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, transition: 'max-width 300ms ease' }}>
+      <MotionIn transition={{ duration: 0.3 }} style={{ background: 'var(--color-white)', borderRadius: 20, boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.10)', padding: '40px 40px 36px', width: '100%', maxWidth: cardMaxWidth, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, }}>
 
         {/* Loading */}
         {state === 'loading' && (
@@ -504,22 +506,22 @@ export default function SharePage() {
 
             {/* Preview button — password-protected files only, before preview is shown */}
             {info.hasPassword && hasPreviewSupport && !previewVisible && !previewLoading && !previewError && (
-              <button
+              <MotionButton
                 onClick={handlePreview}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: '1.5px solid var(--color-purple-pale-27)', borderRadius: 12, padding: '13px', cursor: 'pointer', marginBottom: 10, transition: 'background 150ms' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-pale-22)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: '1.5px solid var(--color-purple-pale-27)', borderRadius: 12, padding: '13px', cursor: 'pointer', marginBottom: 10 }}
+                whileHover={{ background: 'var(--color-purple-pale-22)' }}
+                transition={{ duration: 0.15 }}
               >
                 <Icon name="visibility" size={18} color="var(--color-primary)" />
                 Preview
-              </button>
+              </MotionButton>
             )}
 
             {/* Download button */}
-            <button
+            <MotionButton
               onClick={() => handleDownload()}
               disabled={downloading}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-white)', background: downloading ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', border: 'none', borderRadius: 12, padding: '14px', cursor: downloading ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}
+              transition={{ duration: 0.15 }} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-white)', background: downloading ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', border: 'none', borderRadius: 12, padding: '14px', cursor: downloading ? 'not-allowed' : 'pointer', }}
               onMouseEnter={e => { if (!downloading) e.currentTarget.style.background = 'var(--color-purple-mid-10)'; }}
               onMouseLeave={e => { if (!downloading) e.currentTarget.style.background = 'var(--color-primary)'; }}
             >
@@ -527,16 +529,15 @@ export default function SharePage() {
                 ? <><Spinner size={16} thickness={2} trackColor="rgba(var(--color-white-rgb), 0.4)" indicatorColor="var(--color-white)" durationMs={700} />Downloading…</>
                 : <><Icon name="download" size={18} color="var(--color-white)" />{info.files && info.files.length > 1 ? 'Download first file' : 'Download'}</>
               }
-            </button>
+            </MotionButton>
           </>
         )}
-      </div>
+      </MotionIn>
 
       <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>
         Shared via <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Solytiq</span>
       </div>
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

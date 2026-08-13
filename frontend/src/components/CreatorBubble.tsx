@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import useMembersStore from '../store/useMembersStore';
 import PopIn from './animate-ui/PopIn';
+import MotionIn from './animate-ui/MotionIn';
 
 function initials(fullName: string | null, username: string): string {
   return (fullName || username || 'U')
@@ -53,16 +54,15 @@ export default function CreatorBubble({ creatorId, taskHovered }: CreatorBubbleP
 
   return (
     <>
-      <div
+      <MotionIn
         ref={ref}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={() => setCardVisible(false)}
-        style={{
+        transition={{ duration: 0.15 }} style={{
           width: 22, height: 22, borderRadius: '50%', flexShrink: 0, overflow: 'hidden',
           background: 'linear-gradient(135deg, var(--color-accent-purple-light) 0%, var(--color-primary) 100%)',
           border: '1.5px solid var(--color-white)',
           opacity: taskHovered ? 1 : 0.5,
-          transition: 'opacity 150ms',
           cursor: 'default',
         }}
       >
@@ -70,7 +70,7 @@ export default function CreatorBubble({ creatorId, taskHovered }: CreatorBubbleP
           ? <img src={avatar} alt={member.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <span style={{ ...avatarStyle, fontFamily: 'var(--font-heading)', fontSize: 8, fontWeight: 700, color: 'var(--color-white)' }}>{ini}</span>
         }
-      </div>
+      </MotionIn>
 
       {cardVisible && createPortal(
         // Static anchor wrapper (unanimated) — keeps the fixed translateX(-50%)

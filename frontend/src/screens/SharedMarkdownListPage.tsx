@@ -8,6 +8,8 @@ import { useMobile } from '../hooks/useBreakpoint';
 import type { MarkdownTableBlock } from '../types';
 import { verifySharePassword, ShareSessionError } from '../utils/shareSession';
 import Spinner from '@/components/animate-ui/Spinner';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -223,7 +225,7 @@ export default function SharedMarkdownListPage() {
         </div>
       )}
 
-      <div style={{ background: 'var(--color-white)', borderRadius: 20, boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.10)', padding: state === 'ready' ? 0 : '40px 40px 36px', width: '100%', maxWidth: cardMaxWidth, display: 'flex', flexDirection: 'column', alignItems: state === 'ready' ? 'stretch' : 'center', overflow: 'hidden', transition: 'max-width 300ms ease' }}>
+      <MotionIn transition={{ duration: 0.3 }} style={{ background: 'var(--color-white)', borderRadius: 20, boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.10)', padding: state === 'ready' ? 0 : '40px 40px 36px', width: '100%', maxWidth: cardMaxWidth, display: 'flex', flexDirection: 'column', alignItems: state === 'ready' ? 'stretch' : 'center', overflow: 'hidden', }}>
 
         {/* Loading */}
         {state === 'loading' && (
@@ -274,13 +276,13 @@ export default function SharedMarkdownListPage() {
               />
               {pwError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: 5 }}>Incorrect password, please try again.</div>}
             </div>
-            <button
+            <MotionButton
               onClick={() => void submitPassword(password)}
               disabled={loadingContent || !password}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-white)', background: loadingContent || !password ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', border: 'none', borderRadius: 12, padding: '13px', cursor: loadingContent || !password ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}>
+              transition={{ duration: 0.15 }} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-white)', background: loadingContent || !password ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', border: 'none', borderRadius: 12, padding: '13px', cursor: loadingContent || !password ? 'not-allowed' : 'pointer', }}>
               {loadingContent ? <Spinner size={16} thickness={2} trackColor="rgba(var(--color-white-rgb), 0.4)" indicatorColor="var(--color-white)" durationMs={700} /> : <Icon name="visibility" size={18} color="var(--color-white)" />}
               View markdown page
-            </button>
+            </MotionButton>
           </div>
         )}
 
@@ -305,7 +307,7 @@ export default function SharedMarkdownListPage() {
             </div>
           </>
         )}
-      </div>
+      </MotionIn>
 
       {meta?.expiresAt && state === 'ready' && (
         <div style={{ marginTop: 16, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-warning)', background: 'var(--color-yellow-tint-1)', borderRadius: 99, padding: '4px 12px' }}>Link expires {fmtDate(meta.expiresAt)}</div>
@@ -315,7 +317,6 @@ export default function SharedMarkdownListPage() {
         Shared via <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Solytiq</span>
       </div>
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

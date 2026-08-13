@@ -5,6 +5,7 @@ import { apiGetWorkspaceGraph } from '../../api/client';
 import { nodeColor, nodeSize, radialLayout } from '../../utils/graphLayout';
 import useGraphStore from '../../store/useGraphStore';
 import type { GraphNode, GraphEdge } from '../../types';
+import { motion } from '../animate-ui/motion';
 
 const VIEW_W = 100;
 const VIEW_H = 90;
@@ -101,18 +102,18 @@ export default function GraphMiniMap({ workspaceId }: { workspaceId: string }) {
             <line key={l.id} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} stroke="var(--color-purple-pale-34, #f0edff)" strokeWidth={0.6} />
           ))}
           {positioned.map(({ n, x, y }) => (
-            <circle
+            <motion.circle
               key={n.srn} cx={x} cy={y}
               r={Math.max(nodeSize(n.degree) / 6, 1.4) * (hovered === n.srn ? 1.6 : 1)}
               fill={nodeColor(n.type, n.status)}
               opacity={hovered && hovered !== n.srn ? 0.45 : 0.9}
-              style={{ cursor: 'pointer', transition: 'r 120ms, opacity 120ms' }}
+              transition={{ duration: 0.12 }} style={{ cursor: 'pointer', }}
               onMouseEnter={() => setHovered(n.srn)}
               onMouseLeave={() => setHovered((h) => (h === n.srn ? null : h))}
               onClick={() => openNode(n)}
             >
               <title>{n.title || 'Untitled'}</title>
-            </circle>
+            </motion.circle>
           ))}
         </svg>
       </div>
