@@ -712,7 +712,20 @@ npm run build     # tsc -b && vite build → dist/
 npm run lint      # ESLint (flat config, TypeScript + React hooks)
 npm run preview   # Serve the built dist/
 npm test          # vitest run
+
+# Gates. All four run in CI (.github/workflows/ci.yml) and consume the build
+# above; each takes a *_SKIP_BUILD=1 env var so a local sweep builds once.
+npm run check:animations   # animation-policy gate (see Styling below)
+npm run check:bundle       # eager JS budget, 250 kB gzip
+npm run test:a11y          # axe-core, real Chromium, every backend-free route
+npm run test:responsive    # no horizontal body scroll, 320 → 1440
+npm run test:e2e           # RouteErrorBoundary chunk-retry regression
 ```
+
+> `npm run lint` reports warnings too; CI gates on `eslint . --quiet`, which
+> fails on errors only. See `react-hooks/set-state-in-effect` in
+> `eslint.config.js` and `DEPRECATIONS.md` for the one rule that is a warning
+> on purpose.
 
 ### Backend
 
@@ -721,7 +734,22 @@ cd backend
 npm run dev       # ts-node-dev --respawn src/index.ts (port 3001)
 npm run build     # tsc → dist/
 npm run start     # node dist/index.js (production)
-npm test          # vitest run
+npm test          # vitest run — environment-neutral, no DB, mock QueryExec
+
+# Needs a live Postgres. Uses its OWN env convention (TEST_PGHOST/PGPORT/
+# PGDATABASE/PGUSER/PGPASSWORD), defaulting role AND database to
+# `solytiq_test` — the plain PG* names have no effect on it.
+npm run test:integration
+npm run test:performance
+```
+
+### Repository-wide
+
+```bash
+# Dependency advisories across all three workspaces. Wraps `npm audit`:
+# see the allowlist in the script for the one known, mitigated, unfixable
+# finding, and why a raw audit would be permanently red.
+node scripts/check-sca.mjs frontend backend n8n
 ```
 
 ### Docker
@@ -736,7 +764,11 @@ docker compose logs -f backend  # Stream backend logs
 
 ## Tests
 
-A **Vitest** suite exists (`npm test` in both `backend/` and `frontend/`). Backend coverage spans GPX parsing (`gpx.test.ts` + fixtures), workspace/auth/CalDAV integrity, Automation Hub (`automationGraph.test.ts`, `automationEngine.test.ts`, `automationTypes.test.ts` — graph validation, loop-prevention, and action IDOR guards), the Graph Layer (`srn.test.ts`, `entityIndex.test.ts`, `graphVisibility.test.ts`, `entityLinks.test.ts`, `linkMigration.test.ts`, `inlineLinks.test.ts`, `verifyMigration.test.ts`), the Knowledge Layer (`chunker.test.ts`, `fusion.test.ts`, `knowledgeQueue.test.ts`, `knowledgeSearch.test.ts`), the Agent Runtime (`agentPolicy.test.ts`, `agentInverse.test.ts`, `agentRuntime.test.ts`), the Knowledge Base (`knowledgeBase.test.ts` — extraction heuristics, alias normalization, term lookup; `knowledgeBaseAiTools.test.ts` — the create-base → list → get-`entry_id` → revise-body loop an MCP client walks with no UI available), and MCP (`mcpPrompts.test.ts`, `mcpResources.test.ts`, `graphAiTools.test.ts`) — all using a mock `QueryExec` per the `workspaceIntegrity.test.ts` convention so no live DB is needed — every Graph/Knowledge/Agent function that touches the database accepts an injectable `QueryExec` (defaulting to the pool) for exactly this reason. Live LLM/embedding-provider calls and pgvector-in-CI are out of scope for this suite by design — those paths degrade gracefully (see Knowledge Layer) and are exercised with mocked providers, not real network calls. A small frontend Vitest suite also exists (route-state math, delta-reducer store logic, SRN parse/format, `linkTrigger.test.ts`). Vitest is the standard for new tests in both packages; add backend tests under `src/__tests__/`. Beyond automated tests, verify manually:
+A **Vitest** suite exists (`npm test` in both `backend/` and `frontend/`). Backend coverage spans GPX parsing (`gpx.test.ts` + fixtures), workspace/auth/CalDAV integrity, Automation Hub (`automationGraph.test.ts`, `automationEngine.test.ts`, `automationTypes.test.ts` — graph validation, loop-prevention, and action IDOR guards), the Graph Layer (`srn.test.ts`, `entityIndex.test.ts`, `graphVisibility.test.ts`, `entityLinks.test.ts`, `linkMigration.test.ts`, `inlineLinks.test.ts`, `verifyMigration.test.ts`), the Knowledge Layer (`chunker.test.ts`, `fusion.test.ts`, `knowledgeQueue.test.ts`, `knowledgeSearch.test.ts`), the Agent Runtime (`agentPolicy.test.ts`, `agentInverse.test.ts`, `agentRuntime.test.ts`), the Knowledge Base (`knowledgeBase.test.ts` — extraction heuristics, alias normalization, term lookup; `knowledgeBaseAiTools.test.ts` — the create-base → list → get-`entry_id` → revise-body loop an MCP client walks with no UI available), and MCP (`mcpPrompts.test.ts`, `mcpResources.test.ts`, `graphAiTools.test.ts`) — all using a mock `QueryExec` per the `workspaceIntegrity.test.ts` convention so no live DB is needed — every Graph/Knowledge/Agent function that touches the database accepts an injectable `QueryExec` (defaulting to the pool) for exactly this reason. Live LLM/embedding-provider calls and pgvector-in-CI are out of scope for this suite by design — those paths degrade gracefully (see Knowledge Layer) and are exercised with mocked providers, not real network calls. A small frontend Vitest suite also exists (route-state math, delta-reducer store logic, SRN parse/format, `linkTrigger.test.ts`, and the central Animate-UI layer's own `motionDraggable.test.tsx` / `useFrameLoop.test.tsx`). Vitest is the standard for new tests in both packages; add backend tests under `src/__tests__/`.
+
+**Beyond that default suite** there is a second, DB-backed one: `*.integration.test.ts` (`npm run test:integration`) runs against a real Postgres and covers what a mock `QueryExec` cannot — optimistic-concurrency races, atomic reorder, pool saturation, the multi-replica scheduler, SSE revocation, the OAuth flow. Each file skips loudly rather than failing when no database is reachable, so CI asserts connectivity FIRST: a skipped suite is still a green suite, and a service container that failed to start must not read as a pass. CI runs it against `pgvector/pgvector:pg16` — the same image `docker-compose.yml` ships — so the Knowledge Layer's pgvector paths are exercised rather than only its lexical-only fallback. Live LLM/embedding-provider calls remain out of scope and are exercised with mocked providers.
+
+Beyond automated tests, verify manually:
 - Backend: `curl` or a REST client against `http://localhost:3001`
 - Frontend: run the dev server and test in browser
 
