@@ -9,6 +9,11 @@ import useSyncStore from '../store/useSyncStore';
 import Icon from '../components/Icon';
 import CalendarPicker from '../components/CalendarPicker';
 import Spinner from '@/components/animate-ui/Spinner';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
+import MotionDraggable from '../components/animate-ui/MotionDraggable';
+import { motion } from '../components/animate-ui/motion';
+import { EASE_STANDARD, EASE_SETTLE } from '../components/animate-ui/motionTokens';
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -143,23 +148,23 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true, initialFile
 
         <div style={{ overflowY: 'auto', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Drop zone */}
-          <div
+          <MotionDraggable
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={onDrop}
             onClick={() => inputRef.current?.click()}
-            style={{ border: `2px dashed ${dragOver ? 'var(--color-primary)' : 'var(--color-blue-tint-3)'}`, borderRadius: 14, padding: '32px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer', background: dragOver ? 'var(--color-surface-tint)' : 'var(--color-white)', transition: 'all 150ms' }}
+            transition={{ duration: 0.15 }} style={{ border: `2px dashed ${dragOver ? 'var(--color-primary)' : 'var(--color-blue-tint-3)'}`, borderRadius: 14, padding: '32px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer', background: dragOver ? 'var(--color-surface-tint)' : 'var(--color-white)', }}
           >
             <Icon name="cloud_upload" size={36} color={dragOver ? 'var(--color-primary)' : 'var(--color-blue-mid-2)'} />
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', textAlign: 'center' }}>Choose files or drag & drop them here.</div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-blue-mid-2)', textAlign: 'center' }}>JPEG, PNG, PDF, MP4 and more — no per-file limit.</div>
-            <button
+            <MotionButton
               onClick={e => { e.stopPropagation(); inputRef.current?.click(); }}
               style={{ marginTop: 4, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', background: 'transparent', border: '1.5px solid var(--color-border-alt)', borderRadius: 99, padding: '7px 20px', cursor: 'pointer' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-gray)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-            >Browse Files</button>
-          </div>
+              whileHover={{ background: 'var(--color-surface-gray)' }}
+              transition={{ duration: 0.15 }}
+            >Browse Files</MotionButton>
+          </MotionDraggable>
           <input ref={inputRef} type="file" multiple style={{ display: 'none' }}
             onChange={e => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }} />
 
@@ -188,10 +193,10 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true, initialFile
                 </div>
                 <div style={{ display: 'flex', background: 'var(--color-border-alt)', borderRadius: 8, padding: 2, gap: 2 }}>
                   {(['Public', 'Private'] as const).map(v => (
-                    <button key={v} onClick={() => setIsPublic(v === 'Public')}
-                      style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: (v === 'Public') === isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: (v === 'Public') === isPublic ? 'var(--color-white)' : 'transparent', border: 'none', borderRadius: 6, padding: '4px 12px', cursor: 'pointer', transition: 'all 150ms', boxShadow: (v === 'Public') === isPublic ? '0 1px 3px rgba(var(--color-black-rgb), 0.08)' : 'none' }}>
+                    <MotionButton key={v} onClick={() => setIsPublic(v === 'Public')}
+                      transition={{ duration: 0.15 }} style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: (v === 'Public') === isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: (v === 'Public') === isPublic ? 'var(--color-white)' : 'transparent', border: 'none', borderRadius: 6, padding: '4px 12px', cursor: 'pointer', boxShadow: (v === 'Public') === isPublic ? '0 1px 3px rgba(var(--color-black-rgb), 0.08)' : 'none' }}>
                       {v}
-                    </button>
+                    </MotionButton>
                   ))}
                 </div>
               </div>
@@ -204,18 +209,18 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true, initialFile
               {/* Expiry */}
               <div style={{ position: 'relative' }}>
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 6 }}>Expires <span style={{ fontWeight: 400, color: 'var(--color-text-quaternary)' }}>(optional)</span></div>
-                <button
+                <MotionButton
                   onClick={() => setShowExpiryCal(s => !s)}
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: 'var(--color-white)', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: expiresAt ? 'var(--color-text-primary)' : 'var(--color-text-quaternary)', textAlign: 'left' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border-alt)'; }}
+                  whileHover={{ borderColor: 'var(--color-primary)' }}
+                  transition={{ duration: 0.15 }}
                 >
                   <Icon name="calendar_today" size={14} color={expiresAt ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
                   <span style={{ flex: 1 }}>{expiresAt ? new Date(expiresAt + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Pick a date…'}</span>
                   {expiresAt && (
                     <span onClick={e => { e.stopPropagation(); setExpiresAt(''); setShowExpiryCal(false); }} style={{ color: 'var(--color-text-quaternary)', lineHeight: 1, cursor: 'pointer', padding: '0 2px' }}>×</span>
                   )}
-                </button>
+                </MotionButton>
                 {showExpiryCal && (
                   <div style={{ position: 'absolute', bottom: 'calc(100% + 4px)', left: 0, zIndex: 500 }}>
                     <CalendarPicker
@@ -260,7 +265,7 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true, initialFile
               </div>
               {(entry.status === 'uploading' || entry.status === 'pending') && (
                 <div style={{ marginTop: 10, background: 'var(--color-border-alt)', borderRadius: 99, height: 4, overflow: 'hidden' }}>
-                  <div style={{ width: `${entry.progress}%`, height: '100%', background: 'var(--color-primary)', borderRadius: 99, transition: 'width 200ms' }} />
+                  <MotionIn transition={{ duration: 0.2 }} style={{ width: `${entry.progress}%`, height: '100%', background: 'var(--color-primary)', borderRadius: 99, }} />
                 </div>
               )}
             </div>
@@ -276,7 +281,6 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true, initialFile
           </button>
         </div>
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>,
     document.body
   );
@@ -340,18 +344,18 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
     navigator.clipboard.writeText(file.shareUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   };
 
-  const panelAnim = closing
-    ? 'settingsModalOut 190ms ease-in both'
-    : 'settingsModalIn 360ms cubic-bezier(0.22,1,0.36,1) both';
-  const backdropAnim = closing
-    ? 'backdropOut 190ms ease both'
-    : 'backdropIn 220ms ease both';
 
   return createPortal(
-    <div onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : 24, animation: backdropAnim }}>
-      <div onClick={e => e.stopPropagation()}
-        style={{ background: 'var(--color-white)', borderRadius: isMobile ? '16px 16px 0 0' : 20, width: '100%', maxWidth: 560, maxHeight: isMobile ? '90vh' : '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', animation: panelAnim, overflow: 'hidden' }}>
+    <MotionIn onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: closing ? 0 : 1 }}
+      transition={{ duration: closing ? 0.19 : 0.22, ease: EASE_STANDARD }}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : 24 }}>
+      <MotionIn onClick={e => e.stopPropagation()}
+        initial={{ opacity: 0, y: 22, scale: 0.96 }}
+        animate={closing ? { opacity: 0, y: 14, scale: 0.97 } : { opacity: 1, y: 0, scale: 1 }}
+        transition={closing ? { duration: 0.19, ease: 'easeIn' } : { duration: 0.36, ease: EASE_SETTLE }}
+        style={{ background: 'var(--color-white)', borderRadius: isMobile ? '16px 16px 0 0' : 20, width: '100%', maxWidth: 560, maxHeight: isMobile ? '90vh' : '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 20px 14px', borderBottom: '1px solid var(--color-surface-tint-2)', flexShrink: 0 }}>
@@ -375,16 +379,16 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
               <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>Loading preview…</span>
             </div>
           ) : previewUrl && isImage ? (
-            <img src={previewUrl} alt={file.name} style={{ maxWidth: '100%', maxHeight: 300, objectFit: 'contain', display: 'block', animation: 'sectionFadeUp 280ms ease both' }} />
+            <motion.img src={previewUrl} alt={file.name} style={{ maxWidth: '100%', maxHeight: 300, objectFit: 'contain', display: 'block' }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: EASE_SETTLE }} />
           ) : previewUrl && isVideo ? (
             <video src={previewUrl} controls style={{ maxWidth: '100%', maxHeight: 300, display: 'block', borderRadius: 0 }} />
           ) : previewUrl && isPdf ? (
             <iframe src={previewUrl} title={file.name} style={{ width: '100%', height: 280, border: 'none', display: 'block' }} />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: 32, animation: 'sectionFadeUp 280ms ease both' }}>
+            <MotionIn style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: 32 }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: EASE_SETTLE }}>
               <FileBadge mime={file.mimeType} size={72} />
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-tertiary)', textAlign: 'center' }}>{file.name}</div>
-            </div>
+            </MotionIn>
           )}
         </div>
 
@@ -396,11 +400,11 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
             <div style={{ background: 'var(--color-surface-tint)', borderRadius: 12, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
               <Icon name="link" size={16} color="var(--color-primary)" />
               <span style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.shareUrl}</span>
-              <button onClick={copyLink}
-                style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: copied ? 'var(--color-success)' : 'var(--color-primary)', background: copied ? 'var(--color-green-pale-1)' : 'var(--color-white)', border: `1px solid ${copied ? 'var(--color-green-tint-2)' : 'var(--color-accent-purple-soft-alt)'}`, borderRadius: 7, padding: '5px 12px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, transition: 'all 150ms' }}>
+              <MotionButton onClick={copyLink}
+                transition={{ duration: 0.15 }} style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: copied ? 'var(--color-success)' : 'var(--color-primary)', background: copied ? 'var(--color-green-pale-1)' : 'var(--color-white)', border: `1px solid ${copied ? 'var(--color-green-tint-2)' : 'var(--color-accent-purple-soft-alt)'}`, borderRadius: 7, padding: '5px 12px', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, }}>
                 <Icon name={copied ? 'check' : 'content_copy'} size={12} color={copied ? 'var(--color-success)' : 'var(--color-primary)'} />
                 {copied ? 'Copied!' : 'Copy link'}
-              </button>
+              </MotionButton>
             </div>
           )}
 
@@ -438,10 +442,10 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
             <label style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Visibility</label>
             <div style={{ display: 'flex', background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: 3, gap: 2 }}>
               {(['Public', 'Private'] as const).map(v => (
-                <button key={v} onClick={() => setIsPublic(v === 'Public')}
-                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: (v === 'Public') === isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: (v === 'Public') === isPublic ? 'var(--color-white)' : 'transparent', border: 'none', borderRadius: 6, padding: '7px', cursor: 'pointer', transition: 'all 150ms', boxShadow: (v === 'Public') === isPublic ? '0 1px 3px rgba(var(--color-black-rgb), 0.1)' : 'none' }}>
+                <MotionButton key={v} onClick={() => setIsPublic(v === 'Public')}
+                  transition={{ duration: 0.15 }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: (v === 'Public') === isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: (v === 'Public') === isPublic ? 'var(--color-white)' : 'transparent', border: 'none', borderRadius: 6, padding: '7px', cursor: 'pointer', boxShadow: (v === 'Public') === isPublic ? '0 1px 3px rgba(var(--color-black-rgb), 0.1)' : 'none' }}>
                   <Icon name={v === 'Public' ? 'public' : 'lock'} size={13} color={(v === 'Public') === isPublic ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} /> {v}
-                </button>
+                </MotionButton>
               ))}
             </div>
           </div>
@@ -498,8 +502,8 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
             {saving ? 'Saving…' : 'Save changes'}
           </button>
         </div>
-      </div>
-    </div>,
+      </MotionIn>
+    </MotionIn>,
     document.body
   );
 }
@@ -519,8 +523,8 @@ function RecentCard({ file, onEdit, onDelete }: { file: SharedFile; onEdit: () =
   };
 
   return (
-    <div onClick={() => onEdit()} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ background: 'var(--color-surface-gray)', border: `1px solid ${hov ? 'var(--color-accent-purple-soft-alt)' : 'var(--color-border-alt)'}`, borderRadius: 14, padding: '16px', display: 'flex', flexDirection: 'column', gap: 12, transition: 'border-color 150ms', cursor: 'pointer', flex: 1, minWidth: 0 }}>
+    <MotionIn onClick={() => onEdit()} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      transition={{ duration: 0.15 }} style={{ background: 'var(--color-surface-gray)', border: `1px solid ${hov ? 'var(--color-accent-purple-soft-alt)' : 'var(--color-border-alt)'}`, borderRadius: 14, padding: '16px', display: 'flex', flexDirection: 'column', gap: 12, cursor: 'pointer', flex: 1, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
         <FileBadge mime={file.mimeType} size={44} />
         <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: file.isPublic ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: file.isPublic ? 'var(--color-surface-tint)' : 'var(--color-surface-gray)', border: `1px solid ${file.isPublic ? 'var(--color-accent-purple-soft-alt)' : 'var(--color-border-alt)'}`, borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>
@@ -554,7 +558,7 @@ function RecentCard({ file, onEdit, onDelete }: { file: SharedFile; onEdit: () =
           <Icon name="delete" size={15} color="var(--color-error)" />
         </button>
       </div>
-    </div>
+    </MotionIn>
   );
 }
 
@@ -655,20 +659,20 @@ export default function FilesScreen() {
       onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setPageDragOver(false); }}
       onDrop={e => { e.preventDefault(); setPageDragOver(false); if (e.dataTransfer.files.length) { setPendingUploadFiles(Array.from(e.dataTransfer.files)); setUploadOpen(true); } }}
     >
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 28, width: '100%', animation: 'sectionFadeUp 360ms cubic-bezier(0.22,1,0.36,1) both' }}>
+      <MotionIn style={{ maxWidth: 860, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 28, width: '100%' }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.36, ease: EASE_SETTLE }}>
 
         {/* Page header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 28, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.02em', margin: 0 }}>Files</h1>
-          <button
+          <MotionButton
             onClick={() => { setPendingUploadFiles([]); setUploadOpen(true); }}
             style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '9px 16px', cursor: 'pointer' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-mid-10)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-primary)'; }}
+            whileHover={{ background: 'var(--color-purple-mid-10)' }}
+            transition={{ duration: 0.15 }}
           >
             <Icon name="cloud_upload" size={16} color="var(--color-white)" />
             Upload
-          </button>
+          </MotionButton>
         </div>
 
         {/* Storage usage */}
@@ -705,7 +709,7 @@ export default function FilesScreen() {
               </div>
               {!unlimited && (
                 <div style={{ background: 'var(--color-border-alt)', borderRadius: 99, height: 6, overflow: 'hidden' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 99, transition: 'width 500ms ease' }} />
+                  <MotionIn transition={{ duration: 0.5 }} style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 99, }} />
                 </div>
               )}
             </div>
@@ -729,17 +733,17 @@ export default function FilesScreen() {
         {/* Drop zone / upload area */}
         <div>
           {sectionLabel('Upload')}
-          <div
+          <MotionDraggable
             onDragOver={e => { e.preventDefault(); setPageDragOver(true); }}
             onDragLeave={() => setPageDragOver(false)}
             onDrop={e => { e.preventDefault(); setPageDragOver(false); if (e.dataTransfer.files.length) { setPendingUploadFiles(Array.from(e.dataTransfer.files)); setUploadOpen(true); } }}
             onClick={() => { setPendingUploadFiles([]); setUploadOpen(true); }}
-            style={{ border: `2px dashed ${pageDragOver ? 'var(--color-primary)' : 'var(--color-blue-tint-3)'}`, borderRadius: 16, padding: '40px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, cursor: 'pointer', background: pageDragOver ? 'var(--color-surface-tint)' : 'var(--color-white)', transition: 'all 150ms' }}
+            transition={{ duration: 0.15 }} style={{ border: `2px dashed ${pageDragOver ? 'var(--color-primary)' : 'var(--color-blue-tint-3)'}`, borderRadius: 16, padding: '40px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, cursor: 'pointer', background: pageDragOver ? 'var(--color-surface-tint)' : 'var(--color-white)', }}
           >
             <Icon name="cloud_upload" size={40} color={pageDragOver ? 'var(--color-primary)' : 'var(--color-blue-tint-3)'} />
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>Drop files here or click to upload</div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>JPEG, PNG, PDF, MP4 and more · no per-file limit, just your storage quota</div>
-          </div>
+          </MotionDraggable>
         </div>
 
         {/* All files list */}
@@ -758,11 +762,11 @@ export default function FilesScreen() {
               </div>
             ) : (
               files.map((f, i) => (
-                <div key={f.id}
+                <MotionIn key={f.id}
                   onClick={() => setEditTarget(f)}
                   onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--color-purple-pale-11)'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = ''; }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 18px', borderBottom: i < files.length - 1 ? '1px solid var(--color-surface-tint-2)' : 'none', cursor: 'pointer', transition: 'background 120ms' }}>
+                  transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 18px', borderBottom: i < files.length - 1 ? '1px solid var(--color-surface-tint-2)' : 'none', cursor: 'pointer', }}>
                   <FileBadge mime={f.mimeType} size={38} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.bundleCount && f.bundleCount > 1 ? (f.bundleName || `${f.bundleCount} files`) : f.name}</div>
@@ -804,12 +808,12 @@ export default function FilesScreen() {
                       <Icon name="delete" size={15} color="var(--color-error)" />
                     </button>
                   </div>
-                </div>
+                </MotionIn>
               ))
             )}
           </div>
         </div>
-      </div>
+      </MotionIn>
 
       {/* Upload wizard */}
       {uploadOpen && <UploadWizard onClose={() => { setUploadOpen(false); setPendingUploadFiles([]); }} onUploaded={handleUploaded} initialFiles={pendingUploadFiles} />}
