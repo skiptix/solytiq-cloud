@@ -24,6 +24,10 @@ import {
 const LOCAL_REPLAN_M = 400;
 import { fetchSurfaceBreakdown } from '../utils/surfaceData';
 import type { SurfaceBreakdown } from '../utils/surfaceData';
+import { motion, useReducedMotion } from '../components/animate-ui/motion';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
+import { EASE_STANDARD } from '../components/animate-ui/motionTokens';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmtDist(m: number) {
@@ -664,7 +668,11 @@ export default function GPSEditScreen() {
   const [mapType, setMapType] = useState<'street' | 'satellite'>('street');
   const baseTileRef = useRef<L.TileLayer | null>(null);
   // Surface data
-  const [surfaceData, setSurfaceData] = useState<SurfaceBreakdown | null>(null);
+  // Stored with the route signature it was computed for, so a stale breakdown
+  // can never be shown against a route it does not describe. Deriving validity
+  // at render also means the effect below never has to reset state — which is
+  // what `react-hooks/set-state-in-effect` was pointing at.
+  const [surface, setSurface] = useState<{ sig: string; data: SurfaceBreakdown } | null>(null);
   const [surfaceLoading, setSurfaceLoading] = useState(false);
   const surfaceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const surfaceFetchCtrlRef = useRef<AbortController | null>(null);
@@ -696,9 +704,16 @@ export default function GPSEditScreen() {
   useEffect(() => { namedPinsRef.current = namedPins; }, [namedPins]);
   useEffect(() => { activePoisRef.current = activePoi; }, [activePoi]);
 
+  // Identity of the route the surface breakdown describes. Empty string means
+  // "no breakdown applies" (too few points to ask about).
+  const surfaceSig = editPoints && editPoints.length >= 10
+    ? `${editPoints.length}:${trimStart}:${trimEnd}:${editPoints[0].lat},${editPoints[0].lon}:${editPoints[editPoints.length - 1].lat},${editPoints[editPoints.length - 1].lon}`
+    : '';
+  const surfaceData = surfaceSig && surface?.sig === surfaceSig ? surface.data : null;
+
   // Surface data fetch — debounced 2s after route changes
   useEffect(() => {
-    if (!editPoints || editPoints.length < 10) { setSurfaceData(null); return; }
+    if (!editPoints || !surfaceSig) return;
     clearTimeout(surfaceTimerRef.current!);
     surfaceTimerRef.current = setTimeout(async () => {
       surfaceFetchCtrlRef.current?.abort();
@@ -708,14 +723,13 @@ export default function GPSEditScreen() {
       try {
         const trimmed = editPoints.slice(trimStart, trimEnd + 1);
         const result = await fetchSurfaceBreakdown(trimmed, ctrl.signal);
-        if (!ctrl.signal.aborted && result) setSurfaceData(result);
+        if (!ctrl.signal.aborted && result) setSurface({ sig: surfaceSig, data: result });
       } catch (err) {
         if ((err as DOMException)?.name !== 'AbortError') console.error('📍 Surface data fetch failed:', err);
       } finally { if (!ctrl.signal.aborted) setSurfaceLoading(false); }
     }, 2000);
     return () => clearTimeout(surfaceTimerRef.current!);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editPoints, trimStart, trimEnd]);
+  }, [editPoints, trimStart, trimEnd, surfaceSig]);
 
   // Map-click popup (place name + elevation + add-to-route)
   const [mapClick, setMapClick] = useState<{ lat: number; lon: number; ele: number | null; name: string | null; loading: boolean } | null>(null);
@@ -1882,7 +1896,6 @@ export default function GPSEditScreen() {
       map.off('zoomend', scheduleFetch);
       clearTimeout(poiFetchTimerRef.current!);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePoi, doPoiFetchEdit]);
 
   // ── Named Pin markers ─────────────────────────────────────────────────────
@@ -2203,20 +2216,32 @@ export default function GPSEditScreen() {
     fontSize: 12, fontWeight: 600, cursor: 'pointer',
     fontFamily: 'var(--font-heading)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-    transition: 'background 150ms',
   };
 
-  const mapCtrlBtn: React.CSSProperties = {
-    width: 36, height: 36, borderRadius: 9,
-    background: 'rgba(var(--color-white-rgb), 0.88)',
-    backdropFilter: 'blur(16px)',
-    WebkitBackdropFilter: 'blur(16px)',
-    border: '1px solid rgba(var(--color-white-rgb), 0.75)',
-    boxShadow: '0 2px 12px rgba(var(--color-primary-rgb), 0.10)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer',
-    transition: 'box-shadow 150ms, background 150ms',
+  // Prop bundle rather than a bare style object — see GPSScreen's twin helper
+  // for why hover belongs next to the base style here.
+  const mapCtrlBtn = {
+    style: {
+      width: 36, height: 36, borderRadius: 9,
+      backdropFilter: 'blur(16px)',
+      WebkitBackdropFilter: 'blur(16px)',
+      borderWidth: 1, borderStyle: 'solid',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      cursor: 'pointer',
+    } as React.CSSProperties,
+    animate: {
+      background: 'rgba(var(--color-white-rgb), 0.88)',
+      borderColor: 'rgba(var(--color-white-rgb), 0.75)',
+      boxShadow: '0 2px 12px rgba(var(--color-primary-rgb), 0.10)',
+    },
+    whileHover: {
+      boxShadow: '0 4px 18px rgba(var(--color-primary-rgb), 0.18)',
+      background: 'rgba(var(--color-white-rgb), 0.97)',
+    },
+    transition: { duration: 0.15 },
   };
+
+  const reduceMotion = useReducedMotion();
 
   if (loading) {
     return (
@@ -2228,22 +2253,6 @@ export default function GPSEditScreen() {
 
   return (
     <>
-      <style>{`
-        .leaflet-div-icon { background: transparent !important; border: none !important; }
-        .leaflet-editing-icon {
-          background: var(--color-primary) !important; border: 2.5px solid white !important;
-          border-radius: 50% !important; width: 10px !important; height: 10px !important;
-          margin-left: -5px !important; margin-top: -5px !important;
-        }
-        .leaflet-middle-icon {
-          background: rgba(var(--color-primary-rgb), 0.45) !important; border: 2px solid white !important;
-          border-radius: 50% !important;
-        }
-        .gps-map-ctrl:hover { box-shadow: 0 4px 18px rgba(var(--color-primary-rgb), 0.18) !important; background: rgba(var(--color-white-rgb), 0.97) !important; }
-        @keyframes wpPopIn { from { opacity: 0; transform: translate(-50%, -100%) scale(0.96); } to { opacity: 1; transform: translate(-50%, -100%) scale(1); } }
-        @keyframes wpSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
-
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--color-surface-tint-3)', fontFamily: 'var(--font-body)' }}>
 
         {/* ── Edit Sidebar ────────────────────────────────────────────────── */}
@@ -2254,18 +2263,18 @@ export default function GPSEditScreen() {
         }}>
           {/* Header */}
           <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
-            <button
+            <MotionButton
               onClick={() => navigate(`/gps?file=${id}`)}
               style={{
                 ...secBtnStyle, width: 'auto', padding: '5px 10px', marginBottom: 10,
                 fontSize: 11, color: 'var(--color-text-tertiary)', border: '1px solid var(--color-border)',
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
+              whileHover={{ background: 'var(--color-surface-tint)' }}
+              transition={{ duration: 0.15 }}
             >
               <Icon name="arrow_back" size={13} color="var(--color-text-tertiary)" />
               Route Map
-            </button>
+            </MotionButton>
             <input
               value={editName}
               onChange={e => setEditName(e.target.value)}
@@ -2304,18 +2313,23 @@ export default function GPSEditScreen() {
               <div style={{ fontSize: 9, color: 'var(--color-text-quaternary)', marginBottom: 4 }}>ESTIMATED TIME</div>
               <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
                 {(['road', 'gravel', 'custom'] as const).map(p => (
-                  <button
+                  <MotionButton
                     key={p}
                     onClick={() => setSpeedProfile(p)}
+                    animate={{
+                      borderColor: speedProfile === p ? 'var(--color-primary)' : 'var(--color-border)',
+                      background: speedProfile === p ? 'var(--color-surface-tint)' : 'var(--color-white)',
+                      color: speedProfile === p ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                    }}
+                    transition={{ duration: 0.14 }}
                     style={{
-                      flex: 1, padding: '5px 0', borderRadius: 7, border: `1.5px solid ${speedProfile === p ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                      background: speedProfile === p ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer',
-                      fontSize: 10, fontWeight: 600, color: speedProfile === p ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
-                      fontFamily: 'var(--font-heading)', transition: 'all 140ms',
+                      flex: 1, padding: '5px 0', borderRadius: 7, borderWidth: 1.5, borderStyle: 'solid',
+                      cursor: 'pointer', fontSize: 10, fontWeight: 600,
+                      fontFamily: 'var(--font-heading)',
                     }}
                   >
                     {p === 'road' ? 'Road' : p === 'gravel' ? 'Gravel' : 'Custom'}
-                  </button>
+                  </MotionButton>
                 ))}
               </div>
               {speedProfile === 'custom' && (
@@ -2346,7 +2360,12 @@ export default function GPSEditScreen() {
             <div>
               <div style={{ fontSize: 9, color: 'var(--color-text-quaternary)', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 4 }}>
                 SURFACE
-                {surfaceLoading && <span style={{ fontSize: 9, color: 'var(--color-purple-mid-5)', animation: 'wpSpin 1s linear infinite', display: 'inline-block', fontFamily: "var(--font-icon)" }}>progress_activity</span>}
+                {surfaceLoading && (
+                  <motion.span
+                    animate={reduceMotion ? {} : { rotate: 360 }}
+                    transition={{ duration: 1, ease: 'linear', repeat: Infinity }}
+                    style={{ fontSize: 9, color: 'var(--color-purple-mid-5)', display: 'inline-block', fontFamily: 'var(--font-icon)' }}>progress_activity</motion.span>
+                )}
               </div>
               {surfaceData ? (
                 <>
@@ -2414,7 +2433,7 @@ export default function GPSEditScreen() {
                 </div>
               </div>
             )}
-            <button
+            <MotionButton
               onClick={() => {
                 if (!editPoints) return;
                 const te = editPoints.length - 1;
@@ -2425,11 +2444,11 @@ export default function GPSEditScreen() {
                 endMarkerRef.current?.setLatLng([editPoints[te].lat, editPoints[te].lon]);
               }}
               style={{ ...secBtnStyle, fontSize: 11 }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
+              whileHover={{ background: 'var(--color-surface-tint)' }}
+              transition={{ duration: 0.15 }}
             >
               Reset Trim
-            </button>
+            </MotionButton>
             </>
             )}
           </div>
@@ -2437,28 +2456,34 @@ export default function GPSEditScreen() {
           {/* Routing */}
           <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-quaternary)', letterSpacing: '0.06em', marginBottom: 8 }}>ROUTING</div>
-            <button
+            <MotionButton
               onClick={() => setSnapEnabled(v => !v)}
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '8px 10px', borderRadius: 8, border: '1px solid var(--color-border)',
-                background: 'var(--color-white)', cursor: 'pointer', transition: 'background 150ms',
+                background: 'var(--color-white)', cursor: 'pointer',
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
+              whileHover={{ background: 'var(--color-surface-tint)' }}
+              transition={{ duration: 0.15 }}
             >
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)' }}>Snap to ways</span>
-              <div style={{
-                width: 32, height: 18, borderRadius: 10, position: 'relative', flexShrink: 0,
-                background: snapEnabled ? 'var(--color-primary)' : 'var(--color-purple-tint-5)', transition: 'background 180ms',
-              }}>
-                <div style={{
-                  position: 'absolute', top: 2, left: snapEnabled ? 16 : 2,
-                  width: 14, height: 14, borderRadius: '50%', background: 'var(--color-white)',
-                  boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.25)', transition: 'left 180ms',
-                }} />
-              </div>
-            </button>
+              <motion.div
+                animate={{ background: snapEnabled ? 'var(--color-primary)' : 'var(--color-purple-tint-5)' }}
+                transition={{ duration: 0.18 }}
+                style={{ width: 32, height: 18, borderRadius: 10, position: 'relative', flexShrink: 0 }}>
+                {/* The knob travels on `x`, not `left`: an offset transform is
+                    compositor-friendly where animating `left` forces layout
+                    on every frame. */}
+                <motion.div
+                  animate={{ x: snapEnabled ? 14 : 0 }}
+                  transition={{ duration: 0.18, ease: EASE_STANDARD }}
+                  style={{
+                    position: 'absolute', top: 2, left: 2,
+                    width: 14, height: 14, borderRadius: '50%', background: 'var(--color-white)',
+                    boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.25)',
+                  }} />
+              </motion.div>
+            </MotionButton>
             {snapEnabled && (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8 }}>
@@ -2470,21 +2495,20 @@ export default function GPSEditScreen() {
                   ]).map(opt => {
                     const active = snapProfile === opt.value;
                     return (
-                      <button
+                      <MotionButton
                         key={opt.value}
                         onClick={() => setSnapProfile(opt.value)}
                         title={opt.desc}
-                        style={{
+                        transition={{ duration: 0.15 }} style={{
                           padding: '7px 0', borderRadius: 8, cursor: 'pointer',
                           border: `1.5px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
                           background: active ? 'var(--color-surface-tint)' : 'var(--color-white)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                          transition: 'all 150ms',
                         }}
                       >
                         <Icon name={opt.icon} size={14} color={active ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
                         <span style={{ fontSize: 11, fontWeight: 600, color: active ? 'var(--color-primary)' : 'var(--color-text-tertiary)', fontFamily: 'var(--font-heading)' }}>{opt.label}</span>
-                      </button>
+                      </MotionButton>
                     );
                   })}
                 </div>
@@ -2507,7 +2531,7 @@ export default function GPSEditScreen() {
           <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--color-border)', flexShrink: 0, maxHeight: 260, display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, flexShrink: 0 }}>
               <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-quaternary)', letterSpacing: '0.06em' }}>PINS</div>
-              <button
+              <MotionButton
                 onClick={() => {
                   const map = leafletRef.current;
                   if (!map) return;
@@ -2517,12 +2541,12 @@ export default function GPSEditScreen() {
                   setAddPinMode('pin');
                 }}
                 style={{ ...secBtnStyle, width: 'auto', padding: '4px 8px', fontSize: 10, gap: 4 }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
+                whileHover={{ background: 'var(--color-surface-tint)' }}
+                transition={{ duration: 0.15 }}
               >
                 <Icon name="add_location_alt" size={12} color="var(--color-primary)" />
                 Map Center
-              </button>
+              </MotionButton>
             </div>
             {namedPins.length === 0 ? (
               <div style={{ fontSize: 10.5, color: 'var(--color-text-quaternary)', lineHeight: 1.55 }}>
@@ -2534,11 +2558,14 @@ export default function GPSEditScreen() {
                   const dist = editPoints ? computePinDistance(pin, editPoints.slice(trimStart, trimEnd + 1)) : null;
                   const cfg = (POI_CATEGORY_CONFIG as Record<string, typeof POI_CATEGORY_CONFIG[PoiCategory]>)[pin.sym] ?? null;
                   return (
-                    <div key={pin.id} style={{
-                      background: 'var(--color-white)', borderRadius: 8,
-                      border: `1px solid ${pin.highlighted ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`,
-                      padding: '7px 8px', marginBottom: 5, transition: 'border-color 150ms',
-                    }}>
+                    <motion.div key={pin.id}
+                      animate={{ borderColor: pin.highlighted ? 'var(--color-accent-purple-soft)' : 'var(--color-border)' }}
+                      transition={{ duration: 0.15 }}
+                      style={{
+                        background: 'var(--color-white)', borderRadius: 8,
+                        borderWidth: 1, borderStyle: 'solid',
+                        padding: '7px 8px', marginBottom: 5,
+                      }}>
                       {editingPin === pin.id ? (
                         <input
                           autoFocus
@@ -2587,7 +2614,7 @@ export default function GPSEditScreen() {
                           </div>
                         </>
                       )}
-                    </div>
+                    </motion.div>
                   );
                 })}
                 {namedPins.length > 3 && (
@@ -2627,7 +2654,7 @@ export default function GPSEditScreen() {
                 Redo
               </button>
             </div>
-            <button
+            <MotionButton
               onClick={() => {
                 if (!originalPoints) return;
                 setEditPoints(originalPoints);
@@ -2645,11 +2672,11 @@ export default function GPSEditScreen() {
                 rebuildMap(originalPoints, 0, te);
               }}
               style={{ ...secBtnStyle, color: 'var(--color-error)', borderColor: 'var(--color-red-tint-1)', fontSize: 11 }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
+              whileHover={{ background: 'var(--color-error-bg-alt)' }}
+              transition={{ duration: 0.15 }}
             >
               Reset to Original
-            </button>
+            </MotionButton>
           </div>
 
           {/* Original file info (flex spacer) */}
@@ -2669,48 +2696,49 @@ export default function GPSEditScreen() {
                 {saveError}
               </div>
             )}
-            <button
+            <MotionButton
               onClick={() => navigate(`/gps?file=${id}`)}
               style={{ ...secBtnStyle, marginBottom: 6, fontSize: 12 }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
+              whileHover={{ background: 'var(--color-surface-tint)' }}
+              transition={{ duration: 0.15 }}
             >
               Discard Changes
-            </button>
+            </MotionButton>
 
             {/* Save split button */}
             <div style={{ position: 'relative' }}>
               <div style={{ display: 'flex', gap: 1, borderRadius: 9, overflow: 'hidden', border: '1.5px solid var(--color-primary)' }}>
-                <button
+                <MotionButton
                   onClick={() => handleSave('new')}
                   disabled={!!saving}
+                  animate={{ background: saving ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)' }}
+                  transition={{ duration: 0.15 }}
                   style={{
                     flex: 1, padding: '9px 12px',
-                    background: saving ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)', color: 'var(--color-white)',
+                    color: 'var(--color-white)',
                     fontSize: 12, fontWeight: 600, border: 'none',
                     cursor: saving ? 'default' : 'pointer',
-                    fontFamily: 'var(--font-heading)', transition: 'background 150ms',
+                    fontFamily: 'var(--font-heading)',
                   }}
                   onMouseEnter={e => { if (!saving) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
                   onMouseLeave={e => { if (!saving) e.currentTarget.style.background = 'var(--color-primary)'; }}
                 >
                   {saving === 'new' ? 'Saving…' : 'Save as New'}
-                </button>
-                <button
+                </MotionButton>
+                <MotionButton
                   onClick={() => setSaveMenuOpen(o => !o)}
                   disabled={!!saving}
-                  style={{
+                  transition={{ duration: 0.15 }} style={{
                     padding: '9px 10px',
                     background: saving ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)', color: 'var(--color-white)',
                     border: 'none', borderLeft: '1px solid rgba(var(--color-white-rgb), 0.25)',
                     cursor: saving ? 'default' : 'pointer',
-                    transition: 'background 150ms',
                   }}
                   onMouseEnter={e => { if (!saving) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
                   onMouseLeave={e => { if (!saving) e.currentTarget.style.background = 'var(--color-primary)'; }}
                 >
                   <Icon name="expand_more" size={14} color="var(--color-white)" />
-                </button>
+                </MotionButton>
               </div>
 
               {saveMenuOpen && (
@@ -2725,21 +2753,20 @@ export default function GPSEditScreen() {
                     { mode: 'new' as const, label: 'Save as New Route', desc: 'Keep the original intact' },
                     { mode: 'replace' as const, label: 'Replace Original', desc: 'Overwrite the source file' },
                   ]).map(opt => (
-                    <button
+                    <MotionButton
                       key={opt.mode}
                       onClick={() => { setSaveMenuOpen(false); handleSave(opt.mode); }}
                       style={{
                         width: '100%', padding: '10px 14px', textAlign: 'left',
                         background: 'transparent', border: 'none', cursor: 'pointer',
                         borderBottom: opt.mode === 'new' ? '1px solid var(--color-purple-pale-25)' : 'none',
-                        transition: 'background 150ms',
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                      whileHover={{ background: 'var(--color-surface-tint)' }}
+                      transition={{ duration: 0.15 }}
                     >
                       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)' }}>{opt.label}</div>
                       <div style={{ fontSize: 10, color: 'var(--color-text-quaternary)', marginTop: 1 }}>{opt.desc}</div>
-                    </button>
+                    </MotionButton>
                   ))}
                 </div>
               )}
@@ -2763,12 +2790,15 @@ export default function GPSEditScreen() {
 
           {/* ── Search + POI toggles (unified card, top-center) ─────────────── */}
           <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 1001, width: 340 }}>
-            <div style={{
-              background: 'rgba(var(--color-white-rgb), 0.95)', backdropFilter: 'blur(20px) saturate(180%)',
-              border: `1px solid ${searchOpen ? 'var(--color-accent-purple-soft)' : 'rgba(var(--color-white-rgb), 0.75)'}`,
-              borderRadius: 14, boxShadow: '0 4px 20px rgba(var(--color-primary-rgb), 0.12)',
-              transition: 'border-color 150ms', overflow: 'hidden',
-            }}>
+            <motion.div
+              animate={{ borderColor: searchOpen ? 'var(--color-accent-purple-soft)' : 'rgba(var(--color-white-rgb), 0.75)' }}
+              transition={{ duration: 0.15 }}
+              style={{
+                background: 'rgba(var(--color-white-rgb), 0.95)', backdropFilter: 'blur(20px) saturate(180%)',
+                borderWidth: 1, borderStyle: 'solid',
+                borderRadius: 14, boxShadow: '0 4px 20px rgba(var(--color-primary-rgb), 0.12)',
+                overflow: 'hidden',
+              }}>
               {/* Search row */}
               <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', gap: 8 }}>
                 <Icon name={searchLoading ? 'progress_activity' : 'search'} size={16} color="var(--color-text-tertiary)" />
@@ -2796,36 +2826,41 @@ export default function GPSEditScreen() {
                 {(Object.entries(POI_CATEGORY_CONFIG) as Array<[PoiCategory, typeof POI_CATEGORY_CONFIG[PoiCategory]]>).map(([cat, cfg]) => {
                   const active = activePoi.has(cat);
                   return (
-                    <button
+                    <MotionButton
                       key={cat}
                       title={cfg.label}
-                      onClick={() => setActivePoi(prev => { const next = new Set(prev); active ? next.delete(cat) : next.add(cat); return next; })}
-                      style={{ flex: 1, height: 30, borderRadius: 7, background: active ? cfg.bg : 'transparent', border: active ? `1.5px solid ${cfg.borderColor}` : '1.5px solid var(--color-purple-pale-24)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', opacity: active ? 1 : 0.5 }}
+                      onClick={() => setActivePoi(prev => { const next = new Set(prev); if (active) next.delete(cat); else next.add(cat); return next; })}
+                      transition={{ duration: 0.15 }} style={{ flex: 1, height: 30, borderRadius: 7, background: active ? cfg.bg : 'transparent', border: active ? `1.5px solid ${cfg.borderColor}` : '1.5px solid var(--color-purple-pale-24)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: active ? 1 : 0.5 }}
                     >
                       <span style={{ fontFamily: "var(--font-icon)", fontSize: 15, color: active ? cfg.fg : 'var(--color-text-quaternary)', lineHeight: 1, fontVariationSettings: "'FILL' 1,'wght' 400" }}>{cfg.icon}</span>
-                    </button>
+                    </MotionButton>
                   );
                 })}
-                {poiLoading && <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-primary)', opacity: 0.7, animation: 'pulse 1s ease-in-out infinite', marginLeft: 4, flexShrink: 0 }} />}
+                {poiLoading && (
+                  <motion.div
+                    animate={reduceMotion ? { opacity: 0.7 } : { opacity: [0.25, 0.9, 0.25], scale: [1, 1.35, 1] }}
+                    transition={{ duration: 1, ease: 'easeInOut', repeat: Infinity }}
+                    style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-primary)', marginLeft: 4, flexShrink: 0 }} />
+                )}
               </div>
               {/* Search results dropdown */}
               {searchOpen && searchResults.length > 0 && (
                 <div style={{ borderTop: '1px solid var(--color-border)', maxHeight: 220, overflowY: 'auto' }}>
                   {searchResults.map(r => (
-                    <button
+                    <MotionButton
                       key={r.place_id}
                       onMouseDown={() => handleSearchSelectEdit(r)}
-                      style={{ width: '100%', padding: '8px 14px', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: '1px solid var(--color-surface-tint)', transition: 'background 100ms' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                      style={{ width: '100%', padding: '8px 14px', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: '1px solid var(--color-surface-tint)' }}
+                      whileHover={{ background: 'var(--color-surface-tint-3)' }}
+                      transition={{ duration: 0.1 }}
                     >
                       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)' }}>{r.display_name.split(',')[0]}</div>
                       <div style={{ fontSize: 10, color: 'var(--color-text-quaternary)', marginTop: 1 }}>{r.display_name.split(',').slice(1, 3).join(',').trim()}</div>
-                    </button>
+                    </MotionButton>
                   ))}
                 </div>
               )}
-            </div>
+            </motion.div>
           </div>
 
           {/* Zoom hint when zoomed out with POIs active */}
@@ -2849,30 +2884,33 @@ export default function GPSEditScreen() {
             }}>
               <span style={{ fontWeight: 600 }}>Edit Mode</span> — drag points to reshape
             </div>
-            <button
-              className="gps-map-ctrl"
+            <MotionButton
               onClick={() => leafletRef.current?.zoomIn()}
               title="Zoom In"
-              style={mapCtrlBtn}
+              {...mapCtrlBtn}
             >
               <Icon name="add" size={16} color="var(--color-primary)" />
-            </button>
-            <button
-              className="gps-map-ctrl"
+            </MotionButton>
+            <MotionButton
               onClick={() => leafletRef.current?.zoomOut()}
               title="Zoom Out"
-              style={mapCtrlBtn}
+              {...mapCtrlBtn}
             >
               <Icon name="remove" size={16} color="var(--color-primary)" />
-            </button>
-            <button
-              className="gps-map-ctrl"
+            </MotionButton>
+            <MotionButton
               onClick={handleMapTypeToggle}
               title={mapType === 'street' ? 'Satellite View' : 'Street Map'}
-              style={{ ...mapCtrlBtn, ...(mapType === 'satellite' ? { background: 'var(--color-primary)', border: '1px solid var(--color-purple-mid-12)' } : {}) }}
+              {...mapCtrlBtn}
+              animate={mapType === 'satellite'
+                ? { ...mapCtrlBtn.animate, background: 'var(--color-primary)', borderColor: 'var(--color-purple-mid-12)' }
+                : mapCtrlBtn.animate}
+              whileHover={mapType === 'satellite'
+                ? { boxShadow: '0 4px 18px rgba(var(--color-primary-rgb), 0.18)', background: 'var(--color-purple-mid-11)' }
+                : mapCtrlBtn.whileHover}
             >
               <Icon name={mapType === 'street' ? 'satellite_alt' : 'map'} size={16} color={mapType === 'satellite' ? 'var(--color-white)' : 'var(--color-primary)'} />
-            </button>
+            </MotionButton>
 
             {busy && (
               <div style={{
@@ -2883,16 +2921,22 @@ export default function GPSEditScreen() {
                 padding: '6px 10px', fontSize: 11, color: 'var(--color-primary)', fontWeight: 600,
                 boxShadow: '0 2px 12px rgba(var(--color-primary-rgb), 0.10)', fontFamily: 'var(--font-body)',
               }}>
-                <div style={{
-                  width: 11, height: 11, borderRadius: '50%',
-                  border: '2px solid rgba(var(--color-primary-rgb), 0.25)', borderTopColor: 'var(--color-primary)',
-                  animation: 'wpSpin 700ms linear infinite',
-                }} />
+                <motion.div
+                  animate={reduceMotion ? {} : { rotate: 360 }}
+                  transition={{ duration: 0.7, ease: 'linear', repeat: Infinity }}
+                  style={{
+                    width: 11, height: 11, borderRadius: '50%',
+                    border: '2px solid rgba(var(--color-primary-rgb), 0.25)', borderTopColor: 'var(--color-primary)',
+                  }} />
                 {busy}
               </div>
             )}
             {routingNotice && (
-              <div style={{
+              <MotionIn
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.18, ease: EASE_STANDARD }}
+                style={{
                 display: 'flex', alignItems: 'center', gap: 5,
                 background: routingNotice.kind === 'warning' ? 'rgba(var(--color-orange-pale-3-rgb), 0.92)' : 'rgba(var(--color-error-bg-alt-rgb), 0.92)',
                 backdropFilter: 'blur(16px)',
@@ -2904,44 +2948,49 @@ export default function GPSEditScreen() {
                 boxShadow: routingNotice.kind === 'warning' ? '0 2px 12px rgba(var(--color-orange-rgb), 0.10)' : '0 2px 12px rgba(var(--color-error-rgb), 0.10)',
                 fontFamily: 'var(--font-heading)',
                 maxWidth: 240, textAlign: 'right',
-                animation: 'wpPopIn 180ms ease both',
               }}>
                 <Icon name={routingNotice.kind === 'warning' ? 'alt_route' : 'warning'} size={13} color={routingNotice.kind === 'warning' ? 'var(--color-orange)' : 'var(--color-error)'} />
                 {routingNotice.msg}
-              </div>
+              </MotionIn>
             )}
           </div>
 
           {/* Waypoint popup — adapted from the route-planner card, Luminous List style */}
           {popupData && popupXY && (
-            <div style={{
-              position: 'absolute', left: popupXY.x, top: popupXY.y - 16, zIndex: 1100,
-              transform: 'translate(-50%, -100%)', width: 272, boxSizing: 'border-box',
-              background: 'rgba(var(--color-white-rgb), 0.92)',
-              backdropFilter: 'blur(20px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              border: '1px solid rgba(var(--color-white-rgb), 0.75)', borderRadius: 14,
-              boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.18), inset 0 1px 0 rgba(var(--color-white-rgb), 0.90)',
-              padding: '12px 14px', fontFamily: 'var(--font-body)',
-              animation: 'wpPopIn 180ms ease both',
-            }}>
+            <motion.div
+              // x/y carry the `translate(-50%, -100%)` marker anchor that used
+              // to sit in `style`. Motion owns `transform` outright, so leaving
+              // it there would have it overwritten the moment scale tweens.
+              initial={{ opacity: 0, x: '-50%', y: '-100%', scale: 0.96 }}
+              animate={{ opacity: 1, x: '-50%', y: '-100%', scale: 1 }}
+              transition={{ duration: 0.18, ease: EASE_STANDARD }}
+              style={{
+                position: 'absolute', left: popupXY.x, top: popupXY.y - 16, zIndex: 1100,
+                width: 272, boxSizing: 'border-box',
+                background: 'rgba(var(--color-white-rgb), 0.92)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                border: '1px solid rgba(var(--color-white-rgb), 0.75)', borderRadius: 14,
+                boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.18), inset 0 1px 0 rgba(var(--color-white-rgb), 0.90)',
+                padding: '12px 14px', fontFamily: 'var(--font-body)',
+              }}>
               {/* Header */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                 <span style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   {popupData.wp ? 'Waypoint' : 'Route Point'}
                 </span>
-                <button
+                <MotionButton
                   onClick={() => setActiveSel(null)}
                   style={{
                     width: 24, height: 24, borderRadius: 7, border: 'none',
                     background: 'transparent', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-pale-25)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                  whileHover={{ background: 'var(--color-purple-pale-25)' }}
+                  transition={{ duration: 0.15 }}
                 >
                   <Icon name="close" size={15} color="var(--color-text-tertiary)" />
-                </button>
+                </MotionButton>
               </div>
 
               {/* Coordinates + copy */}
@@ -2949,7 +2998,7 @@ export default function GPSEditScreen() {
                 <span style={{ fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>
                   {popupData.point.lat.toFixed(6)}, {popupData.point.lon.toFixed(6)}
                 </span>
-                <button
+                <MotionButton
                   onClick={() => {
                     navigator.clipboard?.writeText(`${popupData.point.lat.toFixed(6)}, ${popupData.point.lon.toFixed(6)}`).catch(() => {});
                     setCoordsCopied(true);
@@ -2961,11 +3010,11 @@ export default function GPSEditScreen() {
                     background: 'transparent', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-pale-25)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                  whileHover={{ background: 'var(--color-purple-pale-25)' }}
+                  transition={{ duration: 0.15 }}
                 >
                   <Icon name={coordsCopied ? 'check' : 'content_copy'} size={13} color={coordsCopied ? 'var(--color-green-mid-2)' : 'var(--color-text-tertiary)'} />
-                </button>
+                </MotionButton>
               </div>
 
               {/* Mode toggle — only for edited waypoints */}
@@ -2977,25 +3026,29 @@ export default function GPSEditScreen() {
                 ]).map(opt => {
                   const active = popupData.wp!.offRoad === opt.off;
                   return (
-                    <button
+                    <MotionButton
                       key={opt.label}
                       disabled={routingBusy || active}
                       onClick={() => toggleWaypointMode(popupData.wp!.id)}
-                      style={{
-                        padding: '7px 0', borderRadius: 8,
-                        border: `1.5px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                      animate={{
+                        borderColor: active ? 'var(--color-primary)' : 'var(--color-border)',
                         background: active ? 'var(--color-primary)' : 'var(--color-white)',
                         color: active ? 'var(--color-white)' : 'var(--color-text-tertiary)',
+                        opacity: routingBusy && !active ? 0.55 : 1,
+                      }}
+                      transition={{ duration: 0.15 }}
+                      style={{
+                        padding: '7px 0', borderRadius: 8,
+                        borderWidth: 1.5, borderStyle: 'solid',
                         fontSize: 11, fontWeight: 600,
                         cursor: routingBusy || active ? 'default' : 'pointer',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                        fontFamily: 'var(--font-heading)', transition: 'all 150ms',
-                        opacity: routingBusy && !active ? 0.55 : 1,
+                        fontFamily: 'var(--font-heading)',
                       }}
                     >
                       <Icon name={opt.icon} size={13} color={active ? 'var(--color-white)' : 'var(--color-text-tertiary)'} />
                       {opt.label}
-                    </button>
+                    </MotionButton>
                   );
                 })}
               </div>
@@ -3029,9 +3082,11 @@ export default function GPSEditScreen() {
               </div>
 
               {/* Delete point */}
-              <button
+              <MotionButton
                 onClick={deleteActivePoint}
                 disabled={routingBusy}
+                animate={{ opacity: routingBusy ? 0.55 : 1 }}
+                transition={{ duration: 0.15 }}
                 style={{
                   width: '100%', marginTop: 10, padding: '7px 0', borderRadius: 8,
                   border: '1px solid var(--color-red-tint-1)', background: 'var(--color-white)', color: 'var(--color-error)',
@@ -3039,14 +3094,13 @@ export default function GPSEditScreen() {
                   cursor: routingBusy ? 'default' : 'pointer',
                   fontFamily: 'var(--font-heading)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  transition: 'background 150ms', opacity: routingBusy ? 0.55 : 1,
                 }}
                 onMouseEnter={e => { if (!routingBusy) e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
               >
                 <Icon name="delete" size={13} color="var(--color-error)" />
                 Delete point
-              </button>
+              </MotionButton>
 
               {/* Pointer */}
               <div style={{
@@ -3056,22 +3110,28 @@ export default function GPSEditScreen() {
                 borderBottom: '1px solid rgba(var(--color-white-rgb), 0.75)',
                 transform: 'translateX(-50%) rotate(45deg)',
               }} />
-            </div>
+            </motion.div>
           )}
 
           {/* Map click popup — place name, elevation, add-to-route */}
           {mapClick && mapClickXY && (
-            <div style={{
-              position: 'absolute', left: mapClickXY.x, top: mapClickXY.y - 16, zIndex: 1100,
-              transform: 'translate(-50%, -100%)', width: 272, boxSizing: 'border-box',
-              background: 'rgba(var(--color-white-rgb), 0.92)',
-              backdropFilter: 'blur(20px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              border: '1px solid rgba(var(--color-white-rgb), 0.75)', borderRadius: 14,
-              boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.18), inset 0 1px 0 rgba(var(--color-white-rgb), 0.90)',
-              padding: '12px 14px', fontFamily: 'var(--font-body)',
-              animation: 'wpPopIn 180ms ease both',
-            }}>
+            <motion.div
+              // x/y carry the `translate(-50%, -100%)` marker anchor that used
+              // to sit in `style`. Motion owns `transform` outright, so leaving
+              // it there would have it overwritten the moment scale tweens.
+              initial={{ opacity: 0, x: '-50%', y: '-100%', scale: 0.96 }}
+              animate={{ opacity: 1, x: '-50%', y: '-100%', scale: 1 }}
+              transition={{ duration: 0.18, ease: EASE_STANDARD }}
+              style={{
+                position: 'absolute', left: mapClickXY.x, top: mapClickXY.y - 16, zIndex: 1100,
+                width: 272, boxSizing: 'border-box',
+                background: 'rgba(var(--color-white-rgb), 0.92)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                border: '1px solid rgba(var(--color-white-rgb), 0.75)', borderRadius: 14,
+                boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.18), inset 0 1px 0 rgba(var(--color-white-rgb), 0.90)',
+                padding: '12px 14px', fontFamily: 'var(--font-body)',
+              }}>
               {/* Header — place name from reverse geocoding */}
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
                 <span style={{
@@ -3081,18 +3141,18 @@ export default function GPSEditScreen() {
                 }}>
                   {mapClick.loading ? 'Looking up place…' : mapClick.name ?? 'Dropped pin'}
                 </span>
-                <button
+                <MotionButton
                   onClick={() => setMapClick(null)}
                   style={{
                     width: 24, height: 24, borderRadius: 7, border: 'none',
                     background: 'transparent', cursor: 'pointer', flexShrink: 0,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-pale-25)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                  whileHover={{ background: 'var(--color-purple-pale-25)' }}
+                  transition={{ duration: 0.15 }}
                 >
                   <Icon name="close" size={15} color="var(--color-text-tertiary)" />
-                </button>
+                </MotionButton>
               </div>
 
               {/* Coordinates + copy */}
@@ -3100,7 +3160,7 @@ export default function GPSEditScreen() {
                 <span style={{ fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>
                   {mapClick.lat.toFixed(6)}, {mapClick.lon.toFixed(6)}
                 </span>
-                <button
+                <MotionButton
                   onClick={() => {
                     navigator.clipboard?.writeText(`${mapClick.lat.toFixed(6)}, ${mapClick.lon.toFixed(6)}`).catch(() => {});
                     setCoordsCopied(true);
@@ -3112,11 +3172,11 @@ export default function GPSEditScreen() {
                     background: 'transparent', cursor: 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-pale-25)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                  whileHover={{ background: 'var(--color-purple-pale-25)' }}
+                  transition={{ duration: 0.15 }}
                 >
                   <Icon name={coordsCopied ? 'check' : 'content_copy'} size={13} color={coordsCopied ? 'var(--color-green-mid-2)' : 'var(--color-text-tertiary)'} />
-                </button>
+                </MotionButton>
               </div>
 
               {/* Elevation */}
@@ -3128,23 +3188,22 @@ export default function GPSEditScreen() {
               </div>
 
               {/* Add to route */}
-              <button
+              <MotionButton
                 onClick={addClickedPointToRoute}
                 disabled={routingBusy}
-                style={{
+                transition={{ duration: 0.15 }} style={{
                   width: '100%', padding: '8px 0', borderRadius: 9, border: 'none',
                   background: routingBusy ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)', color: 'var(--color-white)',
                   fontSize: 12, fontWeight: 600, cursor: routingBusy ? 'default' : 'pointer',
                   fontFamily: 'var(--font-heading)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  transition: 'background 150ms',
                 }}
                 onMouseEnter={e => { if (!routingBusy) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
                 onMouseLeave={e => { if (!routingBusy) e.currentTarget.style.background = 'var(--color-primary)'; }}
               >
                 <Icon name="add_location_alt" size={14} color="var(--color-white)" />
                 Add to route
-              </button>
+              </MotionButton>
               <div style={{ fontSize: 10, color: 'var(--color-text-quaternary)', marginTop: 6, textAlign: 'center' }}>
                 {snapEnabled ? 'Replans the nearest leg through this point — old sub-points replaced' : 'Connects with straight lines (snap off)'}
               </div>
@@ -3157,7 +3216,7 @@ export default function GPSEditScreen() {
                 borderBottom: '1px solid rgba(var(--color-white-rgb), 0.75)',
                 transform: 'translateX(-50%) rotate(45deg)',
               }} />
-            </div>
+            </motion.div>
           )}
 
           {/* ── Add-Pin Dialog ──────────────────────────────────────────── */}
@@ -3166,7 +3225,11 @@ export default function GPSEditScreen() {
               style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(var(--color-purple-deep-6-rgb), 0.40)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               onClick={e => { if (e.target === e.currentTarget) setAddPinDialog(null); }}
             >
-              <div style={{ background: 'var(--color-white)', borderRadius: 16, padding: '20px', width: 340, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', fontFamily: 'var(--font-body)', animation: 'wpPopIn 180ms ease both' }}>
+              <MotionIn
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.18, ease: EASE_STANDARD }}
+                style={{ background: 'var(--color-white)', borderRadius: 16, padding: '20px', width: 340, boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', fontFamily: 'var(--font-body)' }}>
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>
                   {addPinDialog.poi ? addPinDialog.poi.name : 'Neuer Pin'}
                 </div>
@@ -3198,15 +3261,15 @@ export default function GPSEditScreen() {
                     ]).map(opt => {
                       const active = addPinMode === opt.value;
                       return (
-                        <button
+                        <MotionButton
                           key={opt.value}
                           onClick={() => setAddPinMode(opt.value)}
                           title={opt.desc}
-                          style={{ padding: '8px 10px', borderRadius: 8, cursor: 'pointer', border: `1.5px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`, background: active ? 'var(--color-surface-tint)' : 'var(--color-white)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all 150ms' }}
+                          transition={{ duration: 0.15 }} style={{ padding: '8px 10px', borderRadius: 8, cursor: 'pointer', border: `1.5px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`, background: active ? 'var(--color-surface-tint)' : 'var(--color-white)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, }}
                         >
                           <Icon name={opt.icon} size={16} color={active ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
                           <span style={{ fontSize: 11, fontWeight: 600, color: active ? 'var(--color-primary)' : 'var(--color-text-tertiary)', fontFamily: 'var(--font-heading)' }}>{opt.label}</span>
-                        </button>
+                        </MotionButton>
                       );
                     })}
                   </div>
@@ -3221,17 +3284,17 @@ export default function GPSEditScreen() {
                   >
                     Cancel
                   </button>
-                  <button
+                  <MotionButton
                     onClick={handleAddPin}
                     disabled={routingBusy}
-                    style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', background: routingBusy ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)', color: 'var(--color-white)', fontSize: 12, fontWeight: 600, cursor: routingBusy ? 'default' : 'pointer', fontFamily: 'var(--font-heading)', transition: 'background 150ms' }}
+                    transition={{ duration: 0.15 }} style={{ flex: 1, padding: '9px 0', borderRadius: 8, border: 'none', background: routingBusy ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)', color: 'var(--color-white)', fontSize: 12, fontWeight: 600, cursor: routingBusy ? 'default' : 'pointer', fontFamily: 'var(--font-heading)', }}
                     onMouseEnter={e => { if (!routingBusy) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
                     onMouseLeave={e => { if (!routingBusy) e.currentTarget.style.background = routingBusy ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)'; }}
                   >
                     {addPinMode === 'route' && routingBusy ? 'Routing…' : 'Add'}
-                  </button>
+                  </MotionButton>
                 </div>
-              </div>
+              </MotionIn>
             </div>,
             document.body
           )}

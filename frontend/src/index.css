@@ -388,3 +388,17 @@ body { font-family: var(--font-body); background: var(--color-page-bg); color: v
 .solytiq-poi-popup .leaflet-popup-content { margin: 12px 14px; }
 .solytiq-poi-popup .leaflet-popup-tip { background: rgba(var(--color-white-rgb), 0.95); }
 .solytiq-poi-popup .leaflet-popup-close-button { color: var(--color-text-tertiary) !important; font-size: 16px !important; }
+
+/* Leaflet marker/vertex overrides for the GPS route editor. These are static
+   third-party element styles with no state dependency, so they live here
+   rather than in a `<style>` element the editor re-created on every render. */
+.leaflet-div-icon { background: transparent !important; border: none !important; }
+.leaflet-editing-icon {
+  background: var(--color-primary) !important; border: 2.5px solid white !important;
+  border-radius: 50% !important; width: 10px !important; height: 10px !important;
+  margin-left: -5px !important; margin-top: -5px !important;
+}
+.leaflet-middle-icon {
+  background: rgba(var(--color-primary-rgb), 0.45) !important; border: 2px solid white !important;
+  border-radius: 50% !important;
+}
