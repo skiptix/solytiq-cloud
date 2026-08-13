@@ -19,19 +19,22 @@ interface LinkPickerProps {
   onPick: (entity: EntityIndexEntry) => void;
   onHover: (index: number) => void;
   style?: React.CSSProperties;
+  /** `false` for an embedded (non-floating) picker — see PopIn. */
+  animate?: false;
   emptyHint?: string;
   /** Header icon + label — defaults to the `[[...]]` inline-linking copy; override for reuse in a plain "jump to" search (e.g. the Net view's toolbar). */
   headerIcon?: string;
   headerLabel?: string;
 }
 
-export default function LinkPicker({ results, loading, query, activeIndex, onPick, onHover, style, emptyHint, headerIcon = 'link', headerLabel = 'Link to…' }: LinkPickerProps) {
+export default function LinkPicker({ results, loading, query, activeIndex, onPick, onHover, style, animate, emptyHint, headerIcon = 'link', headerLabel = 'Link to…' }: LinkPickerProps) {
   if (query.trim().length === 0 && results.length === 0 && !loading) return null;
 
   const width = Math.min(300, (typeof window !== 'undefined' ? window.innerWidth : 400) - 32);
   return (
     <PopIn
       duration={120}
+      animate={animate}
       style={{
         position: 'absolute', zIndex: 220, width, maxHeight: 280, overflowY: 'auto',
         background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12,

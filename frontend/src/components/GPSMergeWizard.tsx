@@ -7,6 +7,7 @@ import ModalIn from './animate-ui/ModalIn';
 import MotionButton from './animate-ui/MotionButton';
 import MotionIn from './animate-ui/MotionIn';
 import { motion } from './animate-ui/motion';
+import MotionDraggable from './animate-ui/MotionDraggable';
 
 function fmtDist(m?: number | null) {
   if (m == null) return null;
@@ -271,28 +272,32 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
                 <Icon name="upload" size={14} color="var(--color-primary)" />
                 {uploading ? 'Uploading…' : 'Upload new .GPX or .FIT'}
               </MotionButton>
-              <input ref={fileInputRef} type="file" accept=".gpx,.fit" style={{ display: 'none' }} multiple onChange={e => handleUpload(e.target.files)} />
+              <motion.input ref={fileInputRef} type="file" accept=".gpx,.fit" style={{ display: 'none' }} multiple onChange={e => handleUpload(e.target.files)} />
 
               {/* Selected order */}
               {selectedIds.length > 0 && (
-                <div>
-                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <MotionIn>
+                  <MotionIn style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     Merge order ({selectedIds.length}/5)
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  </MotionIn>
+                  <MotionIn style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {selectedFiles.map((file, idx) => (
-                      <div
+                      <MotionDraggable
                         key={file.id}
                         draggable
                         onDragStart={e => handleDragStart(idx, e)}
                         onDragOver={e => handleDragOver(idx, e)}
                         onDragLeave={() => setDragOverIdx(null)}
                         onDrop={() => handleDrop(idx)}
+                        animate={{
+                          background: dragOverIdx === idx ? 'var(--color-surface-tint-4)' : 'var(--color-purple-pale-10)',
+                          borderColor: dragOverIdx === idx ? 'var(--color-primary)' : 'var(--color-border)',
+                        }}
+                        transition={{ duration: 0.12 }}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
-                          borderRadius: 8, background: dragOverIdx === idx ? 'var(--color-surface-tint-4)' : 'var(--color-purple-pale-10)',
-                          border: `1.5px solid ${dragOverIdx === idx ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                          cursor: 'grab', transition: 'all 120ms',
+                          borderRadius: 8, borderWidth: 1.5, borderStyle: 'solid',
+                          cursor: 'grab',
                         }}
                       >
                         <Icon name="drag_indicator" size={16} color="var(--color-accent-purple-soft)" />
@@ -318,10 +323,10 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
                           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                           <Icon name="close" size={13} color="var(--color-text-quaternary)" />
                         </button>
-                      </div>
+                      </MotionDraggable>
                     ))}
-                  </div>
-                </div>
+                  </MotionIn>
+                </MotionIn>
               )}
             </div>
           )}

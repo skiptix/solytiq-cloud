@@ -177,15 +177,15 @@ export default function OAuthConsentScreen() {
             {loading ? 'Connecting...' : 'Allow Access'}
           </MotionButton>
 
-          <button
+          <MotionButton
             onClick={handleDeny}
             disabled={loading}
-            style={{ width: '100%', padding: '14px 24px', background: 'transparent', color: 'var(--color-text-tertiary)', border: '1px solid var(--color-border-alt)', borderRadius: 10, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.2s' }}
-            onMouseEnter={e => { if(!loading) { e.currentTarget.style.background = 'var(--color-surface-gray)'; e.currentTarget.style.color = 'var(--color-text-primary)'; } }}
-            onMouseLeave={e => { if(!loading) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; } }}
+            whileHover={loading ? undefined : { background: 'var(--color-surface-gray)', color: 'var(--color-text-primary)' }}
+            transition={{ duration: 0.2 }}
+            style={{ width: '100%', padding: '14px 24px', background: 'transparent', color: 'var(--color-text-tertiary)', border: '1px solid var(--color-border-alt)', borderRadius: 10, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer' }}
           >
             Cancel
-          </button>
+          </MotionButton>
         </div>
 
         <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>

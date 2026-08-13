@@ -129,7 +129,11 @@ export default function RelationsPanel({ entityType, entityId, workspaceId, comp
             activeIndex={activeIndex}
             onHover={setActiveIndex}
             onPick={handlePick}
-            style={{ position: 'static', width: '100%', boxShadow: 'none', border: 'none', padding: 0, animation: 'none' }}
+            // Embedded in the panel rather than floating, so it drops the
+            // picker's own pop-in — LinkPicker takes that as a prop instead of
+            // being overridden with `animation: none` from the outside.
+            animate={false}
+            style={{ position: 'static', width: '100%', boxShadow: 'none', border: 'none', padding: 0 }}
           />
         </div>
       )}

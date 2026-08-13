@@ -23,6 +23,7 @@ import { ENTRY_TYPE_OPTIONS } from '../../utils/knowledgeEntryTypes';
 import { knowledgeEntryImageUrl, apiUploadKnowledgeEntryImage, ensureAssetTicket } from '../../api/client';
 import { panelVariantsRight, crossFadeVariants } from '@/components/animate-ui/motionTokens';
 import type { MentionMember } from '../../utils/mention';
+import MotionButton from '../animate-ui/MotionButton';
 
 const ORIGIN_LABEL: Record<string, string> = {
   ai: 'Written by the assistant',
@@ -208,20 +209,24 @@ export default function EntryInspector({
             {ENTRY_TYPE_OPTIONS.map(o => {
               const active = entryType === o.key;
               return (
-                <button key={o.key}
+                <MotionButton key={o.key}
                   disabled={!canWrite}
                   onClick={() => { setEntryType(o.key); setMetaDirty(true); }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 4, padding: '5px 9px', borderRadius: 999,
-                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  animate={{
+                    borderColor: active ? 'var(--color-primary)' : 'var(--color-border)',
                     background: active ? 'var(--color-surface-tint)' : 'var(--color-white)',
                     color: active ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                  }}
+                  transition={{ duration: 0.14 }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4, padding: '5px 9px', borderRadius: 999,
+                    borderWidth: 1, borderStyle: 'solid',
                     fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600,
-                    cursor: canWrite ? 'pointer' : 'default', transition: 'all 140ms',
+                    cursor: canWrite ? 'pointer' : 'default',
                   }}>
                   <Icon name={o.icon} size={12} color={active ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
                   {o.label}
-                </button>
+                </MotionButton>
               );
             })}
           </div>

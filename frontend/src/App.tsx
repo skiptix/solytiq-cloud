@@ -40,6 +40,7 @@ import { EASE_STANDARD } from './components/animate-ui/motionTokens';
 import MotionIn from './components/animate-ui/MotionIn';
 import MotionButton from './components/animate-ui/MotionButton';
 import { motion } from './components/animate-ui/motion';
+import { EASE_SETTLE } from './components/animate-ui/motionTokens';
 
 // Sprint 03, Phase 2 — "Alle Route-Screens ... lazy laden": every screen
 // mounted by a <Route> below is its own chunk, fetched on first navigation
@@ -501,11 +502,13 @@ function AppLayout() {
           resizing={sidebarResizing}
         />
       </nav>
-      <div style={{
-        marginLeft: isMobile ? 0 : sidebarWidth,
-        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0,
-        transition: isMobile || sidebarResizing ? undefined : 'margin-left 240ms cubic-bezier(0.22,1,0.36,1)',
-      }}>
+      <motion.div
+        animate={{ marginLeft: isMobile ? 0 : sidebarWidth }}
+        // No tween while the user is actively dragging the resize handle, or
+        // the shell would lag behind the cursor — same condition the CSS
+        // transition was suppressed under.
+        transition={isMobile || sidebarResizing ? { duration: 0 } : { duration: 0.24, ease: EASE_SETTLE }}
+        style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <TopBar
           onNavigate={navigate}
           isMobile={isMobile}
@@ -548,7 +551,7 @@ function AppLayout() {
             </RouteErrorBoundary>
           </PageIn>
         </div>
-      </div>
+      </motion.div>
 
       {modal === 'add' && (
         <Suspense fallback={<RouteFallback label="Loading…" />}>

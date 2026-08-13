@@ -19,8 +19,14 @@ const s: Record<string, CSSProperties> = {
   // existing token, not a new color.
   sub:   { fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.5 },
   label: { fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' },
-  input: { fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', padding: '8px 0', outline: 'none', width: '100%', transition: 'border-color 200ms' },
+  input: { fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', borderBottomStyle: 'solid', padding: '8px 0', outline: 'none', width: '100%' },
 };
+
+/** The focus underline, as a Motion target rather than a CSS transition. */
+const underline = (focused: boolean) => ({
+  borderBottomWidth: focused ? 2 : 1.5,
+  borderBottomColor: focused ? 'var(--color-primary)' : 'var(--color-border-alt)',
+});
 
 const MotionLink = motion.create(Link);
 
@@ -149,7 +155,10 @@ export default function LoginScreen() {
     <div style={s.wrap}>
       <img src="/solytiq-cloud.png" alt="Solytiq Cloud" style={{ width: 80, height: 80, borderRadius: 20, objectFit: 'cover', boxShadow: '0 4px 20px rgba(var(--color-primary-rgb), 0.18)' }} />
 
-      <div style={{ ...s.card, animation: shake ? 'shake 400ms ease-in-out' : undefined }}>
+      <MotionIn
+        animate={{ x: shake ? [0, -8, 8, 0] : 0 }}
+        transition={{ duration: 0.4, times: shake ? [0, 0.25, 0.75, 1] : undefined, ease: 'easeInOut' }}
+        style={s.card}>
 
         {/* ── Step 1: credentials ── */}
         {step === 'creds' && (
@@ -165,7 +174,9 @@ export default function LoginScreen() {
                   placeholder="Enter your username…" autoFocus autoComplete="username"
                   aria-invalid={!!error || undefined}
                   aria-describedby={error ? 'login-error' : undefined}
-                  style={{ ...s.input, borderBottom: `${userFocus ? 2 : 1.5}px solid ${userFocus ? 'var(--color-primary)' : 'var(--color-border-alt)'}` }}
+                  animate={underline(userFocus)}
+                  transition={{ duration: 0.2 }}
+                  style={s.input}
                   onFocus={() => setUserFocus(true)} onBlur={() => setUserFocus(false)} />
               </MotionIn>
               <MotionIn style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -175,7 +186,9 @@ export default function LoginScreen() {
                     placeholder="••••••••" autoComplete="current-password"
                     aria-invalid={!!error || undefined}
                     aria-describedby={error ? 'login-error' : undefined}
-                    style={{ ...s.input, borderBottom: `${passFocus ? 2 : 1.5}px solid ${passFocus ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, paddingRight: 32 }}
+                    animate={underline(passFocus)}
+                    transition={{ duration: 0.2 }}
+                    style={{ ...s.input, paddingRight: 32 }}
                     onFocus={() => setPassFocus(true)} onBlur={() => setPassFocus(false)} />
                   <MotionButton type="button" onClick={() => setShowPw(v => !v)} aria-label={showPw ? 'Hide password' : 'Show password'} aria-pressed={showPw}
                     style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)', fontSize: 11.5, fontWeight: 600 }}>
@@ -223,7 +236,7 @@ export default function LoginScreen() {
               {/* 6-box OTP input */}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                 {otp.map((digit, i) => (
-                  <input
+                  <motion.input
                     key={i}
                     ref={otpRefs[i]}
                     type="text"
@@ -234,12 +247,17 @@ export default function LoginScreen() {
                     onChange={e => handleOtpChange(i, e.target.value)}
                     onKeyDown={e => handleOtpKey(i, e)}
                     onPaste={i === 0 ? handleOtpPaste : undefined}
+                    animate={{
+                      background: digit ? 'var(--color-surface-tint)' : 'var(--color-surface-gray)',
+                      borderColor: digit ? 'var(--color-primary)' : 'var(--color-border-alt)',
+                    }}
+                    transition={{ duration: 0.15 }}
                     style={{
                       width: 46, height: 56, textAlign: 'center',
                       fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700,
-                      color: 'var(--color-text-primary)', background: digit ? 'var(--color-surface-tint)' : 'var(--color-surface-gray)',
-                      border: `2px solid ${digit ? 'var(--color-primary)' : 'var(--color-border-alt)'}`,
-                      borderRadius: 10, outline: 'none', transition: 'border-color 150ms, background 150ms',
+                      color: 'var(--color-text-primary)',
+                      borderWidth: 2, borderStyle: 'solid',
+                      borderRadius: 10, outline: 'none',
                       caretColor: 'transparent',
                     }}
                   />
@@ -267,7 +285,7 @@ export default function LoginScreen() {
             </div>
           </>
         )}
-      </div>
+      </MotionIn>
     </div>
   );
 }

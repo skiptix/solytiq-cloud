@@ -33,6 +33,7 @@ import PopIn from '@/components/animate-ui/PopIn';
 import ModalIn from '@/components/animate-ui/ModalIn';
 import { EASE_SETTLE, EASE_STANDARD } from '../components/animate-ui/motionTokens';
 import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
 
 // A term's bubble grows with how much its definition actually holds — summary,
 // aliases, and written block content — not just its explicit relation degree.
@@ -524,18 +525,20 @@ export default function KnowledgeScreen() {
                   {ENTRY_TYPE_OPTIONS.map(opt => {
                     const active = typeFilter.length === 0 || typeFilter.includes(opt.key);
                     return (
-                      <button
+                      <MotionButton
                         key={opt.key}
                         onClick={() => toggleTypeFilter(opt.key)}
+                        animate={{ background: active ? 'var(--color-surface-tint)' : 'rgba(0,0,0,0)', opacity: active ? 1 : 0.45 }}
+                        transition={{ duration: 0.12 }}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '5px 6px', borderRadius: 6, border: 'none',
-                          background: active ? 'var(--color-surface-tint)' : 'transparent', opacity: active ? 1 : 0.45, cursor: 'pointer', textAlign: 'left',
-                          fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)', transition: 'background 120ms, opacity 120ms',
+                          cursor: 'pointer', textAlign: 'left',
+                          fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)',
                         }}
                       >
                         <Icon name={opt.icon} size={14} color="var(--color-text-tertiary)" />
                         {opt.label}
-                      </button>
+                      </MotionButton>
                     );
                   })}
                 </PopIn>

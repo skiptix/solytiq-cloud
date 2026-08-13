@@ -13,6 +13,7 @@ import useAIStore from '../store/useAIStore';
 import { apiGetAISettings, apiAIChat } from '../api/client';
 import type { EntityIndexEntry } from '../types';
 import MotionButton from './animate-ui/MotionButton';
+import nextFrame from './animate-ui/nextFrame';
 
 // ── Shared Notes editor ─────────────────────────────────────────────────────
 // Used by the item dialog (TaskDialog) and the milestone editor so both get
@@ -205,7 +206,7 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
     if (!el) return;
     const { next, selStart, selEnd } = toggleWrap(value, el.selectionStart ?? 0, el.selectionEnd ?? 0, marker);
     onChange(next);
-    requestAnimationFrame(() => {
+    nextFrame(() => {
       const now = taRef.current;
       if (!now) return;
       now.focus();
@@ -230,7 +231,7 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
     onChange(nextVal);
     setUndoNote(null);
     setMention(null);
-    requestAnimationFrame(() => {
+    nextFrame(() => {
       const now = taRef.current;
       if (!now) return;
       now.focus();
@@ -254,7 +255,7 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
     onChange(nextVal);
     setUndoNote(null);
     setLinkTrigger(null);
-    requestAnimationFrame(() => {
+    nextFrame(() => {
       const now = taRef.current;
       if (!now) return;
       now.focus();
