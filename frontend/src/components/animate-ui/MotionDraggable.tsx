@@ -21,7 +21,7 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef, CSSProperties, ReactNode } from 'react';
 import { motion } from './motion';
-import type { Transition, TargetAndTransition } from 'motion/react';
+import type { Transition, TargetAndTransition, Variants } from 'motion/react';
 
 // Native <div> surface, keeping the drag handlers as React's own
 // DragEventHandler rather than letting Motion's pan-gesture types win.
@@ -31,12 +31,16 @@ type MotionCollidingProps = 'onAnimationStart' | 'onAnimationEnd' | 'style';
 export interface MotionDraggableProps
   extends Omit<NativeDivProps, MotionCollidingProps> {
   children?: ReactNode;
-  initial?: TargetAndTransition | boolean;
-  animate?: TargetAndTransition;
-  exit?: TargetAndTransition;
+  // Variant NAMES are accepted alongside targets for the same reason MotionIn
+  // accepts them: an ancestor driving a descendant's animation, which is the
+  // replacement for CSS's `.parent:hover .child`.
+  initial?: TargetAndTransition | string | boolean;
+  animate?: TargetAndTransition | string;
+  exit?: TargetAndTransition | string;
   transition?: Transition;
-  whileHover?: TargetAndTransition;
-  whileTap?: TargetAndTransition;
+  whileHover?: TargetAndTransition | string;
+  whileTap?: TargetAndTransition | string;
+  variants?: Variants;
   layout?: boolean | 'position' | 'size';
   style?: CSSProperties;
 }

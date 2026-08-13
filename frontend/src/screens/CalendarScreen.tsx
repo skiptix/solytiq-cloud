@@ -1,7 +1,7 @@
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence } from '@/components/animate-ui/motion';
+import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import { useNavigate } from 'react-router-dom';
 import type { Task, List, Timeline, Meeting, MeetingRecurrenceRule } from '../types';
 import {
@@ -24,6 +24,10 @@ import Icon from '../components/Icon';
 import ContextMenu, { type ContextMenuEntry } from '../components/ContextMenu';
 import PopIn from '../components/animate-ui/PopIn';
 import ModalIn from '../components/animate-ui/ModalIn';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
+import MotionDraggable from '../components/animate-ui/MotionDraggable';
+import { EASE_STANDARD, EASE_SETTLE } from '../components/animate-ui/motionTokens';
 import { useMobile } from '../hooks/useBreakpoint';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -316,7 +320,7 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
     // from this backdrop but still bubble through the React tree to this handler.
     // Checking e.target === e.currentTarget makes sure only an actual backdrop
     // click (not a portaled descendant's) closes the modal.
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+    <MotionIn style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18, ease: EASE_STANDARD }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 480, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)' }}
         onClick={e => e.stopPropagation()}>
@@ -360,9 +364,9 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
           {/* All-day toggle */}
           <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}
             onClick={() => setAllDay(v => !v)}>
-            <div style={{ width: 38, height: 22, borderRadius: 9999, background: allDay ? 'var(--color-primary)' : 'var(--color-purple-tint-4)', position: 'relative', transition: 'background 180ms', flexShrink: 0 }}>
-              <div style={{ position: 'absolute', top: 2, left: allDay ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', transition: 'left 180ms', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.2)' }} />
-            </div>
+            <MotionIn transition={{ duration: 0.18 }} style={{ width: 38, height: 22, borderRadius: 9999, background: allDay ? 'var(--color-primary)' : 'var(--color-purple-tint-4)', position: 'relative', flexShrink: 0 }}>
+              <MotionIn transition={{ duration: 0.18 }} style={{ position: 'absolute', top: 2, left: allDay ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.2)' }} />
+            </MotionIn>
             <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>All-day</span>
           </label>
 
@@ -445,10 +449,10 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
             <label style={labelStyle}>Color</label>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {MEETING_COLORS.map(c => (
-                <button key={c} onClick={() => setColor(c)}
-                  style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: color === c ? '2.5px solid var(--color-text-primary)' : '2.5px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 120ms' }}>
+                <MotionButton key={c} onClick={() => setColor(c)}
+                  transition={{ duration: 0.12 }} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: color === c ? '2.5px solid var(--color-text-primary)' : '2.5px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', }}>
                   {color === c && <Icon name="check" size={14} color="var(--color-white)" />}
-                </button>
+                </MotionButton>
               ))}
             </div>
           </div>
@@ -466,14 +470,14 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
             </button>
           )}
           <button onClick={onClose} style={{ marginLeft: initial && onDelete ? 0 : 'auto', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>Cancel</button>
-          <button onClick={handleSave} disabled={!canSave}
-            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: canSave ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '9px 22px', cursor: canSave ? 'pointer' : 'not-allowed', transition: 'all 180ms' }}>
+          <MotionButton onClick={handleSave} disabled={!canSave}
+            transition={{ duration: 0.18 }} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: canSave ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '9px 22px', cursor: canSave ? 'pointer' : 'not-allowed', }}>
             {initial ? 'Save' : 'Add Meeting'}
-          </button>
+          </MotionButton>
         </div>
 
         {showDelete && initial && onDelete && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-black-rgb), 0.25)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 160ms ease both' }}
+          <MotionIn style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-black-rgb), 0.25)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.16, ease: EASE_STANDARD }}
             onClick={() => setShowDelete(false)}>
             <ModalIn duration={240} style={{ background: 'var(--color-white)', borderRadius: 14, padding: '22px 24px', maxWidth: 340, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.18)' }}
               onClick={e => e.stopPropagation()}>
@@ -500,7 +504,7 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
                 <button onClick={() => { onDelete(initial.id, { series: deleteWholeSeries }); }} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Delete</button>
               </div>
             </ModalIn>
-          </div>
+          </MotionIn>
         )}
       </ModalIn>
 
@@ -555,7 +559,7 @@ function MeetingModal({ initial, presetDate, presetStart, presetEnd, seriesCount
           </div>
         </>, document.body
       )}
-    </div>,
+    </MotionIn>,
     document.body
   );
 }
@@ -593,16 +597,15 @@ function InvitePopover({ candidates, search, onSearchChange, selectedIds, onTogg
         {filtered.map(m => {
           const active = selectedIds.includes(m.id);
           return (
-            <button key={m.id} onClick={() => onToggle(m.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 8, border: 'none', background: active ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 120ms' }}
-              onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--color-purple-pale-5)'; }}
-              onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}>
+            <MotionButton key={m.id} onClick={() => onToggle(m.id)}
+              transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 8, border: 'none', background: active ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left', }}
+              whileHover={!active ? { background: 'var(--color-purple-pale-5)' } : undefined}>
               <MemberAvatar userId={m.id} size={22} />
               <span style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: active ? 600 : 400, color: active ? 'var(--color-primary)' : 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {m.fullName || m.username}
               </span>
               {active && <Icon name="check" size={15} color="var(--color-primary)" />}
-            </button>
+            </MotionButton>
           );
         })}
       </div>
@@ -651,15 +654,14 @@ function RepeatPopover({ preset, onPresetChange, customDays, onCustomDaysChange,
         {REPEAT_PRESETS.map(p => {
           const active = preset === p.value;
           return (
-            <button key={p.value} onClick={() => onPresetChange(p.value)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, border: 'none', background: active ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 120ms' }}
-              onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--color-purple-pale-5)'; }}
-              onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}>
+            <MotionButton key={p.value} onClick={() => onPresetChange(p.value)}
+              transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, border: 'none', background: active ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left', }}
+              whileHover={!active ? { background: 'var(--color-purple-pale-5)' } : undefined}>
               <div style={{ width: 16, height: 16, borderRadius: '50%', border: `1.5px solid ${active ? 'var(--color-primary)' : 'var(--color-purple-tint-7)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {active && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-primary)' }} />}
               </div>
               <span style={{ fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: active ? 600 : 400, color: active ? 'var(--color-primary)' : 'var(--color-text-primary)' }}>{p.label}</span>
-            </button>
+            </MotionButton>
           );
         })}
       </div>
@@ -709,7 +711,7 @@ function MeetingViewModal({ meeting, onClose, onLeave }: { meeting: Meeting; onC
   const others = (meeting.attendeeIds ?? []).filter(id => id !== currentUserId && allMembers[id]);
 
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+    <MotionIn style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18, ease: EASE_STANDARD }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 440, maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.18)', position: 'relative' }}
         onClick={e => e.stopPropagation()}>
@@ -797,7 +799,7 @@ function MeetingViewModal({ meeting, onClose, onLeave }: { meeting: Meeting; onC
         </div>
 
         {confirmLeave && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-black-rgb), 0.25)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 160ms ease both' }}
+          <MotionIn style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-black-rgb), 0.25)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.16, ease: EASE_STANDARD }}
             onClick={() => setConfirmLeave(false)}>
             <ModalIn duration={240} style={{ background: 'var(--color-white)', borderRadius: 14, padding: '22px 24px', maxWidth: 320, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.18)' }}
               onClick={e => e.stopPropagation()}>
@@ -808,10 +810,10 @@ function MeetingViewModal({ meeting, onClose, onLeave }: { meeting: Meeting; onC
                 <button onClick={onLeave} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer' }}>Remove</button>
               </div>
             </ModalIn>
-          </div>
+          </MotionIn>
         )}
       </ModalIn>
-    </div>,
+    </MotionIn>,
     document.body
   );
 }
@@ -822,10 +824,9 @@ function MeetingViewModal({ meeting, onClose, onLeave }: { meeting: Meeting; onC
 function DayAddChooser({ date, onTask, onMeeting, onClose }: { date: string; onTask: () => void; onMeeting: () => void; onClose: () => void }) {
   const friendly = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const opt = (icon: string, title: string, sub: string, onClick: () => void) => (
-    <button onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 12, border: '1.5px solid var(--color-border-alt)', background: 'var(--color-white)', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms', width: '100%' }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-border-alt)'; e.currentTarget.style.background = 'var(--color-white)'; }}>
+    <MotionButton onClick={onClick}
+      transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 12, border: '1.5px solid var(--color-border-alt)', background: 'var(--color-white)', cursor: 'pointer', textAlign: 'left', width: '100%' }}
+      whileHover={{ borderColor: 'var(--color-primary)', background: 'var(--color-surface-tint)' }}>
       <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         <Icon name={icon} size={20} color="var(--color-primary)" />
       </div>
@@ -833,11 +834,11 @@ function DayAddChooser({ date, onTask, onMeeting, onClose }: { date: string; onT
         <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>{title}</div>
         <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 1 }}>{sub}</div>
       </div>
-    </button>
+    </MotionButton>
   );
   // Portaled to <body> — see the comment on MeetingModal's return for why.
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+    <MotionIn style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18, ease: EASE_STANDARD }}
       onClick={onClose}>
       <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 380, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)' }}
         onClick={e => e.stopPropagation()}>
@@ -855,7 +856,7 @@ function DayAddChooser({ date, onTask, onMeeting, onClose }: { date: string; onT
           {opt('event', 'Meeting', 'A standalone calendar event', onMeeting)}
         </div>
       </ModalIn>
-    </div>,
+    </MotionIn>,
     document.body
   );
 }
@@ -903,43 +904,43 @@ function AddToDateModal({ date, lists, onAdd, onClose }: AddToDateModalProps) {
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div>
             <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 5, display: 'block' }}>Task Name</label>
-            <input autoFocus value={title} onChange={e => setTitle(e.target.value)}
+            <motion.input autoFocus value={title} onChange={e => setTitle(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && canSubmit) handleAdd(); }}
               placeholder="What needs to be done?"
-              style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', borderBottom: '1.5px solid var(--color-border-alt)', padding: '7px 0', outline: 'none', boxSizing: 'border-box', transition: 'border-color 200ms' }}
+              transition={{ duration: 0.2 }} style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', borderBottom: '1.5px solid var(--color-border-alt)', padding: '7px 0', outline: 'none', boxSizing: 'border-box', }}
               onFocus={e => (e.target.style.borderBottomColor = 'var(--color-primary)')}
               onBlur={e => (e.target.style.borderBottomColor = 'var(--color-border-alt)')} />
           </div>
           <div>
             <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 8, display: 'block' }}>Add to</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto' }}>
-              <button onClick={() => setDest('dash')}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${dest === 'dash' ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: dest === 'dash' ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}>
+              <MotionButton onClick={() => setDest('dash')}
+                transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${dest === 'dash' ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: dest === 'dash' ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left', }}>
                 <div style={{ width: 20, height: 20, borderRadius: '50%', background: dest === 'dash' ? 'var(--color-primary)' : 'var(--color-border-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   {dest === 'dash' && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-white)' }} />}
                 </div>
                 <Icon name="today" size={15} color={dest === 'dash' ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                 <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: dest === 'dash' ? 'var(--color-primary)' : 'var(--color-text-secondary)' }}>Dashboard</span>
-              </button>
+              </MotionButton>
               {lists.map(list => (
-                <button key={list.id} onClick={() => setDest(list.id)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${dest === list.id ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: dest === list.id ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}>
+                <MotionButton key={list.id} onClick={() => setDest(list.id)}
+                  transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, border: `1.5px solid ${dest === list.id ? 'var(--color-primary)' : 'var(--color-border-alt)'}`, background: dest === list.id ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left', }}>
                   <div style={{ width: 20, height: 20, borderRadius: '50%', background: dest === list.id ? 'var(--color-primary)' : 'var(--color-border-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     {dest === list.id && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-white)' }} />}
                   </div>
                   {list.emoji ? <span style={{ fontSize: 15, lineHeight: 1 }}>{list.emoji}</span> : <Icon name="format_list_bulleted" size={15} color={dest === list.id ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />}
                   <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: dest === list.id ? 'var(--color-primary)' : 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>
-                </button>
+                </MotionButton>
               ))}
             </div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '14px 24px 20px', borderTop: '1px solid var(--color-surface-tint)' }}>
           <button onClick={onClose} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>Cancel</button>
-          <button onClick={handleAdd} disabled={!canSubmit}
-            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: canSubmit ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '9px 20px', cursor: canSubmit ? 'pointer' : 'not-allowed', transition: 'all 180ms' }}>
+          <MotionButton onClick={handleAdd} disabled={!canSubmit}
+            transition={{ duration: 0.18 }} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: canSubmit ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '9px 20px', cursor: canSubmit ? 'pointer' : 'not-allowed', }}>
             Add Task
-          </button>
+          </MotionButton>
         </div>
       </ModalIn>
     </div>,
@@ -952,33 +953,31 @@ function AddToDateModal({ date, lists, onAdd, onClose }: AddToDateModalProps) {
 // ════════════════════════════════════════════════════════════════════
 function ChipCompact({ chip, onOpenMenu }: { chip: Chip; onOpenMenu?: (e: React.MouseEvent, items: ContextMenuEntry[]) => void }) {
   return (
-    <div onClick={e => { e.stopPropagation(); chip.onClick(); }}
+    <MotionDraggable onClick={e => { e.stopPropagation(); chip.onClick(); }}
       onContextMenu={e => { if (chip.contextItems) onOpenMenu?.(e, chip.contextItems); }}
       title={chip.label}
       draggable={!!chip.dragData}
       onDragStart={chip.dragData ? e => { e.dataTransfer.setData('text/plain', chip.dragData!); e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); } : undefined}
-      style={{ display: 'flex', alignItems: 'center', gap: 4, background: chip.bg, borderRadius: 4, padding: '2px 5px', cursor: chip.dragData ? 'grab' : 'pointer', transition: 'filter 120ms', minWidth: 0, overflow: 'hidden' }}
-      onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(0.96)')}
-      onMouseLeave={e => (e.currentTarget.style.filter = 'none')}>
+      transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', gap: 4, background: chip.bg, borderRadius: 4, padding: '2px 5px', cursor: chip.dragData ? 'grab' : 'pointer', minWidth: 0, overflow: 'hidden' }}
+      whileHover={{ filter: 'brightness(0.96)' }}>
       {chip.priorityColor
         ? <div style={{ width: 5, height: 5, borderRadius: '50%', background: chip.priorityColor, flexShrink: 0 }} />
         : chip.emoji
           ? <span style={{ fontSize: 10, lineHeight: 1, flexShrink: 0 }}>{chip.emoji}</span>
           : <div style={{ width: 5, height: 5, borderRadius: '50%', background: chip.accent, flexShrink: 0 }} />}
       <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: chip.accent, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0, fontWeight: 500 }}>{chip.label}</span>
-    </div>
+    </MotionDraggable>
   );
 }
 
 function ChipCard({ chip, onOpenMenu }: { chip: Chip; onOpenMenu?: (e: React.MouseEvent, items: ContextMenuEntry[]) => void }) {
   return (
-    <div onClick={chip.onClick}
+    <MotionDraggable onClick={chip.onClick}
       onContextMenu={e => { if (chip.contextItems) onOpenMenu?.(e, chip.contextItems); }}
       draggable={!!chip.dragData}
       onDragStart={chip.dragData ? e => { e.dataTransfer.setData('text/plain', chip.dragData!); e.dataTransfer.effectAllowed = 'move'; e.stopPropagation(); } : undefined}
-      style={{ display: 'flex', gap: 7, background: chip.bg, borderRadius: 8, padding: '7px 9px', cursor: chip.dragData ? 'grab' : 'pointer', borderLeft: `3px solid ${chip.accent}`, transition: 'filter 120ms' }}
-      onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(0.97)')}
-      onMouseLeave={e => (e.currentTarget.style.filter = 'none')}>
+      transition={{ duration: 0.12 }} style={{ display: 'flex', gap: 7, background: chip.bg, borderRadius: 8, padding: '7px 9px', cursor: chip.dragData ? 'grab' : 'pointer', borderLeft: `3px solid ${chip.accent}`, }}
+      whileHover={{ filter: 'brightness(0.97)' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           {chip.priorityColor && <div style={{ width: 6, height: 6, borderRadius: '50%', background: chip.priorityColor, flexShrink: 0 }} />}
@@ -991,7 +990,7 @@ function ChipCard({ chip, onOpenMenu }: { chip: Chip; onOpenMenu?: (e: React.Mou
           </div>
         )}
       </div>
-    </div>
+    </MotionDraggable>
   );
 }
 
@@ -1008,7 +1007,7 @@ function DayItemsModal({ date, chips, onClose, onOpenMenu }: { date: string; chi
   }, [onClose]);
   // Portaled to <body> — see the comment on MeetingModal's return for why.
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+    <MotionIn style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18, ease: EASE_STANDARD }}
       onClick={onClose}>
       <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 380, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)' }}
         onClick={e => e.stopPropagation()}>
@@ -1027,7 +1026,7 @@ function DayItemsModal({ date, chips, onClose, onOpenMenu }: { date: string; chi
           ))}
         </div>
       </ModalIn>
-    </div>,
+    </MotionIn>,
     document.body
   );
 }
@@ -1493,32 +1492,34 @@ export default function CalendarScreen() {
             const visible = chips.slice(0, 3);
             const overflow = chips.length - visible.length;
             return (
-              <div key={i}
+              <MotionDraggable key={i}
                 onDragOver={e => { if (cell.current) e.preventDefault(); }}
                 onDrop={e => { if (cell.current) handleDayDrop(iso, e); }}
                 onClick={() => { if (cell.current) setDayChooser(iso); }}
-                style={{ minHeight: isMobile ? 76 : 100, border: isToday ? '1.5px solid var(--color-purple-tint-1)' : '1px solid var(--color-surface-tint-2)', background: isToday ? 'var(--color-purple-pale-5)' : cell.current ? 'var(--color-white)' : 'var(--color-surface-neutral)', borderRadius: 6, padding: 4, transition: 'background 150ms', cursor: cell.current ? 'pointer' : 'default', position: 'relative', minWidth: 0, overflow: 'hidden' }}
-                className="cal-cell">
+                initial="rest" animate="rest" whileHover="hover"
+                transition={{ duration: 0.15 }} style={{ minHeight: isMobile ? 76 : 100, border: isToday ? '1.5px solid var(--color-purple-tint-1)' : '1px solid var(--color-surface-tint-2)', background: isToday ? 'var(--color-purple-pale-5)' : cell.current ? 'var(--color-white)' : 'var(--color-surface-neutral)', borderRadius: 6, padding: 4, cursor: cell.current ? 'pointer' : 'default', position: 'relative', minWidth: 0, overflow: 'hidden' }}
+                >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, padding: '0 2px' }}>
                   <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? 'var(--color-primary)' : cell.current ? 'var(--color-text-primary)' : 'var(--color-border-strong)' }}>{cell.date.getDate()}</div>
                   {cell.current && (
-                    <div className="cal-add-btn" style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: 'opacity 150ms', flexShrink: 0 }}>
+                    <MotionIn
+                      variants={{ rest: { opacity: 0 }, hover: { opacity: 1 } }}
+                      transition={{ duration: 0.15 }} style={{ width: 16, height: 16, borderRadius: '50%', background: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, flexShrink: 0 }}>
                       <Icon name="add" size={11} color="var(--color-white)" />
-                    </div>
+                    </MotionIn>
                   )}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                   {visible.map(c => <ChipCompact key={c.key} chip={c} onOpenMenu={openChipMenu} />)}
                   {overflow > 0 && (
-                    <button onClick={e => { e.stopPropagation(); setDayItemsIso(iso); }}
-                      style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'transparent', border: 'none', textAlign: 'left', padding: '1px 5px', borderRadius: 4, cursor: 'pointer', transition: 'all 120ms' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; e.currentTarget.style.color = 'var(--color-primary)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; }}>
+                    <MotionButton onClick={e => { e.stopPropagation(); setDayItemsIso(iso); }}
+                      transition={{ duration: 0.12 }} style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'transparent', border: 'none', textAlign: 'left', padding: '1px 5px', borderRadius: 4, cursor: 'pointer', }}
+                      whileHover={{ background: 'var(--color-surface-tint-2)', color: 'var(--color-primary)' }}>
                       +{overflow} more
-                    </button>
+                    </MotionButton>
                   )}
                 </div>
-              </div>
+              </MotionDraggable>
             );
           })}
         </div>
@@ -1593,12 +1594,11 @@ export default function CalendarScreen() {
                   style={{ borderLeft: '1px solid var(--color-purple-pale-19)', padding: 4, display: 'flex', flexDirection: 'column', gap: 3, minHeight: 30 }}>
                   {shown.map(c => <ChipCard key={c.key} chip={c} onOpenMenu={openChipMenu} />)}
                   {hiddenTasks.length > 0 && (
-                    <button onClick={e => { e.stopPropagation(); setDeadlinesOverflow({ iso, chips: hiddenTasks }); }}
-                      style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'transparent', border: 'none', textAlign: 'left', padding: '1px 5px', borderRadius: 4, cursor: 'pointer', transition: 'all 120ms' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; e.currentTarget.style.color = 'var(--color-primary)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; }}>
+                    <MotionButton onClick={e => { e.stopPropagation(); setDeadlinesOverflow({ iso, chips: hiddenTasks }); }}
+                      transition={{ duration: 0.12 }} style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'transparent', border: 'none', textAlign: 'left', padding: '1px 5px', borderRadius: 4, cursor: 'pointer', }}
+                      whileHover={{ background: 'var(--color-surface-tint-2)', color: 'var(--color-primary)' }}>
                       Show more Deadlines (+{hiddenTasks.length})
-                    </button>
+                    </MotionButton>
                   )}
                 </div>
               );
@@ -1715,15 +1715,14 @@ export default function CalendarScreen() {
                     const chips = visibleChipsByDate[iso] ?? [];
                     const dots = chips.slice(0, 3);
                     return (
-                      <button key={i} onClick={() => { setAnchor(d); setView('month'); }}
-                        style={{ aspectRatio: '1', border: 'none', background: isToday ? 'var(--color-primary)' : 'transparent', borderRadius: 6, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, padding: 0, transition: 'background 120ms' }}
-                        onMouseEnter={e => { if (!isToday) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-                        onMouseLeave={e => { if (!isToday) e.currentTarget.style.background = 'transparent'; }}>
+                      <MotionButton key={i} onClick={() => { setAnchor(d); setView('month'); }}
+                        transition={{ duration: 0.12 }} style={{ aspectRatio: '1', border: 'none', background: isToday ? 'var(--color-primary)' : 'transparent', borderRadius: 6, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, padding: 0, }}
+                        whileHover={!isToday ? { background: 'var(--color-surface-tint)' } : undefined}>
                         <span style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, fontWeight: isToday ? 700 : 400, color: isToday ? 'var(--color-white)' : 'var(--color-text-secondary)' }}>{d.getDate()}</span>
                         <div style={{ display: 'flex', gap: 1.5, height: 4, alignItems: 'center' }}>
                           {dots.map(c => <div key={c.key} style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: isToday ? 'rgba(var(--color-white-rgb), 0.85)' : c.accent }} />)}
                         </div>
-                      </button>
+                      </MotionButton>
                     );
                   })}
                 </div>
@@ -1737,10 +1736,10 @@ export default function CalendarScreen() {
 
   // ── View switcher segmented control ────────────────────────────
   const viewBtn = (v: typeof view, label: string) => (
-    <button key={v} onClick={() => setView(v)}
-      style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: effectiveView === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: effectiveView === v ? 'var(--color-white)' : 'transparent', border: 'none', borderRadius: 7, padding: '6px 14px', cursor: 'pointer', boxShadow: effectiveView === v ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none', transition: 'all 150ms' }}>
+    <MotionButton key={v} onClick={() => setView(v)}
+      transition={{ duration: 0.15 }} style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: effectiveView === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: effectiveView === v ? 'var(--color-white)' : 'transparent', border: 'none', borderRadius: 7, padding: '6px 14px', cursor: 'pointer', boxShadow: effectiveView === v ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none', }}>
       {label}
-    </button>
+    </MotionButton>
   );
 
   return (
@@ -1775,12 +1774,12 @@ export default function CalendarScreen() {
 
             {/* Workspace filter */}
             <div ref={filterRef} style={{ position: 'relative' }}>
-              <button onClick={() => setShowFilter(v => !v)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: (hiddenWs.size > 0 || hiddenKinds.size > 0) ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: (hiddenWs.size > 0 || hiddenKinds.size > 0) ? 'var(--color-surface-tint)' : 'transparent', border: `1px solid ${(hiddenWs.size > 0 || hiddenKinds.size > 0) ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
+              <MotionButton onClick={() => setShowFilter(v => !v)}
+                transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: (hiddenWs.size > 0 || hiddenKinds.size > 0) ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: (hiddenWs.size > 0 || hiddenKinds.size > 0) ? 'var(--color-surface-tint)' : 'transparent', border: `1px solid ${(hiddenWs.size > 0 || hiddenKinds.size > 0) ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', }}>
                 <Icon name="filter_list" size={16} color={(hiddenWs.size > 0 || hiddenKinds.size > 0) ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                 {!isMobile && 'Filter'}
                 {hiddenWs.size > 0 && <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, color: 'var(--color-white)', background: 'var(--color-primary)', borderRadius: 9999, padding: '1px 6px' }}>{Math.max(workspaces.length - hiddenWs.size, 0)}/{workspaces.length}</span>}
-              </button>
+              </MotionButton>
               {showFilter && (
                 <PopIn duration={160} ease="spring" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 250, maxHeight: 360, overflowY: 'auto', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border-alt)', boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.14)', zIndex: 400 }}>
                   {/* Event families — hide meetings / task deadlines / milestones */}
@@ -1792,16 +1791,15 @@ export default function CalendarScreen() {
                     {KIND_META.map(k => {
                       const on = kindVisible(k.id);
                       return (
-                        <button key={k.id} onClick={() => toggleKind(k.id)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 120ms' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                          <div style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? 'var(--color-primary)' : 'var(--color-purple-tint-7)'}`, background: on ? 'var(--color-primary)' : 'var(--color-white)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 120ms' }}>
+                        <MotionButton key={k.id} onClick={() => toggleKind(k.id)}
+                          transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', }}
+                          whileHover={{ background: 'var(--color-surface-tint)' }}>
+                          <MotionIn transition={{ duration: 0.12 }} style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? 'var(--color-primary)' : 'var(--color-purple-tint-7)'}`, background: on ? 'var(--color-primary)' : 'var(--color-white)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, }}>
                             {on && <Icon name="check" size={13} color="var(--color-white)" />}
-                          </div>
+                          </MotionIn>
                           <Icon name={k.icon} size={15} color="var(--color-text-tertiary)" />
                           <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-primary)' }}>{k.label}</span>
-                        </button>
+                        </MotionButton>
                       );
                     })}
                   </div>
@@ -1818,16 +1816,15 @@ export default function CalendarScreen() {
                     {workspaces.map(w => {
                       const on = !hiddenWs.has(w.id);
                       return (
-                        <button key={w.id} onClick={() => toggleWs(w.id)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 120ms' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                          <div style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? 'var(--color-primary)' : 'var(--color-purple-tint-7)'}`, background: on ? 'var(--color-primary)' : 'var(--color-white)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 120ms' }}>
+                        <MotionButton key={w.id} onClick={() => toggleWs(w.id)}
+                          transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', }}
+                          whileHover={{ background: 'var(--color-surface-tint)' }}>
+                          <MotionIn transition={{ duration: 0.12 }} style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${on ? 'var(--color-primary)' : 'var(--color-purple-tint-7)'}`, background: on ? 'var(--color-primary)' : 'var(--color-white)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, }}>
                             {on && <Icon name="check" size={13} color="var(--color-white)" />}
-                          </div>
+                          </MotionIn>
                           {w.emoji && <span style={{ fontSize: 15, lineHeight: 1 }}>{w.emoji}</span>}
                           <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.name}</span>
-                        </button>
+                        </MotionButton>
                       );
                     })}
                   </div>
@@ -1838,13 +1835,13 @@ export default function CalendarScreen() {
             {/* Unscheduled tasks — desktop only; dropped from the mobile toolbar (see showPanel) */}
             {showPanel && (
               <div ref={unschedRef} style={{ position: 'relative' }}>
-                <button onClick={() => setShowUnscheduled(v => !v)}
+                <MotionButton onClick={() => setShowUnscheduled(v => !v)}
                   title="Unscheduled tasks"
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: showUnscheduled ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: showUnscheduled ? 'var(--color-surface-tint)' : 'transparent', border: `1px solid ${showUnscheduled ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', transition: 'all 150ms' }}>
+                  transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: showUnscheduled ? 'var(--color-primary)' : 'var(--color-text-tertiary)', background: showUnscheduled ? 'var(--color-surface-tint)' : 'transparent', border: `1px solid ${showUnscheduled ? 'var(--color-accent-purple-soft)' : 'var(--color-border)'}`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer', }}>
                   <Icon name="bolt" size={16} color={showUnscheduled ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                   Unscheduled
                   {unscheduled.length > 0 && <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, color: 'var(--color-white)', background: 'var(--color-primary)', borderRadius: 9999, padding: '1px 6px' }}>{unscheduled.length}</span>}
-                </button>
+                </MotionButton>
                 {showUnscheduled && (
                   <PopIn duration={160} ease="spring" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 280, maxHeight: '60vh', display: 'flex', flexDirection: 'column', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border-alt)', boxShadow: '0 8px 32px rgba(var(--color-primary-rgb), 0.14)', zIndex: 400, overflow: 'hidden' }}>
                     <div style={{ padding: '12px 14px 8px', borderBottom: '1px solid var(--color-divider)', flexShrink: 0 }}>
@@ -1864,19 +1861,18 @@ export default function CalendarScreen() {
                         <div style={{ textAlign: 'center', padding: '20px 8px', fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>All tasks scheduled!</div>
                       ) : (
                         filteredUnscheduled.map(t => (
-                          <div key={`${t._listId}-${t.id}`} draggable
+                          <MotionDraggable key={`${t._listId}-${t.id}`} draggable
                             onDragStart={e => { e.dataTransfer.setData('text/plain', String(t.id)); e.dataTransfer.effectAllowed = 'move'; setDragTaskId(t.id); }}
                             onDragEnd={() => setDragTaskId(null)}
                             onClick={() => setSelectedTask(t)}
-                            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'var(--color-white)', border: '1px solid var(--color-border)', marginBottom: 4, cursor: 'grab', transition: 'all 150ms', opacity: dragTaskId === t.id ? 0.4 : 1 }}
-                            onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--color-accent-purple-light)')}
-                            onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-border)')}>
+                            transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, background: 'var(--color-white)', border: '1px solid var(--color-border)', marginBottom: 4, cursor: 'grab', opacity: dragTaskId === t.id ? 0.4 : 1 }}
+                            whileHover={{ borderColor: 'var(--color-accent-purple-light)' }}>
                             <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
                             <div style={{ minWidth: 0 }}>
                               <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</div>
                               {t._listName && t._listName !== 'Dashboard' && <div style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--color-text-tertiary)' }}>{t._listName}</div>}
                             </div>
-                          </div>
+                          </MotionDraggable>
                         ))
                       )}
                     </div>
@@ -1886,20 +1882,19 @@ export default function CalendarScreen() {
             )}
 
             {/* New meeting — sits right next to the filter/unscheduled cluster */}
-            <button onClick={() => setCreatingMeeting({ date: effectiveView === 'year' ? todayIso : toIso(anchor) })}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(var(--color-primary-rgb), 0.25)', transition: 'background 150ms' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-mid-11)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-primary)')}>
+            <MotionButton onClick={() => setCreatingMeeting({ date: effectiveView === 'year' ? todayIso : toIso(anchor) })}
+              transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', boxShadow: '0 2px 8px rgba(var(--color-primary-rgb), 0.25)', }}
+              whileHover={{ background: 'var(--color-purple-mid-11)' }}>
               <Icon name="add" size={16} color="var(--color-white)" />
               {isMobile ? 'Meeting' : 'New Meeting'}
-            </button>
+            </MotionButton>
           </div>
         </div>
 
         {/* Body */}
-        <div key={effectiveView} style={{ animation: 'viewSwitchIn 220ms cubic-bezier(0.16,1,0.3,1) both' }}>
+        <MotionIn key={effectiveView} initial={{ opacity: 0, y: 8, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.22, ease: EASE_SETTLE }}>
           {effectiveView === 'month' ? renderMonth() : effectiveView === 'week' ? renderWeek() : renderYear()}
-        </div>
+        </MotionIn>
       </div>
 
       {/* Modals */}
@@ -1943,7 +1938,6 @@ export default function CalendarScreen() {
           onClose={() => { setCreatingMeeting(null); setEditingMeeting(null); }} />
       )}
 
-      <style>{`.cal-cell:hover .cal-add-btn { opacity: 1 !important; }`}</style>
     </div>
   );
 }
