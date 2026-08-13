@@ -10,8 +10,11 @@ import useAccountsStore from '../store/useAccountsStore';
 import { apiUpdateProfile, apiUploadProfileImage } from '../api/client';
 import UserSettingsModal from '../modals/UserSettingsModal';
 import AddAccountModal from '../modals/AddAccountModal';
-import { LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
+import { LAYOUT_TRANSITION, EASE_STANDARD } from '@/components/animate-ui/motionTokens';
 import Spinner from '@/components/animate-ui/Spinner';
+import MotionButton from './animate-ui/MotionButton';
+import MotionDraggable from './animate-ui/MotionDraggable';
+import MotionIn from './animate-ui/MotionIn';
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -212,7 +215,7 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
     width: 26, height: 26, borderRadius: 6,
     background: 'transparent', border: 'none', cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0, transition: 'background 120ms',
+    flexShrink: 0,
   };
 
   const renderField = (label: string, field: 'name' | 'email', displayValue: string, inputType = 'text') => (
@@ -228,35 +231,35 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
             onKeyDown={handleFieldKey}
             style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', outline: 'none', padding: '1px 0', borderBottom: '1.5px solid var(--color-primary)' }}
           />
-          <button
+          <MotionButton
             onClick={commitEdit}
             disabled={editSaving || !editValue.trim()}
             style={{ ...iconBtn, color: 'var(--color-success)' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(var(--color-success-rgb), 0.10)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            whileHover={{ background: 'rgba(var(--color-success-rgb), 0.10)' }}
+            transition={{ duration: 0.15 }}
           >
             <Icon name="check" size={15} color={editSaving ? 'var(--color-text-quaternary)' : 'var(--color-success)'} />
-          </button>
-          <button
+          </MotionButton>
+          <MotionButton
             onClick={cancelEdit}
             style={iconBtn}
-            onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            whileHover={{ background: 'var(--color-surface-tint-2)' }}
+            transition={{ duration: 0.15 }}
           >
             <Icon name="close" size={15} color="var(--color-text-quaternary)" />
-          </button>
+          </MotionButton>
         </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <span style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayValue}</span>
-          <button
+          <MotionButton
             onClick={() => startEdit(field)}
             style={iconBtn}
-            onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            whileHover={{ background: 'var(--color-surface-tint-2)' }}
+            transition={{ duration: 0.15 }}
           >
             <Icon name="edit" size={14} color="var(--color-text-quaternary)" />
-          </button>
+          </MotionButton>
         </div>
       )}
     </div>
@@ -285,7 +288,7 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
           padding: collapsed ? '8px 0' : '7px 8px', justifyContent: collapsed ? 'center' : 'flex-start',
           borderRadius: 10, cursor: 'pointer', border: `1.5px solid ${menuOpen ? 'var(--color-primary)' : 'transparent'}`,
           background: menuOpen ? 'var(--color-surface-tint)' : (avatarHover ? 'var(--color-surface-tint-3)' : 'transparent'),
-          width: '100%', textAlign: 'left', transition: 'all 150ms',
+          width: '100%', textAlign: 'left',
         }}
       >
         {avatarBubble(collapsed ? 30 : 32, collapsed ? 12 : 13)}
@@ -325,9 +328,9 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
               title="Upload profile photo"
             >
               {avatarBubble(64, 22)}
-              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(var(--color-black-rgb), 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: uploadAvatarHover ? 1 : 0, transition: 'opacity 180ms', pointerEvents: 'none' }}>
+              <MotionIn transition={{ duration: 0.18 }} style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(var(--color-black-rgb), 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: uploadAvatarHover ? 1 : 0, pointerEvents: 'none' }}>
                 <Icon name="add" size={22} color="var(--color-white)" />
-              </div>
+              </MotionIn>
             </div>
             <div style={{ textAlign: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
@@ -348,11 +351,11 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
 
           {/* Switch account — expands to the list of other signed-in accounts */}
           <div style={{ padding: '10px 16px 0' }}>
-            <button
+            <MotionButton
               onClick={() => setSwitcherOpen(v => !v)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)', background: 'transparent', border: 'none', borderRadius: 8, padding: '8px 8px', cursor: 'pointer', textAlign: 'left', transition: 'background 150ms' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)', background: 'transparent', border: 'none', borderRadius: 8, padding: '8px 8px', cursor: 'pointer', textAlign: 'left' }}
+              whileHover={{ background: 'var(--color-surface-tint-3)' }}
+              transition={{ duration: 0.15 }}
             >
               <Icon name="swap_horiz" size={16} color="var(--color-text-tertiary)" />
               <span style={{ flex: 1 }}>Switch account</span>
@@ -360,7 +363,7 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
                 <span style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', borderRadius: 9999, padding: '1px 7px' }}>{otherAccounts.length}</span>
               )}
               <Icon name={switcherOpen ? 'expand_less' : 'expand_more'} size={16} color="var(--color-text-quaternary)" />
-            </button>
+            </MotionButton>
 
             <AnimatePresence initial={false}>
             {switcherOpen && (
@@ -375,11 +378,11 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
                 {otherAccounts.map(acct => {
                   const busy = switchingId === acct.userId;
                   return (
-                    <button
+                    <MotionButton
                       key={acct.userId}
                       onClick={() => handleSwitch(acct.userId, acct.username)}
                       disabled={!!switchingId}
-                      style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: switchingId ? 'default' : 'pointer', textAlign: 'left', transition: 'background 150ms' }}
+                      transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: switchingId ? 'default' : 'pointer', textAlign: 'left', }}
                       onMouseEnter={e => { if (!switchingId) e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                     >
@@ -399,7 +402,7 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
                         ? <Spinner size={13} thickness={2} trackColor="var(--color-accent-purple-soft-alt)" durationMs={600} flexShrink={0} />
                         : <Icon name="login" size={14} color="var(--color-text-quaternary)" />
                       }
-                    </button>
+                    </MotionButton>
                   );
                 })}
 
@@ -409,17 +412,17 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
                   </div>
                 )}
 
-                <button
+                <MotionButton
                   onClick={() => { setMenuOpen(false); setSwitcherOpen(false); setAddAccountFor({}); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', transition: 'background 150ms' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 8px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
+                  whileHover={{ background: 'var(--color-surface-tint-3)' }}
+                  transition={{ duration: 0.15 }}
                 >
                   <div style={{ width: 28, height: 28, borderRadius: '50%', border: '1.5px dashed var(--color-purple-pale-38)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Icon name="add" size={15} color="var(--color-primary)" />
                   </div>
                   <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)' }}>Add account</span>
-                </button>
+                </MotionButton>
               </motion.div>
             )}
             </AnimatePresence>
@@ -427,23 +430,23 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
 
           {/* Account Settings + Sign Out */}
           <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <button
+            <MotionButton
               onClick={() => { setMenuOpen(false); setSettingsOpen(true); }}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: '1.5px solid var(--color-purple-pale-38)', borderRadius: 8, padding: '9px 0', cursor: 'pointer', transition: 'all 150ms' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-4)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-soft)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-purple-pale-38)'; }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: '1.5px solid var(--color-purple-pale-38)', borderRadius: 8, padding: '9px 0', cursor: 'pointer' }}
+              whileHover={{ background: 'var(--color-surface-tint-4)', borderColor: 'var(--color-accent-purple-soft)' }}
+              transition={{ duration: 0.15 }}
             >
               <Icon name="manage_accounts" size={15} color="var(--color-primary)" />
               Account Settings
-            </button>
-            <button
+            </MotionButton>
+            <MotionButton
               onClick={handleSignOut}
-              style={{ width: '100%', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: '1.5px solid var(--color-error-bg)', borderRadius: 8, padding: '9px 0', cursor: 'pointer', transition: 'all 150ms' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-error)'; e.currentTarget.style.color = 'var(--color-white)'; e.currentTarget.style.borderColor = 'var(--color-error)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; e.currentTarget.style.color = 'var(--color-error)'; e.currentTarget.style.borderColor = 'var(--color-error-bg)'; }}
+              style={{ width: '100%', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-error)', background: 'var(--color-error-bg-alt)', border: '1.5px solid var(--color-error-bg)', borderRadius: 8, padding: '9px 0', cursor: 'pointer' }}
+              whileHover={{ background: 'var(--color-error)', color: 'var(--color-white)', borderColor: 'var(--color-error)' }}
+              transition={{ duration: 0.15 }}
             >
               Sign Out
-            </button>
+            </MotionButton>
           </div>
         </PopIn>,
         document.body
@@ -466,8 +469,8 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
 
       {/* Profile Image Upload Wizard */}
       {uploadOpen && (
-        <div
-          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 200ms ease both' }}
+        <MotionIn
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, ease: EASE_STANDARD }}
           onClick={e => { if (e.target === e.currentTarget) closeUploadWizard(); }}
         >
           <ModalIn
@@ -479,30 +482,30 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)' }}>
                 {pendingImage ? 'Preview' : 'Upload Profile Photo'}
               </div>
-              <button
+              <MotionButton
                 onClick={closeUploadWizard}
                 style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
+                whileHover={{ background: 'var(--color-border)' }}
+                transition={{ duration: 0.15 }}
               >
                 <Icon name="close" size={15} color="var(--color-text-secondary)" />
-              </button>
+              </MotionButton>
             </div>
 
             <div style={{ padding: '20px 24px 24px' }}>
               {!pendingImage ? (
                 <>
                   <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" style={{ display: 'none' }} onChange={handleFileInput} />
-                  <div
+                  <MotionDraggable
                     onDrop={handleDrop}
                     onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={e => { e.preventDefault(); setDragOver(false); }}
                     onClick={() => fileInputRef.current?.click()}
-                    style={{ border: `2px dashed ${dragOver ? 'var(--color-primary)' : fileError ? 'var(--color-error)' : 'var(--color-border)'}`, borderRadius: 14, background: dragOver ? 'var(--color-surface-tint)' : fileError ? 'var(--color-error-bg-alt)' : 'var(--color-surface-tint-3)', padding: '36px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer', transition: 'all 200ms', userSelect: 'none' }}
+                    transition={{ duration: 0.2 }} style={{ border: `2px dashed ${dragOver ? 'var(--color-primary)' : fileError ? 'var(--color-error)' : 'var(--color-border)'}`, borderRadius: 14, background: dragOver ? 'var(--color-surface-tint)' : fileError ? 'var(--color-error-bg-alt)' : 'var(--color-surface-tint-3)', padding: '36px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}
                   >
-                    <div style={{ width: 48, height: 48, borderRadius: '50%', background: dragOver ? 'var(--color-surface-tint-4)' : 'var(--color-surface-tint-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 200ms' }}>
+                    <MotionIn transition={{ duration: 0.2 }} style={{ width: 48, height: 48, borderRadius: '50%', background: dragOver ? 'var(--color-surface-tint-4)' : 'var(--color-surface-tint-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', }}>
                       <Icon name="upload" size={24} color={dragOver ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
-                    </div>
+                    </MotionIn>
                     <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: dragOver ? 'var(--color-primary)' : 'var(--color-text-secondary)', textAlign: 'center' }}>
                       {dragOver ? 'Drop to upload' : 'Drag & drop your photo'}
                     </div>
@@ -515,7 +518,7 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
                       Select file
                     </div>
                     <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)', marginTop: 2 }}>JPG, PNG, GIF or WebP · Max 2 MB</div>
-                  </div>
+                  </MotionDraggable>
 
                   {fileError && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, padding: '10px 14px', background: 'var(--color-error-bg-alt)', borderRadius: 8, border: '1px solid var(--color-error-bg)' }}>
@@ -525,14 +528,14 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
                   )}
 
                   <div style={{ marginTop: 20 }}>
-                    <button
+                    <MotionButton
                       onClick={closeUploadWizard}
                       style={{ width: '100%', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
+                      whileHover={{ background: 'var(--color-border)' }}
+                      transition={{ duration: 0.15 }}
                     >
                       Cancel
-                    </button>
+                    </MotionButton>
                   </div>
                 </>
               ) : (
@@ -555,14 +558,14 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
                   )}
 
                   <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-                    <button
+                    <MotionButton
                       onClick={() => { setPendingImage(null); setFileError(null); }}
                       style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }}
-                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
+                      whileHover={{ background: 'var(--color-border)' }}
+                      transition={{ duration: 0.15 }}
                     >
                       Choose different
-                    </button>
+                    </MotionButton>
                     <button
                       onClick={handleSaveImage}
                       disabled={imgSaving}
@@ -577,7 +580,7 @@ export default function ProfileCard({ collapsed }: ProfileCardProps) {
               )}
             </div>
           </ModalIn>
-        </div>
+        </MotionIn>
       )}
     </>
   );

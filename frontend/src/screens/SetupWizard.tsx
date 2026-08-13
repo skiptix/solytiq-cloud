@@ -5,6 +5,10 @@ import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import Icon from '../components/Icon';
 import { apiRequestSetupToken } from '../api/client';
+import { motion } from '../components/animate-ui/motion';
+import { EASE_SPRING } from '../components/animate-ui/motionTokens';
+import MotionButton from '../components/animate-ui/MotionButton';
+import MotionIn from '../components/animate-ui/MotionIn';
 
 const w: Record<string, CSSProperties> = {
   wrap: { minHeight: '100vh', background: 'linear-gradient(135deg, var(--color-page-bg) 0%, var(--color-purple-pale-12) 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, padding: 24 },
@@ -20,15 +24,15 @@ const w: Record<string, CSSProperties> = {
   // the Sprint 03 handoff.)
   sub: { fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-secondary)', lineHeight: 1.55 },
   label: { fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)' },
-  input: { fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'var(--color-purple-pale-4)', border: '1.5px solid var(--color-purple-pale-31)', borderRadius: 10, padding: '13px 16px', outline: 'none', width: '100%', transition: 'all 180ms' },
-  primaryBtn: { width: '100%', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '12px 0', cursor: 'pointer', transition: 'all 180ms', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  input: { fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'var(--color-purple-pale-4)', border: '1.5px solid var(--color-purple-pale-31)', borderRadius: 10, padding: '13px 16px', outline: 'none', width: '100%' },
+  primaryBtn: { width: '100%', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '12px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 },
 };
 
 function ProgressDots({ step }: { step: number }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}>
       {[0, 1, 2, 3, 4].map(i => (
-        <div key={i} style={{ height: 4, borderRadius: 9999, background: step > i ? 'var(--color-accent-purple-light)' : step === i ? 'var(--color-primary)' : 'var(--color-purple-pale-39)', width: step === i ? 32 : 12, transition: 'all 300ms ease' }} />
+        <MotionIn key={i} transition={{ duration: 0.3 }} style={{ height: 4, borderRadius: 9999, background: step > i ? 'var(--color-accent-purple-light)' : step === i ? 'var(--color-primary)' : 'var(--color-purple-pale-39)', width: step === i ? 32 : 12, }} />
       ))}
     </div>
   );
@@ -50,7 +54,7 @@ function PasswordStrength({ password }: { password: string }) {
   return (
     <div style={{ marginTop: 4 }}>
       <div style={{ display: 'flex', gap: 4 }}>
-        {[1,2,3,4].map(i => <div key={i} style={{ flex: 1, height: 4, borderRadius: 9999, background: i <= score ? color : 'var(--color-purple-pale-39)', transition: 'background 220ms' }} />)}
+        {[1,2,3,4].map(i => <MotionIn key={i} transition={{ duration: 0.22 }} style={{ flex: 1, height: 4, borderRadius: 9999, background: i <= score ? color : 'var(--color-purple-pale-39)', }} />)}
       </div>
       {label && <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color, marginTop: 6, fontWeight: 500 }}>{label}</div>}
     </div>
@@ -139,15 +143,15 @@ export default function SetupWizard() {
       <label style={w.label}>Username</label>
       <div style={{ position: 'relative' }}>
         <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-quaternary)', pointerEvents: 'none' }}>@</span>
-        <input autoFocus value={username} onChange={e => setUsername(e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} placeholder="alex_admin"
-          style={{ ...w.input, paddingLeft: 40, borderColor: username && !usernameValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }} />
+        <motion.input autoFocus value={username} onChange={e => setUsername(e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} placeholder="alex_admin"
+          animate={{ borderColor: username && !usernameValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }} transition={{ duration: 0.18 }} style={{ ...w.input, paddingLeft: 40  }} />
       </div>
       <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: username && !usernameValid ? 'var(--color-error)' : 'var(--color-text-tertiary)' }}>3–20 characters · letters, numbers, underscores</div>
     </>);
     if (step === 2) return fieldGroup(<>
       <label style={w.label}>Email</label>
-      <input autoFocus type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} placeholder="you@example.com"
-        style={{ ...w.input, borderColor: email && !emailValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }} />
+      <motion.input autoFocus type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} placeholder="you@example.com"
+        animate={{ borderColor: email && !emailValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }} transition={{ duration: 0.18 }} style={{ ...w.input  }} />
       {email && !emailValid && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>Enter a valid email address.</div>}
     </>);
     if (step === 3) return (
@@ -157,44 +161,46 @@ export default function SetupWizard() {
             <label style={w.label}>Password</label>
             <button type="button" onClick={() => setShowPw(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-primary)' }}>{showPw ? 'Hide' : 'Show'}</button>
           </div>
-          <input autoFocus type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
-            style={{ ...w.input, borderColor: password && !passwordValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }} />
+          <motion.input autoFocus type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
+            animate={{ borderColor: password && !passwordValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }} transition={{ duration: 0.18 }} style={{ ...w.input  }} />
           <PasswordStrength password={password} />
         </>)}
         {fieldGroup(<>
           <label style={w.label}>Confirm Password</label>
-          <input type={showPw ? 'text' : 'password'} value={confirm} onChange={e => setConfirm(e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} placeholder="••••••••"
-            style={{ ...w.input, borderColor: confirm && !confirmValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }} />
+          <motion.input type={showPw ? 'text' : 'password'} value={confirm} onChange={e => setConfirm(e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} placeholder="••••••••"
+            animate={{ borderColor: confirm && !confirmValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }} transition={{ duration: 0.18 }} style={{ ...w.input  }} />
           {confirm && !confirmValid && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>Passwords don't match.</div>}
         </>)}
       </div>
     );
     if (step === 4) return fieldGroup(<>
       <label style={w.label}>Setup Token</label>
-      <input autoFocus type="password" value={setupToken} onChange={e => setSetupToken(e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} placeholder="Paste token from backend logs"
-        style={{ ...w.input, borderColor: setupToken && !setupTokenValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }} />
+      <motion.input autoFocus type="password" value={setupToken} onChange={e => setSetupToken(e.target.value)} onKeyDown={e => e.key === 'Enter' && goNext()} placeholder="Paste token from backend logs"
+        animate={{ borderColor: setupToken && !setupTokenValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }} transition={{ duration: 0.18 }} style={{ ...w.input  }} />
       <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: setupToken && !setupTokenValid ? 'var(--color-error)' : 'var(--color-text-tertiary)' }}>
         The token is printed in the backend container logs on startup.
       </div>
-      <button
+      <MotionButton
         type="button"
         onClick={requestToken}
         disabled={tokenRequesting}
-        style={{ marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: tokenRequested ? 'var(--color-success)' : 'var(--color-primary)', background: tokenRequested ? 'rgba(var(--color-success-rgb), 0.08)' : 'rgba(var(--color-primary-rgb), 0.07)', border: `1.5px solid ${tokenRequested ? 'rgba(var(--color-success-rgb), 0.3)' : 'rgba(var(--color-primary-rgb), 0.2)'}`, borderRadius: 10, padding: '10px 0', cursor: tokenRequesting ? 'wait' : 'pointer', transition: 'all 180ms' }}
+        transition={{ duration: 0.18 }} style={{ marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: tokenRequested ? 'var(--color-success)' : 'var(--color-primary)', background: tokenRequested ? 'rgba(var(--color-success-rgb), 0.08)' : 'rgba(var(--color-primary-rgb), 0.07)', border: `1.5px solid ${tokenRequested ? 'rgba(var(--color-success-rgb), 0.3)' : 'rgba(var(--color-primary-rgb), 0.2)'}`, borderRadius: 10, padding: '10px 0', cursor: tokenRequesting ? 'wait' : 'pointer', }}
       >
         <Icon name={tokenRequested ? 'check_circle' : 'terminal'} size={15} color={tokenRequested ? 'var(--color-success)' : 'var(--color-primary)'} />
         {tokenRequesting ? 'Requesting…' : tokenRequested ? 'Token printed to backend logs' : 'Show token in backend logs'}
-      </button>
+      </MotionButton>
     </>);
     if (step === 5) return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, padding: '20px 0' }}>
-        <style>{`@keyframes scIn{0%{transform:scale(0);opacity:0}60%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:1}} @keyframes scDraw{from{stroke-dashoffset:40}to{stroke-dashoffset:0}}`}</style>
-        <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(var(--color-success-rgb), 0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'scIn 420ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+        <MotionIn style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(var(--color-success-rgb), 0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: [0, 1.1, 1], opacity: [0, 1, 1] }}
+          transition={{ duration: 0.4, times: [0, 0.6, 1], ease: EASE_SPRING }}>
           <svg width="36" height="28" viewBox="0 0 36 28">
-            <path d="M3 14 L14 25 L33 4" stroke="var(--color-success)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none"
-              strokeDasharray="40" strokeDashoffset="40" style={{ animation: 'scDraw 500ms 280ms cubic-bezier(0.65,0,0.35,1) forwards' }} />
+            <motion.path d="M3 14 L14 25 L33 4" stroke="var(--color-success)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none"
+              initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.5, delay: 0.28, ease: [0.65, 0, 0.35, 1] }} />
           </svg>
-        </div>
+        </MotionIn>
       </div>
     );
     return null;
@@ -226,11 +232,11 @@ export default function SetupWizard() {
                 <Icon name="chevron_left" size={14} color="var(--color-text-secondary)" /> Back
               </button>
             )}
-            <button onClick={goNext} disabled={!stepValid || loading}
-              style={{ ...w.primaryBtn, background: !stepValid || loading ? 'var(--color-border-strong)' : 'var(--color-primary)', cursor: !stepValid || loading ? 'not-allowed' : 'pointer', flex: step === 0 ? '0 1 auto' : 1, padding: step === 0 ? '12px 32px' : '12px 0' }}>
+            <MotionButton onClick={goNext} disabled={!stepValid || loading}
+              animate={{ background: !stepValid || loading ? 'var(--color-border-strong)' : 'var(--color-primary)' }} transition={{ duration: 0.18 }} style={{ ...w.primaryBtn, cursor: !stepValid || loading ? 'not-allowed' : 'pointer', flex: step === 0 ? '0 1 auto' : 1, padding: step === 0 ? '12px 32px' : '12px 0' }}>
               {loading ? 'Creating account…' : step === 0 ? 'Get Started' : step === 4 ? 'Create Account' : 'Continue'}
               {!loading && stepValid && <Icon name="arrow_forward" size={14} color="var(--color-white)" />}
-            </button>
+            </MotionButton>
           </div>
         )}
       </div>

@@ -11,6 +11,10 @@ import useSyncStore from '../store/useSyncStore';
 import Icon from '../components/Icon';
 import PopIn from '../components/animate-ui/PopIn';
 import ModalIn from '../components/animate-ui/ModalIn';
+import { motion } from '../components/animate-ui/motion';
+import { EASE_SETTLE, EASE_SPRING } from '../components/animate-ui/motionTokens';
+import MotionButton from '../components/animate-ui/MotionButton';
+import MotionIn from '../components/animate-ui/MotionIn';
 
 /** Where the "back" arrow returns to — the exact Board/Page/Timeline this
  *  automation gallery was opened from (there's no standalone gallery route
@@ -81,10 +85,20 @@ function AutomationCard({ automation, index, nodeTypes, onOpen, onDelete, onTogg
   const icon = triggerIcon(automation, nodeTypes);
 
   return (
-    <div onClick={onOpen} role="button" tabIndex={0}
-      style={{ background: 'var(--color-white)', border: '1.5px solid var(--color-purple-pale-34)', borderRadius: 16, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, cursor: 'pointer', transition: 'border-color 200ms, box-shadow 200ms, transform 200ms cubic-bezier(0.34,1.56,0.64,1)', animation: `cardIn 340ms cubic-bezier(0.34,1.56,0.64,1) ${delay}ms both`, opacity: automation.enabled ? 1 : 0.6 }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(var(--color-primary-rgb), 0.10)'; e.currentTarget.style.transform = 'translateY(-3px)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-purple-pale-34)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}>
+    <MotionIn onClick={onOpen} role="button" tabIndex={0}
+      // Staggered card entrance and the 3-property hover lift share this
+      // element, so they share one transition object with per-property timing.
+      initial={{ opacity: 0, y: 12, scale: 0.96 }}
+      animate={{ opacity: automation.enabled ? 1 : 0.6, y: 0, scale: 1 }}
+      whileHover={{ borderColor: 'var(--color-primary)', boxShadow: '0 8px 20px rgba(var(--color-primary-rgb), 0.10)', y: -3 }}
+      transition={{
+        opacity: { duration: 0.34, delay: delay / 1000, ease: EASE_SPRING },
+        scale: { duration: 0.34, delay: delay / 1000, ease: EASE_SPRING },
+        y: { duration: 0.2 },
+        borderColor: { duration: 0.2 },
+        boxShadow: { duration: 0.2 },
+      }}
+      style={{ background: 'var(--color-white)', borderWidth: 1.5, borderStyle: 'solid', borderRadius: 16, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, cursor: 'pointer' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <div style={{ width: 40, height: 40, borderRadius: 11, background: 'var(--color-orange-pale-5)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <Icon name={icon} size={19} color="var(--color-warning-alt)" />
@@ -118,13 +132,13 @@ function AutomationCard({ automation, index, nodeTypes, onOpen, onDelete, onTogg
           </span>
         )}
         {automation.isOwner && (
-          <button onClick={(e) => { e.stopPropagation(); onToggleEnabled(!automation.enabled); }}
-            style={{ width: 36, height: 20, borderRadius: 9999, border: 'none', cursor: 'pointer', background: automation.enabled ? 'var(--color-primary)' : 'var(--color-purple-pale-41)', position: 'relative', transition: 'background 180ms' }}>
-            <span style={{ position: 'absolute', top: 2, left: automation.enabled ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.25)', transition: 'left 180ms cubic-bezier(0.34,1.56,0.64,1)' }} />
-          </button>
+          <MotionButton onClick={(e) => { e.stopPropagation(); onToggleEnabled(!automation.enabled); }}
+            transition={{ duration: 0.18 }} style={{ width: 36, height: 20, borderRadius: 9999, border: 'none', cursor: 'pointer', background: automation.enabled ? 'var(--color-primary)' : 'var(--color-purple-pale-41)', position: 'relative', }}>
+            <motion.span transition={{ duration: 0.18 }} style={{ position: 'absolute', top: 2, left: automation.enabled ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.25)', }} />
+          </MotionButton>
         )}
       </div>
-    </div>
+    </MotionIn>
   );
 }
 
@@ -177,7 +191,7 @@ export default function AutomationsScreen() {
 
   return (
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
-      <div style={{ maxWidth: 980, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 20, width: '100%', animation: 'sectionFadeUp 360ms cubic-bezier(0.22,1,0.36,1) both' }}>
+      <MotionIn style={{ maxWidth: 980, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.36, ease: EASE_SETTLE }}>
 
         <button onClick={() => navigate(backPath)}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
@@ -191,12 +205,12 @@ export default function AutomationsScreen() {
               {ownerName ? `Attached to "${ownerName}"` : 'Attached to this item'} — visible to everyone in the workspace, editable only by their creator.
             </div>
           </div>
-          <button onClick={() => navigate(`/automations/new?ownerType=${ownerType}&ownerId=${ownerId}`)}
-            style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '9px 16px', cursor: 'pointer', transition: 'background 180ms, transform 180ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 180ms' }}
+          <MotionButton onClick={() => navigate(`/automations/new?ownerType=${ownerType}&ownerId=${ownerId}`)}
+            transition={{ duration: 0.18 }} style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '9px 16px', cursor: 'pointer', }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-purple-mid-10)'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(var(--color-primary-rgb), 0.3)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
             <Icon name="add" size={16} color="var(--color-white)" /> New Automation
-          </button>
+          </MotionButton>
         </div>
 
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', maxWidth: 320 }}>
@@ -211,10 +225,10 @@ export default function AutomationsScreen() {
         {loading && automations.length === 0 ? (
           <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '40px 0', textAlign: 'center' }}>Loading automations…</div>
         ) : filtered.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '60px 20px', color: 'var(--color-text-quaternary)', animation: 'cardIn 380ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-            <div style={{ animation: 'fileDropIconFloat 3s ease-in-out infinite' }}>
+          <MotionIn style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '60px 20px', color: 'var(--color-text-quaternary)' }} initial={{ opacity: 0, y: 12, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.38, ease: EASE_SETTLE }}>
+            <MotionIn animate={{ y: [0, -5, 0] }} transition={{ duration: 3, ease: 'easeInOut', repeat: Infinity }}>
               <Icon name="bolt" size={40} color="var(--color-purple-tint-3)" />
-            </div>
+            </MotionIn>
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>
               {automations.length === 0 ? 'No automations yet' : 'No automations match your search'}
             </div>
@@ -223,7 +237,7 @@ export default function AutomationsScreen() {
                 Automate routine upkeep — like deleting checked items or archiving finished lists — with a trigger and one or more actions.
               </div>
             )}
-          </div>
+          </MotionIn>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
             {filtered.map((a, i) => (
@@ -234,7 +248,7 @@ export default function AutomationsScreen() {
             ))}
           </div>
         )}
-      </div>
+      </MotionIn>
 
       {confirmDelete && createPortal(
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }}

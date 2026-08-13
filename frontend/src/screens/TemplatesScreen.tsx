@@ -13,6 +13,9 @@ import EditTemplateStructureModal from '../modals/EditTemplateStructureModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import PopIn from '../components/animate-ui/PopIn';
 import ModalIn from '../components/animate-ui/ModalIn';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
+import { EASE_STANDARD, EASE_SETTLE, EASE_SPRING } from '../components/animate-ui/motionTokens';
 
 type Filter = 'all' | 'list' | 'timeline';
 
@@ -91,9 +94,21 @@ function TemplateCard({ template, index, onUse, onRename, onEditStructure, onTog
   const delay = Math.min(index * 40, 400);
 
   return (
-    <div style={{ background: 'var(--color-white)', border: '1.5px solid var(--color-purple-pale-34)', borderRadius: 16, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'border-color 200ms, box-shadow 200ms, transform 200ms cubic-bezier(0.34,1.56,0.64,1)', animation: `cardIn 340ms cubic-bezier(0.34,1.56,0.64,1) ${delay}ms both` }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.boxShadow = `0 8px 20px ${accent}1a`; e.currentTarget.style.transform = 'translateY(-3px)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-purple-pale-34)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'translateY(0)'; }}>
+    <MotionIn
+      // The staggered card entrance and the hover lift share this element, so
+      // they share one transition object rather than one clobbering the other's
+      // transform.
+      initial={{ opacity: 0, y: 12, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{
+        opacity: { duration: 0.34, delay: delay / 1000, ease: EASE_SPRING },
+        scale: { duration: 0.34, delay: delay / 1000, ease: EASE_SPRING },
+        y: { duration: 0.2 },
+        borderColor: { duration: 0.2 },
+        boxShadow: { duration: 0.2 },
+      }}
+      style={{ background: 'var(--color-white)', border: '1.5px solid var(--color-purple-pale-34)', borderRadius: 16, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}
+      whileHover={{ borderColor: accent, boxShadow: `0 8px 20px ${accent}1a`, y: -3 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <div style={{ width: 40, height: 40, borderRadius: 11, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 19 }}>
           {template.emoji ?? (template.type === 'list' ? '📋' : '🗓️')}
@@ -127,16 +142,16 @@ function TemplateCard({ template, index, onUse, onRename, onEditStructure, onTog
             </span>
           )}
         </div>
-        <button onClick={onUse}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', background: accent, border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', transition: 'transform 150ms cubic-bezier(0.34,1.56,0.64,1), filter 150ms' }}
-          onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; e.currentTarget.style.filter = 'brightness(1.08)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.filter = 'none'; }}
+        <MotionButton onClick={onUse}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', background: accent, border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer' }}
+          whileHover={{ transform: 'scale(1.05)', filter: 'brightness(1.08)' }}
+          transition={{ duration: 0.15 }}
           onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.96)'; }}
           onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}>
           <Icon name="add" size={14} color="var(--color-white)" /> Use
-        </button>
+        </MotionButton>
       </div>
-    </div>
+    </MotionIn>
   );
 }
 
@@ -194,7 +209,7 @@ export default function TemplatesScreen() {
 
   return (
     <div style={{ flex: 1, height: '100%', overflowY: 'auto' }}>
-      <div style={{ maxWidth: 980, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 20, width: '100%', animation: 'sectionFadeUp 360ms cubic-bezier(0.22,1,0.36,1) both' }}>
+      <MotionIn style={{ maxWidth: 980, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.36, ease: EASE_SETTLE }}>
 
         {/* Page header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -204,22 +219,22 @@ export default function TemplatesScreen() {
               Save a board or timeline's full structure to reuse — or shared by others on this instance.
             </div>
           </div>
-          <button onClick={() => setShowCreate(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '9px 16px', cursor: 'pointer', transition: 'background 180ms, transform 180ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 180ms' }}
+          <MotionButton onClick={() => setShowCreate(true)}
+            transition={{ duration: 0.18 }} style={{ display: 'flex', alignItems: 'center', gap: 7, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '9px 16px', cursor: 'pointer', }}
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-purple-mid-10)'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 6px 16px rgba(var(--color-primary-rgb), 0.3)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--color-primary)'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
             <Icon name="add" size={16} color="var(--color-white)" /> New Template
-          </button>
+          </MotionButton>
         </div>
 
         {/* Filters */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', background: 'var(--color-surface-tint-2)', borderRadius: 9999, padding: 3, gap: 2 }}>
             {(['all', 'list', 'timeline'] as const).map((f) => (
-              <button key={f} onClick={() => setFilter(f)}
-                style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, padding: '6px 14px', borderRadius: 9999, border: 'none', cursor: 'pointer', background: filter === f ? 'var(--color-primary)' : 'transparent', color: filter === f ? 'var(--color-white)' : 'var(--color-text-tertiary)', transform: filter === f ? 'scale(1.04)' : 'scale(1)', transition: 'background 180ms, color 180ms, transform 220ms cubic-bezier(0.34,1.56,0.64,1)' }}>
+              <MotionButton key={f} onClick={() => setFilter(f)}
+                transition={{ duration: 0.18 }} style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, padding: '6px 14px', borderRadius: 9999, border: 'none', cursor: 'pointer', background: filter === f ? 'var(--color-primary)' : 'transparent', color: filter === f ? 'var(--color-white)' : 'var(--color-text-tertiary)', transform: filter === f ? 'scale(1.04)' : 'scale(1)', }}>
                 {f === 'all' ? 'All' : f === 'list' ? 'Boards' : 'Timelines'}
-              </button>
+              </MotionButton>
             ))}
           </div>
           <div style={{ flex: 1, minWidth: 160, position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -236,10 +251,10 @@ export default function TemplatesScreen() {
         {loading && templates.length === 0 ? (
           <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', padding: '40px 0', textAlign: 'center' }}>Loading templates…</div>
         ) : filtered.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '60px 20px', color: 'var(--color-text-quaternary)', animation: 'cardIn 380ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-            <div style={{ animation: 'fileDropIconFloat 3s ease-in-out infinite' }}>
+          <MotionIn style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '60px 20px', color: 'var(--color-text-quaternary)' }} initial={{ opacity: 0, y: 12, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.38, ease: EASE_SETTLE }}>
+            <MotionIn animate={{ y: [0, -5, 0] }} transition={{ duration: 3, ease: 'easeInOut', repeat: Infinity }}>
               <Icon name="dashboard_customize" size={40} color="var(--color-purple-tint-3)" />
-            </div>
+            </MotionIn>
             <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>
               {templates.length === 0 ? 'No templates yet' : 'No templates match your search'}
             </div>
@@ -248,7 +263,7 @@ export default function TemplatesScreen() {
                 Save any list or timeline you own as a template to quickly recreate its structure later.
               </div>
             )}
-          </div>
+          </MotionIn>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
             {filtered.map((t, i) => (
@@ -261,7 +276,7 @@ export default function TemplatesScreen() {
             ))}
           </div>
         )}
-      </div>
+      </MotionIn>
 
       {showCreate && <CreateTemplateModal onClose={() => setShowCreate(false)} />}
 
@@ -279,7 +294,7 @@ export default function TemplatesScreen() {
       )}
 
       {renameTarget && createPortal(
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+        <MotionIn style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18, ease: EASE_STANDARD }}
           onClick={(e) => { if (e.target === e.currentTarget) setRenameTarget(null); }}>
           <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 400, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', padding: 24 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
@@ -306,15 +321,15 @@ export default function TemplatesScreen() {
                 style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 16px' }}>
                 Cancel
               </button>
-              <button onClick={commitRename} disabled={!renameValue.trim()}
-                style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: renameValue.trim() ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: renameValue.trim() ? 'pointer' : 'not-allowed', transition: 'background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)' }}
+              <MotionButton onClick={commitRename} disabled={!renameValue.trim()}
+                transition={{ duration: 0.15 }} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: renameValue.trim() ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: renameValue.trim() ? 'pointer' : 'not-allowed', }}
                 onMouseEnter={(e) => { if (renameValue.trim()) e.currentTarget.style.transform = 'scale(1.04)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}>
                 Save
-              </button>
+              </MotionButton>
             </div>
           </ModalIn>
-        </div>,
+        </MotionIn>,
         document.body
       )}
 

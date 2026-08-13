@@ -102,8 +102,16 @@ function stripComments(content) {
 // and colon look the same either way) into one pattern.
 const PATTERNS = [
   { kind: 'keyframes-def', re: /@keyframes\s+[\w-]+/g, category: (rel) => classify(rel) },
-  { kind: 'animation-prop', re: /(?<![\w-])animation(?:Name|-name)?\s*:/g, category: (rel) => classify(rel) },
-  { kind: 'transition-prop', re: /(?<![\w-])transition(?:Property|Duration|TimingFunction|Delay|-property|-duration|-timing-function|-delay)?\s*:/g, category: (rel) => classify(rel) },
+  // A CSS declaration's value is a string — a literal, a template literal, a
+  // ternary over them, or a variable holding one. A compliant Motion prop
+  // written in object form (`transition: { duration: 0.15 }`, as returned by a
+  // props factory) is the ONE shape that is not CSS, so it is the only one
+  // excluded. Excluding by "must be a string" instead would let
+  // `animation: panelAnim` — a variable holding a CSS string, which this
+  // codebase really used — slip through the gate.
+  // JSX props (`transition={{…}}`) never matched: they have `=`, not `:`.
+  { kind: 'animation-prop', re: /(?<![\w-])animation(?:Name|-name)?\s*:(?!\s*\{)/g, category: (rel) => classify(rel) },
+  { kind: 'transition-prop', re: /(?<![\w-])transition(?:Property|Duration|TimingFunction|Delay|-property|-duration|-timing-function|-delay)?\s*:(?!\s*\{)/g, category: (rel) => classify(rel) },
   { kind: 'motion-import', re: /from\s+['"](motion\/react|framer-motion)['"]/g, category: () => 'central-boundary' },
   { kind: 'motion-jsx-usage', re: /<motion\.\w+|\bAnimatePresence\b/g, category: (rel) => classify(rel) },
   { kind: 'web-animations-api', re: /\.animate\(\s*\[/g, category: (rel) => classify(rel) },

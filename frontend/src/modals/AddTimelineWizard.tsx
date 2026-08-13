@@ -10,6 +10,9 @@ import CalendarPicker from '../components/CalendarPicker';
 import TimePicker from '../components/TimePicker';
 import ModalIn from '../components/animate-ui/ModalIn';
 
+import MotionButton from '../components/animate-ui/MotionButton';
+import MotionIn from '../components/animate-ui/MotionIn';
+
 const COLORS = [
   { color: 'var(--color-primary)', bg: 'var(--color-surface-tint)' },
   { color: 'var(--color-blue-mid-7)', bg: 'var(--color-blue-pale-2)' },
@@ -192,7 +195,7 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
 
         {/* Progress */}
         <div style={{ display: 'flex', gap: 4, padding: '12px 24px 0', flexShrink: 0 }}>
-          {[0, 1, 2].map(i => <div key={i} style={{ flex: 1, height: 3, borderRadius: 9999, background: i <= step ? selectedColor.color : 'var(--color-border)', transition: 'background 300ms' }} />)}
+          {[0, 1, 2].map(i => <MotionIn key={i} transition={{ duration: 0.3 }} style={{ flex: 1, height: 3, borderRadius: 9999, background: i <= step ? selectedColor.color : 'var(--color-border)', }} />)}
         </div>
 
         <div style={{ padding: '20px 24px 24px' }}>
@@ -229,15 +232,15 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
                   {LAYOUTS.map(l => {
                     const sel = layout === l.key;
                     return (
-                      <button key={l.key} onClick={() => setLayout(l.key)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${sel ? selectedColor.color : 'var(--color-border-alt)'}`, background: sel ? selectedColor.bg : 'var(--color-white)', cursor: 'pointer', textAlign: 'left', transition: 'all 150ms' }}>
+                      <MotionButton key={l.key} onClick={() => setLayout(l.key)}
+                        transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${sel ? selectedColor.color : 'var(--color-border-alt)'}`, background: sel ? selectedColor.bg : 'var(--color-white)', cursor: 'pointer', textAlign: 'left', }}>
                         <Icon name={l.icon} size={20} color={sel ? selectedColor.color : 'var(--color-accent-purple-light)'} />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>{l.label}</div>
                           <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>{l.desc}</div>
                         </div>
                         {sel && <Icon name="check_circle" size={18} color={selectedColor.color} />}
-                      </button>
+                      </MotionButton>
                     );
                   })}
                 </div>
@@ -246,16 +249,16 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
               <div>
                 <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 8 }}>Privacy</label>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => setIsPublic(false)}
-                    style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${!isPublic ? selectedColor.color : 'var(--color-border-alt)'}`, background: !isPublic ? selectedColor.bg : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 150ms' }}>
+                  <MotionButton onClick={() => setIsPublic(false)}
+                    transition={{ duration: 0.15 }} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${!isPublic ? selectedColor.color : 'var(--color-border-alt)'}`, background: !isPublic ? selectedColor.bg : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, }}>
                     <Icon name="lock" size={16} color={!isPublic ? selectedColor.color : 'var(--color-text-tertiary)'} />
                     <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: !isPublic ? selectedColor.color : 'var(--color-text-tertiary)' }}>Private</span>
-                  </button>
-                  <button onClick={() => setIsPublic(true)}
-                    style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${isPublic ? selectedColor.color : 'var(--color-border-alt)'}`, background: isPublic ? selectedColor.bg : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'all 150ms' }}>
+                  </MotionButton>
+                  <MotionButton onClick={() => setIsPublic(true)}
+                    transition={{ duration: 0.15 }} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${isPublic ? selectedColor.color : 'var(--color-border-alt)'}`, background: isPublic ? selectedColor.bg : 'var(--color-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, }}>
                     <Icon name="public" size={16} color={isPublic ? selectedColor.color : 'var(--color-text-tertiary)'} />
                     <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: isPublic ? selectedColor.color : 'var(--color-text-tertiary)' }}>Public</span>
-                  </button>
+                  </MotionButton>
                 </div>
                 <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 6 }}>
                   {isPublic ? 'Everyone in this workspace can see this timeline.' : 'Only you can see and edit this timeline.'}
@@ -266,8 +269,8 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
                 <label style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', display: 'block', marginBottom: 8 }}>Accent Color</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {COLORS.map((c, i) => (
-                    <button key={i} onClick={() => setColorIdx(i)}
-                      style={{ width: 32, height: 32, borderRadius: '50%', background: c.color, border: `3px solid ${colorIdx === i ? 'var(--color-text-primary)' : 'transparent'}`, cursor: 'pointer', transition: 'all 150ms' }} />
+                    <MotionButton key={i} onClick={() => setColorIdx(i)}
+                      transition={{ duration: 0.15 }} style={{ width: 32, height: 32, borderRadius: '50%', background: c.color, border: `3px solid ${colorIdx === i ? 'var(--color-text-primary)' : 'transparent'}`, cursor: 'pointer', }} />
                   ))}
                 </div>
               </div>
@@ -320,14 +323,14 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
                 <div style={{ display: 'flex', gap: 8 }}>
                   <div style={{ flex: 1, position: 'relative' }} ref={calRef}>
                     <label style={{ fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-tertiary)', display: 'block', marginBottom: 3 }}>Date</label>
-                    <button
+                    <MotionButton
                       type="button"
                       onClick={() => setShowCal(v => !v)}
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${showCal ? selectedColor.color : 'var(--color-border)'}`, background: 'var(--color-white)', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: mDate ? 'var(--color-text-primary)' : 'var(--color-text-quaternary)', transition: 'border-color 150ms', textAlign: 'left' }}
+                      transition={{ duration: 0.15 }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${showCal ? selectedColor.color : 'var(--color-border)'}`, background: 'var(--color-white)', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: mDate ? 'var(--color-text-primary)' : 'var(--color-text-quaternary)', textAlign: 'left' }}
                     >
                       <Icon name="calendar_today" size={14} color={mDate ? selectedColor.color : 'var(--color-border-strong)'} />
                       {mDate ? fmtDate(mDate) : 'dd.mm.yyyy'}
-                    </button>
+                    </MotionButton>
                     {showCal && (
                       <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50 }}>
                         <CalendarPicker
@@ -340,14 +343,14 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
                   </div>
                   <div style={{ width: 120, position: 'relative' }} ref={timeRef}>
                     <label style={{ fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 600, color: 'var(--color-text-tertiary)', display: 'block', marginBottom: 3 }}>Time</label>
-                    <button
+                    <MotionButton
                       type="button"
                       onClick={() => setShowTime(v => !v)}
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${showTime ? selectedColor.color : 'var(--color-border)'}`, background: 'var(--color-white)', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: mTime ? 'var(--color-text-primary)' : 'var(--color-text-quaternary)', transition: 'border-color 150ms', textAlign: 'left' }}
+                      transition={{ duration: 0.15 }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 8, border: `1.5px solid ${showTime ? selectedColor.color : 'var(--color-border)'}`, background: 'var(--color-white)', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: mTime ? 'var(--color-text-primary)' : 'var(--color-text-quaternary)', textAlign: 'left' }}
                     >
                       <Icon name="schedule" size={14} color={mTime ? selectedColor.color : 'var(--color-border-strong)'} />
                       {mTime || '--:--'}
-                    </button>
+                    </MotionButton>
                     {showTime && (
                       <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 50 }}>
                         <TimePicker
@@ -365,10 +368,10 @@ export default function AddTimelineWizard({ onClose, onCreated }: AddTimelineWiz
                     {MILESTONE_STATUSES.map(s => {
                       const sel = mStatus === s.key;
                       return (
-                        <button key={s.key} onClick={() => setMStatus(s.key)}
-                          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', borderRadius: 8, border: `1.5px solid ${sel ? s.color : 'var(--color-border)'}`, background: sel ? `${s.color}14` : 'var(--color-white)', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: sel ? s.color : 'var(--color-text-tertiary)', transition: 'all 140ms' }}>
+                        <MotionButton key={s.key} onClick={() => setMStatus(s.key)}
+                          transition={{ duration: 0.14 }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 6px', borderRadius: 8, border: `1.5px solid ${sel ? s.color : 'var(--color-border)'}`, background: sel ? `${s.color}14` : 'var(--color-white)', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: sel ? s.color : 'var(--color-text-tertiary)', }}>
                           <Icon name={s.icon} size={13} color={sel ? s.color : 'var(--color-accent-purple-light)'} />{s.label}
-                        </button>
+                        </MotionButton>
                       );
                     })}
                   </div>
