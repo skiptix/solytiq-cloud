@@ -11,7 +11,7 @@
 // enforces this at CI time. A future swap of the underlying motion runtime
 // (or a version bump with a breaking export change) touches this one file
 // instead of the ~20 call sites that consume it.
-export { motion, AnimatePresence, useDragControls, useReducedMotion, MotionConfig } from 'motion/react';
+export { motion, AnimatePresence, useDragControls, useReducedMotion, MotionConfig, useAnimationFrame, animate } from 'motion/react';
 // `TargetAndTransition`/`Transition` are re-exported for the same reason as the
 // runtime values: a component that takes a Motion target as a PROP (e.g.
 // SlashCommandInput's `inputAnimate`, where the host owns the animated state)
