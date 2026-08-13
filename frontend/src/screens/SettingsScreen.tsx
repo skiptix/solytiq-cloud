@@ -19,6 +19,7 @@ import PopIn from '../components/animate-ui/PopIn';
 import ModalIn from '../components/animate-ui/ModalIn';
 import MotionButton from '../components/animate-ui/MotionButton';
 import MotionIn from '../components/animate-ui/MotionIn';
+import useNow from '../hooks/useNow';
 
 interface UserEntry {
   id: string;
@@ -33,9 +34,37 @@ interface UserEntry {
 
 type TabId = 'system' | 'ai' | 'ai_skills' | 'security' | 'api' | 'mobile' | 'users' | 'danger';
 
-function relativeTime(iso: string | null): string {
+/** Milliseconds since `last_online` within which a user counts as online. */
+const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+
+// Module scope, not the component body: a component defined during render
+// is a NEW type every render, so React unmounts and remounts it each time —
+// restarting its Motion transition and dropping any focus inside it. Every
+// input here is already a prop, so there was nothing keeping it inside.
+const SaveButton = ({ onClick, saving, saved, disabled }: { onClick: () => void; saving: boolean; saved: boolean; disabled?: boolean }) => (
+  <MotionButton
+    onClick={onClick}
+    disabled={saving || disabled}
+    style={{
+      display: 'flex', alignItems: 'center', gap: 6,
+      fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600,
+      color: saved ? 'var(--color-success)' : 'var(--color-white)',
+      background: saved ? 'rgba(var(--color-success-rgb), 0.12)' : (saving || disabled) ? 'var(--color-border-strong)' : 'var(--color-primary)',
+      border: saved ? '1.5px solid rgba(var(--color-success-rgb), 0.3)' : 'none',
+      borderRadius: 10, padding: '9px 20px',
+      cursor: (saving || disabled) ? 'not-allowed' : 'pointer',
+    }}
+    whileHover={!saving && !saved && !disabled ? { background: 'var(--color-purple-mid-10)' } : undefined}
+    transition={{ duration: 0.15 }}
+  >
+    <Icon name={saved ? 'check' : 'save'} size={14} color={saved ? 'var(--color-success)' : 'var(--color-white)'} />
+    {saved ? 'Saved' : saving ? 'Saving…' : 'Save'}
+  </MotionButton>
+);
+
+function relativeTime(iso: string | null, now: number): string {
   if (!iso) return 'Never';
-  const diff = Date.now() - new Date(iso).getTime();
+  const diff = now - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'Just now';
   if (mins < 60) return `${mins}m ago`;
@@ -89,6 +118,10 @@ function fmtCost(usd: number): string {
 }
 
 export default function SettingsScreen() {
+  // One clock per render, ticking on its own — see hooks/useNow. Reading
+  // Date.now() inline made the "last seen" labels and online dots update only
+  // when something else happened to re-render the list.
+  const now = useNow();
   usePageTitle("Settings");
   const navigate = useNavigate();
   const { isAdmin, userId } = useAuthStore();
@@ -616,26 +649,6 @@ export default function SettingsScreen() {
     </div>
   );
 
-  const SaveButton = ({ onClick, saving, saved, disabled }: { onClick: () => void; saving: boolean; saved: boolean; disabled?: boolean }) => (
-    <MotionButton
-      onClick={onClick}
-      disabled={saving || disabled}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600,
-        color: saved ? 'var(--color-success)' : 'var(--color-white)',
-        background: saved ? 'rgba(var(--color-success-rgb), 0.12)' : (saving || disabled) ? 'var(--color-border-strong)' : 'var(--color-primary)',
-        border: saved ? '1.5px solid rgba(var(--color-success-rgb), 0.3)' : 'none',
-        borderRadius: 10, padding: '9px 20px',
-        cursor: (saving || disabled) ? 'not-allowed' : 'pointer',
-      }}
-      whileHover={!saving && !saved && !disabled ? { background: 'var(--color-purple-mid-10)' } : undefined}
-      transition={{ duration: 0.15 }}
-    >
-      <Icon name={saved ? 'check' : 'save'} size={14} color={saved ? 'var(--color-success)' : 'var(--color-white)'} />
-      {saved ? 'Saved' : saving ? 'Saving…' : 'Save'}
-    </MotionButton>
-  );
 
   const TABS: { id: TabId; label: string; icon: string }[] = [
     { id: 'system',   label: 'System',      icon: 'storage' },
@@ -1411,7 +1424,7 @@ export default function SettingsScreen() {
                     <div key={k.id} style={{ ...row, borderBottom: '1px solid var(--color-surface-tint-2)', flexWrap: 'wrap', gap: 10 }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>{k.name}</div>
-                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>{k.keyPrefix} · Created {new Date(k.createdAt).toLocaleDateString()} · Last used {k.lastUsedAt ? relativeTime(k.lastUsedAt) : 'never'}</div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>{k.keyPrefix} · Created {new Date(k.createdAt).toLocaleDateString()} · Last used {k.lastUsedAt ? relativeTime(k.lastUsedAt, now) : 'never'}</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
                           {k.scopes.map(s => {
                             const f = featureForScope(s);
@@ -1547,9 +1560,9 @@ export default function SettingsScreen() {
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <div style={{ width: 6, height: 6, borderRadius: '50%', background: u.lastOnline && Date.now() - new Date(u.lastOnline).getTime() < 5 * 60 * 1000 ? 'var(--color-success)' : 'var(--color-border)', flexShrink: 0 }} />
+                              <div style={{ width: 6, height: 6, borderRadius: '50%', background: u.lastOnline && now - new Date(u.lastOnline).getTime() < ONLINE_WINDOW_MS ? 'var(--color-success)' : 'var(--color-border)', flexShrink: 0 }} />
                               <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', whiteSpace: 'nowrap' }}>
-                                {relativeTime(u.lastOnline)}
+                                {relativeTime(u.lastOnline, now)}
                               </span>
                             </div>
                             <MotionButton
@@ -1710,9 +1723,9 @@ export default function SettingsScreen() {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: u.lastOnline && Date.now() - new Date(u.lastOnline).getTime() < 5 * 60 * 1000 ? 'var(--color-success)' : 'var(--color-border)', flexShrink: 0 }} />
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: u.lastOnline && now - new Date(u.lastOnline).getTime() < ONLINE_WINDOW_MS ? 'var(--color-success)' : 'var(--color-border)', flexShrink: 0 }} />
                         <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', whiteSpace: 'nowrap' }}>
-                          {relativeTime(u.lastOnline)}
+                          {relativeTime(u.lastOnline, now)}
                         </span>
                       </div>
                       <MotionButton

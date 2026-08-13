@@ -10,7 +10,7 @@ import useMarkdownListsStore from '../store/useMarkdownListsStore';
 import Icon from '../components/Icon';
 import RenameDialog from '../components/RenameDialog';
 import LinkPicker from '../components/LinkPicker';
-import { RF_NODE_TYPES } from '../components/graph/FlowGraph';
+import { EntityNode } from '../components/graph/FlowGraph';
 import SigmaGraph from '../components/graph/SigmaGraph';
 import NeuralGraph, { type NeuralGraphHandle } from '../components/graph/NeuralGraph';
 import GraphToolbar from '../components/graph/GraphToolbar';
@@ -25,6 +25,14 @@ import PopIn from '@/components/animate-ui/PopIn';
 import MotionIn from '../components/animate-ui/MotionIn';
 import MotionButton from '../components/animate-ui/MotionButton';
 import { EASE_SETTLE, EASE_STANDARD } from '../components/animate-ui/motionTokens';
+
+/**
+ * React Flow's `nodeTypes` map. Defined here, at module scope, rather than
+ * exported from FlowGraph.tsx: it is a plain object, and a module exporting
+ * both a component and a non-component breaks Fast Refresh. React Flow also
+ * requires a stable identity for this map, which module scope guarantees.
+ */
+const RF_NODE_TYPES = { entity: EntityNode };
 
 function ExploreView({ isMobile }: { isMobile: boolean }) {
   const navigate = useNavigate();

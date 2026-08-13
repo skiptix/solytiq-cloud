@@ -7,7 +7,7 @@ import CalendarPicker from './CalendarPicker';
 import RingProgress from './RingProgress';
 import SlashCommandInput from './SlashCommandInput';
 import type { SlashCommandResult } from './SlashCommandInput';
-import { markdownToPlainText } from './MarkdownView';
+import { markdownToPlainText } from '../utils/markdownRender';
 import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
 import RenameDialog from './RenameDialog';
 import MoveTaskModal from '../modals/MoveTaskModal';

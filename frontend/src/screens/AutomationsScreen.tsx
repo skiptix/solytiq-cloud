@@ -15,16 +15,8 @@ import { motion } from '../components/animate-ui/motion';
 import { EASE_SETTLE, EASE_SPRING } from '../components/animate-ui/motionTokens';
 import MotionButton from '../components/animate-ui/MotionButton';
 import MotionIn from '../components/animate-ui/MotionIn';
+import { ownerEntityPath } from '../utils/automationOwner';
 
-/** Where the "back" arrow returns to — the exact Board/Page/Timeline this
- *  automation gallery was opened from (there's no standalone gallery route
- *  in the sidebar anymore, so this is the only way back). */
-export function ownerEntityPath(type: AutomationOwnerEntityType | null, id: string | null): string {
-  if (type === 'list' && id) return `/list/${id}`;
-  if (type === 'timeline' && id) return `/timeline/${id}`;
-  if (type === 'markdownList' && id) return `/markdown-list/${id}`;
-  return '/dashboard';
-}
 
 function chainSummary(automation: Automation, nodeTypes: ReturnType<typeof useAutomationsStore.getState>['nodeTypes']): string {
   const trigger = nodeTypes?.triggers.find((t) => t.id === automation.triggerType);

@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import Icon from '../components/Icon';
 import MarkdownTable from '../components/MarkdownTable';
-import { renderInline } from '../components/MarkdownView';
+import { renderInline } from '../utils/markdownRender';
 import { useMobile } from '../hooks/useBreakpoint';
 import type { MarkdownTableBlock } from '../types';
 import { verifySharePassword, ShareSessionError } from '../utils/shareSession';

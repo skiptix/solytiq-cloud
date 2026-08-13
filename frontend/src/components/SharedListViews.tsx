@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
-import { markdownToPlainText } from './MarkdownView';
+import { markdownToPlainText } from '../utils/markdownRender';
 import MotionIn from './animate-ui/MotionIn';
 import MotionButton from './animate-ui/MotionButton';
+import { fmtDate } from '../utils/shareFormat';
 
 // Shapes returned by GET /api/share/list/:token(/content) — read-only, public.
 export interface SharedTask {
@@ -29,9 +30,6 @@ export interface SharedSection {
   tasks: SharedTask[];
 }
 
-export function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-}
 
 // ── Shared task row — used by both the List and Kanban read-only views ─────────
 export function SharedTaskRow({ task, accent, onClick }: { task: SharedTask; accent: string; onClick: (task: SharedTask) => void }) {

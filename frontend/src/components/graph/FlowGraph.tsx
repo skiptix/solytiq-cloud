@@ -59,4 +59,3 @@ export function EntityNode({ data }: NodeProps) {
   );
 }
 
-export const RF_NODE_TYPES = { entity: EntityNode };

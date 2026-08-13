@@ -4,10 +4,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Icon from '../components/Icon';
 import MarkdownView from '../components/MarkdownView';
 import { useMobile } from '../hooks/useBreakpoint';
-import {
-  fmtDate, SharedTaskRow, SharedKanbanView, SharedTaskTimelineView,
-  type SharedTask, type SharedSection,
-} from '../components/SharedListViews';
+import { SharedTaskRow, SharedKanbanView, SharedTaskTimelineView, type SharedTask, type SharedSection } from '../components/SharedListViews';
+import { fmtDate } from '../utils/shareFormat';
 import { verifySharePassword, ShareSessionError } from '../utils/shareSession';
 import Spinner from '@/components/animate-ui/Spinner';
 import ModalIn from '@/components/animate-ui/ModalIn';

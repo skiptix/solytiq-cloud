@@ -174,6 +174,20 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
   // @-mention typeahead state (only active when mentionMembers is provided).
   const [mention, setMention] = useState<MentionContext | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
+  /**
+   * Whether the open typeahead should sit above the field rather than below.
+   *
+   * Measured in the handler that opens it, not during render: reading
+   * `taRef.current` mid-render is both against the rules of React (the ref
+   * may not point at the committed DOM yet) and unnecessary here, since the
+   * only moment the answer can change is the moment the popover opens.
+   */
+  const [flipUp, setFlipUp] = useState(false);
+  /** Popover height used for the flip decision — mention list vs link picker. */
+  const measureFlip = (el: HTMLTextAreaElement, popoverHeight: number) => {
+    const rect = el.getBoundingClientRect();
+    setFlipUp(rect.bottom + popoverHeight > window.innerHeight);
+  };
   const mentionCandidates = mention && mentionMembers?.length
     ? filterMentionMembers(mentionMembers, mention.query)
     : [];
@@ -219,6 +233,7 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
   const refreshMention = (el: HTMLTextAreaElement) => {
     if (!mentionMembers?.length) { if (mention) setMention(null); return; }
     const ctx = detectMention(el.value, el.selectionStart ?? 0);
+    if (ctx) measureFlip(el, 252);
     setMention(ctx);
     setMentionIndex(0);
   };
@@ -243,6 +258,7 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
   // Recompute the `[[` link-trigger context from the textarea's current value + caret.
   const refreshLinkTrigger = (el: HTMLTextAreaElement) => {
     const ctx = detectLinkTrigger(el.value, el.selectionStart ?? 0);
+    if (ctx) measureFlip(el, 300);
     setLinkTrigger(ctx);
     setLinkIndex(0);
   };
@@ -361,13 +377,11 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
             }}
             rows={4}
           />
-          {mentionActive && (() => {
-            // Anchor below the field by default, but flip above when the field's
-            // bottom is close to the viewport bottom so the list stays on-screen
-            // (e.g. inside the scroll-bounded TaskDialog body).
-            const rect = taRef.current?.getBoundingClientRect();
-            const flipUp = !!rect && rect.bottom + 252 > window.innerHeight;
-            return (
+          {/* Anchored below the field by default, flipped above when the
+              field's bottom is close to the viewport bottom so the list stays
+              on-screen (e.g. inside the scroll-bounded TaskDialog body). See
+              `flipUp` for where that is decided. */}
+          {mentionActive && (
               <MentionPopover
                 members={mentionCandidates}
                 activeIndex={mentionIndex}
@@ -375,12 +389,8 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
                 onHover={setMentionIndex}
                 style={flipUp ? { bottom: 'calc(100% + 4px)', left: 0 } : { top: 'calc(100% + 4px)', left: 0 }}
               />
-            );
-          })()}
-          {!mentionActive && linkTriggerActive && (() => {
-            const rect = taRef.current?.getBoundingClientRect();
-            const flipUp = !!rect && rect.bottom + 300 > window.innerHeight;
-            return (
+          )}
+          {!mentionActive && linkTriggerActive && (
               <LinkPicker
                 query={linkTrigger!.query}
                 results={linkResults}
@@ -390,8 +400,7 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
                 onHover={setLinkIndex}
                 style={flipUp ? { bottom: 'calc(100% + 4px)', left: 0 } : { top: 'calc(100% + 4px)', left: 0 }}
               />
-            );
-          })()}
+          )}
         </div>
       )}
     </div>

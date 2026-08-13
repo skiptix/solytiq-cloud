@@ -30,7 +30,7 @@ import { newBlockId, makeEmptyBlock, hasText, type TextBlock } from '../../utils
 import Icon from '../Icon';
 import MarkdownTable from '../MarkdownTable';
 import { makeEmptyTableBlock } from '../../utils/markdownTable';
-import { renderInline } from '../MarkdownView';
+import { renderInline } from '../../utils/markdownRender';
 import { toggleWrap, formatMarkerForKeyDown } from '../../utils/textFormatting';
 import { detectMention, applyMention, filterMentionMembers, type MentionMember } from '../../utils/mention';
 import MentionPopover from '../MentionPopover';
