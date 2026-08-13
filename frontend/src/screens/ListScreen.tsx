@@ -19,6 +19,10 @@ import SaveStatusDot from '../components/SaveStatusDot';
 import EmojiSelector from '../components/EmojiSelector';
 import AutomationsButton from '../components/AutomationsButton';
 import Spinner from '@/components/animate-ui/Spinner';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
+import MotionDraggable from '../components/animate-ui/MotionDraggable';
+import { EASE_SETTLE, EASE_STANDARD } from '../components/animate-ui/motionTokens';
 
 // ── Pull-to-refresh indicator (mobile only) ────────────────────────
 // Purely presentational: height/opacity/rotation driven by usePullToRefresh's
@@ -31,15 +35,17 @@ function PullToRefreshIndicator({ pullDistance, threshold, refreshing, settling 
   const progress = Math.min(1, pullDistance / threshold);
   const pastThreshold = pullDistance >= threshold;
   return (
-    <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', transition: (refreshing || settling) ? 'height 200ms ease' : undefined }}>
+    <MotionIn animate={{ height }} // While the finger is dragging, height follows the pointer with no tween;
+    // it only eases once the gesture is released (refreshing/settling).
+    transition={(refreshing || settling) ? { duration: 0.2, ease: 'easeInOut' } : { duration: 0 }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
       {refreshing ? (
         <Spinner size={22} thickness={2.5} durationMs={600} />
       ) : (
-        <div style={{ opacity: 0.4 + progress * 0.6, transform: `rotate(${pastThreshold ? 180 : 0}deg) scale(${0.7 + progress * 0.3})`, transition: 'transform 120ms ease' }}>
+        <MotionIn transition={{ duration: 0.12 }} style={{ opacity: 0.4 + progress * 0.6, transform: `rotate(${pastThreshold ? 180 : 0}deg) scale(${0.7 + progress * 0.3})`, }}>
           <Icon name="arrow_downward" size={20} color="var(--color-primary)" />
-        </div>
+        </MotionIn>
       )}
-    </div>
+    </MotionIn>
   );
 }
 
@@ -420,7 +426,7 @@ export default function ListScreen() {
                   color: effectiveViewMode === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
                   background: effectiveViewMode === v ? 'var(--color-white)' : 'transparent',
                   boxShadow: effectiveViewMode === v ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none',
-                  border: 'none', borderRadius: 8, padding: isMobile ? '6px 9px' : '7px 14px', cursor: 'pointer', transition: 'all 150ms', whiteSpace: 'nowrap',
+                  border: 'none', borderRadius: 8, padding: isMobile ? '6px 9px' : '7px 14px', cursor: 'pointer', whiteSpace: 'nowrap',
                 }}>
                 <Icon name={v === 'list' ? 'format_list_bulleted' : v === 'kanban' ? 'view_kanban' : 'view_timeline'} size={15} color={effectiveViewMode === v ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                 {v === 'list' ? 'List' : v === 'kanban' ? 'Kanban' : 'Timeline'}
@@ -465,7 +471,7 @@ export default function ListScreen() {
             </div>
           </div>
           <div style={{ marginTop: 14, height: 6, background: 'rgba(var(--color-black-rgb), 0.08)', borderRadius: 9999, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? 'var(--color-success)' : (list.color ?? 'var(--color-primary)'), borderRadius: 9999, transition: 'width 600ms ease-in-out' }} />
+            <MotionIn transition={{ duration: 0.6 }} style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? 'var(--color-success)' : (list.color ?? 'var(--color-primary)'), borderRadius: 9999, }} />
           </div>
           <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)' }}><strong style={{ color: 'var(--color-text-primary)' }}>{completedCount}</strong> completed</div>
@@ -474,7 +480,7 @@ export default function ListScreen() {
         </div>
 
         {/* Sections — List view (stacked) */}
-        {effectiveViewMode === 'list' && <div key="view-list" style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'viewSwitchIn 220ms cubic-bezier(0.16,1,0.3,1) both' }}>
+        {effectiveViewMode === 'list' && <MotionIn key="view-list" style={{ display: 'flex', flexDirection: 'column', gap: 24 }} initial={{ opacity: 0, y: 8, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.22, ease: EASE_SETTLE }}>
         {list.sections.map(section => {
           const isSectionDropTarget = dragOverSectionId === section.id && draggedSectionId !== null && draggedSectionId !== section.id;
           const isSectionReorderTarget = sectionDragOverId === section.id && sectionDragId !== null && sectionDragId !== section.id;
@@ -483,13 +489,15 @@ export default function ListScreen() {
           <motion.div
             key={section.id}
             layout="position"
-            transition={LAYOUT_TRANSITION}
+            animate={{
+              opacity: isBeingDraggedSection ? 0.4 : 1,
+              borderTopColor: isSectionReorderTarget ? 'var(--color-accent-purple-light)' : 'transparent',
+              borderRadius: isSectionReorderTarget ? 4 : 0,
+            }}
+            transition={{ ...LAYOUT_TRANSITION, opacity: { duration: 0.15 }, borderTopColor: { duration: 0.12 } }}
             style={{
               display: 'flex', flexDirection: 'column', gap: 8,
-              opacity: isBeingDraggedSection ? 0.4 : 1,
-              borderTop: isSectionReorderTarget ? '2px solid var(--color-accent-purple-light)' : '2px solid transparent',
-              borderRadius: isSectionReorderTarget ? 4 : 0,
-              transition: 'opacity 150ms, border-color 120ms',
+              borderTopWidth: 2, borderTopStyle: 'solid',
             }}
             onDragOver={e => {
               if (sectionDragId && sectionDragId !== section.id) { e.preventDefault(); setSectionDragOverId(section.id); return; }
@@ -504,20 +512,19 @@ export default function ListScreen() {
               onMouseLeave={() => { setHoverSectionId(null); }}
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px' }}>
               {isOwner && (
-                <button
+                <MotionDraggable
                   draggable
                   onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setSectionDragId(section.id); }}
                   onDragEnd={clearDragState}
                   title="Drag to reorder section"
-                  style={{
+                  transition={{ duration: 0.18 }} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, flexShrink: 0,
                     border: 'none', background: 'transparent', cursor: 'grab', padding: 0, marginLeft: -4,
                     opacity: hoverSectionId === section.id ? 1 : 0,
                     pointerEvents: hoverSectionId === section.id ? 'auto' : 'none',
-                    transition: 'opacity 180ms ease',
                   }}>
                   <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
-                </button>
+                </MotionDraggable>
               )}
               {section.emoji && editingSection?.id !== section.id && (
                 <motion.span
@@ -533,7 +540,7 @@ export default function ListScreen() {
 
               {editingSection?.id === section.id ? (
                 /* Inline edit — label + emoji */
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, animation: 'menuItemIn 160ms ease both' }}>
+                <MotionIn style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }} initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.16, ease: EASE_STANDARD }}>
                   <EmojiSelector
                     value={editingSection.emoji}
                     onChange={em => setEditingSection(s => s ? { ...s, emoji: em } : null)}
@@ -552,7 +559,7 @@ export default function ListScreen() {
                     style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--color-gray-deep-1)', border: 'none', borderBottom: '1.5px solid var(--color-primary)', outline: 'none', background: 'transparent', padding: '0 2px 1px', minWidth: 80 }}
                   />
                   <div style={{ flex: 1, height: 1, background: 'var(--color-border-alt)' }} />
-                </div>
+                </MotionIn>
               ) : (
                 /* Normal label */
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -565,30 +572,29 @@ export default function ListScreen() {
               {(() => {
                 const visible = hoverSectionId === section.id && editingSection?.id !== section.id;
                 return (
-                  <div style={{
+                  <MotionIn transition={{ duration: 0.18 }} style={{
                     display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0,
                     opacity: visible ? 1 : 0,
                     transform: visible ? 'translateX(0)' : 'translateX(6px)',
                     pointerEvents: visible ? 'auto' : 'none',
-                    transition: 'opacity 180ms ease, transform 180ms ease',
                   }}>
-                    <button
+                    <MotionButton
                       onClick={() => setEditingSection({ id: section.id, label: section.label, emoji: section.emoji ?? '' })}
                       title="Edit section"
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'background 120ms' }}
+                      transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-pale-39)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                       <Icon name="edit" size={13} color="var(--color-accent-purple-light)" />
-                    </button>
-                    <button
+                    </MotionButton>
+                    <MotionButton
                       onClick={() => handleDeleteSection(section.id)}
                       title="Delete section"
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', transition: 'background 120ms' }}
+                      transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-red-pale-6)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                       <Icon name="delete" size={13} color="var(--color-error)" />
-                    </button>
-                  </div>
+                    </MotionButton>
+                  </MotionIn>
                 );
               })()}
             </div>
@@ -597,13 +603,13 @@ export default function ListScreen() {
             <div style={{
               display: 'flex', flexDirection: 'column', gap: 2, background: 'var(--color-surface-gray)', borderRadius: 12,
               border: isSectionDropTarget ? '1.5px solid var(--color-accent-purple-light)' : '1px solid var(--color-border-alt)',
-              overflow: 'hidden', transition: 'border-color 120ms',
+              overflow: 'hidden',
               boxShadow: isSectionDropTarget ? '0 0 0 3px rgba(var(--color-accent-purple-light-rgb), 0.15)' : 'none',
             }}>
               {section.tasks.length === 0 ? (
-                <div style={{ padding: '16px', fontFamily: 'var(--font-body)', fontSize: 13, color: isSectionDropTarget ? 'var(--color-accent-purple-light)' : 'var(--color-text-quaternary)', textAlign: 'center', transition: 'color 120ms' }}>
+                <MotionIn transition={{ duration: 0.12 }} style={{ padding: '16px', fontFamily: 'var(--font-body)', fontSize: 13, color: isSectionDropTarget ? 'var(--color-accent-purple-light)' : 'var(--color-text-quaternary)', textAlign: 'center', }}>
                   {isSectionDropTarget ? 'Drop here to move' : 'No tasks in this section.'}
-                </div>
+                </MotionIn>
               ) : (
                 <div style={{ padding: '4px' }}>
                   <AnimatePresence initial={false}>
@@ -646,7 +652,7 @@ export default function ListScreen() {
 
         {/* Add Section — full-width at bottom */}
         {addingSection ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative', animation: 'sectionFadeUp 220ms ease both' }}>
+          <MotionIn style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: EASE_SETTLE }}>
             {/* Emoji selector */}
             <EmojiSelector value={newSectionEmoji} onChange={setNewSectionEmoji} direction="up" />
             <input
@@ -666,21 +672,21 @@ export default function ListScreen() {
               style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 500, color: 'var(--color-text-tertiary)', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
               Cancel
             </button>
-          </div>
+          </MotionIn>
         ) : (
-          <button onClick={() => setAddingSection(true)}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'var(--color-purple-pale-28)', border: '1.5px dashed var(--color-purple-tint-6)', borderRadius: 10, padding: '11px', cursor: 'pointer', width: '100%', transition: 'all 150ms' }}
+          <MotionButton onClick={() => setAddingSection(true)}
+            transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'var(--color-purple-pale-28)', border: '1.5px dashed var(--color-purple-tint-6)', borderRadius: 10, padding: '11px', cursor: 'pointer', width: '100%', }}
             onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-pale-35)'; e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-light)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-purple-pale-28)'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; e.currentTarget.style.borderColor = 'var(--color-purple-tint-6)'; }}>
             <Icon name="add" size={15} color="inherit" />
             Add section
-          </button>
+          </MotionButton>
         )}
-        </div>}
+        </MotionIn>}
 
         {/* Sections — Kanban view (columns) */}
         {effectiveViewMode === 'kanban' && (
-          <div key="view-kanban" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 12, alignItems: 'flex-start', animation: 'viewSwitchIn 220ms cubic-bezier(0.16,1,0.3,1) both' }}>
+          <MotionIn key="view-kanban" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 12, alignItems: 'flex-start' }} initial={{ opacity: 0, y: 8, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.22, ease: EASE_SETTLE }}>
             {list.sections.map((section, idx) => {
               const isSectionDropTarget = dragOverSectionId === section.id && draggedSectionId !== null && draggedSectionId !== section.id;
               const isSectionReorderTarget = sectionDragOverId === section.id && sectionDragId !== null && sectionDragId !== section.id;
@@ -689,14 +695,28 @@ export default function ListScreen() {
                 <motion.div
                   key={section.id}
                   layout="position"
-                  transition={LAYOUT_TRANSITION}
+                  initial={{ opacity: 0, y: 12, scale: 0.96 }}
+                  animate={{
+                    opacity: isBeingDraggedSection ? 0.4 : 1,
+                    y: 0,
+                    scale: 1,
+                    borderLeftColor: isSectionReorderTarget ? 'var(--color-accent-purple-light)' : 'transparent',
+                    borderRadius: isSectionReorderTarget ? 4 : 0,
+                  }}
+                  transition={{
+                    ...LAYOUT_TRANSITION,
+                    // The staggered `cardIn` entrance and the live drag/drop
+                    // feedback share this element, so they share one transition
+                    // object with per-property overrides rather than fighting
+                    // over a single duration.
+                    opacity: { duration: 0.15 },
+                    borderLeftColor: { duration: 0.12 },
+                    y: { duration: 0.24, delay: (idx * 40) / 1000, ease: EASE_SETTLE },
+                    scale: { duration: 0.24, delay: (idx * 40) / 1000, ease: EASE_SETTLE },
+                  }}
                   style={{
                     display: 'flex', flexDirection: 'column', gap: 8, width: 280, flexShrink: 0,
-                    opacity: isBeingDraggedSection ? 0.4 : 1,
-                    borderLeft: isSectionReorderTarget ? '2px solid var(--color-accent-purple-light)' : '2px solid transparent',
-                    borderRadius: isSectionReorderTarget ? 4 : 0,
-                    transition: 'opacity 150ms, border-color 120ms',
-                    animation: `cardIn 240ms ease ${idx * 40}ms both`,
+                    borderLeftWidth: 2, borderLeftStyle: 'solid',
                   }}
                   onDragOver={e => {
                     if (sectionDragId && sectionDragId !== section.id) { e.preventDefault(); setSectionDragOverId(section.id); return; }
@@ -711,20 +731,19 @@ export default function ListScreen() {
                     onMouseLeave={() => setHoverSectionId(null)}
                     style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px' }}>
                     {isOwner && (
-                      <button
+                      <MotionDraggable
                         draggable
                         onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; setSectionDragId(section.id); }}
                         onDragEnd={clearDragState}
                         title="Drag to reorder column"
-                        style={{
+                        transition={{ duration: 0.18 }} style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, flexShrink: 0,
                           border: 'none', background: 'transparent', cursor: 'grab', padding: 0, marginLeft: -4,
                           opacity: hoverSectionId === section.id ? 1 : 0,
                           pointerEvents: hoverSectionId === section.id ? 'auto' : 'none',
-                          transition: 'opacity 180ms ease',
                         }}>
                         <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
-                      </button>
+                      </MotionDraggable>
                     )}
                     {section.emoji && editingSection?.id !== section.id && <span style={{ fontSize: 14 }}>{section.emoji}</span>}
 
@@ -758,11 +777,10 @@ export default function ListScreen() {
                     {(() => {
                       const visible = hoverSectionId === section.id && editingSection?.id !== section.id;
                       return (
-                        <div style={{
+                        <MotionIn transition={{ duration: 0.18 }} style={{
                           display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0,
                           opacity: visible ? 1 : 0,
                           pointerEvents: visible ? 'auto' : 'none',
-                          transition: 'opacity 180ms ease',
                         }}>
                           <button
                             onClick={() => setEditingSection({ id: section.id, label: section.label, emoji: section.emoji ?? '' })}
@@ -776,23 +794,22 @@ export default function ListScreen() {
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer' }}>
                             <Icon name="delete" size={13} color="var(--color-error)" />
                           </button>
-                        </div>
+                        </MotionIn>
                       );
                     })()}
                   </div>
 
                   {/* Cards — scroll independently within the column */}
-                  <div style={{
+                  <MotionIn transition={{ duration: 0.12 }} style={{
                     display: 'flex', flexDirection: 'column', gap: 2, background: 'var(--color-surface-gray)', borderRadius: 12,
                     border: isSectionDropTarget ? '1.5px solid var(--color-accent-purple-light)' : '1px solid var(--color-border-alt)',
                     overflowY: 'auto', maxHeight: 'calc(100vh - 340px)',
                     boxShadow: isSectionDropTarget ? '0 0 0 3px rgba(var(--color-accent-purple-light-rgb), 0.15)' : 'none',
-                    transition: 'border-color 120ms',
                   }}>
                     {section.tasks.length === 0 ? (
-                      <div style={{ padding: '16px', fontFamily: 'var(--font-body)', fontSize: 13, color: isSectionDropTarget ? 'var(--color-accent-purple-light)' : 'var(--color-text-quaternary)', textAlign: 'center', transition: 'color 120ms' }}>
+                      <MotionIn transition={{ duration: 0.12 }} style={{ padding: '16px', fontFamily: 'var(--font-body)', fontSize: 13, color: isSectionDropTarget ? 'var(--color-accent-purple-light)' : 'var(--color-text-quaternary)', textAlign: 'center', }}>
                         {isSectionDropTarget ? 'Drop here to move' : 'No tasks.'}
-                      </div>
+                      </MotionIn>
                     ) : (
                       <div style={{ padding: '4px' }}>
                         <AnimatePresence initial={false}>
@@ -822,15 +839,15 @@ export default function ListScreen() {
                     <div data-quickadd-root style={{ borderTop: section.tasks.length > 0 ? '1px solid var(--color-surface-tint-2)' : 'none' }}>
                       <QuickAdd placeholder="Add task…" onAdd={data => handleAddTask(section.id, data)} availableLists={lists} currentListId={listId} />
                     </div>
-                  </div>
+                  </MotionIn>
                 </motion.div>
               );
             })}
 
             {/* Add column */}
-            <div style={{ width: 280, flexShrink: 0, animation: `cardIn 240ms ease ${list.sections.length * 40}ms both` }}>
+            <MotionIn initial={{ opacity: 0, y: 12, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.24, delay: (list.sections.length * 40) / 1000, ease: EASE_SETTLE }} style={{ width: 280, flexShrink: 0 }}>
               {addingSection ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--color-surface-gray)', border: '1.5px solid var(--color-primary)', borderRadius: 12, padding: 10, animation: 'sectionFadeUp 220ms ease both' }}>
+                <MotionIn style={{ display: 'flex', flexDirection: 'column', gap: 8, background: 'var(--color-surface-gray)', border: '1.5px solid var(--color-primary)', borderRadius: 12, padding: 10 }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: EASE_SETTLE }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <EmojiSelector value={newSectionEmoji} onChange={setNewSectionEmoji} direction="down" />
                     <input
@@ -853,18 +870,18 @@ export default function ListScreen() {
                       Cancel
                     </button>
                   </div>
-                </div>
+                </MotionIn>
               ) : (
-                <button onClick={() => setAddingSection(true)}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'var(--color-purple-pale-28)', border: '1.5px dashed var(--color-purple-tint-6)', borderRadius: 10, padding: '11px', cursor: 'pointer', width: '100%', transition: 'all 150ms' }}
+                <MotionButton onClick={() => setAddingSection(true)}
+                  transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-tertiary)', background: 'var(--color-purple-pale-28)', border: '1.5px dashed var(--color-purple-tint-6)', borderRadius: 10, padding: '11px', cursor: 'pointer', width: '100%', }}
                   onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-pale-35)'; e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.borderColor = 'var(--color-accent-purple-light)'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-purple-pale-28)'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; e.currentTarget.style.borderColor = 'var(--color-purple-tint-6)'; }}>
                   <Icon name="add" size={15} color="inherit" />
                   Add column
-                </button>
+                </MotionButton>
               )}
-            </div>
-          </div>
+            </MotionIn>
+          </MotionIn>
         )}
 
         {/* Timeline view — tasks laid out left-to-right by creation → completion/today */}
