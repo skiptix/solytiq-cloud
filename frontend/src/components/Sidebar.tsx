@@ -17,6 +17,11 @@ import RenameDialog from './RenameDialog';
 import ProfileCard from './ProfileCard';
 import PopIn from './animate-ui/PopIn';
 import ModalIn from './animate-ui/ModalIn';
+import MotionIn from './animate-ui/MotionIn';
+import MotionButton from './animate-ui/MotionButton';
+import MotionDraggable from './animate-ui/MotionDraggable';
+import { motion } from './animate-ui/motion';
+import { EASE_SPRING, EASE_SETTLE, EASE_STANDARD } from './animate-ui/motionTokens';
 import { apiGetGpsFiles, apiReorderTimelines, type ShareInfo } from '../api/client';
 
 const MINI = 60;
@@ -90,25 +95,59 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
 
   return (
     <>
-      <div draggable
+      <MotionDraggable draggable
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         onContextMenu={openContextMenu}
         onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+        animate={
+          // Previously two CSS keyframe animations plus a border transition
+          // that had to be switched off (`transition: 'none'`) while either
+          // ran so they wouldn't fight. As Motion targets on one element the
+          // three states simply replace each other.
+          isTaskDropTarget
+            ? {
+                backgroundColor: ['rgba(var(--color-primary-rgb), 0.08)', 'rgba(var(--color-primary-rgb), 0.16)', 'rgba(var(--color-primary-rgb), 0.08)'],
+                boxShadow: [
+                  'inset 0 0 0 1.5px rgba(var(--color-primary-rgb), 0.45), 0 3px 10px rgba(var(--color-primary-rgb), 0.12)',
+                  'inset 0 0 0 1.5px rgba(var(--color-primary-rgb), 0.8), 0 4px 16px rgba(var(--color-primary-rgb), 0.22)',
+                  'inset 0 0 0 1.5px rgba(var(--color-primary-rgb), 0.45), 0 3px 10px rgba(var(--color-primary-rgb), 0.12)',
+                ],
+                borderTopColor: 'transparent',
+              }
+            : wasRecentlyDropped
+              ? {
+                  backgroundColor: ['rgba(var(--color-primary-rgb), 0.28)', 'rgba(var(--color-primary-rgb), 0)'],
+                  boxShadow: ['inset 0 0 0 2px rgba(var(--color-primary-rgb), 0.7)', 'inset 0 0 0 2px rgba(var(--color-primary-rgb), 0)'],
+                  borderTopColor: 'transparent',
+                }
+              : {
+                  backgroundColor: 'rgba(var(--color-primary-rgb), 0)',
+                  boxShadow: 'inset 0 0 0 0 rgba(var(--color-primary-rgb), 0)',
+                  borderTopColor: dragOverId === list.id ? 'var(--color-accent-purple-light)' : 'transparent',
+                }
+        }
+        transition={
+          isTaskDropTarget
+            ? { duration: 1.2, ease: 'easeInOut', repeat: Infinity }
+            : wasRecentlyDropped
+              ? { duration: 0.55, ease: 'easeOut' }
+              : { duration: 0.12 }
+        }
         style={{
           display: 'flex', alignItems: 'center', borderRadius: 8,
-          borderTop: dragOverId === list.id ? '2px solid var(--color-accent-purple-light)' : '2px solid transparent',
+          borderTopWidth: 2, borderTopStyle: 'solid',
           position: 'relative',
-          animation: isTaskDropTarget ? 'taskDropPulse 1.2s ease-in-out infinite' : (wasRecentlyDropped ? 'taskDropSuccess 550ms ease-out forwards' : undefined),
-          transition: isTaskDropTarget || wasRecentlyDropped ? 'none' : 'border-color 120ms',
           paddingLeft: indented ? 8 : 0,
         }}>
 
-        <button title={collapsed ? list.name : undefined}
+        <MotionButton title={collapsed ? list.name : undefined}
           onClick={() => onNavigate(`/list/${list.id}`)}
-          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: hov ? (list.colorBg ?? 'var(--color-surface-tint-2)') : 'transparent', color: isActive ? (list.color ?? 'var(--color-primary)') : 'var(--color-text-secondary)', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, fontWeight: isActive ? 600 : 450, borderRadius: 8, cursor: 'pointer', border: 'none', fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left', width: '100%' }}
+          animate={{ background: hov ? (list.colorBg ?? 'var(--color-surface-tint-2)') : 'transparent', color: isActive ? (list.color ?? 'var(--color-primary)') : 'var(--color-text-secondary)' }}
+          transition={{ duration: 0.15 }}>
           {!collapsed && (
             <Icon
               name={list.isPublic ? 'public' : 'lock'}
@@ -121,32 +160,47 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
             : <Icon name="format_list_bulleted" size={19} color={isActive ? (list.color ?? 'var(--color-primary)') : 'var(--color-text-tertiary)'} />
           }
           {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{list.name}</span>}
-        </button>
+        </MotionButton>
 
         {!collapsed && !isTaskDropTarget && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 4, flexShrink: 0 }}>
-            <button
+            <MotionButton
               ref={menuBtnRef}
               onClick={openMenu}
               title="Board options"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-pale-39)')}
-              onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background = 'transparent'; }}
+              animate={{ background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', opacity: hov || menuOpen ? 1 : 0 }}
+              whileHover={{ background: 'var(--color-purple-pale-39)' }}
+              transition={{ opacity: { duration: 0.15 }, background: { duration: 0.12 } }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', cursor: 'pointer', padding: 0 }}
             >
               <Icon name="more_vert" size={15} color="var(--color-accent-purple-light)" />
-            </button>
-            <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
+            </MotionButton>
+            <MotionIn animate={{ opacity: hov ? 1 : 0 }} transition={{ duration: 0.15 }} style={{ cursor: 'grab', display: 'flex', alignItems: 'center' }}>
               <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
-            </div>
+            </MotionIn>
           </div>
         )}
 
         {isTaskDropTarget && (
-          <div style={{
+          <MotionIn
+            initial={{ opacity: 0, x: 6, scale: 0.85 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            transition={{ duration: 0.18, ease: EASE_SPRING }}
+            style={{
             position: 'absolute',
             right: collapsed ? '50%' : 6,
             top: '50%',
-            transform: collapsed ? 'translate(50%, -50%)' : 'translateY(-50%)',
+            // The keyframe folded the -50% Y centring into its transform, so it
+            // stays a style value here while x/scale animate.
+            //
+            // The inline style also carried `translate(50%, -50%)` when
+            // collapsed — but `moveHerePill` ran with `fill-mode: both`, and a
+            // CSS animation outranks an inline transform during AND after it.
+            // That 50% X offset therefore never took effect once the pill
+            // animated in. Reproducing the real rendered behaviour rather than
+            // the apparent intent; "fixing" it here would smuggle a visual
+            // change in under a migration.
+            y: '-50%',
             pointerEvents: 'none',
             display: 'flex',
             alignItems: 'center',
@@ -155,7 +209,6 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
             borderRadius: 9999,
             padding: collapsed ? '3px 5px' : '3px 9px',
             boxShadow: '0 2px 10px rgba(var(--color-primary-rgb), 0.4)',
-            animation: 'moveHerePill 180ms cubic-bezier(0.34,1.56,0.64,1) both',
             zIndex: 10,
           }}>
             {!collapsed && (
@@ -164,9 +217,9 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
               </span>
             )}
             <Icon name="arrow_right_alt" size={collapsed ? 13 : 12} color="var(--color-white)" />
-          </div>
+          </MotionIn>
         )}
-      </div>
+      </MotionDraggable>
 
       {/* Right-click / "..." menu — shared component, two triggers */}
       {menuOpen && menuPos && (
@@ -221,9 +274,12 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
 
       {/* Delete confirmation dialog */}
       {showDeleteDialog && createPortal(
-        <div
+        <motion.div
           onClick={() => setShowDeleteDialog(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.18, ease: EASE_STANDARD }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <ModalIn
             duration={280}
             onClick={e => e.stopPropagation()}
@@ -240,7 +296,7 @@ function ListItemRow({ list, isActive, collapsed, indented, dragOverId, folders,
               <button onClick={handleDelete} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
             </div>
           </ModalIn>
-        </div>,
+        </motion.div>,
         document.body
       )}
     </>
@@ -315,7 +371,7 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
 
   return (
     <>
-      <div
+      <MotionDraggable
         draggable={!collapsed && !editingName}
         onDragStart={onDragStart}
         onDragOver={onDragOver}
@@ -323,11 +379,15 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
         onDrop={onDrop}
         onContextMenu={openContextMenu}
         onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, position: 'relative', paddingLeft: indented ? 8 : 0, borderTop: dragOverId === timeline.id ? '2px solid var(--color-accent-purple-light)' : '2px solid transparent', transition: 'border-color 120ms' }}>
+        animate={{ borderTopColor: dragOverId === timeline.id ? 'var(--color-accent-purple-light)' : 'transparent' }}
+        transition={{ duration: 0.12 }}
+        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, position: 'relative', paddingLeft: indented ? 8 : 0, borderTopWidth: 2, borderTopStyle: 'solid' }}>
 
-        <button title={collapsed ? timeline.name : undefined}
+        <MotionButton title={collapsed ? timeline.name : undefined}
           onClick={() => onNavigate(`/timeline/${timeline.id}`)}
-          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: hov ? (timeline.colorBg ?? 'var(--color-surface-tint-2)') : 'transparent', color: isActive ? accent : 'var(--color-text-secondary)', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, fontWeight: isActive ? 600 : 450, borderRadius: 8, cursor: 'pointer', border: 'none', fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left', width: '100%' }}
+          animate={{ background: hov ? (timeline.colorBg ?? 'var(--color-surface-tint-2)') : 'transparent', color: isActive ? accent : 'var(--color-text-secondary)' }}
+          transition={{ duration: 0.15 }}>
             {!collapsed && (
               <Icon name={timeline.isPublic ? 'public' : 'lock'} size={13} color="var(--color-text-quaternary)" />
             )}
@@ -336,26 +396,27 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
               : <Icon name="timeline" size={19} color={isActive ? accent : 'var(--color-text-tertiary)'} />
             }
             {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{timeline.name}</span>}
-          </button>
+          </MotionButton>
 
         {!collapsed && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 4, flexShrink: 0 }}>
-            <button
+            <MotionButton
               ref={menuBtnRef}
               onClick={openMenu}
               title="Timeline options"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-pale-39)')}
-              onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background = 'transparent'; }}
+              animate={{ background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', opacity: hov || menuOpen ? 1 : 0 }}
+              whileHover={{ background: 'var(--color-purple-pale-39)' }}
+              transition={{ opacity: { duration: 0.15 }, background: { duration: 0.12 } }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', cursor: 'pointer', padding: 0 }}
             >
               <Icon name="more_vert" size={15} color="var(--color-accent-purple-light)" />
-            </button>
-            <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
+            </MotionButton>
+            <MotionIn animate={{ opacity: hov ? 1 : 0 }} transition={{ duration: 0.15 }} style={{ cursor: 'grab', display: 'flex', alignItems: 'center' }}>
               <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
-            </div>
+            </MotionIn>
           </div>
         )}
-      </div>
+      </MotionDraggable>
 
       {/* Right-click / "..." menu — shared component, two triggers */}
       {menuOpen && menuPos && (
@@ -411,9 +472,12 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
 
       {/* Delete confirmation dialog */}
       {showDeleteDialog && createPortal(
-        <div
+        <motion.div
           onClick={() => setShowDeleteDialog(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.18, ease: EASE_STANDARD }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <ModalIn
             duration={280}
             onClick={e => e.stopPropagation()}
@@ -427,10 +491,10 @@ function TimelineItemRow({ timeline, isActive, collapsed, indented, folders, dra
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button onClick={() => setShowDeleteDialog(false)} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={handleDelete} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
+              <MotionDraggable onClick={handleDelete} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</MotionDraggable>
             </div>
           </ModalIn>
-        </div>,
+        </motion.div>,
         document.body
       )}
     </>
@@ -567,7 +631,7 @@ function FolderRow({ folder, lists, timelines, markdownLists, markdownTodoLists,
   return (
     <>
       {/* Folder header */}
-      <div
+      <MotionDraggable
         ref={rowRef}
         draggable={!collapsed && !editingName}
         onDragStart={e => onFolderDragStart(folder.id, e)}
@@ -586,10 +650,16 @@ function FolderRow({ folder, lists, timelines, markdownLists, markdownTodoLists,
         onContextMenu={openContextMenu}
         onMouseEnter={() => { setHov(true); if (collapsed) openFlyout(); }}
         onMouseLeave={() => { setHov(false); if (collapsed) scheduleFlyoutClose(); }}
-        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, border: isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', borderTop: dragOverFolderReorderId === folder.id ? '2px solid var(--color-accent-purple-light)' : isDragTarget ? `2px solid ${accentColor}` : '2px solid transparent', transition: 'all 120ms', background: isDragTarget ? `${accentColor}15` : 'transparent' }}>
+        animate={{
+          borderColor: isDragTarget ? accentColor : 'transparent',
+          borderTopColor: dragOverFolderReorderId === folder.id ? 'var(--color-accent-purple-light)' : isDragTarget ? accentColor : 'transparent',
+          background: isDragTarget ? `${accentColor}15` : 'transparent',
+        }}
+        transition={{ duration: 0.12 }}
+        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, borderWidth: 2, borderStyle: 'solid' }}>
 
         {editingName && !collapsed ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '4px 8px', animation: 'menuItemIn 140ms ease both' }}>
+          <MotionIn initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.14, ease: EASE_STANDARD }} style={{ flex: 1, display: 'flex', alignItems: 'center', padding: '4px 8px' }}>
             <input
               autoFocus
               value={nameInput}
@@ -601,9 +671,9 @@ function FolderRow({ folder, lists, timelines, markdownLists, markdownTodoLists,
               }}
               style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13.5, border: 'none', borderBottom: `1.5px solid ${accentColor}`, outline: 'none', background: 'transparent', color: 'var(--color-text-primary)', padding: '2px 4px' }}
             />
-          </div>
+          </MotionIn>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0, borderRadius: 8, background: isActiveDash ? `${accentColor}18` : 'transparent', transition: 'background 150ms' }}>
+          <MotionIn animate={{ background: isActiveDash ? `${accentColor}18` : 'transparent' }} transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0, borderRadius: 8 }}>
             {/* Chevron — toggles collapse */}
             {!collapsed && (
               <button
@@ -618,7 +688,7 @@ function FolderRow({ folder, lists, timelines, markdownLists, markdownTodoLists,
             <button
               onClick={() => onNavigate(`/folder/${folder.id}`)}
               title={collapsed ? folder.name : `Open ${folder.name} overview`}
-              style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '5px 8px 5px 4px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: 'transparent', borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left', width: '100%', color: accentColor }}
+              style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '5px 8px 5px 4px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: 'transparent', borderRadius: 8, cursor: 'pointer', border: 'none', fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left', width: '100%', color: accentColor }}
             >
               {folder.emoji
                 ? <span style={{ fontSize: 15, lineHeight: 1, flexShrink: 0 }}>{folder.emoji}</span>
@@ -630,27 +700,28 @@ function FolderRow({ folder, lists, timelines, markdownLists, markdownTodoLists,
                 </span>
               )}
             </button>
-          </div>
+          </MotionIn>
         )}
 
         {!collapsed && (
           <div style={{ display: 'flex', alignItems: 'center', paddingRight: 4, flexShrink: 0, gap: 2 }}>
-            <button
+            <MotionButton
               ref={menuBtnRef}
               onClick={openMenu}
               title="Folder options"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-pale-39)')}
-              onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background = 'transparent'; }}
+              animate={{ background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', opacity: hov || menuOpen ? 1 : 0 }}
+              whileHover={{ background: 'var(--color-purple-pale-39)' }}
+              transition={{ opacity: { duration: 0.15 }, background: { duration: 0.12 } }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', cursor: 'pointer', padding: 0 }}
             >
               <Icon name="more_vert" size={15} color="var(--color-accent-purple-light)" />
-            </button>
-            <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+            </MotionButton>
+            <MotionIn animate={{ opacity: hov ? 1 : 0 }} transition={{ duration: 0.15 }} style={{ cursor: 'grab', display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
               <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
-            </div>
+            </MotionIn>
           </div>
         )}
-      </div>
+      </MotionDraggable>
 
       {/* Folder contents */}
       {!folder.collapsed && !collapsed && (
@@ -872,9 +943,12 @@ function FolderRow({ folder, lists, timelines, markdownLists, markdownTodoLists,
 
       {/* Delete folder confirmation */}
       {showDeleteDialog && createPortal(
-        <div
+        <motion.div
           onClick={() => setShowDeleteDialog(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.18, ease: EASE_STANDARD }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <ModalIn
             duration={280}
             onClick={e => e.stopPropagation()}
@@ -891,7 +965,7 @@ function FolderRow({ folder, lists, timelines, markdownLists, markdownTodoLists,
               <button onClick={handleDelete} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
             </div>
           </ModalIn>
-        </div>,
+        </motion.div>,
         document.body
       )}
     </>
@@ -927,13 +1001,13 @@ function StandaloneListWithSublists({ list, sublists, active, activeListId, coll
     <div>
       <div style={{ display: 'flex', alignItems: 'center' }}>
         {!collapsed && sublists.length > 0 && (
-          <button onClick={() => toggleSublistExpanded(list.id)}
+          <motion.span onClick={() => toggleSublistExpanded(list.id)}
             title={subExpanded ? 'Collapse sublists' : 'Expand sublists'}
             style={{ display: 'flex', alignItems: 'center', padding: '0 2px', border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}>
-            <span style={{ display: 'inline-flex', transform: subExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 180ms cubic-bezier(0.22,1,0.36,1)' }}>
+            <motion.span animate={{ rotate: subExpanded ? 90 : 0 }} transition={{ duration: 0.18, ease: EASE_SETTLE }} style={{ display: 'inline-flex' }}>
               <Icon name="chevron_right" size={14} color="var(--color-text-quaternary)" />
-            </span>
-          </button>
+            </motion.span>
+          </motion.span>
         )}
         <div style={{ flex: 1 }}>
           <ListItemRow
@@ -955,7 +1029,11 @@ function StandaloneListWithSublists({ list, sublists, active, activeListId, coll
       {!collapsed && subExpanded && sublists.map((sub, subIdx) => {
         const isSubActive = active === 'list' && activeListId === sub.id;
         return (
-          <div key={sub.id} style={{ paddingLeft: (sub.depth ?? 1) * 12, borderLeft: '2px solid var(--color-border)', marginLeft: 10, animation: `menuItemIn 200ms cubic-bezier(0.22,1,0.36,1) both`, animationDelay: `${subIdx * 35}ms` }}>
+          <MotionIn key={sub.id}
+            initial={{ opacity: 0, x: 6 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.2, delay: subIdx * 0.035, ease: EASE_SETTLE }}
+            style={{ paddingLeft: (sub.depth ?? 1) * 12, borderLeft: '2px solid var(--color-border)', marginLeft: 10 }}>
             <ListItemRow
               list={sub}
               isActive={isSubActive}
@@ -970,7 +1048,7 @@ function StandaloneListWithSublists({ list, sublists, active, activeListId, coll
               onDragLeave={onListDragLeave}
               onDrop={e => onListDrop(sub.id, e)}
             />
-          </div>
+          </MotionIn>
         );
       })}
     </div>
@@ -1036,17 +1114,21 @@ function MarkdownListRow({ markdownList, isActive, collapsed, indented, folders,
 
   return (
     <>
-      <div
+      <MotionDraggable
         draggable={!collapsed && !editingName}
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         onContextMenu={openContextMenu} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, position: 'relative', paddingLeft: indented ? 8 : 0, borderTop: dragOverId === markdownList.id ? '2px solid var(--color-accent-purple-light)' : '2px solid transparent', transition: 'border-color 120ms' }}>
-        <button title={collapsed ? markdownList.name : undefined}
+        animate={{ borderTopColor: dragOverId === markdownList.id ? 'var(--color-accent-purple-light)' : 'transparent' }}
+        transition={{ duration: 0.12 }}
+        style={{ display: 'flex', alignItems: 'center', borderRadius: 8, position: 'relative', paddingLeft: indented ? 8 : 0, borderTopWidth: 2, borderTopStyle: 'solid' }}>
+        <MotionButton title={collapsed ? markdownList.name : undefined}
           onClick={() => onNavigate(`/markdown-list/${markdownList.id}`)}
-          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, background: hov ? (markdownList.colorBg ?? 'var(--color-surface-tint-2)') : 'transparent', color: isActive ? (markdownList.color ?? 'var(--color-primary)') : 'var(--color-text-secondary)', fontWeight: isActive ? 600 : 450, borderRadius: 8, transition: 'all 150ms', cursor: 'pointer', border: 'none', fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left', width: '100%' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, minWidth: 0, fontWeight: isActive ? 600 : 450, borderRadius: 8, cursor: 'pointer', border: 'none', fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left', width: '100%' }}
+          animate={{ background: hov ? (markdownList.colorBg ?? 'var(--color-surface-tint-2)') : 'transparent', color: isActive ? (markdownList.color ?? 'var(--color-primary)') : 'var(--color-text-secondary)' }}
+          transition={{ duration: 0.15 }}>
           {!collapsed && (
             <Icon name={markdownList.isPublic ? 'public' : 'lock'} size={13} color="var(--color-text-quaternary)" />
           )}
@@ -1055,21 +1137,22 @@ function MarkdownListRow({ markdownList, isActive, collapsed, indented, folders,
             : <Icon name="notes" size={19} color={isActive ? (markdownList.color ?? 'var(--color-primary)') : 'var(--color-text-tertiary)'} />
           }
           {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{markdownList.name}</span>}
-        </button>
+        </MotionButton>
         {!collapsed && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 2, paddingRight: 4, flexShrink: 0 }}>
-            <button ref={menuBtnRef} onClick={openMenu} title="Markdown page options"
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', cursor: 'pointer', padding: 0, opacity: hov || menuOpen ? 1 : 0, transition: 'opacity 150ms, background 120ms' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-pale-39)')}
-              onMouseLeave={e => { if (!menuOpen) e.currentTarget.style.background = 'transparent'; }}>
+            <MotionButton ref={menuBtnRef} onClick={openMenu} title="Markdown page options"
+              animate={{ background: menuOpen ? 'var(--color-purple-pale-39)' : 'transparent', opacity: hov || menuOpen ? 1 : 0 }}
+              whileHover={{ background: 'var(--color-purple-pale-39)' }}
+              transition={{ opacity: { duration: 0.15 }, background: { duration: 0.12 } }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 20, height: 20, borderRadius: 4, border: 'none', cursor: 'pointer', padding: 0 }}>
               <Icon name="more_vert" size={15} color="var(--color-accent-purple-light)" />
-            </button>
-            <div style={{ opacity: hov ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab', display: 'flex', alignItems: 'center' }}>
+            </MotionButton>
+            <MotionIn animate={{ opacity: hov ? 1 : 0 }} transition={{ duration: 0.15 }} style={{ cursor: 'grab', display: 'flex', alignItems: 'center' }}>
               <Icon name="drag_indicator" size={15} color="var(--color-border-strong)" />
-            </div>
+            </MotionIn>
           </div>
         )}
-      </div>
+      </MotionDraggable>
 
       {menuOpen && menuPos && (
         <ContextMenu x={menuPos.left} y={menuPos.top} items={menuItems} onClose={() => setMenuOpen(false)} />
@@ -1118,9 +1201,12 @@ function MarkdownListRow({ markdownList, isActive, collapsed, indented, folders,
       )}
 
       {showDeleteDialog && createPortal(
-        <div
+        <motion.div
           onClick={() => setShowDeleteDialog(false)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 180ms ease both' }}>
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.18, ease: EASE_STANDARD }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <ModalIn
             duration={280}
             onClick={e => e.stopPropagation()}
@@ -1137,7 +1223,7 @@ function MarkdownListRow({ markdownList, isActive, collapsed, indented, folders,
               <button onClick={handleDelete} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)', border: 'none', borderRadius: 8, padding: '8px 18px', cursor: 'pointer' }}>Delete</button>
             </div>
           </ModalIn>
-        </div>,
+        </motion.div>,
         document.body
       )}
     </>
@@ -1184,15 +1270,15 @@ function MarkdownListWithTodo({ markdownList, todoList, active, activeListId, ac
     <div>
       <div style={{ display: 'flex', alignItems: 'center' }}>
         {!collapsed && todoList && (
-          <button onClick={() => toggleSublistExpanded(markdownList.id)}
+          <motion.span onClick={() => toggleSublistExpanded(markdownList.id)}
             title={subExpanded ? 'Collapse Todo list' : 'Expand Todo list'}
             style={{ display: 'flex', alignItems: 'center', padding: '0 2px', border: 'none', background: 'transparent', cursor: 'pointer', flexShrink: 0 }}>
-            <span style={{ display: 'inline-flex', transform: subExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 180ms cubic-bezier(0.22,1,0.36,1)' }}>
+            <motion.span animate={{ rotate: subExpanded ? 90 : 0 }} transition={{ duration: 0.18, ease: EASE_SETTLE }} style={{ display: 'inline-flex' }}>
               <Icon name="chevron_right" size={14} color="var(--color-text-quaternary)" />
-            </span>
-          </button>
+            </motion.span>
+          </motion.span>
         )}
-        <div style={{ flex: 1 }}>
+        <MotionIn style={{ flex: 1 }}>
           <MarkdownListRow
             markdownList={markdownList}
             isActive={isActive}
@@ -1206,10 +1292,10 @@ function MarkdownListWithTodo({ markdownList, todoList, active, activeListId, ac
             onDragLeave={onMarkdownDragLeave}
             onDrop={onMarkdownDrop ? e => onMarkdownDrop(markdownList.id, e) : undefined}
           />
-        </div>
+        </MotionIn>
       </div>
       {!collapsed && subExpanded && todoList && (
-        <div style={{ paddingLeft: 12, borderLeft: '2px solid var(--color-border)', marginLeft: 10, animation: 'menuItemIn 200ms cubic-bezier(0.22,1,0.36,1) both' }}>
+        <MotionIn initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2, ease: EASE_SETTLE }} style={{ paddingLeft: 12, borderLeft: '2px solid var(--color-border)', marginLeft: 10 }}>
           <ListItemRow
             list={todoList}
             isActive={active === 'list' && activeListId === todoList.id}
@@ -1224,7 +1310,7 @@ function MarkdownListWithTodo({ markdownList, todoList, active, activeListId, ac
             onDragLeave={onListDragLeave}
             onDrop={e => onListDrop(todoList.id, e)}
           />
-        </div>
+        </MotionIn>
       )}
     </div>
   );
@@ -1283,8 +1369,10 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
 
   return (
     <>
-      <button ref={btnRef} onClick={openDropdown} title={collapsed ? (current?.name ?? 'Workspaces') : undefined}
-        style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', width: '100%', borderRadius: 8, border: 'none', background: dropdownOpen ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 500, color: 'var(--color-primary)', transition: 'background 150ms' }}>
+      <MotionButton ref={btnRef} onClick={openDropdown} title={collapsed ? (current?.name ?? 'Workspaces') : undefined}
+        animate={{ background: dropdownOpen ? 'var(--color-surface-tint)' : 'transparent' }}
+        transition={{ duration: 0.15 }}
+        style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', width: '100%', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 500, color: 'var(--color-primary)' }}>
         <div style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--color-purple-pale-21)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
           {current?.image
             ? <img src={current.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -1297,7 +1385,7 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
             <Icon name="unfold_more" size={15} color="var(--color-accent-purple-light)" />
           </>
         )}
-      </button>
+      </MotionButton>
 
       {dropdownOpen && dropdownPos && (
         <PopIn ref={dropRef} duration={140}
@@ -1308,12 +1396,25 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
           )}
 
           {workspaces.map(ws => (
-            <div key={ws.id} style={{ overflow: 'hidden', animation: ws.id === deletingWorkspaceId ? 'wsItemOut 420ms ease forwards' : undefined }}>
-              <button
+            <MotionIn key={ws.id}
+              // `wsItemOut` collapsed the row (opacity + slide + max-height) as
+              // the workspace was being deleted. Kept as an `animate` target
+              // rather than an AnimatePresence `exit`: the row is not unmounted
+              // by this state — it stays mounted and inert (pointerEvents:none)
+              // until the store drops it.
+              animate={ws.id === deletingWorkspaceId
+                ? { opacity: [1, 0, 0], x: [0, -14, -14], maxHeight: [60, 60, 0] }
+                : { opacity: 1, x: 0, maxHeight: 60 }}
+              transition={ws.id === deletingWorkspaceId
+                ? { duration: 0.42, times: [0, 0.55, 1], ease: 'easeInOut' }
+                : { duration: 0 }}
+              style={{ overflow: 'hidden' }}>
+              <MotionButton
                 onClick={() => { if (ws.id === deletingWorkspaceId) return; setCurrentWorkspace(ws.id); setDropdownOpen(false); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', background: ws.id === currentWorkspaceId ? 'var(--color-surface-tint)' : 'transparent', cursor: ws.id === deletingWorkspaceId ? 'default' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: ws.id === currentWorkspaceId ? 600 : 450, color: ws.id === currentWorkspaceId ? 'var(--color-primary)' : 'var(--color-text-primary)', textAlign: 'left', pointerEvents: ws.id === deletingWorkspaceId ? 'none' : undefined }}
-                onMouseEnter={e => { if (ws.id !== currentWorkspaceId && ws.id !== deletingWorkspaceId) e.currentTarget.style.background = 'var(--color-purple-pale-11)'; }}
-                onMouseLeave={e => { if (ws.id !== currentWorkspaceId) e.currentTarget.style.background = 'transparent'; }}>
+                animate={{ background: ws.id === currentWorkspaceId ? 'var(--color-surface-tint)' : 'transparent' }}
+                whileHover={ws.id !== currentWorkspaceId && ws.id !== deletingWorkspaceId ? { background: 'var(--color-purple-pale-11)' } : undefined}
+                transition={{ duration: 0.15 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', border: 'none', cursor: ws.id === deletingWorkspaceId ? 'default' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: ws.id === currentWorkspaceId ? 600 : 450, color: ws.id === currentWorkspaceId ? 'var(--color-primary)' : 'var(--color-text-primary)', textAlign: 'left', pointerEvents: ws.id === deletingWorkspaceId ? 'none' : undefined }}>
                 <div style={{ width: 26, height: 26, borderRadius: 8, background: 'var(--color-purple-pale-21)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
                   {ws.image
                     ? <img src={ws.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -1329,8 +1430,8 @@ function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
                 })()}
                 </div>
                 {ws.id === currentWorkspaceId && <Icon name="check" size={14} color="var(--color-primary)" />}
-              </button>
-            </div>
+              </MotionButton>
+            </MotionIn>
           ))}
 
           <div style={{ height: 1, background: 'var(--color-divider)', margin: '4px 0' }} />
@@ -1626,7 +1727,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   // ── GPS sidebar mode ───────────────────────────────────────────────────────
   if (active === 'gps') {
     return (
-      <aside ref={asideRef} style={{
+      <motion.aside ref={asideRef} style={{
         width: isMobile ? 280 : width,
         minWidth: isMobile ? 280 : width,
         height: '100vh',
@@ -1645,26 +1746,40 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         overflowY: 'auto',
         overflowX: 'hidden',
         boxSizing: 'border-box',
-        transition: isMobile
-          ? 'left 260ms cubic-bezier(0.22,1,0.36,1)'
-          : resizing ? undefined : 'width 240ms cubic-bezier(0.22,1,0.36,1), min-width 240ms cubic-bezier(0.22,1,0.36,1)',
-      }}>
+      }}
+      // Animating `left`/`width`/`minWidth` rather than a transform is
+      // deliberate: this sidebar element is `position: fixed`, and CLAUDE.md's mobile
+      // rule forbids a transform here — it would become the containing block
+      // for its own fixed descendants (collapse button, flyouts) and trap them
+      // inside the sidebar's bounds.
+      animate={isMobile
+        ? { left: drawerOpen ? 0 : -280 }
+        : { width, minWidth: width }}
+      transition={isMobile
+        ? { duration: 0.26, ease: EASE_SETTLE }
+        // No tween while the resize handle is being dragged — the pointer
+        // already supplies the motion; easing it would lag behind.
+        : resizing ? { duration: 0 } : { duration: 0.24, ease: EASE_SETTLE }}>
         {/* Resize handle — desktop only */}
         {!isMobile && (
-          <div onMouseDown={e => { e.preventDefault(); onResizeStart(e.clientX); }}
+          <MotionIn onMouseDown={e => { e.preventDefault(); onResizeStart(e.clientX); }}
             onMouseEnter={() => setHandleHov(true)} onMouseLeave={() => setHandleHov(false)}
-            style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, background: handleHov ? 'rgba(var(--color-primary-rgb), 0.10)' : 'transparent', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            animate={{ background: handleHov ? 'rgba(var(--color-primary-rgb), 0.10)' : 'rgba(var(--color-primary-rgb), 0)' }}
+            transition={{ duration: 0.15 }}
+            style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {handleHov && <div style={{ width: 2, height: 48, borderRadius: 2, background: 'var(--color-accent-purple-light)', opacity: 0.7 }} />}
             {handleHov && (
-              <button type="button"
+              <MotionButton type="button"
                 onMouseDown={e => e.stopPropagation()}
                 onClick={e => { e.stopPropagation(); toggleCollapsed(); }}
                 title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                style={{ position: 'fixed', top: '50%', left: width - 12, transform: 'translateY(-50%)', width: 24, height: 24, borderRadius: 7, border: '1px solid var(--color-border)', background: 'var(--color-white)', boxShadow: '0 2px 8px rgba(var(--color-primary-rgb), 0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 60, transition: resizing ? undefined : 'left 240ms cubic-bezier(0.22,1,0.36,1)' }}>
+                animate={{ left: width - 12 }}
+                transition={resizing ? { duration: 0 } : { duration: 0.24, ease: EASE_SETTLE }}
+                style={{ position: 'fixed', top: '50%', y: '-50%', width: 24, height: 24, borderRadius: 7, border: '1px solid var(--color-border)', background: 'var(--color-white)', boxShadow: '0 2px 8px rgba(var(--color-primary-rgb), 0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 60 }}>
                 <Icon name={collapsed ? 'chevron_right' : 'chevron_left'} size={14} color="var(--color-primary)" />
-              </button>
+              </MotionButton>
             )}
-          </div>
+          </MotionIn>
         )}
 
         {/* Logo / header */}
@@ -1680,16 +1795,16 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         </button>
 
         {/* Upload button */}
-        <button
+        <MotionButton
           onClick={() => window.dispatchEvent(new CustomEvent('gps-upload-trigger'))}
           title={collapsed ? 'Upload Route' : undefined}
-          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 500, color: 'var(--color-primary)', background: 'transparent', border: 'none', transition: 'background 200ms', width: '100%' }}
-          onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
-          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          whileHover={{ background: 'var(--color-surface-tint)' }}
+          transition={{ duration: 0.2 }}
+          style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 500, color: 'var(--color-primary)', background: 'transparent', border: 'none', width: '100%' }}
         >
           <Icon name="upload" size={19} color="var(--color-primary)" />
           {!collapsed && <span>Upload Route</span>}
-        </button>
+        </MotionButton>
 
         {!collapsed && <div style={{ height: 1, background: 'var(--color-border)', margin: '2px 8px' }} />}
 
@@ -1729,23 +1844,26 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
             if (collapsed) {
               return (
                 <div key={file.id} style={{ position: 'relative' }}>
-                  <button
+                  <MotionButton
                     title={displayName}
                     onClick={() => onNavigate(`/gps?file=${file.id}`)}
-                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '8px 0', border: 'none', background: isActive ? 'var(--color-surface-tint)' : 'transparent', borderRadius: 8, cursor: 'pointer', transition: 'all 150ms' }}
+                    animate={{ background: isActive ? 'var(--color-surface-tint)' : 'transparent' }}
+                    transition={{ duration: 0.15 }}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '8px 0', border: 'none', borderRadius: 8, cursor: 'pointer' }}
                   >
                     <Icon name="route" size={18} color={isActive ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
-                  </button>
+                  </MotionButton>
                 </div>
               );
             }
             return (
-              <div
+              <MotionIn
                 key={file.id}
                 onClick={() => onNavigate(`/gps?file=${file.id}`)}
-                style={{ background: isActive ? 'var(--color-surface-tint)' : 'transparent', borderLeft: `3px solid ${isActive ? 'var(--color-primary)' : 'transparent'}`, borderRadius: 8, padding: '7px 8px 7px 6px', cursor: 'pointer', transition: 'all 150ms' }}
-                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}
-                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+                animate={{ background: isActive ? 'var(--color-surface-tint)' : 'transparent', borderLeftColor: isActive ? 'var(--color-primary)' : 'transparent' }}
+                whileHover={!isActive ? { background: 'var(--color-surface-tint-2)' } : undefined}
+                transition={{ duration: 0.15 }}
+                style={{ borderLeftWidth: 3, borderLeftStyle: 'solid', borderRadius: 8, padding: '7px 8px 7px 6px', cursor: 'pointer' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 4, background: file.fileType === 'gpx' ? 'var(--color-purple-pale-21)' : 'var(--color-teal-tint-1)', color: file.fileType === 'gpx' ? 'var(--color-primary)' : 'var(--color-teal-deep-2)', letterSpacing: '0.04em', flexShrink: 0 }}>
@@ -1761,7 +1879,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
                     {file.metadata.totalElevationGain != null && file.metadata.totalElevationGain > 0 && <span>↑{Math.round(file.metadata.totalElevationGain)}m</span>}
                   </div>
                 )}
-              </div>
+              </MotionIn>
             );
           })}
         </div>
@@ -1775,12 +1893,12 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
             </div>
           )}
         </div>
-      </aside>
+      </motion.aside>
     );
   }
 
   return (
-    <aside ref={asideRef} style={{
+    <motion.aside ref={asideRef} style={{
       width: isMobile ? 280 : width,
       minWidth: isMobile ? 280 : width,
       height: '100vh',
@@ -1799,16 +1917,28 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
       overflowY: 'auto',
       overflowX: 'hidden',
       boxSizing: 'border-box',
-      transition: isMobile
-        ? 'left 260ms cubic-bezier(0.22,1,0.36,1)'
-        : resizing ? undefined : 'width 240ms cubic-bezier(0.22,1,0.36,1), min-width 240ms cubic-bezier(0.22,1,0.36,1)',
-    }}>
+    }}
+    // Animating `left`/`width`/`minWidth` rather than a transform is
+    // deliberate: this sidebar element is `position: fixed`, and CLAUDE.md's mobile
+    // rule forbids a transform here — it would become the containing block
+    // for its own fixed descendants (collapse button, flyouts) and trap them
+    // inside the sidebar's bounds.
+    animate={isMobile
+      ? { left: drawerOpen ? 0 : -280 }
+      : { width, minWidth: width }}
+    transition={isMobile
+      ? { duration: 0.26, ease: EASE_SETTLE }
+      // No tween while the resize handle is being dragged — the pointer
+      // already supplies the motion; easing it would lag behind.
+      : resizing ? { duration: 0 } : { duration: 0.24, ease: EASE_SETTLE }}>
 
       {/* Resize handle — desktop only */}
       {!isMobile && (
-        <div onMouseDown={e => { e.preventDefault(); onResizeStart(e.clientX); }}
+        <MotionIn onMouseDown={e => { e.preventDefault(); onResizeStart(e.clientX); }}
           onMouseEnter={() => setHandleHov(true)} onMouseLeave={() => setHandleHov(false)}
-          style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, background: handleHov ? 'rgba(var(--color-primary-rgb), 0.10)' : 'transparent', transition: 'background 150ms', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          animate={{ background: handleHov ? 'rgba(var(--color-primary-rgb), 0.10)' : 'rgba(var(--color-primary-rgb), 0)' }}
+          transition={{ duration: 0.15 }}
+          style={{ position: 'absolute', right: 0, top: 0, width: 6, height: '100%', cursor: 'col-resize', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {handleHov && <div style={{ width: 2, height: 48, borderRadius: 2, background: 'var(--color-accent-purple-light)', opacity: 0.7 }} />}
           {handleHov && (
             <button type="button"
@@ -1819,7 +1949,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
               <Icon name={collapsed ? 'chevron_right' : 'chevron_left'} size={14} color="var(--color-primary)" />
             </button>
           )}
-        </div>
+        </MotionIn>
       )}
 
       {/* Logo / header */}
@@ -1838,7 +1968,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <WorkspaceSwitcher collapsed={collapsed} />
 
         {/* Templates — global gallery, not scoped to the current workspace */}
-        <button
+        <MotionButton
           onClick={() => onNavigate('/templates')}
           title={collapsed ? 'Templates' : undefined}
           onMouseEnter={() => setTemplatesHov(true)}
@@ -1849,31 +1979,36 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
             borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5,
             fontWeight: active === 'templates' ? 700 : 500,
             color: active === 'templates' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-            background: active === 'templates' ? 'var(--color-surface-tint)' : (templatesHov ? 'var(--color-surface-tint-3)' : 'transparent'),
-            border: 'none', transition: 'background 150ms', width: '100%',
-          }}>
+            border: 'none', width: '100%',
+          }}
+          animate={{ background: active === 'templates' ? 'var(--color-surface-tint)' : (templatesHov ? 'var(--color-surface-tint-3)' : 'transparent') }}
+          transition={{ duration: 0.15 }}>
           <Icon name="dashboard_customize" size={17} color={active === 'templates' ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
           {!collapsed && <span>Templates</span>}
-        </button>
+        </MotionButton>
 
         <div style={{ height: 1, background: 'var(--color-border)', margin: '6px 8px' }} />
 
         {/* Add List / Add Folder buttons */}
         <div style={{ display: 'flex', gap: 4 }}>
-          <button title={collapsed ? 'Add' : undefined}
+          <MotionButton title={collapsed ? 'Add' : undefined}
             onMouseEnter={() => setAddHov(true)} onMouseLeave={() => setAddHov(false)}
             onClick={() => onOpenModal('add')}
-            style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 500, color: 'var(--color-primary)', background: addHov ? 'var(--color-surface-tint)' : 'transparent', border: 'none', transition: 'background 200ms' }}>
+            animate={{ background: addHov ? 'var(--color-surface-tint)' : 'transparent' }}
+            transition={{ duration: 0.2 }}
+            style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 8, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', flex: 1, borderRadius: 8, cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 500, color: 'var(--color-primary)', border: 'none' }}>
             <Icon name="add" size={19} color="var(--color-primary)" />
             {!collapsed && <span>Add</span>}
-          </button>
+          </MotionButton>
           {!collapsed && (
-            <button title="Add Folder"
+            <MotionButton title="Add Folder"
               onMouseEnter={() => setFolderHov(true)} onMouseLeave={() => setFolderHov(false)}
               onClick={() => { setAddingFolder(true); setTimeout(() => folderInputRef.current?.focus(), 50); }}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: 'none', background: folderHov ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', padding: 0, flexShrink: 0, transition: 'background 200ms', alignSelf: 'center' }}>
+              animate={{ background: folderHov ? 'var(--color-surface-tint)' : 'transparent' }}
+              transition={{ duration: 0.2 }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0, alignSelf: 'center' }}>
               <Icon name="create_new_folder" size={17} color="var(--color-primary)" />
-            </button>
+            </MotionButton>
           )}
         </div>
 
@@ -1902,7 +2037,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
             everything else is described in terms of, so it has no position to
             sort by and can never be dragged into a folder. */}
         {knowledgeBase && (
-          <button
+          <MotionButton
             title={collapsed ? knowledgeBase.name : undefined}
             onClick={() => onNavigate('/knowledge')}
             onMouseEnter={() => setKnowledgeHov(true)}
@@ -1918,8 +2053,8 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
               color: active === 'knowledge' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
               fontWeight: active === 'knowledge' ? 600 : 450,
               fontFamily: 'var(--font-heading)', fontSize: 13.5, textAlign: 'left',
-              transition: 'all 150ms',
-            }}>
+            }}
+            transition={{ duration: 0.15 }}>
             {knowledgeBase.emoji
               ? <span style={{ fontSize: 16, lineHeight: 1, flexShrink: 0 }}>{knowledgeBase.emoji}</span>
               : <Icon name="neurology" size={19} color={active === 'knowledge' ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />}
@@ -1931,7 +2066,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
                 )}
               </>
             )}
-          </button>
+          </MotionButton>
         )}
 
         {/* Folders */}
@@ -2100,16 +2235,17 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           const total = extraLists.length + extraTimelines.length + extraMarkdown.length;
           if (total === 0) return null;
           const row = (key: string, icon: string, color: string | undefined, emoji: string | null | undefined, name: string, activeRow: boolean, path: string) => (
-            <button
+            <MotionButton
               key={key}
               onClick={() => onNavigate(path)}
               title={collapsed ? name : undefined}
-              style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', border: 'none', width: '100%', textAlign: 'left', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: activeRow ? 600 : 450, color: activeRow ? (color ?? 'var(--color-primary)') : 'var(--color-text-secondary)', background: activeRow ? 'var(--color-surface-tint)' : 'transparent', transition: 'background 150ms' }}
-              onMouseEnter={e => { if (!activeRow) e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
-              onMouseLeave={e => { if (!activeRow) e.currentTarget.style.background = 'transparent'; }}>
+              animate={{ background: activeRow ? 'var(--color-surface-tint)' : 'transparent' }}
+              whileHover={!activeRow ? { background: 'var(--color-surface-tint-3)' } : undefined}
+              transition={{ duration: 0.15 }}
+              style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', border: 'none', width: '100%', textAlign: 'left', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: activeRow ? 600 : 450, color: activeRow ? (color ?? 'var(--color-primary)') : 'var(--color-text-secondary)' }}>
               {emoji ? <span style={{ fontSize: 15, width: 18, textAlign: 'center', flexShrink: 0 }}>{emoji}</span> : <Icon name={icon} size={16} color={activeRow ? (color ?? 'var(--color-primary)') : 'var(--color-text-tertiary)'} />}
               {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>}
-            </button>
+            </MotionButton>
           );
           return (
             <div style={{ marginTop: 6 }}>
@@ -2136,6 +2272,6 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           </div>
         )}
       </div>
-    </aside>
+    </motion.aside>
   );
 }

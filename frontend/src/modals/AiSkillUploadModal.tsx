@@ -6,6 +6,7 @@ import useAiSkillsStore from '../store/useAiSkillsStore';
 import { apiUploadAiSkill, ApiError } from '../api/client';
 import { backdropVariants, modalVariants, crossFadeVariants } from '@/components/animate-ui/motionTokens';
 import type { AiSkill } from '../types';
+import MotionIn from '../components/animate-ui/MotionIn';
 
 interface AiSkillUploadModalProps {
   onClose: () => void;
@@ -150,16 +151,15 @@ export default function AiSkillUploadModal({ onClose, onCreated }: AiSkillUpload
           <AnimatePresence mode="wait" initial={false}>
           {mode === 'upload' ? (
             <motion.div key="upload" variants={crossFadeVariants} initial="initial" animate="animate" exit="exit">
-              <div
+              <MotionIn
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                style={{
+                transition={{ duration: 0.12 }} style={{
                   border: `1.5px dashed ${isDragging || file ? 'var(--color-primary)' : 'var(--color-border)'}`, borderRadius: 12,
                   padding: '22px 16px', textAlign: 'center', cursor: 'pointer', marginBottom: 16,
                   background: isDragging || file ? 'var(--color-purple-pale-14)' : 'var(--color-surface-neutral)',
-                  transition: 'background 120ms, border-color 120ms',
                 }}
               >
                 <input
@@ -173,7 +173,7 @@ export default function AiSkillUploadModal({ onClose, onCreated }: AiSkillUpload
                 <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', marginTop: 2 }}>
                   A .zip must contain a SKILL.md, optionally with reference files alongside it. Drag and drop works too.
                 </div>
-              </div>
+              </MotionIn>
 
               <div style={fieldWrap}>
                 <div style={fieldLabel}>Name (optional override)</div>
@@ -186,7 +186,7 @@ export default function AiSkillUploadModal({ onClose, onCreated }: AiSkillUpload
 
               {busy && (
                 <div style={{ background: 'var(--color-border-alt)', borderRadius: 99, height: 6, overflow: 'hidden', marginBottom: 16 }}>
-                  <div style={{ width: `${progress}%`, height: '100%', background: 'var(--color-primary)', borderRadius: 99, transition: 'width 150ms' }} />
+                  <MotionIn transition={{ duration: 0.15 }} style={{ width: `${progress}%`, height: '100%', background: 'var(--color-primary)', borderRadius: 99, }} />
                 </div>
               )}
             </motion.div>

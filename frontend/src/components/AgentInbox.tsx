@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Icon from './Icon';
 import useAgentStore from '../store/useAgentStore';
 import type { AgentRun, AgentRunStep } from '../types';
+import { motion, useReducedMotion } from './animate-ui/motion';
 
 const STATUS_COLOR: Record<string, string> = {
   running: 'var(--color-primary)', success: 'var(--color-success)', failed: 'var(--color-error)',
@@ -119,6 +120,7 @@ function formatRunTime(iso: string): string {
 export function RunRow({ run, expanded, onToggle }: { run: AgentRun; expanded: boolean; onToggle: () => void }) {
   const steps = (run.steps ?? []) as AgentRunStep[];
   const running = run.status === 'running';
+  const reduceMotion = useReducedMotion();
   return (
     <div style={{ background: 'var(--color-white)', borderRadius: 8, border: '1px solid var(--color-border)', overflow: 'hidden' }}>
       <button
@@ -127,7 +129,12 @@ export function RunRow({ run, expanded, onToggle }: { run: AgentRun; expanded: b
       >
         <span style={{ position: 'relative', width: 7, height: 7, flexShrink: 0 }}>
           <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: STATUS_COLOR[run.status] ?? 'var(--color-text-quaternary)' }} />
-          {running && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: STATUS_COLOR.running, animation: 'pulse 1.2s ease-in-out infinite' }} />}
+          {running && (
+            <motion.span
+              animate={reduceMotion ? { opacity: 0.7 } : { opacity: [0.25, 0.9, 0.25], scale: [1, 1.5, 1] }}
+              transition={{ duration: 1.2, ease: 'easeInOut', repeat: Infinity }}
+              style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: STATUS_COLOR.running }} />
+          )}
         </span>
         <span style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {run.goal}

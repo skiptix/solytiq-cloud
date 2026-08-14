@@ -23,6 +23,7 @@ import { ENTRY_TYPE_OPTIONS } from '../../utils/knowledgeEntryTypes';
 import { knowledgeEntryImageUrl, apiUploadKnowledgeEntryImage, ensureAssetTicket } from '../../api/client';
 import { panelVariantsRight, crossFadeVariants } from '@/components/animate-ui/motionTokens';
 import type { MentionMember } from '../../utils/mention';
+import MotionButton from '../animate-ui/MotionButton';
 
 const ORIGIN_LABEL: Record<string, string> = {
   ai: 'Written by the assistant',
@@ -65,26 +66,16 @@ export default function EntryInspector({
   const [imagesReady, setImagesReady] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Switching to a different entry rebuilds the buffer. Keyed on id rather than
-  // on the whole entry so a background sync refresh can't wipe an in-progress
-  // edit of the entry currently open.
+  // Switching to a different entry rebuilds the buffer by REMOUNTING — the
+  // caller keys this component on `entry.id` (see KnowledgeScreen), so every
+  // useState above already initialises from the right entry and there is no
+  // re-set-everything effect to keep in sync with the field list.
   useEffect(() => {
-    setTerm(entry.term);
-    setSummary(entry.summary ?? '');
-    setEntryType(entry.entryType);
-    setAliases(entry.aliases);
-    setAliasDraft('');
-    setBlocks(entry.content.blocks.length > 0 ? (entry.content.blocks as MarkdownBlock[]) : [makeEmptyBlock('paragraph')]);
-    setMetaDirty(false);
-    setError('');
-    setConfirmDelete(false);
-    setImagesReady(false);
     let cancelled = false;
     ensureAssetTicket(`kbimg:${entry.id}`)
       .catch(() => { /* best-effort — an entry with no images doesn't need one */ })
       .finally(() => { if (!cancelled) setImagesReady(true); });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry.id]);
 
   useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
@@ -208,20 +199,24 @@ export default function EntryInspector({
             {ENTRY_TYPE_OPTIONS.map(o => {
               const active = entryType === o.key;
               return (
-                <button key={o.key}
+                <MotionButton key={o.key}
                   disabled={!canWrite}
                   onClick={() => { setEntryType(o.key); setMetaDirty(true); }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 4, padding: '5px 9px', borderRadius: 999,
-                    border: `1px solid ${active ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                  animate={{
+                    borderColor: active ? 'var(--color-primary)' : 'var(--color-border)',
                     background: active ? 'var(--color-surface-tint)' : 'var(--color-white)',
                     color: active ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                  }}
+                  transition={{ duration: 0.14 }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4, padding: '5px 9px', borderRadius: 999,
+                    borderWidth: 1, borderStyle: 'solid',
                     fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600,
-                    cursor: canWrite ? 'pointer' : 'default', transition: 'all 140ms',
+                    cursor: canWrite ? 'pointer' : 'default',
                   }}>
                   <Icon name={o.icon} size={12} color={active ? 'var(--color-primary)' : 'var(--color-text-quaternary)'} />
                   {o.label}
-                </button>
+                </MotionButton>
               );
             })}
           </div>

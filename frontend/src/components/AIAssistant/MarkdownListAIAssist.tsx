@@ -6,6 +6,7 @@ import { apiGetAISettings, apiAIChat, apiGetAiToolDefs, apiExecuteAiTool } from 
 import type { MarkdownList } from '../../types';
 import Spinner from '@/components/animate-ui/Spinner';
 import PopIn from '@/components/animate-ui/PopIn';
+import MotionButton from '../animate-ui/MotionButton';
 
 // ── Scoped "full access" AI editor for a single Markdown page ──────────────
 // Unlike the global Sol assistant (which can touch every list/task/timeline
@@ -142,14 +143,14 @@ export default function MarkdownListAIAssist({ markdownListId, markdownListName,
 
   return (
     <div style={{ position: 'relative' }}>
-      <button
+      <MotionButton
         type="button"
         title="Ask AI to edit this page"
         onClick={() => setOpen((o) => !o)}
-        style={{ display: 'flex', alignItems: 'center', gap: 5, height: 32, padding: '0 11px', borderRadius: 8, border: `1px solid ${open ? 'var(--color-primary)' : 'var(--color-border)'}`, background: open ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', transition: 'all 120ms' }}>
+        transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', gap: 5, height: 32, padding: '0 11px', borderRadius: 8, border: `1px solid ${open ? 'var(--color-primary)' : 'var(--color-border)'}`, background: open ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', }}>
         <Icon name="auto_awesome" size={15} color="var(--color-primary)" />
         <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)' }}>Ask AI</span>
-      </button>
+      </MotionButton>
 
       {open && (
         <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 250, width: Math.min(360, window.innerWidth - 32), maxHeight: 460, display: 'flex', flexDirection: 'column', background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 14, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', overflow: 'hidden' }}>

@@ -17,6 +17,10 @@ import { searchNominatim, parseCoordInput } from '../utils/nominatim';
 import { POI_CATEGORY_CONFIG, createPoiDivIcon, createPinDivIcon } from '../utils/poiCategories';
 import { diffPoiMarkers } from '../utils/routeState';
 import { buildPoiPopupElement, buildSafeTooltipElement } from '../utils/poiPopup';
+import { motion, useReducedMotion } from '../components/animate-ui/motion';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
+import { EASE_SETTLE, EASE_STANDARD } from '../components/animate-ui/motionTokens';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDist(m?: number | null) {
@@ -553,7 +557,6 @@ export default function GPSScreen() {
       map.off('zoomend', scheduleFetch);
       clearTimeout(poiFetchTimerRef.current!);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePoi, doPoiFetch]);
 
   // ── Search ────────────────────────────────────────────────────────────────
@@ -728,35 +731,52 @@ export default function GPSScreen() {
 
   const CHART_H = 160;
   const chartVisible = !!(selectedId && trackData && !chartCollapsed);
+  // The root MotionConfig's reducedMotion="user" covers transforms and layout,
+  // but says nothing about a decorative repeat we opted into ourselves — the
+  // POI-loading pulse below has to check for itself.
+  const reduceMotion = useReducedMotion();
 
-  // Shared glassmorphic button style for map controls
-  const mapCtrlBtn = (enabled = true): React.CSSProperties => ({
-    width: 36, height: 36, borderRadius: 9,
-    background: 'rgba(var(--color-white-rgb), 0.88)',
-    backdropFilter: 'blur(16px)',
-    WebkitBackdropFilter: 'blur(16px)',
-    border: '1px solid rgba(var(--color-white-rgb), 0.75)',
-    boxShadow: '0 2px 12px rgba(var(--color-primary-rgb), 0.10)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: enabled ? 'pointer' : 'default',
-    opacity: enabled ? 1 : 0.45,
-    transition: 'box-shadow 150ms, background 150ms',
+  // Shared glassmorphic map-control button. Returns the whole prop bundle
+  // rather than only a style object: the hover state used to live in a
+  // `.gps-map-ctrl:hover` rule carrying two `!important`s, which meant the
+  // one control with a real active state (satellite) had its active
+  // background stomped on hover. Keeping hover next to the base style makes
+  // that overlap visible, and lets the active control opt out below.
+  const mapCtrlBtn = (enabled = true) => ({
+    style: {
+      width: 36, height: 36, borderRadius: 9,
+      backdropFilter: 'blur(16px)',
+      WebkitBackdropFilter: 'blur(16px)',
+      borderWidth: 1, borderStyle: 'solid',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      cursor: enabled ? 'pointer' : 'default',
+    } as React.CSSProperties,
+    animate: {
+      background: 'rgba(var(--color-white-rgb), 0.88)',
+      borderColor: 'rgba(var(--color-white-rgb), 0.75)',
+      boxShadow: '0 2px 12px rgba(var(--color-primary-rgb), 0.10)',
+      opacity: enabled ? 1 : 0.45,
+    },
+    whileHover: enabled
+      ? {
+          boxShadow: '0 4px 18px rgba(var(--color-primary-rgb), 0.18)',
+          background: 'rgba(var(--color-white-rgb), 0.97)',
+        }
+      : undefined,
+    transition: { duration: 0.15 },
   });
 
   return (
     <>
-      <style>{`
-        @keyframes gpsPageIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes mapFadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .gps-map-ctrl:hover { box-shadow: 0 4px 18px rgba(var(--color-primary-rgb), 0.18) !important; background: rgba(var(--color-white-rgb), 0.97) !important; }
-      `}</style>
-
-      <div style={{
-        flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
-        height: '100%', overflow: 'hidden', position: 'relative',
-        animation: 'gpsPageIn 380ms cubic-bezier(0.23,1,0.32,1) both',
-        fontFamily: 'var(--font-body)',
-      }}>
+      <MotionIn
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.38, ease: EASE_SETTLE }}
+        style={{
+          flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
+          height: '100%', overflow: 'hidden', position: 'relative',
+          fontFamily: 'var(--font-body)',
+        }}>
         {/* ── Map fills full area ─────────────────────────────────────────────── */}
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden', isolation: 'isolate' }}>
           {/* Leaflet map */}
@@ -764,17 +784,20 @@ export default function GPSScreen() {
 
           {/* ── Floating Info Card (top-left, only when file selected) ─────── */}
           {selectedFile && (
-            <div style={{
-              position: 'absolute', top: 16, left: 16, zIndex: 1000,
-              width: 300, boxSizing: 'border-box',
-              background: 'rgba(var(--color-white-rgb), 0.88)',
-              backdropFilter: 'blur(20px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              border: '1px solid rgba(var(--color-white-rgb), 0.75)',
-              borderRadius: 14, padding: '14px 16px',
-              boxShadow: '0 4px 32px rgba(var(--color-primary-rgb), 0.12), inset 0 1px 0 rgba(var(--color-white-rgb), 0.90)',
-              animation: 'mapFadeIn 300ms ease both',
-            }}>
+            <MotionIn
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3, ease: EASE_STANDARD }}
+              style={{
+                position: 'absolute', top: 16, left: 16, zIndex: 1000,
+                width: 300, boxSizing: 'border-box',
+                background: 'rgba(var(--color-white-rgb), 0.88)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                border: '1px solid rgba(var(--color-white-rgb), 0.75)',
+                borderRadius: 14, padding: '14px 16px',
+                boxShadow: '0 4px 32px rgba(var(--color-primary-rgb), 0.12), inset 0 1px 0 rgba(var(--color-white-rgb), 0.90)',
+              }}>
               {/* File type badge + name */}
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
                 <span style={{
@@ -837,23 +860,23 @@ export default function GPSScreen() {
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
                   {/* Edit */}
-                  <button
+                  <MotionButton
                     onClick={() => navigate(`/gps/${selectedId}/edit`)}
                     style={{
                       height: 32, borderRadius: 8, border: 'none',
                       background: 'var(--color-primary)', color: 'var(--color-white)',
                       fontSize: 11, fontWeight: 600, cursor: 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                      fontFamily: 'var(--font-heading)', transition: 'background 150ms',
+                      fontFamily: 'var(--font-heading)',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-primary)'; }}
+                    whileHover={{ background: 'var(--color-purple-mid-11)' }}
+                    transition={{ duration: 0.15 }}
                   >
                     <Icon name="edit" size={12} color="var(--color-white)" />
                     Edit
-                  </button>
+                  </MotionButton>
                   {/* Download */}
-                  <button
+                  <MotionButton
                     onClick={downloadOriginal}
                     disabled={downloading}
                     style={{
@@ -862,31 +885,34 @@ export default function GPSScreen() {
                       fontSize: 11, fontWeight: 600,
                       cursor: downloading ? 'default' : 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                      fontFamily: 'var(--font-heading)', transition: 'background 150ms',
-                      opacity: downloading ? 0.6 : 1,
+                      fontFamily: 'var(--font-heading)',
                     }}
-                    onMouseEnter={e => { if (!downloading) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-white)'; }}
+                    animate={{ opacity: downloading ? 0.6 : 1 }}
+                    // `undefined` rather than a target: while a download is in
+                    // flight the button gives no hover feedback at all, which
+                    // is what the old `if (!downloading)` guard meant.
+                    whileHover={downloading ? undefined : { background: 'var(--color-surface-tint)' }}
+                    transition={{ duration: 0.15 }}
                   >
                     <Icon name="download" size={12} color="var(--color-text-tertiary)" />
                     Save
-                  </button>
+                  </MotionButton>
                   {/* Delete */}
-                  <button
+                  <MotionButton
                     onClick={() => setDeleteConfirm('selected')}
                     style={{
                       height: 32, borderRadius: 8, border: '1px solid var(--color-red-tint-1)',
                       background: 'transparent', color: 'var(--color-error)',
                       fontSize: 11, fontWeight: 600, cursor: 'pointer',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                      fontFamily: 'var(--font-heading)', transition: 'background 150ms',
+                      fontFamily: 'var(--font-heading)',
                     }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-error-bg-alt)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                    whileHover={{ background: 'var(--color-error-bg-alt)' }}
+                    transition={{ duration: 0.15 }}
                   >
                     <Icon name="delete" size={12} color="var(--color-error)" />
                     Delete
-                  </button>
+                  </MotionButton>
                 </div>
               )}
 
@@ -894,22 +920,25 @@ export default function GPSScreen() {
               {uploading && (
                 <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ flex: 1, height: 4, borderRadius: 4, background: 'var(--color-surface-tint-4)', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${uploadProgress}%`, background: 'var(--color-primary)', borderRadius: 4, transition: 'width 200ms' }} />
+                    <MotionIn transition={{ duration: 0.2 }} style={{ height: '100%', width: `${uploadProgress}%`, background: 'var(--color-primary)', borderRadius: 4, }} />
                   </div>
                   <span style={{ fontSize: 10, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>{uploadProgress}%</span>
                 </div>
               )}
-            </div>
+            </MotionIn>
           )}
 
           {/* ── Search + POI toggles (unified card, top-center) ─────────────── */}
           <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 1001, width: 340 }}>
-            <div style={{
-              background: 'rgba(var(--color-white-rgb), 0.95)', backdropFilter: 'blur(20px) saturate(180%)',
-              border: `1px solid ${searchOpen ? 'var(--color-accent-purple-soft)' : 'rgba(var(--color-white-rgb), 0.75)'}`,
-              borderRadius: 14, boxShadow: '0 4px 20px rgba(var(--color-primary-rgb), 0.12)',
-              transition: 'border-color 150ms', overflow: 'hidden',
-            }}>
+            <motion.div
+              animate={{ borderColor: searchOpen ? 'var(--color-accent-purple-soft)' : 'rgba(var(--color-white-rgb), 0.75)' }}
+              transition={{ duration: 0.15 }}
+              style={{
+                background: 'rgba(var(--color-white-rgb), 0.95)', backdropFilter: 'blur(20px) saturate(180%)',
+                borderWidth: 1, borderStyle: 'solid',
+                borderRadius: 14, boxShadow: '0 4px 20px rgba(var(--color-primary-rgb), 0.12)',
+                overflow: 'hidden',
+              }}>
               {/* Search row */}
               <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', gap: 8 }}>
                 <Icon name={searchLoading ? 'progress_activity' : 'search'} size={16} color="var(--color-text-tertiary)" />
@@ -934,25 +963,36 @@ export default function GPSScreen() {
                 {(Object.entries(POI_CATEGORY_CONFIG) as Array<[PoiCategory, typeof POI_CATEGORY_CONFIG[PoiCategory]]>).map(([cat, cfg]) => {
                   const active = activePoi.has(cat);
                   return (
-                    <button key={cat} title={cfg.label} onClick={() => setActivePoi(prev => { const next = new Set(prev); active ? next.delete(cat) : next.add(cat); return next; })} style={{ flex: 1, height: 30, borderRadius: 7, background: active ? cfg.bg : 'transparent', border: active ? `1.5px solid ${cfg.borderColor}` : '1.5px solid var(--color-purple-pale-24)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', opacity: active ? 1 : 0.5 }}>
+                    <MotionButton
+                      key={cat}
+                      title={cfg.label}
+                      onClick={() => setActivePoi(prev => { const next = new Set(prev); if (active) next.delete(cat); else next.add(cat); return next; })}
+                      animate={{ background: active ? cfg.bg : 'transparent', borderColor: active ? cfg.borderColor : 'var(--color-purple-pale-24)', opacity: active ? 1 : 0.5 }}
+                      transition={{ duration: 0.15 }}
+                      style={{ flex: 1, height: 30, borderRadius: 7, borderWidth: 1.5, borderStyle: 'solid', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <span className="material-symbols-outlined" style={{ fontSize: 15, color: active ? cfg.fg : 'var(--color-text-quaternary)', lineHeight: 1, fontVariationSettings: "'FILL' 1, 'wght' 400" }}>{cfg.icon}</span>
-                    </button>
+                    </MotionButton>
                   );
                 })}
-                {poiLoading && <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-primary)', opacity: 0.7, animation: 'pulse 1s ease-in-out infinite', marginLeft: 4, flexShrink: 0 }} />}
+                {poiLoading && (
+                  <motion.div
+                    animate={reduceMotion ? { opacity: 0.7 } : { opacity: [0.25, 0.9, 0.25], scale: [1, 1.35, 1] }}
+                    transition={{ duration: 1, ease: 'easeInOut', repeat: Infinity }}
+                    style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-primary)', marginLeft: 4, flexShrink: 0 }} />
+                )}
               </div>
               {/* Search results dropdown */}
               {searchOpen && searchResults.length > 0 && (
                 <div style={{ borderTop: '1px solid var(--color-border)', maxHeight: 240, overflowY: 'auto' }}>
                   {searchResults.map(r => (
-                    <button key={r.place_id} onMouseDown={() => handleSearchSelect(r)} style={{ width: '100%', padding: '8px 14px', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: '1px solid var(--color-surface-tint)', transition: 'background 100ms' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                    <MotionButton key={r.place_id} onMouseDown={() => handleSearchSelect(r)} whileHover={{ background: 'var(--color-surface-tint-3)' }} transition={{ duration: 0.1 }} style={{ width: '100%', padding: '8px 14px', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer', borderBottom: '1px solid var(--color-surface-tint)' }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)', fontFamily: 'var(--font-heading)' }}>{r.display_name.split(',')[0]}</div>
                       <div style={{ fontSize: 10, color: 'var(--color-text-quaternary)', marginTop: 1 }}>{r.display_name.split(',').slice(1, 3).join(',').trim()}</div>
-                    </button>
+                    </MotionButton>
                   ))}
                 </div>
               )}
-            </div>
+            </motion.div>
           </div>
           {activePoi.size > 0 && mapZoom < 13 && (
             <div style={{ position: 'absolute', top: 110, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(var(--color-white-rgb), 0.88)', backdropFilter: 'blur(12px)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '6px 14px', fontSize: 11, color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-body)', whiteSpace: 'nowrap' }}>
@@ -962,67 +1002,70 @@ export default function GPSScreen() {
 
           {/* ── Map action controls (top-right) ───────────────────────────── */}
           <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <button
-              className="gps-map-ctrl"
+            <MotionButton
               onClick={() => selectedId && !selectedFile?.smoothed && setSmoothWizardOpen(true)}
               disabled={!selectedId || !!selectedFile?.smoothed}
               title={selectedFile?.smoothed ? 'Elevation already smoothed' : 'Smooth Elevation'}
-              style={mapCtrlBtn(!!selectedId && !selectedFile?.smoothed)}
+              {...mapCtrlBtn(!!selectedId && !selectedFile?.smoothed)}
             >
               <Icon name="auto_fix_high" size={16} color={selectedFile?.smoothed ? 'var(--color-text-quaternary)' : 'var(--color-primary)'} />
-            </button>
-            <button
-              className="gps-map-ctrl"
+            </MotionButton>
+            <MotionButton
               onClick={() => setMergeWizardOpen(true)}
               title="Merge Routes"
-              style={mapCtrlBtn()}
+              {...mapCtrlBtn()}
             >
               <Icon name="merge" size={16} color="var(--color-primary)" />
-            </button>
-            <button
-              className="gps-map-ctrl"
+            </MotionButton>
+            <MotionButton
               onClick={() => fileInputRef.current?.click()}
               title="Upload Route"
-              style={mapCtrlBtn()}
+              {...mapCtrlBtn()}
             >
               <Icon name="upload" size={16} color="var(--color-primary)" />
-            </button>
-            <button
-              className="gps-map-ctrl"
+            </MotionButton>
+            <MotionButton
               onClick={handleMapTypeToggle}
               title={mapType === 'street' ? 'Satellite View' : 'Street Map'}
-              style={{ ...mapCtrlBtn(), ...(mapType === 'satellite' ? { background: 'var(--color-primary)', border: '1px solid var(--color-purple-mid-12)' } : {}) }}
+              {...mapCtrlBtn()}
+              // The one control with a real active state. It keeps the shared
+              // hover shadow but overrides the hover background, so switching
+              // to satellite no longer flashes back to white under the cursor
+              // the way the `!important` stylesheet rule forced it to.
+              animate={mapType === 'satellite'
+                ? { ...mapCtrlBtn().animate, background: 'var(--color-primary)', borderColor: 'var(--color-purple-mid-12)' }
+                : mapCtrlBtn().animate}
+              whileHover={mapType === 'satellite'
+                ? { boxShadow: '0 4px 18px rgba(var(--color-primary-rgb), 0.18)', background: 'var(--color-purple-mid-11)' }
+                : mapCtrlBtn().whileHover}
             >
               <Icon name={mapType === 'street' ? 'satellite_alt' : 'map'} size={16} color={mapType === 'satellite' ? 'var(--color-white)' : 'var(--color-primary)'} />
-            </button>
-            <button
-              className="gps-map-ctrl"
+            </MotionButton>
+            <MotionButton
               onClick={handlePlanNewRoute}
               disabled={planningNew}
               title="Plan new route"
-              style={{ ...mapCtrlBtn(!planningNew) }}
+              {...mapCtrlBtn(!planningNew)}
             >
               <Icon name={planningNew ? 'progress_activity' : 'add_road'} size={16} color="var(--color-primary)" />
-            </button>
+            </MotionButton>
 
             {/* Zoom controls — replaces the default Leaflet control (was hidden under the info card) */}
             <div style={{ height: 1, background: 'rgba(var(--color-primary-rgb), 0.18)', margin: '4px 6px' }} />
-            <button
-              className="gps-map-ctrl"
+            <MotionButton
               onClick={() => leafletRef.current?.zoomIn()}
               title="Zoom In"
-              style={mapCtrlBtn()}
+              {...mapCtrlBtn()}
             >
               <Icon name="add" size={16} color="var(--color-primary)" />
-            </button>
-            <button
-              className="gps-map-ctrl"
+            </MotionButton>
+            <MotionButton
               onClick={() => leafletRef.current?.zoomOut()}
               title="Zoom Out"
-              style={mapCtrlBtn()}
+              {...mapCtrlBtn()}
             >
               <Icon name="remove" size={16} color="var(--color-primary)" />
-            </button>
+            </MotionButton>
           </div>
 
           {/* ── Empty state (no file selected) ────────────────────────────── */}
@@ -1073,9 +1116,9 @@ export default function GPSScreen() {
 
           {/* ── Elevation chart toggle button ─────────────────────────────── */}
           {selectedId && trackData && (
-            <button
+            <MotionButton
               onClick={() => setChartCollapsed(c => !c)}
-              style={{
+              transition={{ duration: 0.28 }} style={{
                 position: 'absolute',
                 bottom: chartVisible ? CHART_H + 10 : 12,
                 left: '50%', transform: 'translateX(-50%)',
@@ -1087,23 +1130,21 @@ export default function GPSScreen() {
                 borderRadius: 20, fontSize: 11, fontWeight: 600,
                 color: 'var(--color-primary)', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: 4,
-                transition: 'bottom 280ms cubic-bezier(0.23,1,0.32,1)',
                 boxShadow: '0 2px 10px rgba(var(--color-primary-rgb), 0.10)',
                 fontFamily: 'var(--font-body)',
               }}
             >
               <Icon name={chartCollapsed ? 'expand_less' : 'expand_more'} size={14} color="var(--color-primary)" />
               {chartCollapsed ? 'Elevation' : 'Hide'}
-            </button>
+            </MotionButton>
           )}
 
           {/* ── Elevation chart strip (bottom) ────────────────────────────── */}
           {selectedId && trackData && (
-            <div style={{
+            <MotionIn transition={{ duration: 0.28 }} style={{
               position: 'absolute', bottom: 0, left: 0, right: 0,
               height: chartCollapsed ? 0 : CHART_H,
               overflow: 'hidden',
-              transition: 'height 280ms cubic-bezier(0.23,1,0.32,1)',
               zIndex: 1000,
               background: 'rgba(var(--color-white-rgb), 0.70)',
               backdropFilter: 'blur(20px) saturate(180%)',
@@ -1116,7 +1157,7 @@ export default function GPSScreen() {
                 hoveredIdx={hoveredIdx}
                 onHover={setHoveredIdx}
               />
-            </div>
+            </MotionIn>
           )}
         </div>
 
@@ -1182,14 +1223,18 @@ export default function GPSScreen() {
                     { value: 'new', label: 'Save as New Route', icon: 'add_circle', desc: 'Keep the original' },
                     { value: 'replace', label: 'Override Current', icon: 'sync', desc: 'Replace original file' },
                   ] as const).map(opt => (
-                    <button
+                    <MotionButton
                       key={opt.value}
                       onClick={() => setSmoothMode(opt.value)}
+                      animate={{
+                        borderColor: smoothMode === opt.value ? 'var(--color-primary)' : 'var(--color-border)',
+                        background: smoothMode === opt.value ? 'var(--color-surface-tint)' : 'var(--color-white)',
+                      }}
+                      transition={{ duration: 0.15 }}
                       style={{
                         padding: '12px 10px', borderRadius: 10, cursor: 'pointer',
-                        border: `2px solid ${smoothMode === opt.value ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                        background: smoothMode === opt.value ? 'var(--color-surface-tint)' : 'var(--color-white)',
-                        textAlign: 'left', transition: 'all 150ms',
+                        borderWidth: 2, borderStyle: 'solid',
+                        textAlign: 'left',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
@@ -1197,7 +1242,7 @@ export default function GPSScreen() {
                         <span style={{ fontSize: 11.5, fontWeight: 700, color: smoothMode === opt.value ? 'var(--color-primary)' : 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)' }}>{opt.label}</span>
                       </div>
                       <div style={{ fontSize: 10.5, color: 'var(--color-text-quaternary)', fontFamily: 'var(--font-body)' }}>{opt.desc}</div>
-                    </button>
+                    </MotionButton>
                   ))}
                 </div>
               </div>
@@ -1220,28 +1265,29 @@ export default function GPSScreen() {
                   onClick={() => setSmoothWizardOpen(false)}
                   style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: '1px solid var(--color-border)', background: 'var(--color-white)', color: 'var(--color-text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-heading)' }}
                 >Cancel</button>
-                <button
+                <MotionButton
                   onClick={handleSmoothApply}
                   disabled={smoothSaving}
+                  animate={{ background: smoothSaving ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)' }}
+                  whileHover={smoothSaving ? undefined : { background: 'var(--color-purple-mid-11)' }}
+                  transition={{ duration: 0.15 }}
                   style={{
                     flex: 2, padding: '9px 0', borderRadius: 9, border: 'none',
-                    background: smoothSaving ? 'var(--color-accent-purple-soft)' : 'var(--color-primary)', color: 'var(--color-white)',
+                    color: 'var(--color-white)',
                     fontSize: 13, fontWeight: 600, cursor: smoothSaving ? 'default' : 'pointer',
-                    fontFamily: 'var(--font-heading)', transition: 'background 150ms',
+                    fontFamily: 'var(--font-heading)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                   }}
-                  onMouseEnter={e => { if (!smoothSaving) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }}
-                  onMouseLeave={e => { if (!smoothSaving) e.currentTarget.style.background = 'var(--color-primary)'; }}
                 >
                   <Icon name="auto_fix_high" size={14} color="var(--color-white)" />
                   {smoothSaving ? 'Applying…' : 'Apply'}
-                </button>
+                </MotionButton>
               </div>
             </div>
           </div>,
           document.body
         )}
-      </div>
+      </MotionIn>
     </>
   );
 }

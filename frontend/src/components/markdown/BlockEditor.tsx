@@ -30,10 +30,14 @@ import { newBlockId, makeEmptyBlock, hasText, type TextBlock } from '../../utils
 import Icon from '../Icon';
 import MarkdownTable from '../MarkdownTable';
 import { makeEmptyTableBlock } from '../../utils/markdownTable';
-import { renderInline } from '../MarkdownView';
+import { renderInline } from '../../utils/markdownRender';
 import { toggleWrap, formatMarkerForKeyDown } from '../../utils/textFormatting';
 import { detectMention, applyMention, filterMentionMembers, type MentionMember } from '../../utils/mention';
 import MentionPopover from '../MentionPopover';
+import MotionIn from '../animate-ui/MotionIn';
+import MotionButton from '../animate-ui/MotionButton';
+import nextFrame from '../animate-ui/nextFrame';
+import { EASE_SETTLE, EASE_STANDARD } from '../animate-ui/motionTokens';
 
 // Matches TaskItem.tsx's hand-drawn checkmark so a `/todo` block's checkbox
 // looks identical to a task row in the Board screen.
@@ -113,7 +117,7 @@ function ImageUploadModal({ uploadImage, isMobile, onUploaded, onClose }: ImageU
           </button>
         </div>
         <div style={{ padding: 24 }}>
-          <div
+          <MotionIn
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={e => {
@@ -123,10 +127,14 @@ function ImageUploadModal({ uploadImage, isMobile, onUploaded, onClose }: ImageU
               if (file) void handleFile(file);
             }}
             onClick={() => !uploading && fileInputRef.current?.click()}
+            animate={{
+              borderColor: dragOver ? 'var(--color-primary)' : 'var(--color-border)',
+              background: dragOver ? 'var(--color-surface-tint)' : 'var(--color-purple-pale-7)',
+            }}
+            transition={{ duration: 0.15 }}
             style={{
-              border: `2px dashed ${dragOver ? 'var(--color-primary)' : 'var(--color-border)'}`, borderRadius: 14, padding: '40px 20px',
+              borderWidth: 2, borderStyle: 'dashed', borderRadius: 14, padding: '40px 20px',
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: uploading ? 'default' : 'pointer',
-              background: dragOver ? 'var(--color-surface-tint)' : 'var(--color-purple-pale-7)', transition: 'all 150ms',
             }}>
             <Icon name={uploading ? 'progress_activity' : 'add_photo_alternate'} size={32} color="var(--color-accent-purple-light)" />
             {uploading ? (
@@ -139,7 +147,7 @@ function ImageUploadModal({ uploadImage, isMobile, onUploaded, onClose }: ImageU
             )}
             <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" style={{ display: 'none' }}
               onChange={e => { const f = e.target.files?.[0]; if (f) void handleFile(f); }} />
-          </div>
+          </MotionIn>
           {error && <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--color-error-bg)', borderRadius: 8, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>{error}</div>}
         </div>
       </ModalIn>
@@ -210,9 +218,13 @@ export default function BlockEditor({
   const blockRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
   // @-mention typeahead — the in-progress mention (which block + where).
-  const [mention, setMention] = useState<{ blockId: string; at: number; query: string } | null>(null);
+  const [pendingMention, setMention] = useState<{ blockId: string; at: number; query: string } | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
-  useEffect(() => { setMention(null); }, [focusedBlockId]);
+  // A mention only belongs to the block it was typed in, so moving focus
+  // elsewhere ends it by definition — derived here rather than cleared by an
+  // effect keyed on focusedBlockId, which took an extra render to settle and
+  // could show the popover over the wrong block for a frame.
+  const mention = pendingMention && pendingMention.blockId === focusedBlockId ? pendingMention : null;
   const mentionCandidates = mention ? filterMentionMembers(mentionMembers, mention.query) : [];
   const mentionActive = mention !== null && mentionCandidates.length > 0;
 
@@ -268,7 +280,7 @@ export default function BlockEditor({
   const applyFormatToBlock = (block: TextBlock, marker: '**' | '*' | '~~', el: HTMLTextAreaElement) => {
     const { next, selStart, selEnd } = toggleWrap(block.text, el.selectionStart ?? 0, el.selectionEnd ?? 0, marker);
     updateBlockText(block.id, next);
-    requestAnimationFrame(() => {
+    nextFrame(() => {
       const now = blockRefs.current[block.id];
       if (!now) return;
       now.focus();
@@ -461,7 +473,7 @@ export default function BlockEditor({
     const { value, caret: nextCaret } = applyMention(block.text, mention.at, caret, m.username);
     updateBlockText(block.id, value);
     setMention(null);
-    requestAnimationFrame(() => {
+    nextFrame(() => {
       const el = blockRefs.current[block.id];
       if (el) { el.focus(); el.setSelectionRange(nextCaret, nextCaret); }
     });
@@ -674,13 +686,15 @@ export default function BlockEditor({
         onDragOver={e => e.preventDefault()}
         onDrop={e => { e.preventDefault(); if (dragBlockId && dragBlockId !== block.id) moveBlock(dragBlockId, block.id); setDragBlockId(null); }}
         style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-        <span
+        <motion.span
           draggable={reorderMode}
           onDragStart={() => { if (reorderMode) setDragBlockId(block.id); }}
           title="Drag to reorder"
-          style={{ cursor: reorderMode ? 'grab' : 'default', flexShrink: 0, width: 15, overflow: 'hidden', display: 'flex', alignItems: 'center', height: 15, marginTop: Math.max(0, lineCenter - 7.5), opacity: reorderMode ? 1 : 0, pointerEvents: reorderMode ? 'auto' : 'none', transition: 'opacity 160ms ease, margin-top 200ms cubic-bezier(0.22,1,0.36,1)' }}>
+          animate={{ opacity: reorderMode ? 1 : 0, marginTop: Math.max(0, lineCenter - 7.5) }}
+          transition={{ opacity: { duration: 0.16, ease: EASE_STANDARD }, marginTop: { duration: 0.2, ease: EASE_SETTLE } }}
+          style={{ cursor: reorderMode ? 'grab' : 'default', flexShrink: 0, width: 15, overflow: 'hidden', display: 'flex', alignItems: 'center', height: 15, pointerEvents: reorderMode ? 'auto' : 'none' }}>
           <Icon name="drag_indicator" size={15} color="var(--color-primary)" />
-        </span>
+        </motion.span>
 
         <div style={{
           flex: 1, minWidth: 0, position: 'relative',
@@ -695,13 +709,15 @@ export default function BlockEditor({
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <hr style={{ flex: 1, border: 'none', borderTop: '1.5px solid var(--color-border)', margin: '10px 0' }} />
               {dividerCanColumnsById[block.id] && (
-                <button
+                <MotionButton
                   onClick={() => toggleColumnsLayout(block.id, 'columns')}
                   title="Arrange the sections above and below side by side"
-                  style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 999, border: `1px solid ${hovered ? 'var(--color-primary)' : 'var(--color-border)'}`, background: hovered ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', transition: 'background 160ms ease, border-color 160ms ease' }}>
+                  animate={{ borderColor: hovered ? 'var(--color-primary)' : 'var(--color-border)', background: hovered ? 'var(--color-surface-tint)' : 'var(--color-white)' }}
+                  transition={{ duration: 0.16, ease: EASE_STANDARD }}
+                  style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 999, borderWidth: 1, borderStyle: 'solid', cursor: 'pointer' }}>
                   <Icon name="view_column" size={13} color={hovered ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                   <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: hovered ? 'var(--color-primary)' : 'var(--color-text-tertiary)' }}>Side by side</span>
-                </button>
+                </MotionButton>
               )}
             </div>
           ) : block.type === 'image' ? (
@@ -728,10 +744,12 @@ export default function BlockEditor({
               {block.type === 'bulleted-list-item' && <span style={{ paddingTop: 9, color: 'var(--color-text-tertiary)', fontSize: 16, lineHeight: 1, flexShrink: 0 }}>•</span>}
               {block.type === 'numbered-list-item' && <span style={{ paddingTop: 8, color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, flexShrink: 0, minWidth: 16 }}>{numberByBlockId[block.id]}.</span>}
               {block.type === 'todo' && (
-                <div onClick={() => toggleTodo(block)}
-                  style={{ marginTop: 8, width: 20, height: 20, minWidth: 20, borderRadius: 5, border: '1.5px solid', borderColor: block.checked ? 'var(--color-primary)' : 'var(--color-border-strong)', background: block.checked ? 'var(--color-primary)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', flexShrink: 0 }}>
+                <motion.div onClick={() => toggleTodo(block)}
+                  animate={{ borderColor: block.checked ? 'var(--color-primary)' : 'var(--color-border-strong)', background: block.checked ? 'var(--color-primary)' : 'transparent' }}
+                  transition={{ duration: 0.15 }}
+                  style={{ marginTop: 8, width: 20, height: 20, minWidth: 20, borderRadius: 5, borderWidth: 1.5, borderStyle: 'solid', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   {block.checked && <Checkmark />}
-                </div>
+                </motion.div>
               )}
               {block.type === 'quote' && <span style={{ width: 3, alignSelf: 'stretch', background: 'var(--color-border-strong)', borderRadius: 2, flexShrink: 0, marginTop: 8, marginBottom: 8 }} />}
               {hasText(block) && (focusedBlockId === block.id ? (
@@ -742,16 +760,19 @@ export default function BlockEditor({
                   onChange={v => handleTextChange(block, v)}
                   onKeyDown={e => handleKeyDown(e, block, index)}
                   onBlur={() => setFocusedBlockId(prev => (prev === block.id ? null : prev))}
-                  style={headingStyleFor(block, isMobile)}
+                  style={headingStyleFor(block, isMobile).style}
+                  animate={headingStyleFor(block, isMobile).animate}
                 />
               ) : (
-                <div
+                <motion.div
                   onClick={() => focusBlock(block.id, true)}
-                  style={{ ...headingStyleFor(block, isMobile), cursor: 'text', whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: '1.6em' }}>
+                  animate={headingStyleFor(block, isMobile).animate}
+                  transition={BLOCK_MORPH_TRANSITION}
+                  style={{ ...headingStyleFor(block, isMobile).style, cursor: 'text', whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: '1.6em' }}>
                   {block.text
                     ? renderInline(block.text, block.id)
                     : <span style={{ color: 'var(--color-text-quaternary)' }}>{index === 0 && blocks.length === 1 ? placeholder : ' '}</span>}
-                </div>
+                </motion.div>
               ))}
             </div>
           )}
@@ -801,12 +822,15 @@ export default function BlockEditor({
           )}
         </div>
 
-        <button onClick={() => deleteBlock(block.id)} title="Delete block"
-          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, marginTop: Math.max(0, lineCenter - 11), borderRadius: 5, border: 'none', background: 'transparent', cursor: 'pointer', opacity: hovered ? 1 : 0, transition: 'opacity 120ms ease, margin-top 200ms cubic-bezier(0.22,1,0.36,1), background 120ms ease' }}
+        <MotionButton onClick={() => deleteBlock(block.id)} title="Delete block"
+          animate={{ opacity: hovered ? 1 : 0, marginTop: Math.max(0, lineCenter - 11) }}
+          whileHover={hovered ? { background: 'var(--color-surface-tint)' } : undefined}
+          transition={{ opacity: { duration: 0.12 }, marginTop: { duration: 0.2, ease: EASE_SETTLE }, default: { duration: 0.12 } }}
+          style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: 5, border: 'none', background: 'transparent', cursor: 'pointer' }}
           onMouseEnter={e => { if (hovered) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
           <Icon name="close" size={13} color="var(--color-text-quaternary)" />
-        </button>
+        </MotionButton>
       </motion.div>
     );
   };
@@ -821,35 +845,39 @@ export default function BlockEditor({
     const rowHovered = hoveredColumnsRowId === divider.id;
     const dragging = dragColumnHandle?.dividerId === divider.id;
 
-    const toolbarBtn: React.CSSProperties = {
-      display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999,
-      border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer',
-      fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)',
-      transition: 'background 140ms ease, border-color 140ms ease, color 140ms ease',
+    const toolbarBtn = {
+      style: {
+        display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999,
+        borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--color-border)',
+        background: 'var(--color-white)', cursor: 'pointer',
+        fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-text-tertiary)',
+      } as React.CSSProperties,
+      whileHover: { background: 'var(--color-surface-tint)', borderColor: 'var(--color-primary)', color: 'var(--color-primary)' },
+      transition: { duration: 0.14, ease: EASE_STANDARD },
     };
-    const hoverIn = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; };
-    const hoverOut = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = 'var(--color-white)'; e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; };
 
     return (
-      <div key={divider.id}
+      <MotionIn key={divider.id}
         onMouseEnter={() => setHoveredColumnsRowId(divider.id)}
         onMouseLeave={() => setHoveredColumnsRowId(prev => prev === divider.id ? null : prev)}
-        style={{ animation: 'viewSwitchIn 260ms cubic-bezier(0.22,1,0.36,1) both' }}>
+        initial={{ opacity: 0, y: 8, scale: 0.985 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.26, ease: EASE_SETTLE }}>
         {/* Toolbar — always visible so the controls are never a mystery */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 8 }}>
           {!isMobile && (
-            <button onClick={() => swapColumns(divider.id)} title="Swap the two columns" style={toolbarBtn} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
+            <MotionButton onClick={() => swapColumns(divider.id)} title="Swap the two columns" {...toolbarBtn}>
               <Icon name="swap_horiz" size={14} color="currentColor" />
               <span>Swap</span>
-            </button>
+            </MotionButton>
           )}
-          <button onClick={() => toggleColumnsLayout(divider.id, 'stack')} title="Stack sections vertically" style={toolbarBtn} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
+          <MotionButton onClick={() => toggleColumnsLayout(divider.id, 'stack')} title="Stack sections vertically" {...toolbarBtn}>
             <Icon name="view_agenda" size={13} color="currentColor" />
             <span>Stack</span>
-          </button>
-          <button onClick={() => deleteBlock(divider.id)} title="Remove divider" style={{ ...toolbarBtn, padding: '5px 8px' }} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
+          </MotionButton>
+          <MotionButton onClick={() => deleteBlock(divider.id)} title="Remove divider" {...toolbarBtn} style={{ ...toolbarBtn.style, padding: '5px 8px' }}>
             <Icon name="close" size={13} color="currentColor" />
-          </button>
+          </MotionButton>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'start' }}>
           {[leftBlocks, rightBlocks].map((sideBlocks, colIdx) => {
@@ -857,7 +885,7 @@ export default function BlockEditor({
             const isDropTarget = dragging && dragColumnHandle!.col !== col;
             const isSource = dragging && dragColumnHandle!.col === col;
             return (
-              <div key={colIdx}
+              <MotionIn key={colIdx}
                 onDragOver={e => { if (dragging) e.preventDefault(); }}
                 onDrop={e => {
                   e.preventDefault();
@@ -866,16 +894,22 @@ export default function BlockEditor({
                 }}
                 style={{
                   position: 'relative', minWidth: 0,
-                  border: `1.5px solid ${isDropTarget ? 'var(--color-primary)' : 'var(--color-border-alt)'}`,
+                  borderWidth: 1.5, borderStyle: 'solid',
                   borderRadius: 12,
-                  background: isDropTarget ? 'var(--color-surface-tint)' : 'var(--color-surface-gray)',
-                  boxShadow: isDropTarget ? '0 0 0 3px rgba(var(--color-primary-rgb), 0.12)' : 'none',
-                  opacity: isSource ? 0.55 : 1,
                   padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2,
-                  transition: 'border-color 140ms ease, background 140ms ease, box-shadow 140ms ease, opacity 140ms ease',
-                }}>
+                }}
+                animate={{
+                  borderColor: isDropTarget ? 'var(--color-primary)' : 'var(--color-border-alt)',
+                  background: isDropTarget ? 'var(--color-surface-tint)' : 'var(--color-surface-gray)',
+                  boxShadow: isDropTarget ? '0 0 0 3px rgba(var(--color-primary-rgb), 0.12)' : '0 0 0 0 rgba(var(--color-primary-rgb), 0)',
+                  opacity: isSource ? 0.55 : 1,
+                }}
+                transition={{ duration: 0.14, ease: EASE_STANDARD }}>
                 {!isMobile && (
-                  <div style={{ display: 'flex', justifyContent: 'center', height: rowHovered || dragging ? 16 : 0, marginBottom: rowHovered || dragging ? 2 : 0, overflow: 'hidden', opacity: rowHovered || dragging ? 1 : 0, transition: 'opacity 140ms ease, height 200ms cubic-bezier(0.22,1,0.36,1), margin-bottom 200ms cubic-bezier(0.22,1,0.36,1)' }}>
+                  <motion.div
+                    animate={{ height: rowHovered || dragging ? 16 : 0, marginBottom: rowHovered || dragging ? 2 : 0, opacity: rowHovered || dragging ? 1 : 0 }}
+                    transition={{ opacity: { duration: 0.14, ease: EASE_STANDARD }, default: { duration: 0.2, ease: EASE_SETTLE } }}
+                    style={{ display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
                     <span
                       draggable
                       onDragStart={() => setDragColumnHandle({ dividerId: divider.id, col })}
@@ -884,14 +918,14 @@ export default function BlockEditor({
                       style={{ cursor: 'grab', display: 'flex', alignItems: 'center', gap: 2, padding: '0 12px', borderRadius: 999, lineHeight: 1 }}>
                       <Icon name="drag_indicator" size={14} color="var(--color-border-strong)" />
                     </span>
-                  </div>
+                  </motion.div>
                 )}
                 {sideBlocks.map(b => renderBlock(b, blockIndexById[b.id]))}
-              </div>
+              </MotionIn>
             );
           })}
         </div>
-      </div>
+      </MotionIn>
     );
   };
 
@@ -916,9 +950,13 @@ export default function BlockEditor({
             }
             if (sectionBlocks.length > 0) {
               rows.push(
-                <div key={`section-${i}`} style={{ border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2, animation: 'viewSwitchIn 260ms cubic-bezier(0.22,1,0.36,1) both' }}>
+                <MotionIn key={`section-${i}`}
+                  initial={{ opacity: 0, y: 8, scale: 0.985 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.26, ease: EASE_SETTLE }}
+                  style={{ border: '1px solid var(--color-border-alt)', borderRadius: 12, background: 'var(--color-surface-gray)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {sectionBlocks.map(block => renderBlock(block, blockIndexById[block.id]))}
-                </div>
+                </MotionIn>
               );
             }
             if (divider) rows.push(<Fragment key={`divider-${divider.id}`}>{renderBlock(divider, blockIndexById[divider.id])}</Fragment>);
@@ -959,8 +997,8 @@ export default function BlockEditor({
           display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 12px', background: 'none',
           border: 'none', borderRadius: 8, cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font-heading)',
           fontSize: 13, fontWeight: 500, color: danger ? 'var(--color-error)' : 'var(--color-text-primary)',
-          transition: 'background 120ms ease',
         });
+        const itemHover = { duration: 0.12, ease: EASE_STANDARD };
         return createPortal(
           <>
             <div onClick={() => setContextMenu(null)} onContextMenu={e => { e.preventDefault(); setContextMenu(null); }} style={{ position: 'fixed', inset: 0, zIndex: 1190 }} />
@@ -977,24 +1015,28 @@ export default function BlockEditor({
                     <div key={ii} style={{ position: 'relative' }}
                       onMouseEnter={() => setCtxSubmenuOpen(true)}
                       onMouseLeave={() => setCtxSubmenuOpen(false)}>
-                      <button style={{ ...itemStyle(), background: ctxSubmenuOpen ? 'var(--color-surface-tint)' : 'none' }}>
+                      <MotionButton
+                        animate={{ background: ctxSubmenuOpen ? 'var(--color-surface-tint)' : 'rgba(0,0,0,0)' }}
+                        transition={itemHover}
+                        style={itemStyle()}>
                         <Icon name={item.icon} size={16} color="var(--color-primary)" />
                         <span style={{ flex: 1 }}>{item.label}</span>
                         <Icon name={subOnLeft ? 'chevron_left' : 'chevron_right'} size={16} color="var(--color-text-quaternary)" />
-                      </button>
+                      </MotionButton>
                       {ctxSubmenuOpen && (
                         <div style={{ position: 'absolute', top: -5, ...bridgePos, zIndex: 1201 }}>
                           <PopIn duration={140} ease="settle" style={{ minWidth: SUB_W, background: 'var(--color-white)', borderRadius: 12, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', border: '1px solid var(--color-border)', padding: 5, transformOrigin: subOnLeft ? 'right top' : 'left top' }}>
                             {item.submenu.map((sub, si) => (
-                              <button key={si}
+                              <MotionButton key={si}
                                 onClick={() => { sub.onClick?.(); setContextMenu(null); }}
-                                style={{ ...itemStyle(), background: sub.active ? 'var(--color-surface-tint)' : 'none', color: sub.active ? 'var(--color-primary)' : 'var(--color-text-primary)', fontWeight: sub.active ? 600 : 500 }}
-                                onMouseEnter={e => { if (!sub.active) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-                                onMouseLeave={e => { e.currentTarget.style.background = sub.active ? 'var(--color-surface-tint)' : 'none'; }}>
+                                animate={{ background: sub.active ? 'var(--color-surface-tint)' : 'rgba(0,0,0,0)', color: sub.active ? 'var(--color-primary)' : 'var(--color-text-primary)' }}
+                                whileHover={{ background: 'var(--color-surface-tint)' }}
+                                transition={itemHover}
+                                style={{ ...itemStyle(), fontWeight: sub.active ? 600 : 500 }}>
                                 <Icon name={sub.icon} size={16} color={sub.active ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
                                 <span style={{ flex: 1 }}>{sub.label}</span>
                                 {sub.active && <Icon name="check" size={15} color="var(--color-primary)" />}
-                              </button>
+                              </MotionButton>
                             ))}
                           </PopIn>
                         </div>
@@ -1003,14 +1045,14 @@ export default function BlockEditor({
                   );
                 }
                 return (
-                  <button key={ii}
+                  <MotionButton key={ii}
                     onClick={() => { item.onClick?.(); setContextMenu(null); }}
-                    style={itemStyle(item.danger)}
-                    onMouseEnter={e => (e.currentTarget.style.background = item.danger ? 'var(--color-error-bg)' : 'var(--color-surface-tint)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                    whileHover={{ background: item.danger ? 'var(--color-error-bg)' : 'var(--color-surface-tint)' }}
+                    transition={itemHover}
+                    style={itemStyle(item.danger)}>
                     <Icon name={item.icon} size={16} color={item.danger ? 'var(--color-error)' : 'var(--color-primary)'} />
                     {item.label}
-                  </button>
+                  </MotionButton>
                 );
               })}
             </PopIn>
@@ -1022,23 +1064,50 @@ export default function BlockEditor({
   );
 }
 
-function headingStyleFor(block: MarkdownBlock, isMobile: boolean): React.CSSProperties {
-  const base: React.CSSProperties = {
-    fontFamily: 'var(--font-body)', fontSize: isMobile ? 14.5 : 15, color: 'var(--color-text-primary)', lineHeight: 1.6,
-    border: 'none', outline: 'none', background: 'transparent', width: '100%', resize: 'none', padding: '6px 0',
-    // Smoothly morph when a block is converted to another type via the
-    // right-click "Turn into" menu (e.g. H1 → H2 eases its size/weight).
-    transition: 'font-size 240ms cubic-bezier(0.22,1,0.36,1), padding 240ms cubic-bezier(0.22,1,0.36,1), color 180ms ease, font-weight 180ms ease',
+/**
+ * Split into the static half and the ANIMATED half, because converting a
+ * block via the right-click "Turn into" menu should morph (H1 → H2 eases its
+ * size and weight) rather than snap. That used to be a CSS `transition` on
+ * font-size/padding/color/font-weight; the animated half is now a Motion
+ * target the caller hands to `animate`.
+ *
+ * Padding is spelled as paddingTop/paddingBottom rather than the `padding`
+ * shorthand: a shorthand string is not an interpolatable value.
+ */
+function headingStyleFor(block: MarkdownBlock, isMobile: boolean): {
+  style: React.CSSProperties;
+  animate: Record<string, string | number>;
+} {
+  const style: React.CSSProperties = {
+    fontFamily: 'var(--font-body)', lineHeight: 1.6,
+    border: 'none', outline: 'none', background: 'transparent', width: '100%', resize: 'none',
+  };
+  const base = {
+    fontSize: isMobile ? 14.5 : 15,
+    color: 'var(--color-text-primary)',
+    fontWeight: 400,
+    paddingTop: 6, paddingBottom: 6,
+    opacity: 1,
   };
   if (block.type === 'heading') {
     const sizes = { 1: 26, 2: 21, 3: 17 } as const;
-    return { ...base, fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: sizes[block.level], padding: '10px 0 4px' };
+    return {
+      style: { ...style, fontFamily: 'var(--font-heading)' },
+      animate: { ...base, fontWeight: 700, fontSize: sizes[block.level], paddingTop: 10, paddingBottom: 4 },
+    };
   }
-  if (block.type === 'quote') return { ...base, fontStyle: 'italic', color: 'var(--color-text-secondary)' };
+  if (block.type === 'quote') return { style: { ...style, fontStyle: 'italic' }, animate: { ...base, color: 'var(--color-text-secondary)' } };
   // Matches TaskItem.tsx's checked-title treatment: opacity + strikethrough together.
-  if (block.type === 'todo' && block.checked) return { ...base, opacity: 0.4, textDecoration: 'line-through' };
-  return base;
+  if (block.type === 'todo' && block.checked) return { style: { ...style, textDecoration: 'line-through' }, animate: { ...base, opacity: 0.4 } };
+  return { style, animate: base };
 }
+
+/** Shared timing for the block-type morph above. */
+const BLOCK_MORPH_TRANSITION = {
+  color: { duration: 0.18, ease: EASE_STANDARD },
+  fontWeight: { duration: 0.18, ease: EASE_STANDARD },
+  default: { duration: 0.24, ease: EASE_SETTLE },
+};
 
 // Auto-resizing single-column textarea shared by every text-bearing block.
 interface AutoTextareaProps {
@@ -1048,14 +1117,15 @@ interface AutoTextareaProps {
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onBlur?: () => void;
   style: React.CSSProperties;
+  animate?: Record<string, string | number>;
   innerRef: (el: HTMLTextAreaElement | null) => void;
 }
-function AutoTextarea({ value, placeholder, onChange, onKeyDown, onBlur, style, innerRef }: AutoTextareaProps) {
+function AutoTextarea({ value, placeholder, onChange, onKeyDown, onBlur, style, animate, innerRef }: AutoTextareaProps) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const resize = () => { const el = ref.current; if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; } };
   useEffect(resize, [value]);
   return (
-    <textarea
+    <motion.textarea
       ref={el => { ref.current = el; innerRef(el); }}
       value={value}
       placeholder={placeholder}
@@ -1065,6 +1135,12 @@ function AutoTextarea({ value, placeholder, onChange, onKeyDown, onBlur, style, 
       onKeyDown={onKeyDown}
       onFocus={resize}
       onBlur={onBlur}
+      animate={animate}
+      transition={BLOCK_MORPH_TRANSITION}
+      // The morph changes font-size and padding, so the auto-grow height has
+      // to be recomputed as it tweens — `resize` otherwise only runs on a
+      // value change and the box would lag a frame behind its own text.
+      onUpdate={resize}
       style={style}
     />
   );

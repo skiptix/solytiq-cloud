@@ -5,6 +5,7 @@ import GraphControls from './GraphControls';
 import PopIn from '../animate-ui/PopIn';
 import { useEntitySearch } from '../../hooks/useEntitySearch';
 import type { EntityIndexEntry } from '../../types';
+import MotionButton from '../animate-ui/MotionButton';
 
 /** Floating top-right toolbar over the full-size Net canvas: search, a
  *  Filters dropdown (wrapping the existing GraphControls panel), and Reset
@@ -28,12 +29,13 @@ export default function GraphToolbar({
 
   const pill: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 6, height: 36, padding: '0 12px', borderRadius: 9,
-    border: '1px solid var(--color-border)', background: 'var(--color-white)',
+    borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--color-border)', background: 'var(--color-white)',
     boxShadow: '0 2px 8px rgba(var(--color-black-rgb), 0.06)', fontFamily: 'var(--font-heading)',
-    fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)', cursor: 'pointer', transition: 'all 150ms',
+    fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)', cursor: 'pointer',
   };
-  const onEnter = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; };
-  const onLeave = (e: React.MouseEvent<HTMLButtonElement>, active: boolean) => { if (!active) { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-secondary)'; } };
+  const pillHover = { borderColor: 'var(--color-primary)', color: 'var(--color-primary)' };
+  const pillTransition = { duration: 0.15 };
+
 
   const pick = useCallback((entity: EntityIndexEntry) => {
     onPickResult(entity);
@@ -87,15 +89,19 @@ export default function GraphToolbar({
       </div>
 
       <div style={{ position: 'relative' }}>
-        <button
+        <MotionButton
           onClick={() => setFiltersOpen((v) => !v)}
-          style={{ ...pill, color: filtersOpen ? 'var(--color-primary)' : 'var(--color-text-secondary)', borderColor: filtersOpen ? 'var(--color-primary)' : 'var(--color-border)' }}
-          onMouseEnter={onEnter}
-          onMouseLeave={(e) => onLeave(e, filtersOpen)}
+          animate={{
+            color: filtersOpen ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+            borderColor: filtersOpen ? 'var(--color-primary)' : 'var(--color-border)',
+          }}
+          whileHover={pillHover}
+          transition={pillTransition}
+          style={pill}
         >
           <Icon name="tune" size={15} color={filtersOpen ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
           {!isMobile && 'Filters'}
-        </button>
+        </MotionButton>
         {filtersOpen && (
           <PopIn duration={160} ease="spring" style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 7 }}>
             <GraphControls isMobile={isMobile} onClose={() => setFiltersOpen(false)} />
@@ -104,16 +110,16 @@ export default function GraphToolbar({
       </div>
 
       {hasCustomLayout && (
-        <button
+        <MotionButton
           onClick={onResetLayout}
           title="Release every manually-dragged node back into the flow"
+          whileHover={pillHover}
+          transition={pillTransition}
           style={pill}
-          onMouseEnter={onEnter}
-          onMouseLeave={(e) => onLeave(e, false)}
         >
           <Icon name="restart_alt" size={15} color="var(--color-text-tertiary)" />
           {!isMobile && 'Reset layout'}
-        </button>
+        </MotionButton>
       )}
     </div>
   );

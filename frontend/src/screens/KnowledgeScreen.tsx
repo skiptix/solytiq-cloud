@@ -31,6 +31,9 @@ import type { MentionMember } from '../utils/mention';
 import Spinner from '@/components/animate-ui/Spinner';
 import PopIn from '@/components/animate-ui/PopIn';
 import ModalIn from '@/components/animate-ui/ModalIn';
+import { EASE_SETTLE, EASE_STANDARD } from '../components/animate-ui/motionTokens';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
 
 // A term's bubble grows with how much its definition actually holds — summary,
 // aliases, and written block content — not just its explicit relation degree.
@@ -345,7 +348,7 @@ export default function KnowledgeScreen() {
   // ── Not created yet ────────────────────────────────────────────────────────
   if (!loading && !base) {
     return (
-      <div style={{ padding: pad, height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'sectionFadeUp 360ms cubic-bezier(0.22,1,0.36,1) both' }}>
+      <MotionIn style={{ padding: pad, height: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center' }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.36, ease: EASE_SETTLE }}>
         <div style={{ maxWidth: 460, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
           <Icon name="neurology" size={48} color="var(--color-purple-tint-3, #c4b8f0)" />
           <div style={{ fontFamily: 'var(--font-heading)', fontSize: 19, fontWeight: 700, color: 'var(--color-text-primary)' }}>No Knowledge Base here yet</div>
@@ -364,12 +367,12 @@ export default function KnowledgeScreen() {
             </div>
           )}
         </div>
-      </div>
+      </MotionIn>
     );
   }
 
   return (
-    <div style={{ padding: pad, height: '100%', width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 16, animation: 'sectionFadeUp 360ms cubic-bezier(0.22,1,0.36,1) both' }}>
+    <MotionIn style={{ padding: pad, height: '100%', width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 16 }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.36, ease: EASE_SETTLE }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
           <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 700, margin: 0, color: 'var(--color-text-primary)' }}>
@@ -522,18 +525,20 @@ export default function KnowledgeScreen() {
                   {ENTRY_TYPE_OPTIONS.map(opt => {
                     const active = typeFilter.length === 0 || typeFilter.includes(opt.key);
                     return (
-                      <button
+                      <MotionButton
                         key={opt.key}
                         onClick={() => toggleTypeFilter(opt.key)}
+                        animate={{ background: active ? 'var(--color-surface-tint)' : 'rgba(0,0,0,0)', opacity: active ? 1 : 0.45 }}
+                        transition={{ duration: 0.12 }}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '5px 6px', borderRadius: 6, border: 'none',
-                          background: active ? 'var(--color-surface-tint)' : 'transparent', opacity: active ? 1 : 0.45, cursor: 'pointer', textAlign: 'left',
-                          fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)', transition: 'background 120ms, opacity 120ms',
+                          cursor: 'pointer', textAlign: 'left',
+                          fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)',
                         }}
                       >
                         <Icon name={opt.icon} size={14} color="var(--color-text-tertiary)" />
                         {opt.label}
-                      </button>
+                      </MotionButton>
                     );
                   })}
                 </PopIn>
@@ -545,7 +550,13 @@ export default function KnowledgeScreen() {
         <AnimatePresence>
           {selectedEntry && (
             <EntryInspector
-              key="entry-inspector"
+              // Keyed on the ENTRY, not a constant: switching terms should
+              // rebuild the whole editing buffer, which React does for free by
+              // remounting. The effect that used to re-set ten pieces of state
+              // by hand is gone with it. Still not keyed on the whole entry
+              // object — a background sync refresh must not wipe an
+              // in-progress edit of the entry currently open.
+              key={selectedEntry.id}
               entry={selectedEntry}
               relations={relations}
               canWrite={canWrite}
@@ -596,8 +607,8 @@ export default function KnowledgeScreen() {
         )}
 
         {creating && (
-          <div onClick={() => setCreating(false)}
-            style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-black-rgb), 0.14)', backdropFilter: 'blur(3px)', zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}>
+          <MotionIn onClick={() => setCreating(false)}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(var(--color-black-rgb), 0.14)', backdropFilter: 'blur(3px)', zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18, ease: EASE_STANDARD }}>
             <ModalIn duration={280} onClick={e => e.stopPropagation()}
               style={{ background: 'var(--color-white)', borderRadius: 14, padding: 20, width: '100%', maxWidth: 380, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)' }}>
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: 15.5, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 4 }}>Add a term</div>
@@ -619,9 +630,9 @@ export default function KnowledgeScreen() {
                   style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: newTerm.trim() ? 'var(--color-primary)' : 'var(--color-border-strong)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: newTerm.trim() ? 'pointer' : 'not-allowed' }}>Add</button>
               </div>
             </ModalIn>
-          </div>
+          </MotionIn>
         )}
       </div>
-    </div>
+    </MotionIn>
   );
 }

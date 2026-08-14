@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import ModalIn from './animate-ui/ModalIn';
+import { EASE_STANDARD } from './animate-ui/motionTokens';
+import MotionIn from './animate-ui/MotionIn';
 
 interface RenameDialogProps {
   value: string;
@@ -15,7 +17,7 @@ interface RenameDialogProps {
 export default function RenameDialog({ value, accentColor = 'var(--color-primary)', title = 'Rename', onSave, onCancel }: RenameDialogProps) {
   const [v, setV] = useState(value);
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', animation: 'backdropIn 180ms ease both' }}
+    <MotionIn style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18, ease: EASE_STANDARD }}
       onClick={onCancel}>
       <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 14, padding: '24px 28px', width: '100%', maxWidth: 360, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)' }}
         onClick={e => e.stopPropagation()}>
@@ -38,7 +40,7 @@ export default function RenameDialog({ value, accentColor = 'var(--color-primary
           </button>
         </div>
       </ModalIn>
-    </div>,
+    </MotionIn>,
     document.body
   );
 }

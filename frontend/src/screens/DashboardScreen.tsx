@@ -30,6 +30,9 @@ import useNotificationsStore from '../store/useNotificationsStore';
 import useSyncStore from '../store/useSyncStore';
 import { notificationTarget } from '../utils/notifications';
 import type { AppNotification } from '../api/client';
+import { EASE_SETTLE } from '../components/animate-ui/motionTokens';
+import MotionButton from '../components/animate-ui/MotionButton';
+import MotionIn from '../components/animate-ui/MotionIn';
 
 // ── Shared style tokens ────────────────────────────────────────────
 // Matches the surface used by the Folder Dashboard and Board screens.
@@ -38,8 +41,12 @@ const CARD: React.CSSProperties = {
   borderRadius: 16,
 };
 // Smooth, staggered entrance for each box when the dashboard opens.
-const enterAnim = (delayMs: number): React.CSSProperties => ({
-  animation: `cardIn 480ms cubic-bezier(0.22,1,0.36,1) ${delayMs}ms both`,
+// Returns Motion props (spread onto the element) rather than a style object —
+// the same staggered `cardIn` shape, just owned by Motion.
+const enterAnim = (delayMs: number) => ({
+  initial: { opacity: 0, y: 12, scale: 0.96 },
+  animate: { opacity: 1, y: 0, scale: 1 },
+  transition: { duration: 0.48, delay: delayMs / 1000, ease: EASE_SETTLE },
 });
 // How many rows the (deliberately non-scrolling) My Tasks box shows before the
 // rest is deferred to the "All tasks" dialog.
@@ -96,12 +103,12 @@ function TaskRow({ task, source, workspace, todayIso, onToggle, onOpen }: {
   const due = isDueToday(task.deadline, todayIso);
   const dateColor = overdue ? 'var(--color-error)' : due ? 'var(--color-orange)' : 'var(--color-text-tertiary)';
   return (
-    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={() => onOpen(task)}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 9, background: hov ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', transition: 'background 150ms' }}>
-      <div onClick={e => { e.stopPropagation(); onToggle(task); }}
-        style={{ width: 18, height: 18, minWidth: 18, borderRadius: 5, border: '1.5px solid', borderColor: task.checked ? 'var(--color-primary)' : 'var(--color-border-strong)', background: task.checked ? 'var(--color-primary)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 150ms' }}>
+    <MotionIn onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={() => onOpen(task)}
+      transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 9, background: hov ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', }}>
+      <MotionIn onClick={e => { e.stopPropagation(); onToggle(task); }}
+        transition={{ duration: 0.15 }} style={{ width: 18, height: 18, minWidth: 18, borderRadius: 5, border: '1.5px solid', borderColor: task.checked ? 'var(--color-primary)' : 'var(--color-border-strong)', background: task.checked ? 'var(--color-primary)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, }}>
         {task.checked && <svg width="10" height="8" viewBox="0 0 11 9" fill="none"><path d="M1 4.5L4 7.5L10 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-      </div>
+      </MotionIn>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-primary)', opacity: task.checked ? 0.45 : 1, textDecoration: task.checked ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</div>
         <div style={{ marginTop: 2, display: 'flex', minWidth: 0 }}><WorkspaceBadge workspace={workspace} source={source} /></div>
@@ -121,7 +128,7 @@ function TaskRow({ task, source, workspace, todayIso, onToggle, onOpen }: {
           )}
         </div>
       )}
-    </div>
+    </MotionIn>
   );
 }
 
@@ -138,15 +145,15 @@ function MyTasksBox({ todayTasks, weekTasks, resolve, wsById, todayIso, onToggle
   const hidden = active.length - visible.length;
 
   const pill = (key: TaskFilter, label: string, count: number) => (
-    <button onClick={() => setFilter(key)}
-      style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 9999, padding: '5px 12px', cursor: 'pointer', background: filter === key ? 'var(--color-primary)' : 'var(--color-surface-tint-2)', color: filter === key ? 'var(--color-white)' : 'var(--color-text-tertiary)', transition: 'all 150ms' }}>
+    <MotionButton onClick={() => setFilter(key)}
+      transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 9999, padding: '5px 12px', cursor: 'pointer', background: filter === key ? 'var(--color-primary)' : 'var(--color-surface-tint-2)', color: filter === key ? 'var(--color-white)' : 'var(--color-text-tertiary)', }}>
       {label}
       <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 9999, padding: '0 6px', background: filter === key ? 'rgba(var(--color-white-rgb), 0.22)' : 'var(--color-white)', color: filter === key ? 'var(--color-white)' : 'var(--color-text-quaternary)' }}>{count}</span>
-    </button>
+    </MotionButton>
   );
 
   return (
-    <section style={{ ...CARD, ...enterAnim(40), padding: '18px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <section {...enterAnim(40)} style={{ ...CARD, padding: '18px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="task_alt" size={17} color="var(--color-primary)" />
@@ -168,13 +175,13 @@ function MyTasksBox({ todayTasks, weekTasks, resolve, wsById, todayIso, onToggle
         ))}
       </div>
 
-      <button onClick={onSeeAll}
-        onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-purple-tint-2)'; }}
-        style={{ marginTop: 'auto', width: '100%', background: 'transparent', border: '1px dashed var(--color-purple-tint-2)', borderRadius: 9, padding: '10px', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 160ms' }}>
+      <MotionButton onClick={onSeeAll}
+        whileHover={{ background: 'var(--color-surface-tint)', borderColor: 'var(--color-primary)' }}
+        transition={{ duration: 0.16 }}
+        style={{ marginTop: 'auto', width: '100%', background: 'transparent', border: '1px dashed var(--color-purple-tint-2)', borderRadius: 9, padding: '10px', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, }}>
         <Icon name="checklist" size={15} color="var(--color-primary)" />
         All tasks{hidden > 0 ? ` (${hidden} more)` : ''}
-      </button>
+      </MotionButton>
     </section>
   );
 }
@@ -344,7 +351,7 @@ function DynamicBox({ mode, setMode, milestoneItems, taskItems }: {
   mode: DynamicMode; setMode: (m: DynamicMode) => void; milestoneItems: TimelineItem[]; taskItems: TimelineItem[];
 }) {
   return (
-    <section style={{ ...CARD, ...enterAnim(200), flex: 1, minHeight: 0, padding: '16px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <section {...enterAnim(200)} style={{ ...CARD, flex: 1, minHeight: 0, padding: '16px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--color-blue-pale-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="timeline" size={17} color="var(--color-blue-mid-7)" />
@@ -374,8 +381,8 @@ function MeetingRow({ meeting, currentUserId, onOpen }: { meeting: Meeting; curr
   const shown = others.slice(0, 3);
   const extra = others.length - shown.length;
   return (
-    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={onOpen}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 9, background: hov ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', transition: 'background 150ms' }}>
+    <MotionIn onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={onOpen}
+      transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 9, background: hov ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', }}>
       <div style={{ width: 3, alignSelf: 'stretch', minHeight: 30, borderRadius: 2, background: color, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, fontWeight: 500, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meeting.title}</div>
@@ -392,7 +399,7 @@ function MeetingRow({ meeting, currentUserId, onOpen }: { meeting: Meeting; curr
           {extra > 0 && <span style={{ marginLeft: 3, fontFamily: 'var(--font-heading)', fontSize: 10.5, fontWeight: 700, color: 'var(--color-text-tertiary)' }}>+{extra}</span>}
         </div>
       )}
-    </div>
+    </MotionIn>
   );
 }
 
@@ -430,7 +437,7 @@ function RightColumn({ meetings, currentUserId, onSeeCalendar }: { meetings: Mee
     return ka - kb;
   });
   return (
-    <section style={{ ...CARD, ...enterAnim(120), display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+    <section {...enterAnim(120)} style={{ ...CARD, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {/* Notifications feed (Top) */}
       <div style={{ padding: '18px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -459,15 +466,15 @@ function RightColumn({ meetings, currentUserId, onSeeCalendar }: { meetings: Mee
                 <NotificationItem key={n.id} notification={n} onActivate={activateNotification} onDismiss={(x) => void dismiss(x.id)} compact />
               ))}
             </div>
-            <button
+            <MotionButton
               onClick={() => setPanelOpen(true)}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-              style={{ width: '100%', background: 'transparent', border: 'none', borderRadius: 8, padding: '6px', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, transition: 'background 140ms' }}
+              whileHover={{ background: 'var(--color-surface-tint)' }}
+              transition={{ duration: 0.15 }}
+              style={{ width: '100%', background: 'transparent', border: 'none', borderRadius: 8, padding: '6px', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, }}
             >
               View all notifications
               <Icon name="arrow_forward" size={13} color="var(--color-primary)" />
-            </button>
+            </MotionButton>
           </>
         )}
       </div>
@@ -490,13 +497,13 @@ function RightColumn({ meetings, currentUserId, onSeeCalendar }: { meetings: Mee
             <div style={{ padding: '20px 12px', textAlign: 'center', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>No meetings today.</div>
           ) : sorted.map(m => <MeetingRow key={m.id} meeting={m} currentUserId={currentUserId} onOpen={onSeeCalendar} />)}
         </div>
-        <button onClick={onSeeCalendar}
-          onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.borderColor = 'var(--color-primary)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--color-purple-tint-2)'; }}
-          style={{ marginTop: 'auto', width: '100%', background: 'transparent', border: '1px dashed var(--color-purple-tint-2)', borderRadius: 9, padding: '10px', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'all 160ms' }}>
+        <MotionButton onClick={onSeeCalendar}
+          whileHover={{ background: 'var(--color-surface-tint)', borderColor: 'var(--color-primary)' }}
+          transition={{ duration: 0.16 }}
+          style={{ marginTop: 'auto', width: '100%', background: 'transparent', border: '1px dashed var(--color-purple-tint-2)', borderRadius: 9, padding: '10px', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, }}>
           <Icon name="calendar_month" size={15} color="var(--color-primary)" />
           See all meetings
-        </button>
+        </MotionButton>
       </div>
     </section>
   );
@@ -690,10 +697,10 @@ export default function DashboardScreen() {
           // the Net mini-map are desktop-only (see RightColumn/GraphMiniMap).
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-              <div style={{ ...CARD, ...enterAnim(40), flex: '1 1 45%', minWidth: 0, padding: '16px 16px' }}>
+              <div {...enterAnim(40)} style={{ ...CARD, flex: '1 1 45%', minWidth: 0, padding: '16px 16px' }}>
                 <DonutChart title="All tasks" subtitle={`${allCounts.total} total`} completed={allCounts.completed} open={allCounts.open} />
               </div>
-              <div style={{ ...CARD, ...enterAnim(80), flex: '1 1 45%', minWidth: 0, padding: '16px 16px' }}>
+              <div {...enterAnim(80)} style={{ ...CARD, flex: '1 1 45%', minWidth: 0, padding: '16px 16px' }}>
                 <DonutChart title="Next 7 days" subtitle={`${weekCounts.total} due`} completed={weekCounts.completed} open={weekCounts.open} />
               </div>
             </div>
@@ -711,10 +718,10 @@ export default function DashboardScreen() {
             {/* Middle — charts + dynamic timeline */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                <div style={{ ...CARD, ...enterAnim(100), flex: '1 1 220px', minWidth: 0, padding: '16px 16px' }}>
+                <div {...enterAnim(100)} style={{ ...CARD, flex: '1 1 220px', minWidth: 0, padding: '16px 16px' }}>
                   <DonutChart title="All tasks" subtitle={`${allCounts.total} total`} completed={allCounts.completed} open={allCounts.open} />
                 </div>
-                <div style={{ ...CARD, ...enterAnim(140), flex: '1 1 220px', minWidth: 0, padding: '16px 16px' }}>
+                <div {...enterAnim(140)} style={{ ...CARD, flex: '1 1 220px', minWidth: 0, padding: '16px 16px' }}>
                   <DonutChart title="Next 7 days" subtitle={`${weekCounts.total} due`} completed={weekCounts.completed} open={weekCounts.open} />
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Icon from './Icon';
 import PopIn from './animate-ui/PopIn';
+import MotionButton from './animate-ui/MotionButton';
 
 interface CalendarPickerProps {
   value?: string;
@@ -72,18 +73,17 @@ export default function CalendarPicker({ value, onChange, onClear }: CalendarPic
           const isSelected = iso === value;
           const isPast = cell.date < today;
           return (
-            <button key={i} onClick={() => { if (cell.current) onChange(iso); }}
-              style={{
+            <MotionButton key={i} onClick={() => { if (cell.current) onChange(iso); }}
+              transition={{ duration: 0.12 }} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 height: 32, borderRadius: 8, border: isToday && !isSelected ? '1.5px solid var(--color-purple-tint-1)' : 'none',
                 background: isSelected ? 'var(--color-primary)' : isToday ? 'var(--color-purple-pale-5)' : 'transparent',
                 fontFamily: 'var(--font-body)', fontSize: 12.5, fontWeight: isSelected || isToday ? 600 : 400,
                 color: isSelected ? 'var(--color-white)' : !cell.current ? 'var(--color-purple-tint-2)' : isPast ? 'var(--color-text-quaternary)' : 'var(--color-text-primary)',
                 cursor: cell.current ? 'pointer' : 'default',
-                transition: 'all 120ms',
               }}>
               {cell.date.getDate()}
-            </button>
+            </MotionButton>
           );
         })}
       </div>

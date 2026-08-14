@@ -17,7 +17,7 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef, CSSProperties, ReactNode } from 'react';
 import { motion } from './motion';
-import type { Transition, TargetAndTransition } from 'motion/react';
+import type { Transition, TargetAndTransition, Variants } from 'motion/react';
 
 // Extends the full native `<div>` attribute surface (data-*, aria-*, role,
 // ...) for the same reason MotionButton does — see its own comment on the
@@ -25,12 +25,18 @@ import type { Transition, TargetAndTransition } from 'motion/react';
 type NativePropsMotionOverrides = 'onDrag' | 'onDragStart' | 'onDragEnd' | 'onAnimationStart' | 'onAnimationEnd' | 'style';
 export interface MotionInProps extends Omit<ComponentPropsWithoutRef<'div'>, NativePropsMotionOverrides> {
   children?: ReactNode;
-  initial?: TargetAndTransition | boolean;
-  animate?: TargetAndTransition;
-  exit?: TargetAndTransition;
+  // Each state also accepts a variant NAME. That is what lets an ancestor drive
+  // a descendant's animation — the replacement for CSS's `.parent:hover .child`,
+  // which Motion has no selector-based equivalent for: the parent declares
+  // `whileHover="hover"` and the child picks the label up through `variants`.
+  // (First needed by CalendarScreen's day cell revealing its add button.)
+  initial?: TargetAndTransition | string | boolean;
+  animate?: TargetAndTransition | string;
+  exit?: TargetAndTransition | string;
   transition?: Transition;
-  whileHover?: TargetAndTransition;
-  whileTap?: TargetAndTransition;
+  whileHover?: TargetAndTransition | string;
+  whileTap?: TargetAndTransition | string;
+  variants?: Variants;
   style?: CSSProperties;
 }
 

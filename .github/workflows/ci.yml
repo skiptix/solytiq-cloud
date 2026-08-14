@@ -1,0 +1,228 @@
+name: CI
+
+# Runs on every pull request and on pushes to main. Jobs are split so a
+# failure names the thing that broke rather than "CI failed" — and so the
+# frontend, backend and packaging suites run in parallel instead of one
+# waiting on the other.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  # A new push to the same branch cancels the previous run — nobody needs the
+  # results of a commit that has already been superseded.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Actions are pinned to a commit SHA, not a tag. A tag is mutable: whoever
+# controls the action's repo can repoint v4 at new code, and this workflow
+# runs with a checkout of the repository and access to the job's environment.
+# The comment after each SHA records which release it is, so the pin stays
+# readable and reviewable.
+#
+# These two pins currently emit a "Node.js 20 is deprecated" warning — the
+# runner force-runs them on Node 24, so they work, but they should move to
+# checkout v5 / setup-node v5 when someone can verify the new SHAs against
+# the upstream repos. Deliberately not guessing: a wrong SHA does not
+# degrade, it fails every job.
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc -b --noEmit
+
+      # `--quiet` on purpose: errors gate, warnings do not. See the rationale
+      # on `react-hooks/set-state-in-effect` in eslint.config.js and the full
+      # case in DEPRECATIONS.md — it is a warning because it flags a correct
+      # async-fetch shape, and the findings stay visible in `npm run lint`.
+      - name: Lint
+        run: npx eslint . --quiet
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # The `playwright` package is a dependency, but the browser binary is
+      # not — a11y, responsive and E2E all drive real Chromium and would fail
+      # on a bare `npm ci` without this.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Every gate below consumes the build above, hence the SKIP_BUILD flags:
+      # without them each one rebuilds the whole app again.
+      - name: Animation policy
+        run: npm run check:animations
+
+      - name: Bundle budget
+        run: npm run check:bundle
+
+      - name: Accessibility
+        run: npm run test:a11y
+        env:
+          A11Y_SKIP_BUILD: '1'
+
+      # CLAUDE.md's mobile rules promise the page body never scrolls
+      # horizontally. This asserts it at every width those rules name.
+      - name: Responsive breakpoints
+        run: npm run test:responsive
+        env:
+          RESPONSIVE_SKIP_BUILD: '1'
+
+      - name: E2E regression
+        run: npm run test:e2e
+        env:
+          E2E_SKIP_BUILD: '1'
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+
+    # The integration suite needs a real Postgres. pgvector's image is the one
+    # docker-compose.yml ships, so CI exercises the same extension surface the
+    # Knowledge Layer degrades around rather than a plain postgres:16.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: solytiq_test
+          POSTGRES_USER: solytiq_test
+          POSTGRES_PASSWORD: solytiq_test_pw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U solytiq_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      # isolated-vm (the Automation Hub's code sandbox) is a native module and
+      # compiles from source here — the same reason backend/Dockerfile is a
+      # multi-stage build. ubuntu-24.04 ships the toolchain it needs.
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # UPLOAD_DIR is required, not optional: routes/files.ts creates it at
+      # MODULE LOAD, and its default is the container path /app/uploads, which
+      # a runner cannot mkdir. Without this, 8 suites fail at import with
+      # EACCES before a single assertion runs. (The sprint brief's own
+      # verification sequence sets it for exactly this reason — I ran the
+      # suite locally with it and left it out of this workflow.)
+      - name: Prepare a writable upload dir
+        run: echo "UPLOAD_DIR=$(mktemp -d -p "$RUNNER_TEMP" uploads-XXXXXX)" >> "$GITHUB_ENV"
+
+      # Otherwise environment-neutral: no DB, no network, mock QueryExec.
+      - name: Unit tests
+        run: npm test
+        env:
+          TZ: UTC
+
+      # The integration suite SKIPS (loudly, but skips) when Postgres is
+      # unreachable. Without this, a service container that failed to start
+      # would produce a green job that ran zero tests — the same silent-pass
+      # failure mode the a11y gate had. Assert connectivity first.
+      - name: Assert Postgres is reachable
+        run: node -e "const{Client}=require('pg');const c=new Client();c.connect().then(()=>c.query('SELECT 1')).then(()=>{console.log('postgres reachable');return c.end()}).catch(e=>{console.error('postgres NOT reachable:',e.message);process.exit(1)})"
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGDATABASE: solytiq_test
+          PGUSER: solytiq_test
+          PGPASSWORD: solytiq_test_pw
+
+      # TEST_PG*, not PG*. Each *.integration.test.ts maps TEST_PG* onto PG*
+      # itself before importing db.ts, and defaults BOTH the role and the
+      # database to `solytiq_test`. Setting the plain PG* names has no effect —
+      # verified the hard way locally, where 13 of 15 files skipped with
+      # `role "solytiq_test" does not exist` while the job still went green.
+      - name: Integration tests (PostgreSQL)
+        run: npm run test:integration
+        env:
+          TZ: UTC
+          TEST_PGHOST: localhost
+          TEST_PGPORT: '5432'
+          TEST_PGDATABASE: solytiq_test
+          TEST_PGUSER: solytiq_test
+          TEST_PGPASSWORD: solytiq_test_pw
+          JWT_SECRET: ci-only-not-a-real-secret-${{ github.run_id }}
+
+  packaging:
+    name: Docker & n8n node
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: n8n/package-lock.json
+
+      # Catches a malformed compose file or an unresolvable variable before
+      # anyone tries to deploy with it.
+      - name: docker compose config
+        run: docker compose config --quiet
+
+      # Builds the real images. The backend one matters most: it is the
+      # 3-stage build that compiles isolated-vm, so a broken toolchain stage
+      # shows up here rather than on someone's server.
+      - name: Build images
+        run: docker compose build
+
+      # CLAUDE.md requires this node stay in sync with
+      # backend/src/routes/adminReadApi.ts; its smoke test exercises
+      # execute()/poll()/loadOptions against a mock Admin API, so that is
+      # where drift surfaces.
+      - name: n8n node build + smoke test
+        working-directory: n8n
+        run: |
+          npm ci
+          npm test
+
+  sca:
+    name: Dependency advisories
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Wraps `npm audit` rather than calling it directly: raw
+      # `--audit-level=high` cannot distinguish a new advisory from the one
+      # known, unfixable, already-mitigated xlsx finding, so it would be
+      # permanently red. The wrapper fails on anything not explicitly
+      # accounted for, and treats a network/tool failure as a failure rather
+      # than a pass.
+      - name: Audit dependencies
+        run: node scripts/check-sca.mjs frontend backend n8n

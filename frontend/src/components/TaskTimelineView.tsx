@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { List, Task, TaskChangeLogEntry } from '../types';
 import { apiGetListChangelog } from '../api/client';
 import Icon from './Icon';
+import { EASE_SETTLE } from './animate-ui/motionTokens';
+import MotionIn from './animate-ui/MotionIn';
+import MotionButton from './animate-ui/MotionButton';
 
 interface TaskTimelineViewProps {
   list: List;
@@ -245,7 +248,7 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
   const BAR_HEIGHT = isMobile ? 12 : 15;
 
   return (
-    <div key="view-timeline" style={{ display: 'flex', flexDirection: 'column', gap: 12, animation: 'viewSwitchIn 220ms cubic-bezier(0.16,1,0.3,1) both' }}>
+    <MotionIn key="view-timeline" style={{ display: 'flex', flexDirection: 'column', gap: 12 }} initial={{ opacity: 0, y: 8, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.22, ease: EASE_SETTLE }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
         <button onClick={jumpToToday}
           style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
@@ -254,16 +257,19 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
         </button>
         <div style={{ display: 'inline-flex', background: 'var(--color-surface-tint)', borderRadius: 10, padding: 3, gap: 2 }}>
           {(['day', 'week', 'month'] as const).map(z => (
-            <button key={z} onClick={() => setZoom(z)}
+            <MotionButton key={z} onClick={() => setZoom(z)}
+              animate={{
+                color: zoom === z ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
+                background: zoom === z ? 'var(--color-white)' : 'rgba(0,0,0,0)',
+                boxShadow: zoom === z ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : '0 1px 4px rgba(var(--color-primary-rgb), 0)',
+              }}
+              transition={{ duration: 0.15 }}
               style={{
                 fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, textTransform: 'capitalize',
-                color: zoom === z ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
-                background: zoom === z ? 'var(--color-white)' : 'transparent',
-                boxShadow: zoom === z ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none',
-                border: 'none', borderRadius: 8, padding: '7px 13px', cursor: 'pointer', transition: 'all 150ms',
+                border: 'none', borderRadius: 8, padding: '7px 13px', cursor: 'pointer',
               }}>
               {z}
-            </button>
+            </MotionButton>
           ))}
         </div>
       </div>
@@ -436,6 +442,6 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
           </div>
         </div>
       )}
-    </div>
+    </MotionIn>
   );
 }

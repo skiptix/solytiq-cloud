@@ -8,6 +8,7 @@ import AddTimelineWizard from './AddTimelineWizard';
 import AddMarkdownListWizard from './AddMarkdownListWizard';
 import TemplateSelectStep from './TemplateSelectStep';
 import ModalIn from '../components/animate-ui/ModalIn';
+import MotionButton from '../components/animate-ui/MotionButton';
 
 interface AddWizardProps {
   onClose: () => void;
@@ -126,12 +127,12 @@ export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, o
         {/* Options */}
         <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {options.map(opt => (
-            <button key={opt.key}
+            <MotionButton key={opt.key}
               onClick={() => {
                 if (opt.key === 'knowledge') { void handleKnowledge(); return; }
                 setMode(opt.key === 'markdownList' ? 'markdownList' : `${opt.key}-templates`);
               }}
-              style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 18px', borderRadius: 14, border: '1.5px solid var(--color-purple-pale-34)', background: 'var(--color-white)', cursor: 'pointer', textAlign: 'left', transition: 'all 160ms', width: '100%' }}
+              transition={{ duration: 0.16 }} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 18px', borderRadius: 14, border: '1.5px solid var(--color-purple-pale-34)', background: 'var(--color-white)', cursor: 'pointer', textAlign: 'left', width: '100%' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = opt.color; e.currentTarget.style.background = opt.bg; e.currentTarget.style.transform = 'translateY(-1px)'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-purple-pale-34)'; e.currentTarget.style.background = 'var(--color-white)'; e.currentTarget.style.transform = 'translateY(0)'; }}>
               <div style={{ width: 46, height: 46, borderRadius: 12, background: opt.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -142,7 +143,7 @@ export default function AddWizard({ onClose, onCreatedList, onCreatedTimeline, o
                 <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-tertiary)', lineHeight: 1.45 }}>{opt.desc}</div>
               </div>
               <Icon name="chevron_right" size={20} color="var(--color-border-strong)" />
-            </button>
+            </MotionButton>
           ))}
         </div>
       </ModalIn>

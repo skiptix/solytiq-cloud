@@ -8,6 +8,10 @@ import { milestoneCompletion, railFillIndex } from '../utils/timeline';
 import { verifySharePassword, ShareSessionError } from '../utils/shareSession';
 import Spinner from '@/components/animate-ui/Spinner';
 import ModalIn from '@/components/animate-ui/ModalIn';
+import { useReducedMotion } from '../components/animate-ui/motion';
+import { EASE_STANDARD } from '../components/animate-ui/motionTokens';
+import MotionButton from '../components/animate-ui/MotionButton';
+import MotionIn from '../components/animate-ui/MotionIn';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -65,6 +69,9 @@ function sharedByInitials(name: string): string {
 }
 
 export default function SharedTimelinePage() {
+  // Gates the rail's continuous decorative motion; backgroundPosition is not a
+  // transform, so the root MotionConfig does not suppress it.
+  const reduceMotion = useReducedMotion();
   const { token } = useParams<{ token: string }>();
   const [state, setState] = useState<PageState>('loading');
   const [meta, setMeta] = useState<TimelineMeta | null>(null);
@@ -184,13 +191,13 @@ export default function SharedTimelinePage() {
         </div>
       )}
 
-      <div style={{ background: 'var(--color-white)', borderRadius: 20, boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.10)', padding: state === 'ready' ? 0 : '40px 40px 36px', width: '100%', maxWidth: cardMaxWidth, display: 'flex', flexDirection: 'column', alignItems: state === 'ready' ? 'stretch' : 'center', overflow: 'hidden', transition: 'max-width 300ms ease' }}>
+      <MotionIn transition={{ duration: 0.3 }} style={{ background: 'var(--color-white)', borderRadius: 20, boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.10)', padding: state === 'ready' ? 0 : '40px 40px 36px', width: '100%', maxWidth: cardMaxWidth, display: 'flex', flexDirection: 'column', alignItems: state === 'ready' ? 'stretch' : 'center', overflow: 'hidden', }}>
 
         {/* Loading */}
         {state === 'loading' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px 0' }}>
             <Spinner size={36} thickness={3} durationMs={700} />
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-quaternary)' }}>Loading…</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)' }}>Loading…</div>
           </div>
         )}
 
@@ -235,13 +242,13 @@ export default function SharedTimelinePage() {
               />
               {pwError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: 5 }}>Incorrect password, please try again.</div>}
             </div>
-            <button
+            <MotionButton
               onClick={() => void submitPassword(password)}
               disabled={loadingContent || !password}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-white)', background: loadingContent || !password ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', border: 'none', borderRadius: 12, padding: '13px', cursor: loadingContent || !password ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}>
+              transition={{ duration: 0.15 }} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-white)', background: loadingContent || !password ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', border: 'none', borderRadius: 12, padding: '13px', cursor: loadingContent || !password ? 'not-allowed' : 'pointer', }}>
               {loadingContent ? <Spinner size={16} thickness={2} trackColor="rgba(var(--color-white-rgb), 0.4)" indicatorColor="var(--color-white)" durationMs={700} /> : <Icon name="visibility" size={18} color="var(--color-white)" />}
               View timeline
-            </button>
+            </MotionButton>
           </div>
         )}
 
@@ -264,7 +271,7 @@ export default function SharedTimelinePage() {
                   {content.timeline.subtitle && <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', marginTop: 4 }}>{content.timeline.subtitle}</div>}
                   <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ flex: 1, maxWidth: 320, height: 8, borderRadius: 9999, background: 'rgba(var(--color-black-rgb), 0.07)', overflow: 'hidden' }}>
-                      <div style={{ width: `${pct}%`, height: '100%', borderRadius: 9999, background: accent, transition: 'width 400ms ease' }} />
+                      <MotionIn transition={{ duration: 0.4 }} style={{ width: `${pct}%`, height: '100%', borderRadius: 9999, background: accent, }} />
                     </div>
                     <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)' }}>{done}/{total} done · {pct}%</span>
                   </div>
@@ -275,15 +282,21 @@ export default function SharedTimelinePage() {
             {/* Milestones */}
             <div style={{ padding: '28px 36px 36px' }}>
               {total === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-quaternary)' }}>This timeline has no milestones yet.</div>
+                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)' }}>This timeline has no milestones yet.</div>
               ) : (
                 <div style={{ position: 'relative', paddingLeft: 8 }}>
                   <div style={{ position: 'absolute', left: 8 + 8 - 1, top: 8, bottom: 8, width: 2, background: 'var(--color-border)', borderRadius: 2 }} />
                   {fillIndex > -1 && (
-                    <div className={railActive ? 'timeline-rail-flow' : undefined} style={{ position: 'absolute', left: 8 + 8 - 1, top: 8, height: `${fillPct}%`, width: 2, borderRadius: 2, backgroundColor: accent, backgroundImage: railActive ? 'linear-gradient(180deg, transparent 0%, rgba(var(--color-white-rgb), 0.6) 50%, transparent 100%)' : undefined, backgroundSize: '100% 50%', backgroundRepeat: 'repeat-y', transition: 'height 600ms cubic-bezier(0.4,0,0.2,1)', animation: railActive ? 'railFlow 1.8s linear infinite' : undefined }} />
+                    <MotionIn
+                      animate={railActive && !reduceMotion ? { backgroundPosition: ['0 -200%', '0 200%'] } : undefined}
+                      transition={{ duration: 1.8, ease: 'linear', repeat: Infinity }}
+                      style={{ position: 'absolute', left: 8 + 8 - 1, top: 8, height: `${fillPct}%`, width: 2, borderRadius: 2, backgroundColor: accent, backgroundImage: railActive ? 'linear-gradient(180deg, transparent 0%, rgba(var(--color-white-rgb), 0.6) 50%, transparent 100%)' : undefined, backgroundSize: '100% 50%', backgroundRepeat: 'repeat-y' }} />
                   )}
                   {railActive && (
-                    <div className="timeline-rail-tip" style={{ position: 'absolute', left: 8 + 8, top: `calc(8px + ${fillPct}%)`, width: 7, height: 7, marginTop: -3.5, borderRadius: '50%', background: accent, transition: 'top 600ms cubic-bezier(0.4,0,0.2,1)', animation: 'railTipPulse 1.8s ease-in-out infinite' }} />
+                    <MotionIn
+                      animate={reduceMotion ? undefined : { scale: [1, 2.1, 1], opacity: [0.9, 0, 0.9] }}
+                      transition={{ duration: 1.8, ease: 'easeInOut', repeat: Infinity }}
+                      style={{ position: 'absolute', left: 8 + 8, top: `calc(8px + ${fillPct}%)`, width: 7, height: 7, marginTop: -3.5, borderRadius: '50%', background: accent }} />
                   )}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {milestones.map((m, i) => {
@@ -300,9 +313,9 @@ export default function SharedTimelinePage() {
                             {effectivelyDone && <Icon name="check" size={9} color="var(--color-white)" />}
                             {!effectivelyDone && effectiveStatus === 'in-progress' && <div style={{ width: 5, height: 5, borderRadius: '50%', background: dot }} />}
                           </div>
-                          <div
+                          <MotionIn
                             onClick={() => setPreviewMilestone(m)}
-                            style={{ flex: 1, minWidth: 0, background: effectivelyDone ? `${dot}08` : 'var(--color-white)', border: `1px solid ${effectivelyDone ? dot + '30' : 'var(--color-purple-pale-34)'}`, borderLeft: `3px solid ${dot}`, borderRadius: 12, padding: '12px 14px', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.03)', cursor: 'pointer', transition: 'box-shadow 150ms' }}
+                            transition={{ duration: 0.15 }} style={{ flex: 1, minWidth: 0, background: effectivelyDone ? `${dot}08` : 'var(--color-white)', border: `1px solid ${effectivelyDone ? dot + '30' : 'var(--color-purple-pale-34)'}`, borderLeft: `3px solid ${dot}`, borderRadius: 12, padding: '12px 14px', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.03)', cursor: 'pointer', }}
                             onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(var(--color-black-rgb), 0.07)')}
                             onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 1px 3px rgba(var(--color-black-rgb), 0.03)')}>
                             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -328,7 +341,7 @@ export default function SharedTimelinePage() {
                                 )}
                               </div>
                             </div>
-                          </div>
+                          </MotionIn>
                         </div>
                       );
                     })}
@@ -338,19 +351,17 @@ export default function SharedTimelinePage() {
             </div>
           </>
         )}
-      </div>
+      </MotionIn>
 
       {meta?.expiresAt && state === 'ready' && (
         <div style={{ marginTop: 16, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-warning)', background: 'var(--color-yellow-tint-1)', borderRadius: 99, padding: '4px 12px' }}>Link expires {fmtDate(meta.expiresAt)}</div>
       )}
 
-      <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>
+      <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
         Shared via <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Solytiq</span>
       </div>
 
       {previewMilestone && <MilestonePreview milestone={previewMilestone} onClose={() => setPreviewMilestone(null)} />}
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -375,7 +386,7 @@ function MilestonePreview({ milestone: m, onClose }: { milestone: SharedMileston
   const hasProps = !!(m.date || m.time || m.status);
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', animation: 'backdropIn 200ms ease both' }}>
+    <MotionIn onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, ease: EASE_STANDARD }}>
       <ModalIn duration={260} onClick={e => e.stopPropagation()} style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 560, maxHeight: '88vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(var(--color-black-rgb), 0.22)' }}>
         <div style={{ height: 3, background: stripe, flexShrink: 0 }} />
         <div style={{ overflowY: 'auto', padding: '24px 28px 28px' }}>
@@ -408,6 +419,6 @@ function MilestonePreview({ milestone: m, onClose }: { milestone: SharedMileston
           )}
         </div>
       </ModalIn>
-    </div>
+    </MotionIn>
   );
 }

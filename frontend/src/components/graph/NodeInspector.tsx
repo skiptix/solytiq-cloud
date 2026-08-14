@@ -18,6 +18,9 @@ import type { NetRenderNode } from '../../utils/graphHierarchy';
 import Icon from '../Icon';
 import { apiGetEntityLinks, apiGetLinkTypes } from '../../api/client';
 import { nodeColor, nodeIcon, ENTITY_TYPE_LABEL } from '../../utils/graphLayout';
+import { EASE_SETTLE } from '../animate-ui/motionTokens';
+import MotionIn from '../animate-ui/MotionIn';
+import MotionButton from '../animate-ui/MotionButton';
 
 const POPUP_W = 292;
 const MAX_H = 400;
@@ -91,13 +94,12 @@ export default function NodeInspector({ node, breadcrumb, anchor, containerSize,
   const muted: React.CSSProperties = { fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' };
 
   return (
-    <div
-      style={{
+    <MotionIn
+      initial={{ opacity: 0, y: 12, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.2, ease: EASE_SETTLE }} style={{
         position: 'absolute', left, top, width: POPUP_W, maxHeight: MAX_H, overflowY: 'auto', zIndex: 8,
         display: 'flex', flexDirection: 'column', gap: 10, padding: 14,
         background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)',
         boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.2)',
-        animation: 'cardIn 200ms cubic-bezier(0.34,1.56,0.64,1) both',
         // The canvas disables text selection so drags don't highlight node
         // labels — undo that inherited rule here, this is a normal panel.
         userSelect: 'text', WebkitUserSelect: 'text',
@@ -107,17 +109,17 @@ export default function NodeInspector({ node, breadcrumb, anchor, containerSize,
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2, fontFamily: 'var(--font-body)', fontSize: 11 }}>
           {breadcrumb.slice(0, -1).map((crumb) => (
             <span key={crumb.srn} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <button
+              <MotionButton
                 onClick={() => onBreadcrumbClick(crumb)}
                 style={{
                   background: 'none', border: 'none', padding: '2px 2px', cursor: 'pointer', color: 'var(--color-text-tertiary)',
                   font: 'inherit', maxWidth: 92, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-primary)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-tertiary)'; }}
+                whileHover={{ color: 'var(--color-primary)' }}
+                transition={{ duration: 0.15 }}
               >
                 {crumb.emoji ? `${crumb.emoji} ` : ''}{crumb.title || (crumb.type === 'workspace' ? 'Workspace' : 'Untitled')}
-              </button>
+              </MotionButton>
               <Icon name="chevron_right" size={11} color="var(--color-text-quaternary)" />
             </span>
           ))}
@@ -140,36 +142,36 @@ export default function NodeInspector({ node, breadcrumb, anchor, containerSize,
             {node.isArchived && <StatusPill label="Archived" color="var(--color-text-quaternary)" />}
           </div>
         </div>
-        <button
+        <MotionButton
           onClick={onClose}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-tertiary)', display: 'flex', padding: 2, transition: 'color 150ms' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-text-primary)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-tertiary)'; }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-tertiary)', display: 'flex', padding: 2 }}
+          whileHover={{ color: 'var(--color-text-primary)' }}
+          transition={{ duration: 0.15 }}
         >
           <Icon name="close" size={17} />
-        </button>
+        </MotionButton>
       </div>
 
       <div style={{ display: 'flex', gap: 8 }}>
         {node.deepLink && (
-          <button
+          <MotionButton
             onClick={() => navigate(node.deepLink!)}
-            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 10px', borderRadius: 8, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'transform 150ms' }}
-            onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.02)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 10px', borderRadius: 8, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+            whileHover={{ transform: 'scale(1.02)' }}
+            transition={{ duration: 0.15 }}
           >
             <Icon name="open_in_new" size={14} color="var(--color-white)" /> Open
-          </button>
+          </MotionButton>
         )}
-        <button
+        <MotionButton
           onClick={onCenter}
           title="Re-center the view on this item"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', transition: 'all 150ms' }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-secondary)'; }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+          whileHover={{ borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
+          transition={{ duration: 0.15 }}
         >
           <Icon name="filter_center_focus" size={14} />
-        </button>
+        </MotionButton>
       </div>
 
       {!isWorkspace && (
@@ -218,6 +220,6 @@ export default function NodeInspector({ node, breadcrumb, anchor, containerSize,
           ))}
         </div>
       )}
-    </div>
+    </MotionIn>
   );
 }

@@ -8,6 +8,8 @@
  * tooltip that breaks the ring down into its Completed / Open counts.
  */
 import { useId, useState } from 'react';
+import MotionIn from './animate-ui/MotionIn';
+import { motion } from './animate-ui/motion';
 
 interface DonutChartProps {
   title: string;
@@ -64,8 +66,8 @@ export default function DonutChart({ title, subtitle, completed, open, size = 12
         onMouseLeave={() => setHov(false)}
         style={{ position: 'relative', width: size, height: size, cursor: 'default' }}
       >
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-labelledby={titleId}
-          style={{ display: 'block', transformOrigin: 'center', transform: hov ? 'scale(1.05)' : 'scale(1)', transition: 'transform 260ms cubic-bezier(0.34,1.56,0.64,1), filter 200ms', filter: hov ? 'drop-shadow(0 8px 18px rgba(var(--color-primary-rgb), 0.20))' : 'none' }}>
+        <motion.svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-labelledby={titleId}
+          transition={{ duration: 0.26 }} style={{ display: 'block', transformOrigin: 'center', transform: hov ? 'scale(1.05)' : 'scale(1)', filter: hov ? 'drop-shadow(0 8px 18px rgba(var(--color-primary-rgb), 0.20))' : 'none' }}>
           <title id={titleId}>{`${title}: ${completed} of ${total} completed (${pct}%), ${open} open`}</title>
           {/* Track */}
           <circle cx={cx} cy={cy} r={r} fill="none" stroke={TRACK_COLOR} strokeWidth={stroke} />
@@ -88,14 +90,14 @@ export default function DonutChart({ title, subtitle, completed, open, size = 12
             style={{ fontFamily: 'var(--font-body)', fontSize: 10.5, fontWeight: 600, fill: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             {total > 0 ? 'done' : 'no tasks'}
           </text>
-        </svg>
+        </motion.svg>
 
         {/* Hover tooltip — the breakdown, so counts + identity are one interaction away. */}
         {total > 0 && (
-          <div style={{ position: 'absolute', left: '50%', top: -10, transform: 'translate(-50%, -100%)', opacity: hov ? 1 : 0, transition: 'opacity 160ms', pointerEvents: 'none', background: 'var(--color-text-primary)', borderRadius: 9, padding: '8px 11px', boxShadow: '0 6px 22px rgba(var(--color-black-rgb), 0.24)', display: 'flex', flexDirection: 'column', gap: 5, whiteSpace: 'nowrap', zIndex: 5 }}>
+          <MotionIn transition={{ duration: 0.16 }} style={{ position: 'absolute', left: '50%', top: -10, transform: 'translate(-50%, -100%)', opacity: hov ? 1 : 0, pointerEvents: 'none', background: 'var(--color-text-primary)', borderRadius: 9, padding: '8px 11px', boxShadow: '0 6px 22px rgba(var(--color-black-rgb), 0.24)', display: 'flex', flexDirection: 'column', gap: 5, whiteSpace: 'nowrap', zIndex: 5 }}>
             <TooltipRow color={COMPLETED_COLOR} value={completed} label="Completed" />
             <TooltipRow color={OPEN_COLOR} value={open} label="Open" />
-          </div>
+          </MotionIn>
         )}
       </div>
     </div>

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
-import { markdownToPlainText } from './MarkdownView';
+import { markdownToPlainText } from '../utils/markdownRender';
+import MotionIn from './animate-ui/MotionIn';
+import MotionButton from './animate-ui/MotionButton';
+import { fmtDate } from '../utils/shareFormat';
 
 // Shapes returned by GET /api/share/list/:token(/content) — read-only, public.
 export interface SharedTask {
@@ -27,9 +30,6 @@ export interface SharedSection {
   tasks: SharedTask[];
 }
 
-export function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-}
 
 // ── Shared task row — used by both the List and Kanban read-only views ─────────
 export function SharedTaskRow({ task, accent, onClick }: { task: SharedTask; accent: string; onClick: (task: SharedTask) => void }) {
@@ -39,11 +39,11 @@ export function SharedTaskRow({ task, accent, onClick }: { task: SharedTask; acc
   const navigable = !!task.linkedShareToken;
   const done = task.checked || linkedComplete;
   return (
-    <div
+    <MotionIn
       onClick={() => onClick(task)}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 8, cursor: 'pointer', transition: 'background 150ms' }}
-      onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 8, cursor: 'pointer' }}
+      whileHover={{ background: 'var(--color-surface-tint)' }}
+      transition={{ duration: 0.15 }}
     >
       {isLinked ? (
         <div style={{ width: 20, height: 20, minWidth: 20, borderRadius: '50%', border: `2px solid ${accent}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
@@ -73,7 +73,7 @@ export function SharedTaskRow({ task, accent, onClick }: { task: SharedTask; acc
       {task.deadline && <span style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', flexShrink: 0 }}>{fmtDate(task.deadline)}</span>}
       {navigable && <Icon name="chevron_right" size={18} color="var(--color-text-quaternary)" />}
       {isLinked && !navigable && <Icon name="lock" size={14} color="var(--color-blue-tint-3)" />}
-    </div>
+    </MotionIn>
   );
 }
 
@@ -309,16 +309,19 @@ export function SharedTaskTimelineView({ sections, accent, isMobile, onTaskClick
         </button>
         <div style={{ display: 'inline-flex', background: 'var(--color-surface-tint)', borderRadius: 10, padding: 3, gap: 2 }}>
           {(['day', 'week', 'month'] as const).map(z => (
-            <button key={z} onClick={() => setZoom(z)}
+            <MotionButton key={z} onClick={() => setZoom(z)}
               style={{
                 fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, textTransform: 'capitalize',
+                border: 'none', borderRadius: 8, padding: '7px 13px', cursor: 'pointer',
+              }}
+              animate={{
                 color: zoom === z ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
-                background: zoom === z ? 'var(--color-white)' : 'transparent',
-                boxShadow: zoom === z ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : 'none',
-                border: 'none', borderRadius: 8, padding: '7px 13px', cursor: 'pointer', transition: 'all 150ms',
-              }}>
+                background: zoom === z ? 'var(--color-white)' : 'rgba(0,0,0,0)',
+                boxShadow: zoom === z ? '0 1px 4px rgba(var(--color-primary-rgb), 0.18)' : '0 1px 4px rgba(var(--color-primary-rgb), 0)',
+              }}
+              transition={{ duration: 0.15 }}>
               {z}
-            </button>
+            </MotionButton>
           ))}
         </div>
       </div>

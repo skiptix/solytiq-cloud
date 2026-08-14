@@ -2,7 +2,7 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useMobile } from '../hooks/useBreakpoint';
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { AnimatePresence } from '@/components/animate-ui/motion';
+import { AnimatePresence, motion, useReducedMotion } from '@/components/animate-ui/motion';
 import type { ReactNode } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import type { Milestone, MilestoneStatus, TimelineLayout, MilestoneAttachment, SharedFile, WorkspaceMember } from '../types';
@@ -30,7 +30,8 @@ import NotesEditor from '../components/NotesEditor';
 import RelationsPanel from '../components/graph/RelationsPanel';
 import MarkdownView from '../components/MarkdownView';
 import AutomationsButton from '../components/AutomationsButton';
-import { FilePicker, AttachBadge, useAttachmentDrop, AttachDropOverlay } from '../components/TaskDialog';
+import { FilePicker, AttachBadge, AttachDropOverlay } from '../components/TaskDialog';
+import { useAttachmentDrop } from '../hooks/useAttachmentDrop';
 import AttachmentPreviewModal from '../components/AttachmentPreview';
 import { isPreviewable } from '../utils/attachmentPreview';
 import { DeleteConfirmModal } from '../components/TaskItem';
@@ -39,6 +40,9 @@ import RenameDialog from '../components/RenameDialog';
 import MoveMilestoneModal from '../modals/MoveMilestoneModal';
 import useMembersStore from '../store/useMembersStore';
 import Spinner from '@/components/animate-ui/Spinner';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
+import { EASE_STANDARD, EASE_SETTLE, EASE_SPRING } from '../components/animate-ui/motionTokens';
 
 function fmtAttSize(bytes: number): string {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
@@ -239,16 +243,19 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
   // dialog could never render above the sidebar/topbar regardless of z-index.
   return createPortal(
     <>
-    <div onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : '24px 20px', animation: 'backdropIn 200ms ease both' }}>
-      <div onClick={e => e.stopPropagation()}
+    <MotionIn onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', padding: isMobile ? 0 : '24px 20px' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, ease: EASE_STANDARD }}>
+      <MotionIn onClick={e => e.stopPropagation()}
         {...dropHandlers}
-        style={{ background: 'var(--color-white)', borderRadius: isMobile ? '16px 16px 0 0' : 18, width: '100%', maxWidth: 800, maxHeight: isMobile ? '94vh' : '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: '0 32px 80px rgba(var(--color-black-rgb), 0.22), 0 2px 8px rgba(var(--color-black-rgb), 0.08)', animation: isMobile ? 'slideUp 280ms cubic-bezier(0.22,1,0.36,1) both' : 'modalIn 260ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+        initial={isMobile ? { opacity: 0, y: '100%' } : { opacity: 0, scale: 0.94, y: 12 }}
+        animate={isMobile ? { opacity: 1, y: 0 } : { opacity: 1, scale: 1, y: 0 }}
+        transition={isMobile ? { duration: 0.28, ease: EASE_SETTLE } : { duration: 0.26, ease: EASE_SPRING }}
+        style={{ background: 'var(--color-white)', borderRadius: isMobile ? '16px 16px 0 0' : 18, width: '100%', maxWidth: 800, maxHeight: isMobile ? '94vh' : '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', position: 'relative', boxShadow: '0 32px 80px rgba(var(--color-black-rgb), 0.22), 0 2px 8px rgba(var(--color-black-rgb), 0.08)' }}>
 
         <AttachDropOverlay visible={dragging} subtitle="Files will be uploaded and attached to this milestone" />
 
         {/* Accent stripe */}
-        <div style={{ height: 3, background: effectiveAccent, flexShrink: 0, transition: 'background 200ms' }} />
+        <MotionIn transition={{ duration: 0.2 }} style={{ height: 3, background: effectiveAccent, flexShrink: 0, }} />
 
         {/* Scrollable body */}
         <div style={{ overflowY: 'auto', flex: 1, padding: '28px 32px 32px' }}>
@@ -262,19 +269,19 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
               style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', outline: 'none', lineHeight: 1.3, padding: '6px 0', marginTop: 2 }} />
             <div style={{ display: 'flex', gap: 4, flexShrink: 0, marginTop: 4 }}>
               {initial && onDelete && (
-                <button onClick={() => setShowDelete(true)} title="Delete milestone"
-                  style={{ width: 34, height: 34, borderRadius: 9, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 120ms' }}
+                <MotionButton onClick={() => setShowDelete(true)} title="Delete milestone"
+                  transition={{ duration: 0.12 }} style={{ width: 34, height: 34, borderRadius: 9, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-error-bg)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                   <Icon name="delete" size={17} color="var(--color-error)" />
-                </button>
+                </MotionButton>
               )}
-              <button onClick={onClose} title="Close"
-                style={{ width: 34, height: 34, borderRadius: 9, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 120ms' }}
+              <MotionButton onClick={onClose} title="Close"
+                transition={{ duration: 0.12 }} style={{ width: 34, height: 34, borderRadius: 9, background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-surface-tint)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 <Icon name="close" size={18} color="var(--color-text-tertiary)" />
-              </button>
+              </MotionButton>
             </div>
           </div>
 
@@ -282,11 +289,11 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
           <div style={{ background: 'var(--color-surface-tint-3)', borderRadius: 12, marginBottom: 28, border: '1px solid var(--color-purple-pale-23)' }}>
             <PropRow icon="calendar_today" label="Date" first isMobile={isMobile}>
               <div style={{ position: 'relative' }} ref={calRef}>
-                <button type="button" onClick={() => { setShowCal(v => !v); setDateError(false); }}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 8, border: `1px solid ${dateError ? 'var(--color-error)' : showCal ? effectiveAccent : (date ? 'var(--color-accent-purple-soft-alt)' : 'transparent')}`, background: dateError ? 'var(--color-red-pale-2)' : (date ? 'var(--color-surface-tint)' : 'transparent'), cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: date ? 'var(--color-primary)' : 'var(--color-border-strong)', transition: 'all 120ms', textAlign: 'left' }}>
+                <MotionButton type="button" onClick={() => { setShowCal(v => !v); setDateError(false); }}
+                  transition={{ duration: 0.12 }} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 8, border: `1px solid ${dateError ? 'var(--color-error)' : showCal ? effectiveAccent : (date ? 'var(--color-accent-purple-soft-alt)' : 'transparent')}`, background: dateError ? 'var(--color-red-pale-2)' : (date ? 'var(--color-surface-tint)' : 'transparent'), cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: date ? 'var(--color-primary)' : 'var(--color-border-strong)', textAlign: 'left' }}>
                   <Icon name="calendar_today" size={13} color={date ? effectiveAccent : 'var(--color-border-strong)'} />
                   {date ? fmtDate(date) : 'Pick a date…'}
-                </button>
+                </MotionButton>
                 {dateError && <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginLeft: 10 }}>A date is required.</span>}
                 {showCal && (
                   <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50 }}>
@@ -302,11 +309,11 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
 
             <PropRow icon="schedule" label="Time" isMobile={isMobile}>
               <div style={{ position: 'relative' }} ref={timeRef}>
-                <button type="button" onClick={() => setShowTime(v => !v)}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 8, border: `1px solid ${showTime ? effectiveAccent : (time ? 'var(--color-accent-purple-soft-alt)' : 'transparent')}`, background: time ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: time ? 'var(--color-primary)' : 'var(--color-border-strong)', transition: 'all 120ms', textAlign: 'left' }}>
+                <MotionButton type="button" onClick={() => setShowTime(v => !v)}
+                  transition={{ duration: 0.12 }} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 10px', borderRadius: 8, border: `1px solid ${showTime ? effectiveAccent : (time ? 'var(--color-accent-purple-soft-alt)' : 'transparent')}`, background: time ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: time ? 'var(--color-primary)' : 'var(--color-border-strong)', textAlign: 'left' }}>
                   <Icon name="schedule" size={13} color={time ? effectiveAccent : 'var(--color-border-strong)'} />
                   {time || 'Set a time…'}
-                </button>
+                </MotionButton>
                 {showTime && (
                   <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50 }}>
                     <TimePicker
@@ -324,10 +331,10 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
                 {STATUSES.map(s => {
                   const sel = status === s.key;
                   return (
-                    <button key={s.key} onClick={() => setStatus(s.key)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 8, border: `1px solid ${sel ? s.color : 'var(--color-border-alt)'}`, background: sel ? `${s.color}18` : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: sel ? s.color : 'var(--color-text-tertiary)', transition: 'all 120ms' }}>
+                    <MotionButton key={s.key} onClick={() => setStatus(s.key)}
+                      transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 8, border: `1px solid ${sel ? s.color : 'var(--color-border-alt)'}`, background: sel ? `${s.color}18` : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: sel ? s.color : 'var(--color-text-tertiary)', }}>
                       <Icon name={s.icon} size={13} color={sel ? s.color : 'var(--color-accent-purple-light)'} />{s.label}
-                    </button>
+                    </MotionButton>
                   );
                 })}
               </div>
@@ -449,27 +456,27 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-primary)', marginBottom: 4 }}>Uploading… {uploadProgress}%</div>
                       <div style={{ background: 'var(--color-border-alt)', borderRadius: 99, height: 3, overflow: 'hidden' }}>
-                        <div style={{ width: `${uploadProgress}%`, height: '100%', background: 'var(--color-primary)', borderRadius: 99, transition: 'width 150ms' }} />
+                        <MotionIn transition={{ duration: 0.15 }} style={{ width: `${uploadProgress}%`, height: '100%', background: 'var(--color-primary)', borderRadius: 99, }} />
                       </div>
                     </div>
                   </div>
                 )}
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <button onClick={() => fileInputRef.current?.click()} disabled={uploadProgress !== null}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1.5px dashed var(--color-blue-tint-3)', borderRadius: 9, padding: '7px 14px', cursor: uploadProgress !== null ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', transition: 'all 120ms', opacity: uploadProgress !== null ? 0.5 : 1 }}
+                  <MotionButton onClick={() => fileInputRef.current?.click()} disabled={uploadProgress !== null}
+                    transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1.5px dashed var(--color-blue-tint-3)', borderRadius: 9, padding: '7px 14px', cursor: uploadProgress !== null ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', opacity: uploadProgress !== null ? 0.5 : 1 }}
                     onMouseEnter={e => { if (uploadProgress === null) { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--color-surface-tint-3)'; } }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-blue-tint-3)'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; e.currentTarget.style.background = 'transparent'; }}>
                     <Icon name="upload" size={14} color="currentColor" />
                     Upload file
-                  </button>
-                  <button onClick={() => setShowFilePicker(true)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1.5px dashed var(--color-blue-tint-3)', borderRadius: 9, padding: '7px 14px', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', transition: 'all 120ms' }}
+                  </MotionButton>
+                  <MotionButton onClick={() => setShowFilePicker(true)}
+                    transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1.5px dashed var(--color-blue-tint-3)', borderRadius: 9, padding: '7px 14px', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--color-surface-tint-3)'; }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--color-blue-tint-3)'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; e.currentTarget.style.background = 'transparent'; }}>
                     <Icon name="folder_open" size={14} color="currentColor" />
                     Attach from Files
-                  </button>
+                  </MotionButton>
                 </div>
 
                 <input ref={fileInputRef} type="file" style={{ display: 'none' }}
@@ -487,8 +494,8 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
             {initial ? 'Save' : 'Add'}
           </button>
         </div>
-      </div>
-    </div>
+      </MotionIn>
+    </MotionIn>
     <AnimatePresence>
       {showFilePicker && <FilePicker key="file-picker" onSelect={handleLinkFile} onClose={() => setShowFilePicker(false)} />}
     </AnimatePresence>
@@ -518,6 +525,10 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
 // ── Timeline screen ────────────────────────────────────────────────────────────
 export default function TimelineScreen() {
   const isMobile = useMobile();
+  // Gates the rail's continuous decorative motion. The root MotionConfig only
+  // suppresses transform/layout under reduced motion, and the rail animates
+  // backgroundPosition, so this has to be explicit.
+  const reduceMotion = useReducedMotion();
   const { timelineId } = useParams<{ timelineId: string }>();
   const navigate = useNavigate();
   const { userId: currentUserId } = useAuthStore();
@@ -703,7 +714,7 @@ export default function TimelineScreen() {
             {/* Progress */}
             <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1, maxWidth: 320, height: 8, borderRadius: 9999, background: 'rgba(var(--color-black-rgb), 0.07)', overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%', borderRadius: 9999, background: accent, transition: 'width 400ms ease' }} />
+                <MotionIn transition={{ duration: 0.4 }} style={{ width: `${pct}%`, height: '100%', borderRadius: 9999, background: accent, }} />
               </div>
               <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)' }}>{done}/{total} done · {pct}%</span>
             </div>
@@ -745,7 +756,7 @@ export default function TimelineScreen() {
             {/* Accent progress fill — grows toward the leading milestone, partially
                 into the segment of the one that's still in progress today. */}
             {fillIndex > -1 && (
-              <div className={railActive ? 'timeline-rail-flow' : undefined} style={{
+              <MotionIn style={{
                 position: 'absolute',
                 left: 8 + nodeSize / 2 - 1,
                 top: nodeSize / 2,
@@ -757,13 +768,13 @@ export default function TimelineScreen() {
                 backgroundImage: railActive ? 'linear-gradient(180deg, transparent 0%, rgba(var(--color-white-rgb), 0.6) 50%, transparent 100%)' : undefined,
                 backgroundSize: '100% 50%',
                 backgroundRepeat: 'repeat-y',
-                transition: 'height 600ms cubic-bezier(0.4,0,0.2,1)',
-                animation: railActive ? 'railFlow 1.8s linear infinite' : undefined,
-              }} />
+              }}
+              animate={railActive && !reduceMotion ? { backgroundPosition: ['0 -200%', '0 200%'] } : undefined}
+              transition={{ duration: 1.8, ease: 'linear', repeat: Infinity }} />
             )}
             {/* Pulsing tip marking the live leading edge of an in-progress segment. */}
             {railActive && (
-              <div className="timeline-rail-tip" style={{
+              <MotionIn style={{
                 position: 'absolute',
                 left: 8 + nodeSize / 2,
                 top: `calc(${nodeSize / 2}px + ${fillPct}%)`,
@@ -773,9 +784,9 @@ export default function TimelineScreen() {
                 borderRadius: '50%',
                 background: accent,
                 zIndex: 0,
-                transition: 'top 600ms cubic-bezier(0.4,0,0.2,1)',
-                animation: 'railTipPulse 1.8s ease-in-out infinite',
-              }} />
+              }}
+              animate={reduceMotion ? undefined : { scale: [1, 2.1, 1], opacity: [0.9, 0, 0.9] }}
+              transition={{ duration: 1.8, ease: 'easeInOut', repeat: Infinity }} />
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap }}>
               {milestones.map((m, i) => {
@@ -793,24 +804,24 @@ export default function TimelineScreen() {
                 return (
                   <div key={m.id} style={{ position: 'relative', display: 'flex', gap: 18, alignItems: 'flex-start' }}>
                     {/* Node */}
-                    <button
+                    <MotionButton
                       onClick={() => cycleStatus(m)}
                       title={isOwner ? `Status: ${st.label} — click to change` : st.label}
-                      style={{ position: 'relative', zIndex: 1, width: nodeSize, height: nodeSize, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: effectivelyDone ? dot : 'var(--color-white)', border: `2.5px solid ${dot}`, cursor: isOwner ? 'pointer' : 'default', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 4px var(--color-white)', transition: 'all 300ms' }}>
+                      transition={{ duration: 0.3 }} style={{ position: 'relative', zIndex: 1, width: nodeSize, height: nodeSize, borderRadius: '50%', flexShrink: 0, marginTop: 4, background: effectivelyDone ? dot : 'var(--color-white)', border: `2.5px solid ${dot}`, cursor: isOwner ? 'pointer' : 'default', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 4px var(--color-white)', }}>
                       {effectivelyDone && <Icon name="check" size={nodeSize - 7} color="var(--color-white)" />}
                       {!effectivelyDone && effectiveStatus === 'in-progress' && <div style={{ width: nodeSize / 3, height: nodeSize / 3, borderRadius: '50%', background: dot }} />}
-                    </button>
+                    </MotionButton>
 
                     {/* Card */}
-                    <div style={{ flex: 1, minWidth: 0, background: effectivelyDone ? `${dot}08` : 'var(--color-white)', border: `1px solid ${effectivelyDone ? dot + '30' : 'var(--color-purple-pale-34)'}`, borderLeft: `3px solid ${dot}`, borderRadius: 12, padding: cardPad, transition: 'box-shadow 150ms, background 300ms', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.03)' }}
-                      onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(var(--color-black-rgb), 0.07)')}
-                      onMouseLeave={e => (e.currentTarget.style.boxShadow = '0 1px 3px rgba(var(--color-black-rgb), 0.03)')}
+                    <MotionIn style={{ flex: 1, minWidth: 0, background: effectivelyDone ? `${dot}08` : 'var(--color-white)', border: `1px solid ${effectivelyDone ? dot + '30' : 'var(--color-purple-pale-34)'}`, borderLeft: `3px solid ${dot}`, borderRadius: 12, padding: cardPad, boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.03)' }}
+                      whileHover={{ boxShadow: '0 4px 16px rgba(var(--color-black-rgb), 0.07)' }}
+                      transition={{ duration: 0.15 }}
                       onContextMenu={e => { if (!isOwner) return; e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, milestone: m }); }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                         {m.emoji && <span style={{ fontSize: layout === 'detailed' ? 20 : 16, lineHeight: 1.2, flexShrink: 0 }}>{m.emoji}</span>}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                            <span style={{ fontFamily: 'var(--font-heading)', fontSize: titleSize, fontWeight: 700, color: effectivelyDone ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)', textDecoration: effectivelyDone && m.status === 'done' ? 'line-through' : 'none', transition: 'color 300ms' }}>{m.title}</span>
+                            <motion.span transition={{ duration: 0.3 }} style={{ fontFamily: 'var(--font-heading)', fontSize: titleSize, fontWeight: 700, color: effectivelyDone ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)', textDecoration: effectivelyDone && m.status === 'done' ? 'line-through' : 'none', }}>{m.title}</motion.span>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-heading)', fontSize: 10, fontWeight: 700, color: st.color, background: `${st.color}1a`, padding: '2px 8px', borderRadius: 9999, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                               <Icon name={st.icon} size={11} color={st.color} />{st.label}
                             </span>
@@ -850,7 +861,7 @@ export default function TimelineScreen() {
                           </div>
                         )}
                       </div>
-                    </div>
+                    </MotionIn>
                   </div>
                 );
               })}

@@ -87,12 +87,15 @@ const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 type SettingsTab = 'profile' | 'preferences' | 'controls' | 'security' | 'connections' | 'mobile' | 'calendar';
 
+/** Tabs with no pill on the mobile layout — see the clamp in the component. */
+const MOBILE_HIDDEN_TABS = new Set<SettingsTab>(['controls', 'mobile', 'calendar']);
+
 export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   const isMobile = useMobile();
   const { username, fullName, email, profileImage, isAdmin, totpEnabled, setProfile, setTotpEnabled } = useAuthStore();
   const { timezone, setTimezone, defaultListViewMode, setDefaultListViewMode } = useUserPrefsStore();
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
+  const [rawActiveTab, setActiveTab] = useState<SettingsTab>('profile');
 
   // Feature flags
   const [twoFAFeatureEnabled, setTwoFAFeatureEnabled] = useState(true);
@@ -382,11 +385,9 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   // If the viewport crosses into mobile while a now-hidden tab is active
   // (e.g. rotating/resizing mid-session), fall back to Profile rather than
   // stranding the panel on a tab with no corresponding pill to reselect.
-  useEffect(() => {
-    if (isMobile && (activeTab === 'controls' || activeTab === 'mobile' || activeTab === 'calendar')) {
-      setActiveTab('profile');
-    }
-  }, [isMobile, activeTab]);
+  // Clamped at render rather than corrected by an effect: the effect version
+  // painted one frame on the now-invalid tab before snapping back.
+  const activeTab = isMobile && MOBILE_HIDDEN_TABS.has(rawActiveTab) ? 'profile' : rawActiveTab;
 
   // Portaled to <body>: this modal is opened from ProfileCard, deep inside the
   // fixed-position, z-indexed Sidebar (see Sidebar's own zIndex: 40/60). A

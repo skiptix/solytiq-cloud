@@ -2,6 +2,8 @@ import { createPortal } from 'react-dom';
 import type { VisibilityConflict } from '../api/client';
 import Icon from './Icon';
 import ModalIn from './animate-ui/ModalIn';
+import { EASE_STANDARD } from './animate-ui/motionTokens';
+import MotionIn from './animate-ui/MotionIn';
 
 interface VisibilityConflictModalProps {
   conflict: VisibilityConflict;
@@ -60,9 +62,9 @@ export default function VisibilityConflictModal({ conflict, busy, onConfirm, onC
   const confirmLabel = isPromote ? 'Make all public' : 'Make all private';
 
   return createPortal(
-    <div
+    <MotionIn
       onClick={onCancel}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(4px)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'backdropIn 200ms ease both' }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(4px)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, ease: EASE_STANDARD }}>
       <ModalIn
         duration={280}
         onClick={e => e.stopPropagation()}
@@ -115,7 +117,7 @@ export default function VisibilityConflictModal({ conflict, busy, onConfirm, onC
           )}
         </div>
       </ModalIn>
-    </div>,
+    </MotionIn>,
     document.body,
   );
 }

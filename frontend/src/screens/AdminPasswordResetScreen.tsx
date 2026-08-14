@@ -4,6 +4,10 @@ import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiAdminPasswordResetRequest, apiAdminPasswordResetConfirm } from '../api/client';
 import Icon from '../components/Icon';
+import { motion } from '../components/animate-ui/motion';
+import { EASE_SPRING } from '../components/animate-ui/motionTokens';
+import MotionButton from '../components/animate-ui/MotionButton';
+import MotionIn from '../components/animate-ui/MotionIn';
 
 const s: Record<string, CSSProperties> = {
   wrap:  { minHeight: '100vh', background: 'linear-gradient(135deg, var(--color-page-bg) 0%, var(--color-purple-pale-12) 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24, padding: 24 },
@@ -11,8 +15,8 @@ const s: Record<string, CSSProperties> = {
   title: { fontFamily: 'var(--font-heading)', fontSize: 24, fontWeight: 700, color: 'var(--color-text-primary)', letterSpacing: '-0.015em', lineHeight: 1.2 },
   sub:   { fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', lineHeight: 1.55 },
   label: { fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)' },
-  input: { fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'var(--color-purple-pale-4)', border: '1.5px solid var(--color-purple-pale-31)', borderRadius: 10, padding: '13px 16px', outline: 'none', width: '100%', transition: 'all 180ms', boxSizing: 'border-box' },
-  primaryBtn: { width: '100%', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '12px 0', cursor: 'pointer', transition: 'all 180ms', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  input: { fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'var(--color-purple-pale-4)', border: '1.5px solid var(--color-purple-pale-31)', borderRadius: 10, padding: '13px 16px', outline: 'none', width: '100%', boxSizing: 'border-box' },
+  primaryBtn: { width: '100%', fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 10, padding: '12px 0', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 },
 };
 
 function PasswordStrength({ password }: { password: string }) {
@@ -31,7 +35,7 @@ function PasswordStrength({ password }: { password: string }) {
   return (
     <div style={{ marginTop: 4 }}>
       <div style={{ display: 'flex', gap: 4 }}>
-        {[1,2,3,4].map(i => <div key={i} style={{ flex: 1, height: 4, borderRadius: 9999, background: i <= score ? color : 'var(--color-purple-pale-39)', transition: 'background 220ms' }} />)}
+        {[1,2,3,4].map(i => <MotionIn key={i} transition={{ duration: 0.22 }} style={{ flex: 1, height: 4, borderRadius: 9999, background: i <= score ? color : 'var(--color-purple-pale-39)', }} />)}
       </div>
       {label && <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color, marginTop: 6, fontWeight: 500 }}>{label}</div>}
     </div>
@@ -144,24 +148,24 @@ export default function AdminPasswordResetScreen() {
 
             {error && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', textAlign: 'center' }}>{error}</div>}
 
-            <button
+            <MotionButton
               onClick={handleRequest}
               disabled={requesting}
-              style={{ ...s.primaryBtn, background: requesting ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', cursor: requesting ? 'wait' : 'pointer' }}
+              animate={{ background: requesting ? 'var(--color-accent-purple-light)' : 'var(--color-primary)' }} transition={{ duration: 0.18 }} style={{ ...s.primaryBtn, cursor: requesting ? 'wait' : 'pointer' }}
             >
               <Icon name="terminal" size={16} color="var(--color-white)" />
               {requesting ? 'Generating…' : 'Generate Reset Code'}
-            </button>
+            </MotionButton>
 
-            <button
+            <MotionButton
               type="button"
               onClick={() => navigate('/login')}
               style={{ background: 'none', border: 'none', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', cursor: 'pointer', textAlign: 'center' }}
-              onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-primary)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-tertiary)'; }}
+              whileHover={{ color: 'var(--color-primary)' }}
+              transition={{ duration: 0.15 }}
             >
               ← Back to login
-            </button>
+            </MotionButton>
           </>
         )}
 
@@ -202,14 +206,14 @@ export default function AdminPasswordResetScreen() {
                     {requesting ? 'Regenerating…' : 'Regenerate'}
                   </button>
                 </div>
-                <input
+                <motion.input
                   autoFocus
                   type="text"
                   value={code}
                   onChange={e => { setCode(e.target.value.toUpperCase()); setError(''); }}
                   placeholder="XXXX-XXXX"
                   maxLength={9}
-                  style={{ ...s.input, fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700, letterSpacing: '0.12em', textAlign: 'center', borderColor: code && !codeValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }}
+                  animate={{ borderColor: code && !codeValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }} transition={{ duration: 0.18 }} style={{ ...s.input, fontFamily: 'var(--font-heading)', fontSize: 18, fontWeight: 700, letterSpacing: '0.12em', textAlign: 'center'  }}
                 />
                 <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
                   8-character code from backend logs (e.g. A3F2-B1C8)
@@ -222,12 +226,12 @@ export default function AdminPasswordResetScreen() {
                   <label style={s.label}>New Password</label>
                   <button type="button" onClick={() => setShowPw(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-primary)', padding: 0 }}>{showPw ? 'Hide' : 'Show'}</button>
                 </div>
-                <input
+                <motion.input
                   type={showPw ? 'text' : 'password'}
                   value={password}
                   onChange={e => { setPassword(e.target.value); setError(''); }}
                   placeholder="••••••••"
-                  style={{ ...s.input, borderColor: password && !passwordValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }}
+                  animate={{ borderColor: password && !passwordValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }} transition={{ duration: 0.18 }} style={{ ...s.input  }}
                 />
                 <PasswordStrength password={password} />
               </div>
@@ -235,12 +239,12 @@ export default function AdminPasswordResetScreen() {
               {/* Confirm password */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <label style={s.label}>Confirm Password</label>
-                <input
+                <motion.input
                   type={showPw ? 'text' : 'password'}
                   value={confirm}
                   onChange={e => { setConfirm(e.target.value); setError(''); }}
                   placeholder="••••••••"
-                  style={{ ...s.input, borderColor: confirm && !confirmValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }}
+                  animate={{ borderColor: confirm && !confirmValid ? 'var(--color-error)' : 'var(--color-purple-pale-31)' }} transition={{ duration: 0.18 }} style={{ ...s.input  }}
                 />
                 {confirm && !confirmValid && (
                   <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>Passwords don't match.</div>
@@ -249,38 +253,40 @@ export default function AdminPasswordResetScreen() {
 
               {error && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>{error}</div>}
 
-              <button
+              <MotionButton
                 type="submit"
                 disabled={!canSubmit || loading}
-                style={{ ...s.primaryBtn, background: !canSubmit || loading ? 'var(--color-border-strong)' : 'var(--color-primary)', cursor: !canSubmit || loading ? 'not-allowed' : 'pointer', marginTop: 4 }}
+                animate={{ background: !canSubmit || loading ? 'var(--color-border-strong)' : 'var(--color-primary)' }} transition={{ duration: 0.18 }} style={{ ...s.primaryBtn, cursor: !canSubmit || loading ? 'not-allowed' : 'pointer', marginTop: 4 }}
               >
                 {loading ? 'Resetting…' : 'Reset Password'}
                 {!loading && canSubmit && <Icon name="arrow_forward" size={14} color="var(--color-white)" />}
-              </button>
+              </MotionButton>
             </form>
 
-            <button
+            <MotionButton
               type="button"
               onClick={() => { setStep('request'); setCodeSent(false); setError(''); }}
               style={{ background: 'none', border: 'none', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', cursor: 'pointer', textAlign: 'center' }}
-              onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-primary)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-tertiary)'; }}
+              whileHover={{ color: 'var(--color-primary)' }}
+              transition={{ duration: 0.15 }}
             >
               ← Back
-            </button>
+            </MotionButton>
           </>
         )}
 
         {/* ── Step: done ── */}
         {step === 'done' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, padding: '12px 0' }}>
-            <style>{`@keyframes scIn{0%{transform:scale(0);opacity:0}60%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:1}} @keyframes scDraw{from{stroke-dashoffset:40}to{stroke-dashoffset:0}}`}</style>
-            <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(var(--color-success-rgb), 0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'scIn 420ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+            <MotionIn style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(var(--color-success-rgb), 0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: [0, 1.1, 1], opacity: [0, 1, 1] }}
+              transition={{ duration: 0.4, times: [0, 0.6, 1], ease: EASE_SPRING }}>
               <svg width="36" height="28" viewBox="0 0 36 28">
-                <path d="M3 14 L14 25 L33 4" stroke="var(--color-success)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none"
-                  strokeDasharray="40" strokeDashoffset="40" style={{ animation: 'scDraw 500ms 280ms cubic-bezier(0.65,0,0.35,1) forwards' }} />
+                <motion.path d="M3 14 L14 25 L33 4" stroke="var(--color-success)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none"
+                  initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.5, delay: 0.28, ease: [0.65, 0, 0.35, 1] }} />
               </svg>
-            </div>
+            </MotionIn>
             <div style={{ textAlign: 'center' }}>
               <div style={{ ...s.title, fontSize: 22 }}>Password Reset!</div>
               <div style={{ ...s.sub, marginTop: 8 }}>Your admin password has been updated.<br />Taking you to login…</div>

@@ -7,11 +7,16 @@ import CalendarPicker from './CalendarPicker';
 import RingProgress from './RingProgress';
 import SlashCommandInput from './SlashCommandInput';
 import type { SlashCommandResult } from './SlashCommandInput';
-import { markdownToPlainText } from './MarkdownView';
+import { markdownToPlainText } from '../utils/markdownRender';
 import ContextMenu, { type ContextMenuEntry } from './ContextMenu';
 import RenameDialog from './RenameDialog';
 import MoveTaskModal from '../modals/MoveTaskModal';
 import ModalIn from './animate-ui/ModalIn';
+import MotionDraggable from './animate-ui/MotionDraggable';
+import MotionIn from './animate-ui/MotionIn';
+import MotionButton from './animate-ui/MotionButton';
+import { motion } from './animate-ui/motion';
+import { EASE_SPRING } from './animate-ui/motionTokens';
 
 const BADGE_COLORS: Record<string, { bg: string; color: string }> = {
   Work:     { bg: 'var(--color-yellow-tint-3)', color: 'var(--color-yellow-deep-1)' },
@@ -65,7 +70,10 @@ export function EditModal({ task = {}, mode = 'edit', onSave, onClose, available
   const linkedList = linkedListId ? availableLists.find(l => l.id === linkedListId) : null;
 
   const fl: CSSProperties = { fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 5, display: 'block' };
-  const fi: CSSProperties = { width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', borderBottom: '1.5px solid var(--color-border-alt)', padding: '7px 0', outline: 'none', transition: 'border-color 200ms' };
+  const fi: CSSProperties = { width: '100%', fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-primary)', background: 'transparent', border: 'none', borderBottomWidth: 1.5, borderBottomStyle: 'solid', borderBottomColor: 'var(--color-border-alt)', padding: '7px 0', outline: 'none' };
+  // Shared by both fields below — Motion owns the focus underline now, so the
+  // imperative onFocus/onBlur border mutation is gone.
+  const fiFocus = { borderBottomColor: 'var(--color-primary)' };
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.18)', backdropFilter: 'blur(4px)', zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
@@ -81,16 +89,14 @@ export function EditModal({ task = {}, mode = 'edit', onSave, onClose, available
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
           <div>
             <label style={fl}>Task Name</label>
-            <input value={title} onChange={e => setTitle(e.target.value)} style={fi}
-              onFocus={e => (e.target.style.borderBottomColor = 'var(--color-primary)')}
-              onBlur={e => (e.target.style.borderBottomColor = 'var(--color-border-alt)')} />
+            <motion.input value={title} onChange={e => setTitle(e.target.value)} style={fi}
+              whileFocus={fiFocus} transition={{ duration: 0.2 }} />
           </div>
           <div>
             <label style={fl}>Notes</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+            <motion.textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
               style={{ ...fi, resize: 'none', lineHeight: 1.5 }}
-              onFocus={e => (e.target.style.borderBottomColor = 'var(--color-primary)')}
-              onBlur={e => (e.target.style.borderBottomColor = 'var(--color-border-alt)')} />
+              whileFocus={fiFocus} transition={{ duration: 0.2 }} />
           </div>
           <div style={{ position: 'relative' }}>
             <label style={fl}>Deadline</label>
@@ -111,10 +117,12 @@ export function EditModal({ task = {}, mode = 'edit', onSave, onClose, available
             <label style={fl}>Priority</label>
             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
               {PRIORITIES.map(p => (
-                <button key={p} onClick={() => setPriority(priority === p ? '' : p)}
-                  style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: `1.5px solid ${priority === p ? PRIORITY_COLORS[p] : 'var(--color-border-alt)'}`, background: priority === p ? `${PRIORITY_COLORS[p]}15` : 'transparent', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: priority === p ? PRIORITY_COLORS[p] : 'var(--color-text-tertiary)', cursor: 'pointer', transition: 'all 150ms' }}>
+                <MotionButton key={p} onClick={() => setPriority(priority === p ? '' : p)}
+                  animate={{ borderColor: priority === p ? PRIORITY_COLORS[p] : 'var(--color-border-alt)', background: priority === p ? `${PRIORITY_COLORS[p]}15` : 'transparent', color: priority === p ? PRIORITY_COLORS[p] : 'var(--color-text-tertiary)' }}
+                  transition={{ duration: 0.15 }}
+                  style={{ flex: 1, padding: '7px 0', borderRadius: 8, borderWidth: 1.5, borderStyle: 'solid', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   {p}
-                </button>
+                </MotionButton>
               ))}
             </div>
           </div>
@@ -125,10 +133,12 @@ export function EditModal({ task = {}, mode = 'edit', onSave, onClose, available
                 const bc = BADGE_COLORS[t] ?? { bg: 'var(--color-surface-tint)', color: 'var(--color-text-secondary)' };
                 const active = tag === t;
                 return (
-                  <button key={t} onClick={() => setTag(active ? '' : t)}
-                    style={{ borderRadius: 9999, padding: '4px 12px', border: `1.5px solid ${active ? bc.color : 'var(--color-border-alt)'}`, background: active ? bc.bg : 'transparent', fontFamily: 'var(--font-body)', fontSize: 11, fontWeight: 600, color: active ? bc.color : 'var(--color-text-tertiary)', cursor: 'pointer', transition: 'all 150ms' }}>
+                  <MotionButton key={t} onClick={() => setTag(active ? '' : t)}
+                    animate={{ borderColor: active ? bc.color : 'var(--color-border-alt)', background: active ? bc.bg : 'transparent', color: active ? bc.color : 'var(--color-text-tertiary)' }}
+                    transition={{ duration: 0.15 }}
+                    style={{ borderRadius: 9999, padding: '4px 12px', borderWidth: 1.5, borderStyle: 'solid', fontFamily: 'var(--font-body)', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
                     {t}
-                  </button>
+                  </MotionButton>
                 );
               })}
             </div>
@@ -154,11 +164,13 @@ export function EditModal({ task = {}, mode = 'edit', onSave, onClose, available
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '14px 24px 20px', borderTop: '1px solid var(--color-surface-tint)' }}>
           <button onClick={onClose} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>Cancel</button>
-          <button onClick={() => onSave({ title, note: notes, deadline: deadline || undefined, priority: (priority as Task['priority']) || undefined, badge: tag || undefined, linkedListId, linkedListType })}
+          <MotionButton onClick={() => onSave({ title, note: notes, deadline: deadline || undefined, priority: (priority as Task['priority']) || undefined, badge: tag || undefined, linkedListId, linkedListType })}
             disabled={!canSubmit}
-            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: canSubmit ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '9px 20px', cursor: canSubmit ? 'pointer' : 'not-allowed', transition: 'all 180ms' }}>
+            animate={{ background: canSubmit ? 'var(--color-primary)' : 'var(--color-border-strong)' }}
+            transition={{ duration: 0.18 }}
+            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', border: 'none', borderRadius: 8, padding: '9px 20px', cursor: canSubmit ? 'pointer' : 'not-allowed' }}>
             {isCreate ? 'Add Task' : 'Save Changes'}
-          </button>
+          </MotionButton>
         </div>
       </ModalIn>
     </div>
@@ -244,7 +256,7 @@ export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClic
 
   return (
     <>
-      <div
+      <MotionDraggable
         draggable={!!(onDragStart)}
         onDragStart={e => {
           e.dataTransfer.effectAllowed = 'move';
@@ -264,12 +276,15 @@ export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClic
         onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY }); }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 8,
+        animate={{
           background: hovered && !isDragging ? 'var(--color-surface-tint)' : 'transparent',
           opacity: isDragging ? 0.35 : 1,
-          borderTop: isDragOver ? '2px solid var(--color-accent-purple-light)' : '2px solid transparent',
-          transition: 'background 200ms, opacity 150ms, border-color 120ms',
+          borderTopColor: isDragOver ? 'var(--color-accent-purple-light)' : 'transparent',
+        }}
+        transition={{ background: { duration: 0.2 }, opacity: { duration: 0.15 }, borderTopColor: { duration: 0.12 } }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 8,
+          borderTopWidth: 2, borderTopStyle: 'solid',
           position: 'relative',
         }}>
         {linkedListId ? (
@@ -279,10 +294,13 @@ export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClic
             color={linkedList?.color ?? 'var(--color-primary)'}
           />
         ) : (
-          <div style={{ width: 20, height: 20, minWidth: 20, borderRadius: 5, border: '1.5px solid', borderColor: checked ? 'var(--color-primary)' : 'var(--color-border-strong)', background: checked ? 'var(--color-primary)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 150ms', flexShrink: 0 }}
+          <MotionIn
+            animate={{ borderColor: checked ? 'var(--color-primary)' : 'var(--color-border-strong)', background: checked ? 'var(--color-primary)' : 'transparent' }}
+            transition={{ duration: 0.15 }}
+            style={{ width: 20, height: 20, minWidth: 20, borderRadius: 5, borderWidth: 1.5, borderStyle: 'solid', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
             onClick={e => { e.stopPropagation(); onToggle?.(task.id); }}>
             {checked && <Checkmark />}
-          </div>
+          </MotionIn>
         )}
 
         <div style={{ flex: 1, minWidth: 0, cursor: onRowClick || linkedListId ? 'pointer' : 'default' }}
@@ -327,10 +345,13 @@ export default function TaskItem({ task, onToggle, onDelete, onUpdate, onRowClic
             <Icon name="attach_file" size={12} color="var(--color-text-quaternary)" />
           </div>
         )}
-        <div style={{ width: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: hovered ? 1 : 0, transition: 'opacity 150ms', cursor: 'grab' }}>
+        <MotionIn
+          animate={{ opacity: hovered ? 1 : 0 }}
+          transition={{ duration: 0.15 }}
+          style={{ width: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab' }}>
           <Icon name="drag_indicator" size={16} color="var(--color-border-strong)" />
-        </div>
-      </div>
+        </MotionIn>
+      </MotionDraggable>
 
       {contextMenu && (
         <ContextMenu x={contextMenu.x} y={contextMenu.y} items={menuItems} onClose={() => setContextMenu(null)} />
@@ -402,7 +423,10 @@ export function QuickAdd({ placeholder = 'Add a new task…', onAdd, availableLi
   if (isSlash && availableLists.length > 0) {
     return (
       <div style={{ position: 'relative' }}>
-        <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', width: 18, height: 18, borderRadius: 4, border: `1.5px solid ${focused ? 'var(--color-primary)' : 'var(--color-border-strong)'}`, pointerEvents: 'none', transition: 'border-color 200ms' }} />
+        <motion.div
+          animate={{ borderColor: focused ? 'var(--color-primary)' : 'var(--color-border-strong)' }}
+          transition={{ duration: 0.2 }}
+          style={{ position: 'absolute', left: 14, top: '50%', y: '-50%', width: 18, height: 18, borderRadius: 4, borderWidth: 1.5, borderStyle: 'solid', pointerEvents: 'none' }} />
         <SlashCommandInput
           value={val}
           onChange={setVal}
@@ -414,12 +438,14 @@ export function QuickAdd({ placeholder = 'Add a new task…', onAdd, availableLi
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onKeyDown={e => { if (e.key === 'Enter' && hasText && !val.startsWith('/')) { e.preventDefault(); submit(); } }}
-          inputStyle={{ width: '100%', background: 'var(--color-white)', border: 'none', borderRadius: 10, padding: `13px ${hasText ? 86 : 48}px 13px 42px`, fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-secondary)', outline: focused ? '2px solid rgba(var(--color-primary-rgb), 0.18)' : 'none', outlineOffset: -1, transition: 'outline 200ms, padding 180ms' }}
+          inputStyle={{ width: '100%', background: 'var(--color-white)', border: 'none', borderRadius: 10, paddingTop: 13, paddingBottom: 13, paddingLeft: 42, fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-secondary)', outlineWidth: 2, outlineStyle: 'solid', outlineOffset: -1 }}
+          inputAnimate={{ paddingRight: hasText ? 86 : 48, outlineColor: focused ? 'rgba(var(--color-primary-rgb), 0.18)' : 'rgba(var(--color-primary-rgb), 0)' }}
+          inputTransition={{ outlineColor: { duration: 0.2 }, paddingRight: { duration: 0.18 } }}
         />
-        <button onMouseDown={e => e.preventDefault()} onClick={() => setVal('')}
-          style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', width: 28, height: 28, borderRadius: '50%', background: 'var(--color-surface-tint)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 200ms' }}>
+        <MotionButton onMouseDown={e => e.preventDefault()} onClick={() => setVal('')}
+          style={{ position: 'absolute', right: 10, top: '50%', y: '-50%', width: 28, height: 28, borderRadius: '50%', background: 'var(--color-surface-tint)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="close" size={16} color="var(--color-primary)" />
-        </button>
+        </MotionButton>
         {pendingSublist && (
           <EditModal mode="create" task={{ title: pendingSublist.taskTitle }}
             onSave={d => {
@@ -435,22 +461,32 @@ export function QuickAdd({ placeholder = 'Add a new task…', onAdd, availableLi
   return (
     <>
       <div style={{ position: 'relative' }}>
-        <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', width: 18, height: 18, borderRadius: 4, border: `1.5px solid ${focused ? 'var(--color-primary)' : 'var(--color-border-strong)'}`, pointerEvents: 'none', transition: 'border-color 200ms' }} />
-        <input value={val} onChange={e => setVal(e.target.value)}
+        <motion.div
+          animate={{ borderColor: focused ? 'var(--color-primary)' : 'var(--color-border-strong)' }}
+          transition={{ duration: 0.2 }}
+          style={{ position: 'absolute', left: 14, top: '50%', y: '-50%', width: 18, height: 18, borderRadius: 4, borderWidth: 1.5, borderStyle: 'solid', pointerEvents: 'none' }} />
+        <motion.input value={val} onChange={e => setVal(e.target.value)}
           onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
           onKeyDown={e => { if (e.key === 'Enter' && hasText) { e.preventDefault(); submit(); } }}
           placeholder={placeholder}
-          style={{ width: '100%', background: 'var(--color-white)', border: 'none', borderRadius: 10, padding: `13px ${hasText ? 86 : 48}px 13px 42px`, fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-secondary)', outline: focused ? '2px solid rgba(var(--color-primary-rgb), 0.18)' : 'none', outlineOffset: -1, transition: 'outline 200ms, padding 180ms' }} />
+          animate={{ paddingRight: hasText ? 86 : 48, outlineColor: focused ? 'rgba(var(--color-primary-rgb), 0.18)' : 'rgba(var(--color-primary-rgb), 0)' }}
+          transition={{ outlineColor: { duration: 0.2 }, paddingRight: { duration: 0.18 } }}
+          style={{ width: '100%', background: 'var(--color-white)', border: 'none', borderRadius: 10, paddingTop: 13, paddingBottom: 13, paddingLeft: 42, fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-secondary)', outlineWidth: 2, outlineStyle: 'solid', outlineOffset: -1 }} />
         {hasText && (
-          <button onMouseDown={e => e.preventDefault()} onClick={() => setAdvancedOpen(true)}
-            style={{ position: 'absolute', right: 46, top: '50%', transform: 'translateY(-50%)', width: 28, height: 28, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'qaPencilIn 200ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
+          <MotionButton onMouseDown={e => e.preventDefault()} onClick={() => setAdvancedOpen(true)}
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.2, ease: EASE_SPRING }}
+            style={{ position: 'absolute', right: 46, top: '50%', y: '-50%', width: 28, height: 28, borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon name="edit" size={15} color="var(--color-primary)" />
-          </button>
+          </MotionButton>
         )}
-        <button onMouseDown={e => e.preventDefault()} onClick={() => submit()} disabled={!hasText}
-          style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', width: 28, height: 28, borderRadius: '50%', background: hasText ? 'var(--color-primary)' : 'var(--color-surface-tint)', border: 'none', cursor: hasText ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 200ms' }}>
+        <MotionButton onMouseDown={e => e.preventDefault()} onClick={() => submit()} disabled={!hasText}
+          animate={{ background: hasText ? 'var(--color-primary)' : 'var(--color-surface-tint)' }}
+          transition={{ duration: 0.2 }}
+          style={{ position: 'absolute', right: 10, top: '50%', y: '-50%', width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: hasText ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="arrow_upward" size={16} color={hasText ? 'var(--color-white)' : 'var(--color-primary)'} />
-        </button>
+        </MotionButton>
       </div>
       {advancedOpen && <EditModal mode="create" task={{ title: val }} onSave={submit} onClose={() => setAdvancedOpen(false)} availableLists={availableLists} currentListId={currentListId} />}
     </>

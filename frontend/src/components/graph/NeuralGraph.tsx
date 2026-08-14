@@ -24,6 +24,9 @@ import type { SimLink, SimNodeSpec } from '../../utils/forceSimulation';
 import Icon from '../Icon';
 import NodeInspector from './NodeInspector';
 import PopIn from '../animate-ui/PopIn';
+import MotionButton from '../animate-ui/MotionButton';
+import { animate, motion, useReducedMotion } from '../animate-ui/motion';
+import { EASE_OUT_CUBIC, EASE_SPRING, EASE_STANDARD } from '../animate-ui/motionTokens';
 
 const MIN_K = 0.2;
 const MAX_K = 3;
@@ -82,6 +85,7 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
   { nodes, hierarchy, relationEdges, workspaceRootSrn, workspaceId, selectedSrn, onNodeClick, onNodeOpen, onBackgroundClick, pinnedPositions, onNodePin },
   ref
 ) {
+  const reduceMotion = useReducedMotion();
   const containerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<SVGGElement>(null);
   const nodeElRefs = useRef(new Map<string, SVGGElement>());
@@ -92,7 +96,11 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
   const cameraRef = useRef<Camera>({ x: 0, y: 0, k: 1 });
   const [hoveredSrn, setHoveredSrn] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ srn: string; x: number; y: number } | null>(null);
-  const [selectedAnchor, setSelectedAnchor] = useState<{ x: number; y: number } | null>(null);
+  const [anchorPos, setSelectedAnchor] = useState<{ x: number; y: number } | null>(null);
+  // Derived rather than cleared by an effect: an anchor only means anything
+  // while something is selected, so tying it to selectedSrn at render removes
+  // the reset-state-in-an-effect round trip entirely.
+  const selectedAnchor = selectedSrn ? anchorPos : null;
 
   const nodeBySrn = useMemo(() => new Map(nodes.map((n) => [n.srn, n])), [nodes]);
   const selectedNode = selectedSrn ? nodeBySrn.get(selectedSrn) : null;
@@ -112,8 +120,6 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
     }
     return chain;
   }, [nodeBySrn, hierarchy, workspaceRootSrn]);
-
-  useEffect(() => { if (!selectedSrn) setSelectedAnchor(null); }, [selectedSrn]);
 
   // ── container sizing ──────────────────────────────────────────────
   useEffect(() => {
@@ -136,21 +142,21 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
   }, [size.w, size.h]);
   useEffect(() => { applyCamera(); }, [applyCamera]);
 
-  const tweenRef = useRef<number | null>(null);
+  // Motion's imperative `animate()` over the plain camera object, rather than
+  // a hand-rolled rAF tween. Same curve (EASE_OUT_CUBIC is `1 - (1-p)^3`
+  // spelled as its bezier), but it runs inside Motion's frame scheduler
+  // alongside every other animation instead of racing it, and the returned
+  // controls replace the manual cancelAnimationFrame bookkeeping.
+  const tweenRef = useRef<{ stop: () => void } | null>(null);
   const animateCameraTo = useCallback((target: Camera, ms = 420) => {
-    if (tweenRef.current) cancelAnimationFrame(tweenRef.current);
-    const start = { ...cameraRef.current };
-    const t0 = performance.now();
-    const ease = (p: number) => 1 - Math.pow(1 - p, 3);
-    const step = (now: number) => {
-      const p = Math.min((now - t0) / ms, 1);
-      const e = ease(p);
-      cameraRef.current = { x: start.x + (target.x - start.x) * e, y: start.y + (target.y - start.y) * e, k: start.k + (target.k - start.k) * e };
-      applyCamera();
-      if (p < 1) tweenRef.current = requestAnimationFrame(step);
-    };
-    tweenRef.current = requestAnimationFrame(step);
+    tweenRef.current?.stop();
+    tweenRef.current = animate(cameraRef.current, target, {
+      duration: ms / 1000,
+      ease: EASE_OUT_CUBIC,
+      onUpdate: applyCamera,
+    });
   }, [applyCamera]);
+  useEffect(() => () => tweenRef.current?.stop(), []);
 
   // ── simulation data ──────────────────────────────────────────────
   // infoWeight (see GraphNode) is an opt-in bonus — unset/0 for ordinary Net
@@ -247,6 +253,18 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
     .sort((a, b) => (Number(b.isRoot) - Number(a.isRoot)) || (b.weight - a.weight) || a.srn.localeCompare(b.srn)),
   [nodes, visualDegree, workspaceRootSrn]);
 
+  /**
+   * Last visibility this pass decided per label, so the fade below only starts
+   * on an actual change. The `<text>` cannot be a `motion.text` with a
+   * declarative opacity: this pass owns opacity frame by frame, and a React
+   * re-render carrying Motion's own idea of the value would clobber it.
+   * Motion's imperative `animate()` on the element is the right half of the
+   * API for that — it replaces the CSS `transition: opacity 220ms` this used
+   * to lean on, without handing the property to the declarative renderer.
+   */
+  const labelVisible = useRef(new Map<string, boolean>());
+  const labelFades = useRef(new Map<string, { stop: () => void }>());
+
   const updateLabels = useCallback((positions: Map<string, { x: number; y: number }>) => {
     const plan = planLabels(labelOrder, positions, cameraRef.current, sizeRef.current, {
       focus: focusRef.current,
@@ -255,7 +273,15 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
     for (const placement of plan) {
       const el = labelElRefs.current.get(placement.srn);
       if (!el) continue;
-      el.style.opacity = placement.visible ? '1' : '0';
+      if (labelVisible.current.get(placement.srn) !== placement.visible) {
+        labelVisible.current.set(placement.srn, placement.visible);
+        labelFades.current.get(placement.srn)?.stop();
+        labelFades.current.set(placement.srn, animate(
+          el,
+          { opacity: placement.visible ? 1 : 0 },
+          { duration: 0.22, ease: EASE_STANDARD }
+        ));
+      }
       // Skip the layout writes for a label nobody can see — most of them, most
       // of the time, on a large graph.
       if (!placement.visible) continue;
@@ -264,6 +290,11 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
       el.setAttribute('y', String(placement.y));
     }
   }, [labelOrder]);
+
+  useEffect(() => {
+    const fades = labelFades.current;
+    return () => { for (const f of fades.values()) f.stop(); fades.clear(); };
+  }, []);
 
   // ── RAF-driven imperative position updates ──────────────────────────
   // moved() only re-renders React when a screen position shifts by more than
@@ -450,14 +481,17 @@ const NeuralGraph = forwardRef<NeuralGraphHandle, NeuralGraphProps>(function Neu
               if (!nodeBySrn.has(e.src) || !nodeBySrn.has(e.dst)) return null;
               const active = !!highlightNeighbors && highlightNeighbors.has(e.src) && highlightNeighbors.has(e.dst);
               return (
-                <line
+                <motion.line
                   key={`r:${e.id}`}
                   ref={(el) => { const key = `r:${e.id}`; if (el) edgeElRefs.current.set(key, { el, src: e.src, dst: e.dst }); else edgeElRefs.current.delete(key); }}
                   stroke={e.crossWorkspace ? 'var(--color-warning)' : 'var(--color-primary)'}
                   strokeWidth={active ? 2.5 : 1.5}
                   strokeDasharray={active ? '5 4' : undefined}
-                  className={active ? 'net-edge-flow' : undefined}
-                  style={active ? { animation: 'netEdgeFlow 900ms linear infinite' } : undefined}
+                  // Dash flow marks the highlighted neighbourhood. Purely
+                  // decorative, so reduced motion drops it entirely — which is
+                  // what the `.net-edge-flow` media-query override did.
+                  animate={active && !reduceMotion ? { strokeDashoffset: [0, -24] } : { strokeDashoffset: 0 }}
+                  transition={{ duration: 0.9, ease: 'linear', repeat: Infinity }}
                   opacity={!highlightNeighbors ? 0.5 : (active ? 0.95 : 0.08)}
                 />
               );
@@ -545,6 +579,7 @@ interface NetNodeProps {
 }
 
 const NetNode = memo(function NetNode({ node, radius, isRoot, isPinned, selected, hovered, dimmed, registerRef, registerLabelRef, onDoubleClick, onEnter, onLeave }: NetNodeProps) {
+  const reduceMotion = useReducedMotion();
   const color = nodeColor(node.type, node.status);
   const icon = nodeIcon(node.type);
   const scale = hovered ? 1.22 : selected ? 1.1 : 1;
@@ -552,9 +587,23 @@ const NetNode = memo(function NetNode({ node, radius, isRoot, isPinned, selected
 
   return (
     <g ref={registerRef} data-srn={node.srn} style={{ cursor: isRoot ? 'default' : 'grab' }} onDoubleClick={onDoubleClick} onMouseEnter={onEnter} onMouseLeave={onLeave}>
-      <g style={{ transform: `scale(${scale})`, transformOrigin: 'center', transformBox: 'fill-box', transition: 'transform 180ms cubic-bezier(0.34,1.56,0.64,1), opacity 200ms', opacity: dimmed ? 0.18 : 1 }}>
+      <motion.g
+        animate={{ scale, opacity: dimmed ? 0.18 : 1 }}
+        transition={{ scale: { duration: 0.18, ease: EASE_SPRING }, opacity: { duration: 0.2 } }}
+        style={{ transformOrigin: 'center', transformBox: 'fill-box' }}>
         {isRoot && (
-          <circle r={radius + 10} fill={color} opacity={0.16} className="net-root-glow" style={{ animation: 'netRootGlow 3.2s ease-in-out infinite', transformOrigin: 'center', transformBox: 'fill-box' }} />
+          <motion.circle
+            r={radius + 10}
+            fill={color}
+            // The root's slow breath. Values come from the netRootGlow
+            // keyframe, not from the `opacity={0.16}` attribute that used to
+            // sit here — CSS opacity outranks the SVG attribute, so 0.16 only
+            // ever showed under `prefers-reduced-motion`, where the keyframe
+            // was switched off and the glow all but vanished. Reduced motion
+            // now holds the loop's own resting value instead.
+            animate={reduceMotion ? { opacity: 0.55 } : { opacity: [0.55, 0.85, 0.55], scale: [1, 1.12, 1] }}
+            transition={{ duration: 3.2, ease: 'easeInOut', repeat: Infinity }}
+            style={{ transformOrigin: 'center', transformBox: 'fill-box' }} />
         )}
         {(hovered || selected) && !isRoot && (
           <circle r={radius + 6} fill="none" stroke={color} strokeWidth={1.5} opacity={0.4} />
@@ -577,7 +626,7 @@ const NetNode = memo(function NetNode({ node, radius, isRoot, isPinned, selected
         {isPinned && !isRoot && (
           <circle cx={radius * 0.72} cy={-radius * 0.72} r={4} fill="var(--color-white)" stroke={color} strokeWidth={1.5} />
         )}
-      </g>
+      </motion.g>
       {/* `y`, `font-size` and `opacity` are owned by NeuralGraph's imperative
           label pass (counter-scaling + occlusion culling) — deliberately not
           set here, or a React re-render would clobber the pass's decision. */}
@@ -587,7 +636,7 @@ const NetNode = memo(function NetNode({ node, radius, isRoot, isPinned, selected
         style={{
           fontFamily: 'var(--font-heading)', fontWeight: hovered || selected ? 700 : 600,
           fill: hovered || selected ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-          opacity: 0, pointerEvents: 'none', transition: 'opacity 220ms ease, fill 150ms',
+          opacity: 0, pointerEvents: 'none',
           paintOrder: 'stroke', stroke: 'var(--color-white)', strokeLinejoin: 'round',
         }}
       >
@@ -600,12 +649,14 @@ const NetNode = memo(function NetNode({ node, radius, isRoot, isPinned, selected
 // ── Zoom / center controls — matches the app's floating-button convention (see GraphScreen's existing "Reset layout" pill). ──
 
 function ZoomControls({ onZoomIn, onZoomOut, onCenter }: { onZoomIn: () => void; onZoomOut: () => void; onCenter: () => void }) {
-  const btnStyle: React.CSSProperties = {
-    width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-text-secondary)', transition: 'background 120ms, color 120ms',
+  const btnProps = {
+    style: {
+      width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--color-text-secondary)',
+    } as React.CSSProperties,
+    whileHover: { background: 'var(--color-surface-tint)', color: 'var(--color-primary)' },
+    transition: { duration: 0.12 },
   };
-  const onEnter = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.color = 'var(--color-primary)'; };
-  const onLeave = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-secondary)'; };
   return (
     // Bottom-left, not bottom-right — the global AI Assistant bubble is
     // fixed at bottom:30/right:30 of the viewport (AIAssistant/index.tsx)
@@ -615,11 +666,11 @@ function ZoomControls({ onZoomIn, onZoomOut, onCenter }: { onZoomIn: () => void;
       borderRadius: 10, border: '1px solid var(--color-border)', background: 'var(--color-white)',
       boxShadow: '0 2px 10px rgba(var(--color-black-rgb), 0.08)', overflow: 'hidden',
     }}>
-      <button title="Zoom in" onClick={onZoomIn} onMouseEnter={onEnter} onMouseLeave={onLeave} style={btnStyle}><Icon name="add" size={17} /></button>
+      <MotionButton title="Zoom in" onClick={onZoomIn} {...btnProps}><Icon name="add" size={17} /></MotionButton>
       <div style={{ height: 1, background: 'var(--color-divider)' }} />
-      <button title="Zoom out" onClick={onZoomOut} onMouseEnter={onEnter} onMouseLeave={onLeave} style={btnStyle}><Icon name="remove" size={17} /></button>
+      <MotionButton title="Zoom out" onClick={onZoomOut} {...btnProps}><Icon name="remove" size={17} /></MotionButton>
       <div style={{ height: 1, background: 'var(--color-divider)' }} />
-      <button title="Center on workspace" onClick={onCenter} onMouseEnter={onEnter} onMouseLeave={onLeave} style={btnStyle}><Icon name="filter_center_focus" size={16} /></button>
+      <MotionButton title="Center on workspace" onClick={onCenter} {...btnProps}><Icon name="filter_center_focus" size={16} /></MotionButton>
     </div>
   );
 }

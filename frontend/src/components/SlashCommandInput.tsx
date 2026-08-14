@@ -2,6 +2,9 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react
 import type { List } from '../types';
 import Icon from './Icon';
 import PopIn from './animate-ui/PopIn';
+import MotionButton from './animate-ui/MotionButton';
+import { motion } from './animate-ui/motion';
+import type { TargetAndTransition, Transition } from './animate-ui/motion';
 
 export interface SlashCommandResult {
   type: 'list' | 'link';
@@ -20,6 +23,10 @@ interface SlashCommandInputProps {
   excludeListIds?: string[];
   autoFocus?: boolean;
   inputStyle?: React.CSSProperties;
+  /** Motion target for the inner input — the host owns the animated state
+   *  (focus ring, padding shift) since only it knows what drives them. */
+  inputAnimate?: TargetAndTransition;
+  inputTransition?: Transition;
   onFocus?: () => void;
   onBlur?: () => void;
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
@@ -53,6 +60,8 @@ export default function SlashCommandInput({
   excludeListIds = [],
   autoFocus,
   inputStyle,
+  inputAnimate,
+  inputTransition,
   onFocus,
   onBlur,
   onKeyDown,
@@ -179,13 +188,12 @@ export default function SlashCommandInput({
   const itemBase: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
     cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)',
-    border: 'none', background: 'transparent', width: '100%', textAlign: 'left',
-    transition: 'background 100ms',
+    border: 'none', width: '100%', textAlign: 'left',
   };
 
   return (
     <div ref={containerRef}>
-      <input
+      <motion.input
         ref={inputRef}
         value={value}
         onChange={handleChange}
@@ -194,6 +202,8 @@ export default function SlashCommandInput({
         onBlur={onBlur}
         placeholder={placeholder}
         autoFocus={autoFocus}
+        animate={inputAnimate}
+        transition={inputTransition}
         style={inputStyle}
       />
 
@@ -222,15 +232,20 @@ export default function SlashCommandInput({
             </div>
           ) : (
             visibleCommands.map((cmd, idx) => (
-              <button
+              <MotionButton
                 key={cmd.id}
-                style={{ ...itemBase, background: highlightIdx === idx ? 'var(--color-surface-tint)' : 'transparent' }}
+                style={itemBase}
+                animate={{ background: highlightIdx === idx ? 'var(--color-surface-tint)' : 'transparent' }}
+                transition={{ duration: 0.1 }}
                 onMouseEnter={() => setHighlightIdx(idx)}
                 onMouseDown={e => { e.preventDefault(); selectSlashOption(cmd.id); }}
               >
-                <div style={{ width: 32, height: 32, borderRadius: 8, background: highlightIdx === idx ? 'var(--color-purple-pale-26)' : 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background 100ms' }}>
+                <motion.div
+                  animate={{ background: highlightIdx === idx ? 'var(--color-purple-pale-26)' : 'var(--color-surface-tint)' }}
+                  transition={{ duration: 0.1 }}
+                  style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <Icon name={cmd.icon} size={16} color="var(--color-primary)" />
-                </div>
+                </motion.div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>{cmd.label}</div>
                   <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 1 }}>{cmd.desc}</div>
@@ -238,7 +253,7 @@ export default function SlashCommandInput({
                 <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-border-strong)', background: 'var(--color-surface-tint)', borderRadius: 5, padding: '2px 7px', flexShrink: 0 }}>
                   {cmd.hint}
                 </span>
-              </button>
+              </MotionButton>
             ))
           )}
 
@@ -259,9 +274,11 @@ export default function SlashCommandInput({
             </div>
           ) : (
             searchResults.map((list, idx) => (
-              <button
+              <MotionButton
                 key={list.id}
-                style={{ ...itemBase, background: highlightIdx === idx ? 'var(--color-surface-tint)' : 'transparent' }}
+                style={itemBase}
+                animate={{ background: highlightIdx === idx ? 'var(--color-surface-tint)' : 'transparent' }}
+                transition={{ duration: 0.1 }}
                 onMouseEnter={() => setHighlightIdx(idx)}
                 onMouseDown={e => { e.preventDefault(); selectLinkedList(list); }}
               >
@@ -270,7 +287,7 @@ export default function SlashCommandInput({
                   : <Icon name="format_list_bulleted" size={15} color="var(--color-text-tertiary)" />
                 }
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{list.name}</span>
-              </button>
+              </MotionButton>
             ))
           )}
         </PopIn>

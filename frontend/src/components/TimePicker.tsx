@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import Icon from './Icon';
 import PopIn from './animate-ui/PopIn';
+import MotionButton from './animate-ui/MotionButton';
 
 interface TimePickerProps {
   /** "HH:MM" (24-hour), or undefined when unset. */
@@ -61,7 +62,7 @@ export default function TimePicker({ value, onChange, onClear }: TimePickerProps
         {items.map(n => {
           const isSelected = selected === n;
           return (
-            <button
+            <MotionButton
               key={n}
               ref={isSelected ? btnRef : undefined}
               onClick={() => (kind === 'hour' ? emit(n, minute) : emit(hour, n))}
@@ -69,15 +70,17 @@ export default function TimePicker({ value, onChange, onClear }: TimePickerProps
                 flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 height: 32, borderRadius: 8, border: 'none',
-                background: isSelected ? 'var(--color-primary)' : 'transparent',
                 fontFamily: 'var(--font-body)', fontSize: 13, fontWeight: isSelected ? 600 : 400,
                 color: isSelected ? 'var(--color-white)' : 'var(--color-text-primary)',
-                cursor: 'pointer', transition: 'background 120ms',
+                cursor: 'pointer',
               }}
+              animate={{ background: isSelected ? 'var(--color-primary)' : 'rgba(0,0,0,0)' }}
+              whileHover={isSelected ? undefined : { background: 'var(--color-purple-pale-5)' }}
+              transition={{ duration: 0.12 }}
               onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--color-purple-pale-5)'; }}
               onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}>
               {pad(n)}
-            </button>
+            </MotionButton>
           );
         })}
       </div>

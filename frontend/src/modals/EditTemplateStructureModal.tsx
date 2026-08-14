@@ -6,6 +6,9 @@ import useTemplatesStore from '../store/useTemplatesStore';
 import Icon from '../components/Icon';
 import TimePicker from '../components/TimePicker';
 import ModalIn from '../components/animate-ui/ModalIn';
+import { EASE_STANDARD } from '../components/animate-ui/motionTokens';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
 
 interface EditTemplateStructureModalProps {
   template: Template;
@@ -205,7 +208,7 @@ export default function EditTemplateStructureModal({ template, onClose }: EditTe
   };
 
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+    <MotionIn style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(5px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18, ease: EASE_STANDARD }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 640, maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}
         onClick={(e) => e.stopPropagation()}>
@@ -322,13 +325,13 @@ export default function EditTemplateStructureModal({ template, onClose }: EditTe
           <button onClick={onClose} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px 16px' }}>
             Cancel
           </button>
-          <button onClick={handleSave} disabled={!canSave}
-            style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: canSave ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: canSave ? 'pointer' : 'not-allowed', transition: 'background 150ms' }}>
+          <MotionButton onClick={handleSave} disabled={!canSave}
+            transition={{ duration: 0.15 }} style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: canSave ? 'var(--color-primary)' : 'var(--color-border-strong)', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: canSave ? 'pointer' : 'not-allowed', }}>
             {saving ? 'Saving…' : 'Save Changes'}
-          </button>
+          </MotionButton>
         </div>
       </ModalIn>
-    </div>,
+    </MotionIn>,
     document.body
   );
 }

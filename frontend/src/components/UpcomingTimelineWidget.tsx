@@ -5,6 +5,7 @@ import useAppStore from '../store/useAppStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import { apiGetUpcomingMilestones } from '../api/client';
 import Icon from './Icon';
+import MotionIn from './animate-ui/MotionIn';
 
 // Mirror the milestone status palette used in TimelineScreen.
 const STATUS_META: Record<MilestoneStatus, { label: string; color: string }> = {
@@ -43,8 +44,8 @@ function EventRow({ m, onOpen }: { m: UpcomingMilestone; onOpen: () => void }) {
   const days = daysUntil(m.date);
   const soon = days != null && days <= 2;
   return (
-    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={onOpen}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: hov ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', transition: 'background 150ms' }}>
+    <MotionIn onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={onOpen}
+      transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: hov ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', }}>
       <div style={{ width: 9, height: 9, minWidth: 9, borderRadius: '50%', background: accent, boxShadow: `0 0 0 3px ${accent}22`, flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -66,7 +67,7 @@ function EventRow({ m, onOpen }: { m: UpcomingMilestone; onOpen: () => void }) {
           <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, color: 'var(--color-text-quaternary)' }}>in {days} days</span>
         )}
       </div>
-    </div>
+    </MotionIn>
   );
 }
 

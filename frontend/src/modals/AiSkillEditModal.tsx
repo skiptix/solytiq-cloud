@@ -7,6 +7,7 @@ import { apiGetAiSkill, apiReplaceAiSkillBundle, ApiError } from '../api/client'
 import { backdropVariants, modalVariants, crossFadeVariants } from '@/components/animate-ui/motionTokens';
 import type { AiSkill, AiSkillFile } from '../types';
 import Spinner from '@/components/animate-ui/Spinner';
+import MotionButton from '../components/animate-ui/MotionButton';
 
 interface AiSkillEditModalProps {
   skillId: string;
@@ -162,12 +163,12 @@ export default function AiSkillEditModal({ skillId, onClose }: AiSkillEditModalP
                   <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>Enabled</div>
                   <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>{skill.enabled ? 'Sol can use this skill right now.' : 'Hidden from every user\'s assistant.'}</div>
                 </div>
-                <button
+                <MotionButton
                   onClick={handleToggleEnabled}
-                  style={{ width: 44, height: 24, borderRadius: 12, background: skill.enabled ? 'var(--color-primary)' : 'var(--color-border)', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, transition: 'background 200ms' }}
+                  transition={{ duration: 0.2 }} style={{ width: 44, height: 24, borderRadius: 12, background: skill.enabled ? 'var(--color-primary)' : 'var(--color-border)', border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0, }}
                 >
-                  <span style={{ position: 'absolute', top: 2, left: skill.enabled ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)', transition: 'left 200ms' }} />
-                </button>
+                  <motion.span transition={{ duration: 0.2 }} style={{ position: 'absolute', top: 2, left: skill.enabled ? 22 : 2, width: 20, height: 20, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)', }} />
+                </MotionButton>
               </div>
 
               <div style={fieldWrap}>

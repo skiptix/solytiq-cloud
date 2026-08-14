@@ -2,6 +2,8 @@ import type { GraphEntityType } from '../../types';
 import Icon from '../Icon';
 import useGraphStore from '../../store/useGraphStore';
 import { nodeColor, ENTITY_TYPE_LABEL_PLURAL as TYPE_LABELS } from '../../utils/graphLayout';
+import MotionIn from '../animate-ui/MotionIn';
+import MotionButton from '../animate-ui/MotionButton';
 
 const ALL_TYPES = Object.keys(TYPE_LABELS) as GraphEntityType[];
 
@@ -11,9 +13,9 @@ function CheckRow({ checked, label, onToggle }: { checked: boolean; label: strin
       onClick={onToggle}
       style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 2px', borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', width: '100%' }}
     >
-      <div style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${checked ? 'var(--color-primary)' : 'var(--color-purple-tint-7, #d8d3ec)'}`, background: checked ? 'var(--color-primary)' : 'var(--color-white)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 120ms' }}>
+      <MotionIn transition={{ duration: 0.12 }} style={{ width: 18, height: 18, borderRadius: 5, border: `1.5px solid ${checked ? 'var(--color-primary)' : 'var(--color-purple-tint-7, #d8d3ec)'}`, background: checked ? 'var(--color-primary)' : 'var(--color-white)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, }}>
         {checked && <Icon name="check" size={13} color="var(--color-white)" />}
-      </div>
+      </MotionIn>
       <span style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)' }}>{label}</span>
     </button>
   );
@@ -69,18 +71,20 @@ export default function GraphControls({ isMobile, onClose }: { isMobile: boolean
           {ALL_TYPES.map((t) => {
             const active = filters.entityTypes.length === 0 || filters.entityTypes.includes(t);
             return (
-              <button
+              <MotionButton
                 key={t}
                 onClick={() => toggleType(t)}
+                animate={{ background: active ? 'var(--color-surface-tint)' : 'rgba(0,0,0,0)', opacity: active ? 1 : 0.45 }}
+                transition={{ duration: 0.12 }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8, padding: '5px 6px', borderRadius: 6, border: 'none',
-                  background: active ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', textAlign: 'left',
-                  opacity: active ? 1 : 0.45, fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)', transition: 'background 120ms, opacity 120ms',
+                  cursor: 'pointer', textAlign: 'left',
+                  fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-primary)',
                 }}
               >
                 <span style={{ width: 8, height: 8, borderRadius: 4, background: nodeColor(t), flexShrink: 0 }} />
                 {TYPE_LABELS[t]}
-              </button>
+              </MotionButton>
             );
           })}
         </div>

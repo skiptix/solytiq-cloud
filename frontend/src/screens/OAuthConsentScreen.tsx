@@ -4,6 +4,7 @@ import useAuthStore from '../store/useAuthStore';
 import { useEffect, useState } from 'react';
 import { apiOAuthApprove, apiOAuthClientInfo, type OAuthClientInfo } from '../api/client';
 import Icon from '../components/Icon';
+import MotionButton from '../components/animate-ui/MotionButton';
 
 // SECURITY (S3): this screen used to hardcode "Claude" as the requesting
 // client's name, unconditionally, regardless of which client_id was in the
@@ -166,25 +167,25 @@ export default function OAuthConsentScreen() {
         )}
 
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <button
+          <MotionButton
             onClick={handleAllow}
             disabled={loading || !clientInfo}
-            style={{ width: '100%', padding: '14px 24px', background: 'var(--color-primary)', color: 'var(--color-white)', border: 'none', borderRadius: 10, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, cursor: loading || !clientInfo ? 'wait' : 'pointer', transition: 'background 0.2s' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--color-purple-mid-14)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'var(--color-primary)'}
+            style={{ width: '100%', padding: '14px 24px', background: 'var(--color-primary)', color: 'var(--color-white)', border: 'none', borderRadius: 10, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, cursor: loading || !clientInfo ? 'wait' : 'pointer' }}
+            whileHover={{ background: 'var(--color-purple-mid-14)' }}
+            transition={{ duration: 0.15 }}
           >
             {loading ? 'Connecting...' : 'Allow Access'}
-          </button>
+          </MotionButton>
 
-          <button
+          <MotionButton
             onClick={handleDeny}
             disabled={loading}
-            style={{ width: '100%', padding: '14px 24px', background: 'transparent', color: 'var(--color-text-tertiary)', border: '1px solid var(--color-border-alt)', borderRadius: 10, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.2s' }}
-            onMouseEnter={e => { if(!loading) { e.currentTarget.style.background = 'var(--color-surface-gray)'; e.currentTarget.style.color = 'var(--color-text-primary)'; } }}
-            onMouseLeave={e => { if(!loading) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--color-text-tertiary)'; } }}
+            whileHover={loading ? undefined : { background: 'var(--color-surface-gray)', color: 'var(--color-text-primary)' }}
+            transition={{ duration: 0.2 }}
+            style={{ width: '100%', padding: '14px 24px', background: 'transparent', color: 'var(--color-text-tertiary)', border: '1px solid var(--color-border-alt)', borderRadius: 10, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer' }}
           >
             Cancel
-          </button>
+          </MotionButton>
         </div>
 
         <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>

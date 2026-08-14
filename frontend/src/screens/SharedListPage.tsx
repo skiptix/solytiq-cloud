@@ -4,13 +4,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import Icon from '../components/Icon';
 import MarkdownView from '../components/MarkdownView';
 import { useMobile } from '../hooks/useBreakpoint';
-import {
-  fmtDate, SharedTaskRow, SharedKanbanView, SharedTaskTimelineView,
-  type SharedTask, type SharedSection,
-} from '../components/SharedListViews';
+import { SharedTaskRow, SharedKanbanView, SharedTaskTimelineView, type SharedTask, type SharedSection } from '../components/SharedListViews';
+import { fmtDate } from '../utils/shareFormat';
 import { verifySharePassword, ShareSessionError } from '../utils/shareSession';
 import Spinner from '@/components/animate-ui/Spinner';
 import ModalIn from '@/components/animate-ui/ModalIn';
+import { EASE_STANDARD } from '../components/animate-ui/motionTokens';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -153,13 +154,13 @@ export default function SharedListPage() {
         </div>
       )}
 
-      <div style={{ background: 'var(--color-white)', borderRadius: 20, boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.10)', padding: state === 'ready' ? 0 : '40px 40px 36px', width: '100%', maxWidth: cardMaxWidth, display: 'flex', flexDirection: 'column', alignItems: state === 'ready' ? 'stretch' : 'center', overflow: 'hidden', transition: 'max-width 300ms ease' }}>
+      <MotionIn transition={{ duration: 0.3 }} style={{ background: 'var(--color-white)', borderRadius: 20, boxShadow: '0 8px 40px rgba(var(--color-primary-rgb), 0.10)', padding: state === 'ready' ? 0 : '40px 40px 36px', width: '100%', maxWidth: cardMaxWidth, display: 'flex', flexDirection: 'column', alignItems: state === 'ready' ? 'stretch' : 'center', overflow: 'hidden', }}>
 
         {/* Loading */}
         {state === 'loading' && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '20px 0' }}>
             <Spinner size={36} thickness={3} durationMs={700} />
-            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-quaternary)' }}>Loading…</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)' }}>Loading…</div>
           </div>
         )}
 
@@ -204,13 +205,13 @@ export default function SharedListPage() {
               />
               {pwError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', marginTop: 5 }}>Incorrect password, please try again.</div>}
             </div>
-            <button
+            <MotionButton
               onClick={() => void submitPassword(password)}
               disabled={loadingContent || !password}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-white)', background: loadingContent || !password ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', border: 'none', borderRadius: 12, padding: '13px', cursor: loadingContent || !password ? 'not-allowed' : 'pointer', transition: 'background 150ms' }}>
+              transition={{ duration: 0.15 }} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, fontFamily: 'var(--font-heading)', fontSize: 15, fontWeight: 700, color: 'var(--color-white)', background: loadingContent || !password ? 'var(--color-accent-purple-light)' : 'var(--color-primary)', border: 'none', borderRadius: 12, padding: '13px', cursor: loadingContent || !password ? 'not-allowed' : 'pointer', }}>
               {loadingContent ? <Spinner size={16} thickness={2} trackColor="rgba(var(--color-white-rgb), 0.4)" indicatorColor="var(--color-white)" durationMs={700} /> : <Icon name="visibility" size={18} color="var(--color-white)" />}
               View board
-            </button>
+            </MotionButton>
           </div>
         )}
 
@@ -231,14 +232,14 @@ export default function SharedListPage() {
                 <div style={{ fontFamily: 'var(--font-heading)', fontSize: 40, fontWeight: 700, color: accent, lineHeight: 1, flexShrink: 0 }}>{pct}%</div>
               </div>
               <div style={{ marginTop: 14, height: 6, background: 'rgba(var(--color-black-rgb), 0.08)', borderRadius: 9999, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? 'var(--color-success)' : accent, borderRadius: 9999, transition: 'width 600ms ease-in-out' }} />
+                <MotionIn transition={{ duration: 0.6 }} style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? 'var(--color-success)' : accent, borderRadius: 9999, }} />
               </div>
             </div>
 
             {/* Content — layout follows the owner's "Shared view" setting */}
             <div style={{ padding: '24px 32px 32px' }}>
               {content.sections.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-quaternary)' }}>This board is empty.</div>
+                <div style={{ textAlign: 'center', padding: '24px', fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)' }}>This board is empty.</div>
               ) : content.list.viewMode === 'kanban' ? (
                 <SharedKanbanView sections={content.sections} accent={accent} onTaskClick={handleTaskClick} />
               ) : content.list.viewMode === 'timeline' ? (
@@ -254,7 +255,7 @@ export default function SharedListPage() {
                       </div>
                       <div style={{ background: 'var(--color-surface-gray)', borderRadius: 12, border: '1px solid var(--color-border-alt)', overflow: 'hidden' }}>
                         {section.tasks.length === 0 ? (
-                          <div style={{ padding: '14px 16px', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)', textAlign: 'center' }}>No items.</div>
+                          <div style={{ padding: '14px 16px', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-tertiary)', textAlign: 'center' }}>No items.</div>
                         ) : (
                           <div style={{ padding: 4 }}>
                             {section.tasks.map(task => <SharedTaskRow key={task.id} task={task} accent={accent} onClick={handleTaskClick} />)}
@@ -268,19 +269,18 @@ export default function SharedListPage() {
             </div>
           </>
         )}
-      </div>
+      </MotionIn>
 
       {meta?.expiresAt && state === 'ready' && (
         <div style={{ marginTop: 16, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-warning)', background: 'var(--color-yellow-tint-1)', borderRadius: 99, padding: '4px 12px' }}>Link expires {fmtDate(meta.expiresAt)}</div>
       )}
 
-      <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)' }}>
+      <div style={{ marginTop: 24, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
         Shared via <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>Solytiq</span>
       </div>
 
       {previewTask && <ItemPreview task={previewTask} accent={accent} onClose={() => setPreviewTask(null)} />}
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -310,7 +310,7 @@ function ItemPreview({ task, accent, onClose }: { task: SharedTask; accent: stri
   if (task.badge) rows.push({ icon: 'sell', label: 'Tag', node: <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', padding: '2px 8px', borderRadius: 9999 }}>{task.badge}</span> });
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px', animation: 'backdropIn 200ms ease both' }}>
+    <MotionIn onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.28)', backdropFilter: 'blur(6px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 20px' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, ease: EASE_STANDARD }}>
       <ModalIn duration={260} onClick={e => e.stopPropagation()} style={{ background: 'var(--color-white)', borderRadius: 18, width: '100%', maxWidth: 560, maxHeight: '88vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 32px 80px rgba(var(--color-black-rgb), 0.22)' }}>
         <div style={{ height: 3, background: accent, flexShrink: 0 }} />
         <div style={{ overflowY: 'auto', padding: '24px 28px 28px' }}>
@@ -339,6 +339,6 @@ function ItemPreview({ task, accent, onClose }: { task: SharedTask; accent: stri
           )}
         </div>
       </ModalIn>
-    </div>
+    </MotionIn>
   );
 }

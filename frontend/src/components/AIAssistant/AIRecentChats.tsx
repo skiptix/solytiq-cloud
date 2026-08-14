@@ -1,5 +1,8 @@
 import type { AISession } from '../../store/useAIStore';
 import Icon from '../Icon';
+import MotionButton from '../animate-ui/MotionButton';
+import MotionIn from '../animate-ui/MotionIn';
+import { EASE_SETTLE, EASE_STANDARD } from '../animate-ui/motionTokens';
 
 interface Props {
   sessions: AISession[];
@@ -33,8 +36,8 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
   const groups = groupByDate(sessions);
 
   return (
-    <div
-      style={{
+    <MotionIn
+      initial={{ opacity: 0, x: '100%' }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.26, ease: EASE_SETTLE }} style={{
         position: 'absolute',
         inset: 0,
         background: 'var(--color-white)',
@@ -43,7 +46,6 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
         flexDirection: 'column',
         overflow: 'hidden',
         zIndex: 15,
-        animation: 'aiPanelIn 260ms cubic-bezier(0.22,1,0.36,1) both',
       }}
     >
       {/* Header */}
@@ -57,7 +59,7 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
           gap: 10,
         }}
       >
-        <button
+        <MotionButton
           onClick={onClose}
           style={{
             width: 30,
@@ -70,13 +72,12 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            transition: 'background 180ms ease, transform 150ms ease',
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(var(--color-white-rgb), 0.24)'; e.currentTarget.style.transform = 'scale(1.08)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(var(--color-white-rgb), 0.12)'; e.currentTarget.style.transform = 'scale(1)'; }}
+          whileHover={{ background: 'rgba(var(--color-white-rgb), 0.24)', transform: 'scale(1.08)' }}
+          transition={{ duration: 0.18 }}
         >
           <Icon name="arrow_back" size={15} color="rgba(var(--color-white-rgb), 0.85)" />
-        </button>
+        </MotionButton>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div
             style={{
@@ -106,8 +107,8 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
       {/* Sessions list */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px 8px' }}>
         {sessions.length === 0 ? (
-          <div
-            style={{
+          <MotionIn
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3, ease: EASE_STANDARD }} style={{
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -115,7 +116,6 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
               height: '100%',
               gap: 10,
               padding: 24,
-              animation: 'aiFadeIn 300ms ease both',
             }}
           >
             <div
@@ -143,12 +143,12 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
             >
               No previous chats yet.<br />Start a conversation with Sol!
             </div>
-          </div>
+          </MotionIn>
         ) : (
           groups.map(({ label, items }, groupIdx) => (
             <div key={label}>
-              <div
-                style={{
+              <MotionIn
+                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, delay: (groupIdx * 40) / 1000, ease: EASE_STANDARD }} style={{
                   fontFamily: 'var(--font-body)',
                   fontSize: 10.5,
                   fontWeight: 600,
@@ -156,16 +156,34 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
                   textTransform: 'uppercase',
                   letterSpacing: '0.07em',
                   padding: '10px 8px 4px',
-                  animation: `aiItemIn 280ms ease ${groupIdx * 40}ms both`,
                 }}
               >
                 {label}
-              </div>
+              </MotionIn>
               {items.map((session, itemIdx) => {
                 const delay = groupIdx * 40 + itemIdx * 35 + 40;
                 return (
-                  <div
+                  // The row is the variant parent: its own hover state both
+                  // shifts/tints the row AND reveals the delete button below,
+                  // which used to be faked with a `ref` callback forcing a
+                  // permanent 0.4 opacity because plain inline styles have no
+                  // way to express "on ancestor hover".
+                  <MotionIn
                     key={session.id}
+                    initial="hidden"
+                    animate="visible"
+                    whileHover="hover"
+                    variants={{
+                      hidden: { opacity: 0, y: 8 },
+                      visible: {
+                        opacity: 1, y: 0, x: 0, background: 'transparent',
+                        transition: { duration: 0.28, delay: delay / 1000, ease: EASE_STANDARD },
+                      },
+                      hover: {
+                        x: 2, background: 'var(--color-surface-tint)',
+                        transition: { duration: 0.18, ease: EASE_STANDARD },
+                      },
+                    }}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -173,12 +191,8 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
                       borderRadius: 12,
                       padding: '9px 10px',
                       cursor: 'pointer',
-                      transition: 'background 180ms ease, transform 150ms ease',
-                      animation: `aiItemIn 280ms ease ${delay}ms both`,
                     }}
                     onClick={() => onSelect(session.id)}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--color-surface-tint)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateX(2px)'; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; (e.currentTarget as HTMLDivElement).style.transform = 'translateX(0)'; }}
                   >
                     <div
                       style={{
@@ -220,39 +234,48 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
                         {new Date(session.created_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onDelete(session.id); }}
-                      title="Delete chat"
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: 7,
-                        background: 'transparent',
-                        border: 'none',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                        opacity: 0,
-                        transition: 'opacity 180ms ease, background 180ms ease, transform 150ms ease',
+                    {/* Reveal is inherited from the row's variant label; the
+                        button keeps its OWN object `whileHover` for the
+                        press-target feedback. Separating the two onto two
+                        elements avoids relying on how a child's own gesture
+                        prop interacts with an inherited variant label. */}
+                    <MotionIn
+                      variants={{
+                        hidden: { opacity: 0 },
+                        visible: { opacity: 0 },
+                        hover: { opacity: 1 },
                       }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-red-pale-4)'; e.currentTarget.style.transform = 'scale(1.1)'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'scale(1)'; }}
-                      // Show delete on parent hover via CSS would need a class; instead show always with low opacity
-                      ref={(el) => {
-                        if (el) el.style.opacity = '0.4';
-                      }}
+                      transition={{ duration: 0.18, ease: EASE_STANDARD }}
+                      style={{ display: 'flex', flexShrink: 0 }}
                     >
-                      <Icon name="delete" size={14} color="var(--color-error)" />
-                    </button>
-                  </div>
+                      <MotionButton
+                        onClick={(e) => { e.stopPropagation(); onDelete(session.id); }}
+                        title="Delete chat"
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 7,
+                          background: 'transparent',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}
+                        whileHover={{ background: 'var(--color-red-pale-4)', scale: 1.1 }}
+                        transition={{ duration: 0.18 }}
+                      >
+                        <Icon name="delete" size={14} color="var(--color-error)" />
+                      </MotionButton>
+                    </MotionIn>
+                  </MotionIn>
                 );
               })}
             </div>
           ))
         )}
       </div>
-    </div>
+    </MotionIn>
   );
 }

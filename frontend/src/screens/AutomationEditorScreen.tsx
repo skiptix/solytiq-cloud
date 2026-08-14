@@ -14,7 +14,7 @@ import Icon from '../components/Icon';
 import TimePicker from '../components/TimePicker';
 import CalendarPicker from '../components/CalendarPicker';
 import JsonTree from '../components/JsonTree';
-import { ownerEntityPath } from './AutomationsScreen';
+import { ownerEntityPath } from '../utils/automationOwner';
 import ModalIn from '../components/animate-ui/ModalIn';
 
 // ---------------------------------------------------------------------------

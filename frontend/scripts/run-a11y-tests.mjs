@@ -3,27 +3,34 @@
 // using axe-core (industry-standard automated a11y engine, already a
 // devDependency) driven by Playwright against the pre-installed Chromium.
 //
-// Scope, and why: this sandbox has no backend/database running this phase
-// (see the Sprint 03 handoff — deliberately out of scope), so screens behind
-// `<Protected>` (everything mounted inside AppLayout: Dashboard, Board,
-// Timeline, the new skip-link/`<nav>`/`<main>` landmarks, the TemplatesScreen
-// ConfirmDialog pilot, …) cannot be reached by a real, unauthenticated
-// browser session and are NOT swept here — that gap is called out explicitly
-// in the handoff rather than silently skipped. What IS reachable and
-// genuinely tested, end to end, against the real production build:
-//   - /login — reachable with no backend (a failed `apiCheckSetupRequired()`
-//     call falls back to rendering the login form regardless, see App.tsx).
-//     This is also the screen Sprint 03 fixed concrete a11y bugs on
-//     (unassociated <label>s, no aria-invalid/aria-describedby on error,
-//     unlabelled OTP digit inputs) — this gate is what proves those fixes
-//     and guards against regressing them.
+// Scope, and why: there is no backend/database running here, so screens
+// behind `<Protected>` (everything inside AppLayout: Dashboard, Board,
+// Timeline, …) cannot be reached by a real unauthenticated browser session
+// and are NOT swept — a gap called out explicitly rather than silently
+// skipped. Every route that IS reachable without a backend is swept:
+//
+//   /login       the screen whose a11y bugs were actually fixed
+//                (unassociated <label>s, no aria-invalid/aria-describedby on
+//                error, unlabelled OTP digit inputs).
+//   /setup       the first-run wizard.
+//   /admin-reset the recovery screen.
+//   /share/…     the public share chrome, in its error state.
+//
+// Sprint 04 correction: this file previously listed ONLY /login and claimed
+// it renders with no backend. It does not. A failed `apiCheckSetupRequired()`
+// falls back to `setSetupRequired(!adminRegistered)`, and with nothing in
+// localStorage that is `true`, so /login redirects to /setup. The sweep was
+// therefore testing SetupWizard while reporting it as Login, and the login
+// fixes above were never actually verified. Seeding `solytiq_auth` with
+// `adminRegistered: true` (see the `seed` field below) is what makes the
+// login form render, so the gate now tests what it says it tests.
 //
 // Usage: npm run test:a11y  (add A11Y_SKIP_BUILD=1 to reuse an already-built
 // dist/, matching check-bundle.mjs's convention).
 
 import { chromium } from 'playwright';
 import { execSync, spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -31,7 +38,21 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
 const PORT = 4444;
-const CHROMIUM_PATH = process.env.PLAYWRIGHT_CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const SANDBOX_CHROMIUM = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+// How to find Chromium, in priority order:
+//   1. PLAYWRIGHT_CHROMIUM_PATH, if someone set it explicitly.
+//   2. The dev sandbox's pre-installed browser, IF it is actually there.
+//   3. Nothing — let Playwright resolve its own download.
+//
+// That last case is the one that matters. Passing a hardcoded
+// `executablePath` made this script work in exactly one environment: a
+// GitHub runner installs Chromium under ~/.cache/ms-playwright, so every
+// browser gate failed on its first CI run with "executable doesn't exist at
+// /opt/pw-browsers/...". Omitting the option entirely is what makes
+// Playwright look where it actually put the browser.
+const CHROMIUM_PATH = process.env.PLAYWRIGHT_CHROMIUM_PATH
+  || (existsSync(SANDBOX_CHROMIUM) ? SANDBOX_CHROMIUM : undefined);
+const LAUNCH_OPTIONS = CHROMIUM_PATH ? { executablePath: CHROMIUM_PATH } : {};
 
 if (!process.env.A11Y_SKIP_BUILD) {
   console.log('[test:a11y] Running production build…');
@@ -44,10 +65,14 @@ const axeSource = readFileSync(join(root, 'node_modules/axe-core/axe.min.js'), '
 // (a single-page axe sweep); if the browser/network stack wedges on
 // something (e.g. an external resource with no way to time out cleanly),
 // force-exit with a clear failure rather than hanging the CI step forever.
+// Scaled to the page count below (a single-page sweep took ~15s); if the
+// browser/network stack wedges on something with no clean timeout, fail
+// loudly rather than hanging the CI step forever.
+const WATCHDOG_MS = 180000;
 const watchdog = setTimeout(() => {
-  console.error('[test:a11y] FAIL — watchdog timeout (60s) exceeded, forcing exit.');
+  console.error(`[test:a11y] FAIL — watchdog timeout (${WATCHDOG_MS / 1000}s) exceeded, forcing exit.`);
   process.exit(1);
-}, 60000);
+}, WATCHDOG_MS);
 watchdog.unref();
 
 // Spawn the local `vite` binary directly rather than through `npx` — `npx`
@@ -65,16 +90,32 @@ try {
   for (let i = 0; i < 50 && !serverReady; i++) await sleep(200);
   if (!serverReady) throw new Error('vite preview server did not start within 10s');
 
-  const browser = await chromium.launch({ executablePath: CHROMIUM_PATH });
+  const browser = await chromium.launch(LAUNCH_OPTIONS);
 
+  // `seed` runs before the app boots; `ready` is the selector that proves the
+  // intended screen (not a fallback) actually rendered — a sweep that silently
+  // accepts whatever loaded is how the /login gap above went unnoticed.
   const pages = [
-    { path: '/login', label: 'Login screen' },
+    {
+      path: '/login',
+      label: 'Login screen',
+      seed: { key: 'solytiq_auth', value: JSON.stringify({ state: { adminRegistered: true }, version: 0 }) },
+      ready: '#login-username',
+    },
+    { path: '/setup', label: 'Setup wizard', ready: 'input, button' },
+    { path: '/admin-reset', label: 'Admin password reset', ready: 'input, button' },
+    { path: '/share/__a11y-probe__', label: 'Public share page (error state)', ready: 'body' },
   ];
 
-  for (const { path, label } of pages) {
+  for (const { path, label, seed, ready } of pages) {
     console.log(`\n[test:a11y] ${label} (${path})`);
     const context = await browser.newContext();
     const page = await context.newPage();
+    if (seed) {
+      await page.addInitScript(({ key, value }) => {
+        try { window.localStorage.setItem(key, value); } catch { /* private mode */ }
+      }, seed);
+    }
     // NOT 'networkidle': index.html references Google Fonts, and this
     // sandbox's browser network stack doesn't share the shell's configured
     // HTTPS proxy, so those external requests can hang well past any
@@ -82,9 +123,18 @@ try {
     // 'domcontentloaded' is enough; the explicit waitForSelector below is
     // the real readiness signal we actually care about.
     await page.goto(`http://localhost:${PORT}${path}`, { waitUntil: 'domcontentloaded', timeout: 15000 });
-    // The login form only appears once the (failed, no-backend) setup check
-    // settles — give it a moment rather than racing the fallback branch.
-    await page.waitForSelector('#login-username', { timeout: 8000 }).catch(() => {});
+    // Each screen only appears once the (failed, no-backend) setup check
+    // settles. A missing readiness selector is a HARD failure: it means the
+    // route fell back to something else and any result below would describe
+    // the wrong screen.
+    try {
+      await page.waitForSelector(ready, { timeout: 8000 });
+    } catch {
+      exitCode = 1;
+      console.log(`  FAIL — "${ready}" never appeared; ${path} did not render ${label}.`);
+      await context.close();
+      continue;
+    }
 
     await page.addScriptTag({ content: axeSource });
     const results = await page.evaluate(async () => {
@@ -126,6 +176,7 @@ try {
     // axe already covers "label" broadly, but asserting the exact
     // htmlFor/id pairing directly makes the regression this fixed explicit
     // rather than implicit in axe's rule set.
+    if (path === '/login') {
     const usernameLabelled = await page.evaluate(() => {
       const input = document.getElementById('login-username');
       if (!input) return null;
@@ -137,6 +188,7 @@ try {
       console.log('  FAIL — #login-username has no associated <label for="login-username">.');
     } else if (usernameLabelled === true) {
       console.log('  PASS — #login-username is programmatically labelled.');
+    }
     }
 
     await context.close();

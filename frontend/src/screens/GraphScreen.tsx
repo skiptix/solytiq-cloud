@@ -10,7 +10,7 @@ import useMarkdownListsStore from '../store/useMarkdownListsStore';
 import Icon from '../components/Icon';
 import RenameDialog from '../components/RenameDialog';
 import LinkPicker from '../components/LinkPicker';
-import { RF_NODE_TYPES } from '../components/graph/FlowGraph';
+import { EntityNode } from '../components/graph/FlowGraph';
 import SigmaGraph from '../components/graph/SigmaGraph';
 import NeuralGraph, { type NeuralGraphHandle } from '../components/graph/NeuralGraph';
 import GraphToolbar from '../components/graph/GraphToolbar';
@@ -22,6 +22,17 @@ import { apiGetCanvases, apiCreateCanvas, apiGetCanvas, apiUpdateCanvas, apiCrea
 import type { GraphNode, GraphCanvas, EntityIndexEntry } from '../types';
 import Spinner from '@/components/animate-ui/Spinner';
 import PopIn from '@/components/animate-ui/PopIn';
+import MotionIn from '../components/animate-ui/MotionIn';
+import MotionButton from '../components/animate-ui/MotionButton';
+import { EASE_SETTLE, EASE_STANDARD } from '../components/animate-ui/motionTokens';
+
+/**
+ * React Flow's `nodeTypes` map. Defined here, at module scope, rather than
+ * exported from FlowGraph.tsx: it is a plain object, and a module exporting
+ * both a component and a non-component breaks Fast Refresh. React Flow also
+ * requires a stable identity for this map, which module scope guarantees.
+ */
+const RF_NODE_TYPES = { entity: EntityNode };
 
 function ExploreView({ isMobile }: { isMobile: boolean }) {
   const navigate = useNavigate();
@@ -102,7 +113,7 @@ function ExploreView({ isMobile }: { isMobile: boolean }) {
   const isEmpty = !loading && allNodes.length === 0;
 
   return (
-    <div style={{ position: 'relative', height: '100%', width: '100%', minWidth: 0, borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.04)', overflow: 'hidden', animation: 'cardIn 320ms cubic-bezier(0.22,1,0.36,1) both' }}>
+    <MotionIn style={{ position: 'relative', height: '100%', width: '100%', minWidth: 0, borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.04)', overflow: 'hidden' }} initial={{ opacity: 0, y: 12, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.32, ease: EASE_SETTLE }}>
       {loading && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', fontFamily: 'var(--font-heading)', fontSize: 13, zIndex: 4, background: 'var(--color-white)' }}>
           <Spinner size={16} thickness={2} durationMs={600} />
@@ -110,19 +121,19 @@ function ExploreView({ isMobile }: { isMobile: boolean }) {
         </div>
       )}
       {isEmpty && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', animation: 'sectionFadeUp 320ms ease both', zIndex: 4, background: 'var(--color-white)' }}>
+        <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.32, ease: EASE_SETTLE }} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', zIndex: 4, background: 'var(--color-white)' }}>
           <Icon name="hub" size={40} color="var(--color-purple-tint-3, #c4b8f0)" />
           <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>Nothing here yet</div>
           <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, maxWidth: 280, textAlign: 'center' }}>Create a board, page, or timeline in this workspace to see it take shape here.</div>
-        </div>
+        </MotionIn>
       )}
       {!loading && !isEmpty && (
         nodes.length === 0 ? (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', animation: 'sectionFadeUp 320ms ease both', zIndex: 4, background: 'var(--color-white)' }}>
+          <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.32, ease: EASE_SETTLE }} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--color-text-quaternary)', zIndex: 4, background: 'var(--color-white)' }}>
             <Icon name="visibility_off" size={40} color="var(--color-purple-tint-3, #c4b8f0)" />
             <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, color: 'var(--color-text-secondary)' }}>Nothing matches your filters</div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, maxWidth: 280, textAlign: 'center' }}>Try widening the entity-type filter.</div>
-          </div>
+          </MotionIn>
         ) : useSigma
           ? <SigmaGraph nodes={nodes} edges={relationEdges} onNodeClick={handleNodeClick} />
           : <NeuralGraph
@@ -148,7 +159,7 @@ function ExploreView({ isMobile }: { isMobile: boolean }) {
         onPickResult={handlePickSearchResult}
         isMobile={isMobile}
       />
-    </div>
+    </MotionIn>
   );
 }
 
@@ -313,27 +324,29 @@ function CanvasView({ isMobile }: { isMobile: boolean }) {
 
   if (!active) {
     return (
-      <div style={{ padding: '4px 2px', height: '100%', overflowY: 'auto', animation: 'sectionFadeUp 320ms cubic-bezier(0.22,1,0.36,1) both' }}>
-        <button
+      <MotionIn style={{ padding: '4px 2px', height: '100%', overflowY: 'auto' }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.32, ease: EASE_SETTLE }}>
+        <MotionButton
           onClick={() => setCreating(true)}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: 18, transition: 'transform 150ms cubic-bezier(0.34,1.56,0.64,1)' }}
-          onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: 18 }}
+          whileHover={{ transform: 'scale(1.03)' }}
+          transition={{ duration: 0.15 }}
         >
           <Icon name="add" size={16} color="var(--color-white)" /> New canvas
-        </button>
+        </MotionButton>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
           {canvases.map((c, i) => (
-            <button
+            <MotionButton
               key={c.id}
               onClick={() => void openCanvas(c.id)}
-              style={{ padding: 16, borderRadius: 12, border: '1.5px solid var(--color-purple-pale-34)', background: 'var(--color-white)', textAlign: 'left', cursor: 'pointer', transition: 'border-color 150ms, background 150ms, transform 150ms cubic-bezier(0.34,1.56,0.64,1)', animation: `menuItemIn 200ms ease ${i * 30}ms both` }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.background = 'var(--color-surface-tint)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-purple-pale-34)'; e.currentTarget.style.background = 'var(--color-white)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+              initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.2, delay: (i * 30) / 1000, ease: EASE_STANDARD }} style={{ padding: 16, borderRadius: 12, border: '1.5px solid var(--color-purple-pale-34)', background: 'var(--color-white)', textAlign: 'left', cursor: 'pointer', }}
+              whileHover={{
+                borderColor: 'var(--color-primary)', background: 'var(--color-surface-tint)', y: -2,
+                transition: { duration: 0.15, delay: 0 },
+              }}
             >
               <div style={{ fontWeight: 700, fontFamily: 'var(--font-heading)', fontSize: 13.5, color: 'var(--color-text-primary)' }}>{c.emoji ?? '⬡'} {c.name}</div>
               <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)', marginTop: 4 }}>{c.layout.nodes.length} nodes</div>
-            </button>
+            </MotionButton>
           ))}
           {canvases.length === 0 && (
             <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '48px 20px', color: 'var(--color-text-quaternary)', textAlign: 'center' }}>
@@ -351,21 +364,21 @@ function CanvasView({ isMobile }: { isMobile: boolean }) {
             onCancel={() => setCreating(false)}
           />
         )}
-      </div>
+      </MotionIn>
     );
   }
 
   return (
-    <div style={{ height: '100%', position: 'relative', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.04)', overflow: 'hidden', animation: 'cardIn 320ms cubic-bezier(0.22,1,0.36,1) both' }}>
+    <MotionIn style={{ height: '100%', position: 'relative', background: 'var(--color-white)', borderRadius: 14, border: '1px solid var(--color-border)', boxShadow: '0 1px 2px rgba(var(--color-black-rgb), 0.04)', overflow: 'hidden' }} initial={{ opacity: 0, y: 12, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.32, ease: EASE_SETTLE }}>
       <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 5, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button
+        <MotionButton
           onClick={() => setActive(null)}
-          style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', boxShadow: '0 2px 8px rgba(var(--color-black-rgb), 0.06)', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', cursor: 'pointer', transition: 'all 150ms' }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--color-primary)'; e.currentTarget.style.color = 'var(--color-primary)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; e.currentTarget.style.color = 'var(--color-text-secondary)'; }}
+          style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', boxShadow: '0 2px 8px rgba(var(--color-black-rgb), 0.06)', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', cursor: 'pointer' }}
+          whileHover={{ borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
+          transition={{ duration: 0.15 }}
         >
           <Icon name="arrow_back" size={14} /> All canvases
-        </button>
+        </MotionButton>
         <span style={{ padding: '6px 10px', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>{saving ? 'Saving…' : active.name}</span>
       </div>
 
@@ -438,7 +451,7 @@ function CanvasView({ isMobile }: { isMobile: boolean }) {
         <Background gap={18} color="var(--color-purple-pale-34, #f0edff)" />
         <Controls showInteractive={false} />
       </ReactFlow>
-    </div>
+    </MotionIn>
   );
 }
 
@@ -462,31 +475,30 @@ export default function GraphScreen() {
   }
 
   return (
-    <div style={{ padding: isMobile ? 12 : 24, height: '100%', width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 16, animation: 'sectionFadeUp 360ms cubic-bezier(0.22,1,0.36,1) both' }}>
+    <MotionIn style={{ padding: isMobile ? 12 : 24, height: '100%', width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 16 }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.36, ease: EASE_SETTLE }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: 20, fontWeight: 700, margin: 0, color: 'var(--color-text-primary)' }}>Net</h1>
         <div style={{ display: 'flex', gap: 4, padding: 4, background: 'var(--color-surface-tint)', borderRadius: 10 }}>
           {tabs.map((t) => (
-            <button
+            <MotionButton
               key={t.key}
               onClick={() => setView(t.key)}
-              style={{
+              transition={{ duration: 0.15 }} style={{
                 display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: 'none',
                 background: view === t.key ? 'var(--color-white)' : 'transparent', fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 12.5, cursor: 'pointer',
                 color: view === t.key ? 'var(--color-primary)' : 'var(--color-text-secondary)',
                 boxShadow: view === t.key ? '0 1px 4px rgba(var(--color-black-rgb), 0.08)' : 'none',
-                transition: 'all 150ms',
               }}
             >
               <Icon name={t.icon} size={15} color={view === t.key ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
               {t.label}
-            </button>
+            </MotionButton>
           ))}
         </div>
       </div>
       <div style={{ flex: 1, minHeight: 0, minWidth: 0 }}>
         {view === 'explore' ? <ExploreView isMobile={isMobile} /> : <CanvasView isMobile={isMobile} />}
       </div>
-    </div>
+    </MotionIn>
   );
 }

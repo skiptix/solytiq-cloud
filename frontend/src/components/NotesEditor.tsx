@@ -12,6 +12,8 @@ import { useEntitySearch } from '../hooks/useEntitySearch';
 import useAIStore from '../store/useAIStore';
 import { apiGetAISettings, apiAIChat } from '../api/client';
 import type { EntityIndexEntry } from '../types';
+import MotionButton from './animate-ui/MotionButton';
+import nextFrame from './animate-ui/nextFrame';
 
 // ── Shared Notes editor ─────────────────────────────────────────────────────
 // Used by the item dialog (TaskDialog) and the milestone editor so both get
@@ -105,14 +107,14 @@ function AiAssistButton({ aiContext, value, onApply }: AiAssistButtonProps) {
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
-      <button
+      <MotionButton
         type="button"
         title="Ask AI"
         onClick={() => setOpen((o) => !o)}
-        style={{ display: 'flex', alignItems: 'center', gap: 4, height: 26, padding: '0 9px', borderRadius: 7, border: `1px solid ${open ? 'var(--color-primary)' : 'var(--color-purple-pale-23)'}`, background: open ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', transition: 'all 120ms' }}>
+        transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', gap: 4, height: 26, padding: '0 9px', borderRadius: 7, border: `1px solid ${open ? 'var(--color-primary)' : 'var(--color-purple-pale-23)'}`, background: open ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', }}>
         <Icon name="auto_awesome" size={14} color="var(--color-primary)" />
         <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11.5, fontWeight: 600, color: 'var(--color-primary)' }}>Ask AI</span>
-      </button>
+      </MotionButton>
 
       {open && (
         <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 60, width: Math.min(280, window.innerWidth - 32), background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 12 }}>
@@ -172,6 +174,20 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
   // @-mention typeahead state (only active when mentionMembers is provided).
   const [mention, setMention] = useState<MentionContext | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
+  /**
+   * Whether the open typeahead should sit above the field rather than below.
+   *
+   * Measured in the handler that opens it, not during render: reading
+   * `taRef.current` mid-render is both against the rules of React (the ref
+   * may not point at the committed DOM yet) and unnecessary here, since the
+   * only moment the answer can change is the moment the popover opens.
+   */
+  const [flipUp, setFlipUp] = useState(false);
+  /** Popover height used for the flip decision — mention list vs link picker. */
+  const measureFlip = (el: HTMLTextAreaElement, popoverHeight: number) => {
+    const rect = el.getBoundingClientRect();
+    setFlipUp(rect.bottom + popoverHeight > window.innerHeight);
+  };
   const mentionCandidates = mention && mentionMembers?.length
     ? filterMentionMembers(mentionMembers, mention.query)
     : [];
@@ -204,7 +220,7 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
     if (!el) return;
     const { next, selStart, selEnd } = toggleWrap(value, el.selectionStart ?? 0, el.selectionEnd ?? 0, marker);
     onChange(next);
-    requestAnimationFrame(() => {
+    nextFrame(() => {
       const now = taRef.current;
       if (!now) return;
       now.focus();
@@ -217,6 +233,7 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
   const refreshMention = (el: HTMLTextAreaElement) => {
     if (!mentionMembers?.length) { if (mention) setMention(null); return; }
     const ctx = detectMention(el.value, el.selectionStart ?? 0);
+    if (ctx) measureFlip(el, 252);
     setMention(ctx);
     setMentionIndex(0);
   };
@@ -229,7 +246,7 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
     onChange(nextVal);
     setUndoNote(null);
     setMention(null);
-    requestAnimationFrame(() => {
+    nextFrame(() => {
       const now = taRef.current;
       if (!now) return;
       now.focus();
@@ -241,6 +258,7 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
   // Recompute the `[[` link-trigger context from the textarea's current value + caret.
   const refreshLinkTrigger = (el: HTMLTextAreaElement) => {
     const ctx = detectLinkTrigger(el.value, el.selectionStart ?? 0);
+    if (ctx) measureFlip(el, 300);
     setLinkTrigger(ctx);
     setLinkIndex(0);
   };
@@ -253,7 +271,7 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
     onChange(nextVal);
     setUndoNote(null);
     setLinkTrigger(null);
-    requestAnimationFrame(() => {
+    nextFrame(() => {
       const now = taRef.current;
       if (!now) return;
       now.focus();
@@ -284,17 +302,17 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
   const mod = isMac ? '⌘' : 'Ctrl+';
 
   const fmtBtn = (icon: string, title: string, marker: Marker) => (
-    <button
+    <MotionButton
       type="button"
       title={title}
       disabled={showPreview}
       onMouseDown={e => e.preventDefault() /* keep the textarea selection */}
       onClick={() => applyFormat(marker)}
-      style={{ width: 26, height: 26, borderRadius: 7, border: 'none', background: 'transparent', cursor: showPreview ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: showPreview ? 0.35 : 1, transition: 'background 120ms' }}
+      transition={{ duration: 0.12 }} style={{ width: 26, height: 26, borderRadius: 7, border: 'none', background: 'transparent', cursor: showPreview ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: showPreview ? 0.35 : 1, }}
       onMouseEnter={e => { if (!showPreview) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
       <Icon name={icon} size={16} color="var(--color-text-tertiary)" />
-    </button>
+    </MotionButton>
   );
 
   return (
@@ -305,13 +323,13 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
           <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-border-strong)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Notes</div>
           <div style={{ display: 'inline-flex', background: 'var(--color-surface-tint-3)', border: '1px solid var(--color-purple-pale-23)', borderRadius: 8, padding: 2 }}>
             {(['write', 'preview'] as const).map(t => (
-              <button
+              <MotionButton
                 key={t}
                 type="button"
                 onClick={() => setTab(t)}
-                style={{ padding: '3px 10px', borderRadius: 6, border: 'none', background: tab === t ? 'var(--color-white)' : 'transparent', boxShadow: tab === t ? '0 1px 3px rgba(var(--color-black-rgb), 0.08)' : 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: tab === t ? 'var(--color-primary)' : 'var(--color-text-tertiary)', transition: 'all 120ms', textTransform: 'capitalize' }}>
+                transition={{ duration: 0.12 }} style={{ padding: '3px 10px', borderRadius: 6, border: 'none', background: tab === t ? 'var(--color-white)' : 'transparent', boxShadow: tab === t ? '0 1px 3px rgba(var(--color-black-rgb), 0.08)' : 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: tab === t ? 'var(--color-primary)' : 'var(--color-text-tertiary)', textTransform: 'capitalize' }}>
                 {t}
-              </button>
+              </MotionButton>
             ))}
           </div>
         </div>
@@ -359,13 +377,11 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
             }}
             rows={4}
           />
-          {mentionActive && (() => {
-            // Anchor below the field by default, but flip above when the field's
-            // bottom is close to the viewport bottom so the list stays on-screen
-            // (e.g. inside the scroll-bounded TaskDialog body).
-            const rect = taRef.current?.getBoundingClientRect();
-            const flipUp = !!rect && rect.bottom + 252 > window.innerHeight;
-            return (
+          {/* Anchored below the field by default, flipped above when the
+              field's bottom is close to the viewport bottom so the list stays
+              on-screen (e.g. inside the scroll-bounded TaskDialog body). See
+              `flipUp` for where that is decided. */}
+          {mentionActive && (
               <MentionPopover
                 members={mentionCandidates}
                 activeIndex={mentionIndex}
@@ -373,12 +389,8 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
                 onHover={setMentionIndex}
                 style={flipUp ? { bottom: 'calc(100% + 4px)', left: 0 } : { top: 'calc(100% + 4px)', left: 0 }}
               />
-            );
-          })()}
-          {!mentionActive && linkTriggerActive && (() => {
-            const rect = taRef.current?.getBoundingClientRect();
-            const flipUp = !!rect && rect.bottom + 300 > window.innerHeight;
-            return (
+          )}
+          {!mentionActive && linkTriggerActive && (
               <LinkPicker
                 query={linkTrigger!.query}
                 results={linkResults}
@@ -388,8 +400,7 @@ export default function NotesEditor({ value, onChange, placeholder = 'Add notes,
                 onHover={setLinkIndex}
                 style={flipUp ? { bottom: 'calc(100% + 4px)', left: 0 } : { top: 'calc(100% + 4px)', left: 0 }}
               />
-            );
-          })()}
+          )}
         </div>
       )}
     </div>

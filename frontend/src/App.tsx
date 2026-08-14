@@ -36,6 +36,11 @@ import RouteFallback from './components/RouteFallback';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import PopIn from './components/animate-ui/PopIn';
 import PageIn from './components/animate-ui/PageIn';
+import { EASE_STANDARD } from './components/animate-ui/motionTokens';
+import MotionIn from './components/animate-ui/MotionIn';
+import MotionButton from './components/animate-ui/MotionButton';
+import { motion } from './components/animate-ui/motion';
+import { EASE_SETTLE } from './components/animate-ui/motionTokens';
 
 // Sprint 03, Phase 2 — "Alle Route-Screens ... lazy laden": every screen
 // mounted by a <Route> below is its own chunk, fetched on first navigation
@@ -440,9 +445,9 @@ function AppLayout() {
           Visually hidden until focused (standard skip-link pattern — off
           canvas by default, slides into view on :focus so a sighted keyboard
           user can also see where focus went). */}
-      <a
+      <motion.a
         href="#main-content"
-        style={{
+        transition={{ duration: 0.15 }} style={{
           position: 'fixed',
           top: -60,
           left: 12,
@@ -455,22 +460,20 @@ function AppLayout() {
           fontSize: 13,
           fontWeight: 600,
           textDecoration: 'none',
-          transition: 'top 150ms ease',
         }}
         onFocus={(e) => { e.currentTarget.style.top = '12px'; }}
         onBlur={(e) => { e.currentTarget.style.top = '-60px'; }}
       >
         Skip to main content
-      </a>
+      </motion.a>
       {/* Mobile sidebar backdrop */}
       {isMobile && drawerOpen && (
-        <div
+        <MotionIn
           onClick={() => setDrawerOpen(false)}
-          style={{
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18, ease: EASE_STANDARD }} style={{
             position: 'fixed', inset: 0, zIndex: 39,
             background: 'rgba(var(--color-black-rgb), 0.32)',
             backdropFilter: 'blur(2px)',
-            animation: 'backdropIn 180ms ease both',
           }}
         />
       )}
@@ -499,11 +502,13 @@ function AppLayout() {
           resizing={sidebarResizing}
         />
       </nav>
-      <div style={{
-        marginLeft: isMobile ? 0 : sidebarWidth,
-        flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0,
-        transition: isMobile || sidebarResizing ? undefined : 'margin-left 240ms cubic-bezier(0.22,1,0.36,1)',
-      }}>
+      <motion.div
+        animate={{ marginLeft: isMobile ? 0 : sidebarWidth }}
+        // No tween while the user is actively dragging the resize handle, or
+        // the shell would lag behind the cursor — same condition the CSS
+        // transition was suppressed under.
+        transition={isMobile || sidebarResizing ? { duration: 0 } : { duration: 0.24, ease: EASE_SETTLE }}
+        style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         <TopBar
           onNavigate={navigate}
           isMobile={isMobile}
@@ -546,7 +551,7 @@ function AppLayout() {
             </RouteErrorBoundary>
           </PageIn>
         </div>
-      </div>
+      </motion.div>
 
       {modal === 'add' && (
         <Suspense fallback={<RouteFallback label="Loading…" />}>
@@ -569,14 +574,14 @@ function AppLayout() {
       {loadError && (
         <PopIn duration={200} style={{ position: 'fixed', bottom: 20, left: '50%', marginLeft: -170, width: 340, maxWidth: 'calc(100vw - 32px)', zIndex: 500, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, background: 'var(--color-white)', border: '1px solid var(--color-border)', boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)' }}>
           <span style={{ color: 'var(--color-error)', fontWeight: 600 }}>Couldn't refresh your data.</span>
-          <button
+          <MotionButton
             onClick={() => (SYNC_ENGINE ? useSyncStore.getState().bootstrap(currentWorkspaceId ?? undefined) : loadFromApi(currentWorkspaceId ?? undefined))}
             style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 8, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
-            onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-purple-mid-11)')}
-            onMouseLeave={e => (e.currentTarget.style.background = 'var(--color-primary)')}
+            whileHover={{ background: 'var(--color-purple-mid-11)' }}
+            transition={{ duration: 0.15 }}
           >
             Retry
-          </button>
+          </MotionButton>
         </PopIn>
       )}
 

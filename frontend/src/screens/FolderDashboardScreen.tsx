@@ -7,6 +7,9 @@ import useAppStore from '../store/useAppStore';
 import UpcomingTimelineWidget from '../components/UpcomingTimelineWidget';
 import Icon from '../components/Icon';
 import Spinner from '@/components/animate-ui/Spinner';
+import MotionIn from '../components/animate-ui/MotionIn';
+import { motion } from '../components/animate-ui/motion';
+import { EASE_STANDARD, EASE_SPRING } from '../components/animate-ui/motionTokens';
 
 // ── Date helpers ────────────────────────────────────────────────
 function toIso(d: Date): string {
@@ -32,7 +35,7 @@ function AnimatedBar({ pct, color, height = 8, delay = 150 }: { pct: number; col
   useEffect(() => { const t = setTimeout(() => setW(pct), delay); return () => clearTimeout(t); }, [pct, delay]);
   return (
     <div style={{ background: 'var(--color-divider)', borderRadius: 9999, height, overflow: 'hidden' }}>
-      <div style={{ height: '100%', width: `${w}%`, background: color, borderRadius: 9999, transition: 'width 900ms cubic-bezier(0.34,1.56,0.64,1)' }} />
+      <MotionIn transition={{ duration: 0.9 }} style={{ height: '100%', width: `${w}%`, background: color, borderRadius: 9999, }} />
     </div>
   );
 }
@@ -41,8 +44,8 @@ function AnimatedBar({ pct, color, height = 8, delay = 150 }: { pct: number; col
 function StatCard({ num, label, sub, icon, iconBg, iconColor, accent }: { num: number; label: string; sub: string; icon: string; iconBg: string; iconColor: string; accent?: string }) {
   const [hov, setHov] = useState(false);
   return (
-    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ background: 'var(--color-surface-gray)', border: `1px solid ${hov ? 'var(--color-purple-tint-2)' : 'var(--color-border-alt)'}`, borderRadius: 12, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'all 180ms', minWidth: 0 }}>
+    <MotionIn onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      transition={{ duration: 0.18 }} style={{ background: 'var(--color-surface-gray)', border: `1px solid ${hov ? 'var(--color-purple-tint-2)' : 'var(--color-border-alt)'}`, borderRadius: 12, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ width: 34, height: 34, borderRadius: 10, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name={icon} size={17} color={iconColor} />
@@ -51,7 +54,7 @@ function StatCard({ num, label, sub, icon, iconBg, iconColor, accent }: { num: n
       </div>
       <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text-primary)', fontSize: 30, lineHeight: 1, letterSpacing: '-0.02em' }}>{num}</span>
       <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)' }}>{label}</div>
-    </div>
+    </MotionIn>
   );
 }
 
@@ -60,8 +63,8 @@ function MiniTask({ task, onGo }: { task: Task; onGo: () => void }) {
   const [hov, setHov] = useState(false);
   const PCOLS: Record<string, string> = { High: 'var(--color-orange)', Medium: 'var(--color-warning-alt)', Low: 'var(--color-text-tertiary)' };
   return (
-    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={onGo}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: hov ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', transition: 'background 150ms' }}>
+    <MotionIn onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={onGo}
+      transition={{ duration: 0.15 }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: hov ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', }}>
       <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--color-border-strong)', flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</div>
@@ -71,7 +74,7 @@ function MiniTask({ task, onGo }: { task: Task; onGo: () => void }) {
         {task.priority && <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'var(--font-body)', color: PCOLS[task.priority] }}>{task.priority}</span>}
         <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)' }}>{friendlyDate(task.deadline)}</span>
       </div>
-    </div>
+    </MotionIn>
   );
 }
 
@@ -114,18 +117,33 @@ function ListCard({ list, onClick, index, folderColor }: { list: List; onClick: 
   useEffect(() => { const t = setTimeout(() => setBarW(pct), 350 + index * 70); return () => clearTimeout(t); }, [pct, index]);
 
   return (
-    <div
+    <MotionIn
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       onClick={onClick} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && onClick()}
       aria-label={`Open ${list.name} list`}
-      style={{
+      initial={{ opacity: 0, y: 12, scale: 0.96 }}
+      // The staggered card entrance and the hover lift land on the same
+      // element, so they share one target: y resolves to -3 on hover and 0 at
+      // rest, and the entrance only owns the first frame via `initial`.
+      animate={{
+        opacity: 1,
+        scale: 1,
+        y: hov ? -3 : 0,
         background: hov ? (list.colorBg ?? `${color}12`) : 'var(--color-surface-gray)',
-        border: `1px solid ${hov ? color + '55' : 'var(--color-border-alt)'}`,
+        borderColor: hov ? color + '55' : 'var(--color-border-alt)',
+        boxShadow: hov ? `0 8px 24px ${color}1a` : '0 0 0 0 transparent',
+      }}
+      transition={{
+        opacity: { duration: 0.38, delay: (index * 60) / 1000, ease: EASE_SPRING },
+        scale: { duration: 0.38, delay: (index * 60) / 1000, ease: EASE_SPRING },
+        y: { duration: 0.22 },
+        background: { duration: 0.22 },
+        borderColor: { duration: 0.22 },
+        boxShadow: { duration: 0.22 },
+      }}
+      style={{
+        borderWidth: 1, borderStyle: 'solid',
         borderRadius: 14, padding: '18px 16px', cursor: 'pointer',
-        transition: 'all 220ms cubic-bezier(0.34,1.56,0.64,1)',
-        transform: hov ? 'translateY(-3px)' : 'none',
-        boxShadow: hov ? `0 8px 24px ${color}1a` : 'none',
-        animation: `cardIn 380ms cubic-bezier(0.34,1.56,0.64,1) ${index * 60}ms both`,
         display: 'flex', flexDirection: 'column', gap: 12, outline: 'none',
       }}
     >
@@ -151,16 +169,16 @@ function ListCard({ list, onClick, index, folderColor }: { list: List; onClick: 
           <span style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-quaternary)' }}>{total - done} left</span>
         </div>
         <div style={{ background: 'var(--color-divider)', borderRadius: 9999, height: 5, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${barW}%`, background: color, borderRadius: 9999, transition: 'width 900ms cubic-bezier(0.34,1.56,0.64,1)' }} />
+          <MotionIn transition={{ duration: 0.9 }} style={{ height: '100%', width: `${barW}%`, background: color, borderRadius: 9999, }} />
         </div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: hov ? color : 'var(--color-text-quaternary)', display: 'flex', alignItems: 'center', gap: 4, transition: 'color 200ms' }}>
+        <motion.span transition={{ duration: 0.2 }} style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: hov ? color : 'var(--color-text-quaternary)', display: 'flex', alignItems: 'center', gap: 4, }}>
           Open list <Icon name="arrow_forward" size={13} color={hov ? color : 'var(--color-text-quaternary)'} />
-        </span>
+        </motion.span>
       </div>
-    </div>
+    </MotionIn>
   );
 }
 
@@ -228,7 +246,7 @@ export default function FolderDashboardScreen() {
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: isMobile ? '20px 16px 80px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
 
         {/* ── Header ─────────────────────────────────────────── */}
-        <header style={{ animation: 'folderDashIn 420ms ease both' }}>
+        <motion.header initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.42, ease: EASE_STANDARD }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
             {folder.emoji
               ? <span style={{ fontSize: 40, lineHeight: 1, filter: 'drop-shadow(0 2px 8px rgba(var(--color-black-rgb), 0.10))' }}>{folder.emoji}</span>
@@ -276,21 +294,21 @@ export default function FolderDashboardScreen() {
               <span style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)' }}>{open} remaining</span>
             </div>
           </div>
-        </header>
+        </motion.header>
 
         {/* ── Upcoming timeline events (scoped to this folder) ─── */}
         <UpcomingTimelineWidget folderId={folderId} accent={ac} />
 
         {/* ── Stat cards ─────────────────────────────────────── */}
-        <section style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 12, animation: 'folderDashIn 420ms 80ms ease both' }}>
+        <motion.section initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.42, delay: 0.08, ease: EASE_STANDARD }} style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: 12 }}>
           <StatCard num={open} label="Open Tasks" sub="remaining" icon="inventory_2" iconBg="var(--color-surface-tint)" iconColor="var(--color-primary)" />
           <StatCard num={done} label="Completed" sub={total > 0 ? `${pct}%` : 'none yet'} icon="check_circle" iconBg="rgba(var(--color-success-rgb), 0.10)" iconColor="var(--color-success)" accent="var(--color-success)" />
           <StatCard num={todayTasks.length} label="Due Today" sub="urgent" icon="today" iconBg="rgba(var(--color-orange-rgb), 0.10)" iconColor="var(--color-orange)" accent="var(--color-orange)" />
           <StatCard num={folderLists.length} label="Boards" sub="in folder" icon="folder_open" iconBg={acBg} iconColor={ac} accent={ac} />
-        </section>
+        </motion.section>
 
         {/* ── Task panels ─────────────────────────────────────── */}
-        <section style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, animation: 'folderDashIn 420ms 160ms ease both' }}>
+        <motion.section initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.42, delay: 0.16, ease: EASE_STANDARD }} style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
           <TaskPanel
             title="Due Today" icon="today" accent="var(--color-orange)" accentBg="rgba(var(--color-orange-rgb), 0.08)"
             tasks={todayTasks} emptyText="Nothing due today — you're on track!"
@@ -301,10 +319,10 @@ export default function FolderDashboardScreen() {
             tasks={weekTasks} emptyText="No tasks scheduled for this week."
             onGo={id => navigate(`/list/${id}`)}
           />
-        </section>
+        </motion.section>
 
         {/* ── Lists grid ─────────────────────────────────────── */}
-        <section style={{ animation: 'folderDashIn 420ms 240ms ease both' }}>
+        <motion.section initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.42, delay: 0.24, ease: EASE_STANDARD }}>
           <div style={{ fontFamily: 'var(--font-heading)', fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
             <Icon name="folder_open" size={18} color={ac} />
             Boards in {folder.name}
@@ -322,7 +340,7 @@ export default function FolderDashboardScreen() {
               ))}
             </div>
           )}
-        </section>
+        </motion.section>
       </div>
     </div>
   );

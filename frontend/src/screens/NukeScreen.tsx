@@ -2,6 +2,8 @@ import { usePageTitle } from "../hooks/usePageTitle";
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { apiNuke } from '../api/client';
+import MotionIn from '../components/animate-ui/MotionIn';
+import { motion } from '../components/animate-ui/motion';
 
 const STEPS = [
   { at: 0,  label: 'Preparing wipe…' },
@@ -136,7 +138,7 @@ export default function NukeScreen() {
       <div style={{ position: 'relative', width: 180, height: 180, marginBottom: 32 }}>
         <svg width={180} height={180} viewBox="0 0 180 180" style={{ transform: 'rotate(-90deg)' }}>
           <circle cx={90} cy={90} r={R} fill="none" stroke="var(--color-error-bg)" strokeWidth={10} />
-          <circle
+          <motion.circle
             cx={90}
             cy={90}
             r={R}
@@ -146,14 +148,14 @@ export default function NukeScreen() {
             strokeLinecap="round"
             strokeDasharray={CIRC}
             strokeDashoffset={offset}
-            style={{ transition: 'stroke-dashoffset 80ms linear, stroke 400ms ease' }}
+            transition={{ duration: 0.08 }} style={{ }}
           />
         </svg>
 
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-          <span style={{ fontFamily: 'var(--font-heading)', fontSize: 32, fontWeight: 800, color: pct === 100 ? 'var(--color-success)' : 'var(--color-error)', letterSpacing: '-0.03em', transition: 'color 400ms ease' }}>
+          <motion.span transition={{ duration: 0.4 }} style={{ fontFamily: 'var(--font-heading)', fontSize: 32, fontWeight: 800, color: pct === 100 ? 'var(--color-success)' : 'var(--color-error)', letterSpacing: '-0.03em', }}>
             {pct}%
-          </span>
+          </motion.span>
         </div>
       </div>
 
@@ -163,9 +165,9 @@ export default function NukeScreen() {
       </div>
 
       {/* Status message */}
-      <div style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)', marginBottom: 40, minHeight: 20, transition: 'opacity 200ms' }}>
+      <MotionIn transition={{ duration: 0.2 }} style={{ fontFamily: 'var(--font-body)', fontSize: 14, color: 'var(--color-text-tertiary)', marginBottom: 40, minHeight: 20, }}>
         {pct === 100 ? 'Redirecting to setup…' : currentStep.label}
-      </div>
+      </MotionIn>
 
       {/* Step list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 320 }}>
@@ -175,7 +177,7 @@ export default function NukeScreen() {
 
           return (
             <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{
+              <MotionIn transition={{ duration: 0.3 }} style={{
                 width: 22,
                 height: 22,
                 borderRadius: '50%',
@@ -185,24 +187,22 @@ export default function NukeScreen() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                transition: 'all 300ms ease',
               }}>
                 {done && (
                   <svg width={11} height={11} viewBox="0 0 12 12" fill="none">
                     <path d="M2 6l3 3 5-5" stroke="var(--color-white)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 )}
-              </div>
+              </MotionIn>
 
-              <span style={{
+              <motion.span transition={{ duration: 0.3 }} style={{
                 fontFamily: 'var(--font-body)',
                 fontSize: 13,
                 color: done ? 'var(--color-text-primary)' : active ? 'var(--color-error)' : 'var(--color-text-quaternary)',
                 fontWeight: active ? 600 : 400,
-                transition: 'color 300ms ease',
               }}>
                 {s.label}
-              </span>
+              </motion.span>
             </div>
           );
         })}

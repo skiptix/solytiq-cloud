@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { motion, useReducedMotion } from '../animate-ui/motion';
+import MotionButton from '../animate-ui/MotionButton';
 
 interface Props {
   isOpen: boolean;
@@ -8,6 +10,10 @@ interface Props {
 }
 
 export default function AIBubble({ isOpen, isThinking, onClick, size = 52 }: Props) {
+  // The idle float is continuous decorative motion; MotionConfig's
+  // reducedMotion only covers transform-based animations it drives, and
+  // Phase 4 wants this pausable explicitly.
+  const reduceMotion = useReducedMotion();
   const bubbleRef = useRef<HTMLButtonElement>(null);
   const [pupil, setPupil] = useState({ x: 0, y: 0 });
   const [blink, setBlink] = useState(false);
@@ -57,12 +63,23 @@ export default function AIBubble({ isOpen, isThinking, onClick, size = 52 }: Pro
     : '0 4px 16px rgba(var(--color-primary-rgb), 0.28)';
 
   return (
-    <button
+    <MotionButton
       ref={bubbleRef}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       aria-label="AI Assistant"
+      // The idle float and the hover/open scale share this element, so they
+      // share one target: `scale` resolves from state, `y` only loops while the
+      // bubble is idle (and never under reduced motion).
+      animate={{
+        scale: hovered ? 1.1 : isOpen ? 1.05 : 1,
+        y: !isOpen && !isThinking && !reduceMotion ? [0, -3, 0] : 0,
+      }}
+      transition={{
+        scale: { duration: 0.22 },
+        y: { duration: 7, ease: 'easeInOut', repeat: Infinity },
+      }}
       style={{
         width: size,
         height: size,
@@ -72,10 +89,7 @@ export default function AIBubble({ isOpen, isThinking, onClick, size = 52 }: Pro
         padding: 0,
         background: 'none',
         position: 'relative',
-        transition: 'transform 220ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 300ms ease',
-        transform: hovered ? 'scale(1.1)' : isOpen ? 'scale(1.05)' : 'scale(1)',
         boxShadow: shadow,
-        animation: !isOpen && !isThinking ? 'aiBubbleFloat 7s ease-in-out infinite' : undefined,
       }}
     >
       <svg viewBox="0 0 52 52" width={size} height={size} style={{ display: 'block' }}>
@@ -96,17 +110,17 @@ export default function AIBubble({ isOpen, isThinking, onClick, size = 52 }: Pro
         <ellipse cx="20" cy="14" rx="9" ry="5" fill="rgba(var(--color-white-rgb), 0.18)" />
 
         {/* Left eye */}
-        <ellipse
+        <motion.ellipse
           cx="18" cy="22" rx="7" ry="8" fill="white"
-          style={{ transformOrigin: '18px 22px', transform: `scaleY(${eyeScaleY})`, transition: 'transform 80ms' }}
+          animate={{ scaleY: eyeScaleY }} transition={{ duration: 0.08 }} style={{ transformOrigin: '18px 22px' }}
         />
         {!blink && <circle cx={18 + pupil.x} cy={22 + pupil.y} r="3.5" fill="var(--color-purple-deep-2)" clipPath="url(#leftEyeClip)" />}
         {!blink && <circle cx={18 + pupil.x + 1.2} cy={22 + pupil.y - 1.2} r="1" fill="rgba(var(--color-white-rgb), 0.7)" clipPath="url(#leftEyeClip)" />}
 
         {/* Right eye */}
-        <ellipse
+        <motion.ellipse
           cx="34" cy="22" rx="7" ry="8" fill="white"
-          style={{ transformOrigin: '34px 22px', transform: `scaleY(${eyeScaleY})`, transition: 'transform 80ms' }}
+          animate={{ scaleY: eyeScaleY }} transition={{ duration: 0.08 }} style={{ transformOrigin: '34px 22px' }}
         />
         {!blink && <circle cx={34 + pupil.x} cy={22 + pupil.y} r="3.5" fill="var(--color-purple-deep-2)" clipPath="url(#rightEyeClip)" />}
         {!blink && <circle cx={34 + pupil.x + 1.2} cy={22 + pupil.y - 1.2} r="1" fill="rgba(var(--color-white-rgb), 0.7)" clipPath="url(#rightEyeClip)" />}
@@ -117,14 +131,13 @@ export default function AIBubble({ isOpen, isThinking, onClick, size = 52 }: Pro
 
       {/* Thinking dot */}
       {isThinking && (
-        <span style={{
+        <motion.span animate={{ scale: [1, 1.3, 1], opacity: [1, 0.7, 1] }} transition={{ duration: 1.0, ease: 'easeInOut', repeat: Infinity }} style={{
           position: 'absolute', top: 2, right: 2,
           width: 12, height: 12, borderRadius: '50%',
           background: 'var(--color-success)', border: '2px solid var(--color-white)',
-          animation: 'aiPulse 1s ease-in-out infinite',
         }} />
       )}
 
-    </button>
+    </MotionButton>
   );
 }

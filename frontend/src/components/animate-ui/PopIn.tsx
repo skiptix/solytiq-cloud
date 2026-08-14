@@ -29,6 +29,15 @@ export interface PopInProps {
   duration: number;
   /** Matches the original CSS timing-function: `ease` -> 'standard', `cubic-bezier(0.34,1.56,0.64,1)` -> 'spring', `cubic-bezier(0.22,1,0.36,1)` -> 'settle'. */
   ease?: PopInEase;
+  /**
+   * `false` renders at the resting state with no entrance. For a consumer
+   * that embeds this in normal flow rather than floating it over something
+   * (RelationsPanel's inline LinkPicker) — a pop-in only reads as a pop-in
+   * when it arrives on top of content that was already there. Callers used to
+   * express this by overriding `animation: 'none'` from outside, which stops
+   * working the moment the animation is not CSS.
+   */
+  animate?: false;
   style?: CSSProperties;
   className?: string;
   onClick?: MouseEventHandler<HTMLDivElement>;
@@ -43,15 +52,15 @@ export interface PopInProps {
 }
 
 const PopIn = forwardRef<HTMLDivElement, PopInProps>(function PopIn(
-  { children, duration, ease = 'standard', style, ...rest },
+  { children, duration, ease = 'standard', animate = true, style, ...rest },
   ref
 ) {
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, scale: 0.88, y: -6 }}
+      initial={animate === false ? false : { opacity: 0, scale: 0.88, y: -6 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ duration: duration / 1000, ease: EASE_MAP[ease] }}
+      transition={animate === false ? { duration: 0 } : { duration: duration / 1000, ease: EASE_MAP[ease] }}
       style={style}
       {...rest}
     >

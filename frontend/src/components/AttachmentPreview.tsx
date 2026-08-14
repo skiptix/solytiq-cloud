@@ -5,6 +5,8 @@ import MarkdownView from './MarkdownView';
 import { previewKind, extOf } from '../utils/attachmentPreview';
 import ModalIn from './animate-ui/ModalIn';
 import Spinner from '@/components/animate-ui/Spinner';
+import { EASE_STANDARD } from './animate-ui/motionTokens';
+import MotionIn from './animate-ui/MotionIn';
 
 // ── Attachment preview ────────────────────────────────────────────────────
 // A click-to-preview viewer for the most common attachment formats, shared by
@@ -125,7 +127,7 @@ export default function AttachmentPreviewModal({ name, mimeType, fetchBlob, onDo
   // Portaled to <body> — the dialogs that open this live inside routed screens
   // whose `.page-transition` wrapper traps position:fixed descendants.
   return createPortal(
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.5)', backdropFilter: 'blur(4px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)', animation: 'backdropIn 180ms ease both' }}
+    <MotionIn style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.5)', backdropFilter: 'blur(4px)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--modal-pad)' }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18, ease: EASE_STANDARD }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <ModalIn duration={280} style={{ background: 'var(--color-white)', borderRadius: 16, width: '100%', maxWidth: 860, maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 8px 40px rgba(var(--color-black-rgb), 0.28)' }}
         onClick={e => e.stopPropagation()}>
@@ -149,7 +151,7 @@ export default function AttachmentPreviewModal({ name, mimeType, fetchBlob, onDo
           {body}
         </div>
       </ModalIn>
-    </div>,
+    </MotionIn>,
     document.body
   );
 }

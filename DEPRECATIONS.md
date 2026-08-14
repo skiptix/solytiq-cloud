@@ -86,3 +86,46 @@ tool-calling loop draw from. Removing that flag would let an agent run call
 policy limits — an unbounded-fork risk. If a future change genuinely needs
 an agent to spawn sub-runs, it needs a real recursion-depth guard first, not
 just removing this flag.
+
+---
+
+## `react-hooks/set-state-in-effect` is a warning, not an error
+
+`frontend/eslint.config.js` downgrades this rule. That is a deliberate,
+reversible decision with a specific scope, recorded here so nobody re-raises
+it to `error` without also doing the work below.
+
+The rule (from the React Compiler rule set) fires on any synchronous
+`setState` in an effect body. It found five genuine "you might not need an
+effect" cases in this codebase, all fixed — EntryInspector now resets by
+`key` instead of ten setters, UserSettingsModal clamps its tab at render,
+CommandPalette adjusts during render, GPSMergeWizard derives both its file
+list and its gap modes. Those were real: each painted one frame with the
+wrong value before correcting itself.
+
+What remains is a single shape, repeated across ~24 files:
+
+```tsx
+useEffect(() => {
+  if (!id) { setData([]); return; }   // clear the PREVIOUS id's data
+  setLoading(true);                    // drives the spinner
+  fetchThing(id).then(r => setData(r));
+}, [id]);
+```
+
+Both flagged statements are load-bearing and neither is derivable — the
+value comes from the network. Remove the reset and the previous entity's
+data stays on screen while the new request is in flight; move it into the
+`.then()` and you get the same flash, just later.
+
+**The principled fix** is a shared `useAsyncData(fetcher, deps)` hook that
+owns the loading flag and cancellation, so the rule fires once, inside it.
+That is worth doing on its own merits: those ~24 sites currently hand-roll
+cancellation three different ways (`cancelled`, `alive`, `reqId.current`),
+and about nine of them do something slightly different again. It is a
+refactor of the app's data-loading path, not a lint cleanup, which is why it
+was not folded into an animation sprint.
+
+Until then: `npm run lint` still reports every one of them, so a genuinely
+new violation is visible; CI gates on `eslint . --quiet`, which fails on
+errors only.

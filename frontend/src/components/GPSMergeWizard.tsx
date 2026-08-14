@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { GpsFile, GapMode } from '../types';
 import { apiUploadGpsFile, apiMergeGpsFilesDownload, apiMergeGpsFilesSave } from '../api/client';
@@ -7,6 +7,7 @@ import ModalIn from './animate-ui/ModalIn';
 import MotionButton from './animate-ui/MotionButton';
 import MotionIn from './animate-ui/MotionIn';
 import { motion } from './animate-ui/motion';
+import MotionDraggable from './animate-ui/MotionDraggable';
 
 function fmtDist(m?: number | null) {
   if (m == null) return null;
@@ -21,9 +22,16 @@ interface Props {
 
 export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged }: Props) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [allFiles, setAllFiles] = useState<GpsFile[]>(libraryFiles);
+  // Only the files uploaded inside this wizard live in state; the library
+  // comes from props and is merged at render. The previous version mirrored
+  // the whole prop into state and re-synced it in an effect, which meant the
+  // list showed the previous library for one frame after a refresh.
+  const [uploadedFiles, setUploadedFiles] = useState<GpsFile[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [gapModes, setGapModes] = useState<GapMode[]>([]);
+  // Per-gap override, sparse and index-keyed. The rendered list is derived
+  // from the current selection below, so adding or removing a file resizes it
+  // immediately instead of one render later.
+  const [gapModeOverrides, setGapModeOverrides] = useState<Record<number, GapMode>>({});
   const [outputName, setOutputName] = useState('merged_route');
   const [merging, setMerging] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -31,22 +39,17 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragSrcIdx = useRef<number | null>(null);
 
-  useEffect(() => {
-    setAllFiles(prev => {
-      const existing = new Set(libraryFiles.map(f => f.id));
-      const fresh = prev.filter(f => !existing.has(f.id));
-      return [...libraryFiles, ...fresh];
-    });
-  }, [libraryFiles]);
+  // A file uploaded here can also arrive in `libraryFiles` once the parent
+  // refetches, so de-dupe by id rather than showing it twice.
+  const allFiles = useMemo(() => {
+    const existing = new Set(libraryFiles.map(f => f.id));
+    return [...libraryFiles, ...uploadedFiles.filter(f => !existing.has(f.id))];
+  }, [libraryFiles, uploadedFiles]);
 
-  useEffect(() => {
-    const needed = Math.max(0, selectedIds.length - 1);
-    setGapModes(prev => {
-      const next = prev.slice(0, needed);
-      while (next.length < needed) next.push('skip');
-      return next;
-    });
-  }, [selectedIds.length]);
+  const gapModes = useMemo<GapMode[]>(
+    () => Array.from({ length: Math.max(0, selectedIds.length - 1) }, (_, i) => gapModeOverrides[i] ?? 'skip'),
+    [selectedIds.length, gapModeOverrides]
+  );
 
   const selectedFiles = selectedIds.map(id => allFiles.find(f => f.id === id)).filter(Boolean) as GpsFile[];
   const totalDist = selectedFiles.reduce((s, f) => s + (f.metadata?.totalDistance ?? 0), 0);
@@ -101,7 +104,7 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
     try {
       for (let i = 0; i < Math.min(fileList.length, 5 - selectedIds.length); i++) {
         const uploaded = await apiUploadGpsFile(fileList[i], () => {});
-        setAllFiles(prev => [uploaded, ...prev]);
+        setUploadedFiles(prev => [uploaded, ...prev]);
         setSelectedIds(prev => prev.length < 5 ? [...prev, uploaded.id] : prev);
         window.dispatchEvent(new CustomEvent('gps-files-changed'));
       }
@@ -271,28 +274,32 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
                 <Icon name="upload" size={14} color="var(--color-primary)" />
                 {uploading ? 'Uploading…' : 'Upload new .GPX or .FIT'}
               </MotionButton>
-              <input ref={fileInputRef} type="file" accept=".gpx,.fit" style={{ display: 'none' }} multiple onChange={e => handleUpload(e.target.files)} />
+              <motion.input ref={fileInputRef} type="file" accept=".gpx,.fit" style={{ display: 'none' }} multiple onChange={e => handleUpload(e.target.files)} />
 
               {/* Selected order */}
               {selectedIds.length > 0 && (
-                <div>
-                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <MotionIn>
+                  <MotionIn style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     Merge order ({selectedIds.length}/5)
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  </MotionIn>
+                  <MotionIn style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {selectedFiles.map((file, idx) => (
-                      <div
+                      <MotionDraggable
                         key={file.id}
                         draggable
                         onDragStart={e => handleDragStart(idx, e)}
                         onDragOver={e => handleDragOver(idx, e)}
                         onDragLeave={() => setDragOverIdx(null)}
                         onDrop={() => handleDrop(idx)}
+                        animate={{
+                          background: dragOverIdx === idx ? 'var(--color-surface-tint-4)' : 'var(--color-purple-pale-10)',
+                          borderColor: dragOverIdx === idx ? 'var(--color-primary)' : 'var(--color-border)',
+                        }}
+                        transition={{ duration: 0.12 }}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
-                          borderRadius: 8, background: dragOverIdx === idx ? 'var(--color-surface-tint-4)' : 'var(--color-purple-pale-10)',
-                          border: `1.5px solid ${dragOverIdx === idx ? 'var(--color-primary)' : 'var(--color-border)'}`,
-                          cursor: 'grab', transition: 'all 120ms',
+                          borderRadius: 8, borderWidth: 1.5, borderStyle: 'solid',
+                          cursor: 'grab',
                         }}
                       >
                         <Icon name="drag_indicator" size={16} color="var(--color-accent-purple-soft)" />
@@ -318,10 +325,10 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
                           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                           <Icon name="close" size={13} color="var(--color-text-quaternary)" />
                         </button>
-                      </div>
+                      </MotionDraggable>
                     ))}
-                  </div>
-                </div>
+                  </MotionIn>
+                </MotionIn>
               )}
             </div>
           )}
@@ -372,7 +379,7 @@ export default function GPSMergeWizard({ files: libraryFiles, onClose, onMerged 
                             {(['skip', 'straight'] as GapMode[]).map(mode => (
                               <MotionButton
                                 key={mode}
-                                onClick={() => setGapModes(prev => { const a = [...prev]; a[idx] = mode; return a; })}
+                                onClick={() => setGapModeOverrides(prev => ({ ...prev, [idx]: mode }))}
                                 animate={{
                                   borderColor: gapModes[idx] === mode ? 'var(--color-primary)' : 'var(--color-border)',
                                   background: gapModes[idx] === mode ? 'var(--color-surface-tint-4)' : 'transparent',
