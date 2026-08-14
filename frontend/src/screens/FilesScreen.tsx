@@ -117,7 +117,12 @@ function UploadWizard({ onClose, onUploaded, defaultIsPublic = true, initialFile
     });
   }, [isPublic, title, password, expiresAt, onUploaded]);
 
+  // NOTE (set-state-in-effect): a HANDOFF, not
+  // a load: the page-level drag/drop target opens this wizard with the files
+  // already dropped, and this is where they enter the upload queue. The
+  // upload starts here too, so it cannot move into render.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see the note above
     if (initialFiles.length) addFiles(initialFiles);
   // run once for files passed in from page-level drag/drop
   // eslint-disable-next-line react-hooks/exhaustive-deps

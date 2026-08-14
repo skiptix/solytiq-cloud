@@ -674,9 +674,17 @@ export default function AutomationEditorScreen() {
 
   useEffect(() => { loadNodeTypes(); }, [loadNodeTypes]);
 
+  // NOTE (set-state-in-effect): this SEEDS
+  // EDITABLE BUFFERS (name / description / graph), it does not display a
+  // loaded value. useAsyncData derives `data` from its key, which is exactly
+  // wrong for a buffer the user then edits — the next render would discard
+  // their typing. The alternative spelling is a child keyed on the loaded
+  // id so a new automation remounts the editor, which is a larger structural
+  // change than this rule warrants.
   useEffect(() => {
     if (isNew) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see the note above
     setLoading(true);
     getDetail(id!)
       .then((a) => {

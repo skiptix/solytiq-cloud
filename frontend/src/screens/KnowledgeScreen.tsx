@@ -257,9 +257,14 @@ export default function KnowledgeScreen() {
   }, []);
 
   // Deep link: /knowledge?entry=<id> (what entity_index stores for an entry).
+  // NOTE (set-state-in-effect): consuming a
+  // one-shot URL signal, not deriving state: it selects the entry, pans to
+  // it, and strips the query param so it cannot fire twice. Nothing to key
+  // on — the param IS the event, and it is gone afterwards.
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('entry');
     if (id && entries.some(e => e.id === id)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see the note above
       setSelectedId(id);
       centerOnEntry(`${ENTRY_PREFIX}${id}`);
       window.history.replaceState({}, '', '/knowledge');

@@ -140,7 +140,17 @@ function AppLayout() {
   const [modal, setModal] = useState<'add' | null>(null);
   const [addWizardMode, setAddWizardMode] = useState<'list' | 'timeline' | undefined>(undefined);
   const isMobile = useMobile();
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  // The mobile drawer remembers WHICH navigation it was opened on, so a route
+  // change closes it by derivation rather than by an effect reaching in and
+  // setting it — the same key-vs-value trick useAsyncData plays (see the
+  // former "Close drawer on route change" effect below, and its Sprint 03
+  // note about why the ref-during-render pattern was not available here).
+  // location.key, not pathname: it is React Router's identity for a history
+  // entry, so opening the drawer, navigating away and navigating BACK by link
+  // gives a new key and leaves it closed. Going back through history returns
+  // to the same entry and restores it, which is the same thing scroll
+  // restoration does and is not a bug.
+  const [drawer, setDrawer] = useState<{ open: boolean; navKey: string }>({ open: false, navKey: '' });
   // Suppresses the sidebar/content width transition while the resize handle is
   // being dragged (so it tracks the cursor 1:1), while still animating smoothly
   // on a collapse/expand toggle (click or keyboard shortcut).
@@ -360,22 +370,15 @@ function AppLayout() {
     return () => clearInterval(id);
   }, [loadError, loadFromApi]);
 
-  // Close drawer on route change (mobile).
-  // NOTE (Sprint 03 handoff): this pre-existing effect trips this project's
-  // `react-hooks/set-state-in-effect` rule (calling setState synchronously
-  // in an effect body). It predates Phase 3 and is untouched by this sprint's
-  // functional changes. A rewrite to React's documented "track the previous
-  // value in a ref and branch during render" pattern was attempted here and
-  // reverted — this repo's lint config also enables `react-hooks/refs`,
-  // which forbids reading/writing `ref.current` during render, so that
-  // pattern is not actually available in this codebase; fixing this
-  // correctly needs a structural change (e.g. keying a subtree to force a
-  // remount) that is out of Sprint 03's scope. Left as a known, precisely
-  // located pre-existing baseline error — see the Sprint 03 handoff's
-  // Altfehler list. Do not add an `eslint-disable` here.
-  useEffect(() => {
-    if (isMobile) setDrawerOpen(false);
-  }, [location.pathname, isMobile]);
+  // Closing the drawer on a route change (mobile) used to be an effect that
+  // called setDrawerOpen(false) — see the state declaration above for the
+  // derivation that replaced it. Desktop keeps the old semantics exactly: the
+  // route never closed it there, because nothing opens it there either.
+  const drawerOpen = drawer.open && (!isMobile || drawer.navKey === location.key);
+  const setDrawerOpen = useCallback(
+    (open: boolean) => setDrawer({ open, navKey: open ? location.key : '' }),
+    [location.key]
+  );
 
   // Remember the current screen as the "resume here" target for this user's
   // next new tab / reload (desktop and mobile alike) — see resolveHomeRoute()

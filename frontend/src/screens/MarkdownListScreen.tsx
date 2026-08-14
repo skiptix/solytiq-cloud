@@ -85,9 +85,15 @@ export default function MarkdownListScreen() {
     return [...byId.values()];
   })();
 
+  // NOTE (set-state-in-effect): same case as
+  // AutomationEditorScreen: this SEEDS EDITABLE BUFFERS (name, emoji, colour,
+  // blocks) that the user then types into, so a key-derived `data` would
+  // overwrite their edits on the next render. The synchronous resets are what
+  // stop the previous page's content showing under a new id.
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see the note above
     setLoading(true);
     setNotFound(false);
     // Mint (or reuse a still-fresh cached) per-document image ticket ALONGSIDE
