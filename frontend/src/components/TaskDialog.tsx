@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import type { Task, TaskAttachment, SharedFile } from '../types';
@@ -244,6 +244,7 @@ interface TaskDialogProps {
  *  new reference every render and re-run every dependent memo. */
 const EMPTY_MEMBERS: WorkspaceMember[] = [];
 const EMPTY_MENTIONS: MentionMember[] = [];
+const EMPTY_ATTACHMENTS: TaskAttachment[] = [];
 
 export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDialogProps) {
   const isMobile = useMobile();
@@ -263,8 +264,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
   const [creatingList, setCreatingList] = useState(false);
 
   // Attachments
-  const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
-  const [attachLoading, setAttachLoading] = useState(true);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [removingAttId, setRemovingAttId] = useState<string | null>(null);
@@ -276,12 +275,17 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
   const backdropRef = useRef<HTMLDivElement>(null);
   const calBtnRef = useRef<HTMLButtonElement>(null);
 
-  const loadAttachments = useCallback(async () => {
-    try {
-      const r = await apiGetTaskAttachments(task.id);
-      setAttachments(r.attachments);
-    } catch { /* silent */ } finally { setAttachLoading(false); }
-  }, [task.id]);
+  // Loaded once per task, then patched locally as files are uploaded, linked
+  // and removed — hence setData rather than a refetch after every mutation.
+  const {
+    data: attachments,
+    loading: attachLoading,
+    setData: setAttachments,
+  } = useAsyncData(
+    task.id,
+    async () => (await apiGetTaskAttachments(task.id)).attachments,
+    EMPTY_ATTACHMENTS,
+  );
 
   const { lists, setLists, updateListTask, loadFromApi } = useAppStore();
   const { currentWorkspaceId } = useWorkspaceStore();
@@ -331,7 +335,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
     if (titleRef.current) resizeTA(titleRef.current);
   }, []);
 
-  useEffect(() => { loadAttachments(); }, [loadAttachments]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && !showCal) onClose(); };

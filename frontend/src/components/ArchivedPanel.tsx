@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import type { List } from '../types';
 import { apiGetArchivedLists, apiUnarchiveList } from '../api/client';
 import Icon from './Icon';
 import { listItemVariants, crossFadeVariants, LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
+import useAsyncData from '../hooks/useAsyncData';
 
 function friendlyTime(iso: string) {
   const d = new Date(iso);
@@ -32,21 +33,18 @@ interface ArchivedPanelProps {
  * the global active-workspace store, since this panel is always about the
  * workspace the settings dialog was opened for.
  */
+/** Stable identity — returned as `data`, so an inline literal would be a new reference every render. */
+const EMPTY_LISTS: List[] = [];
+
 export default function ArchivedPanel({ workspaceId }: ArchivedPanelProps) {
-  const [lists, setLists] = useState<List[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [unarchivingId, setUnarchivingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    apiGetArchivedLists(workspaceId)
-      .then((res) => { if (!cancelled) setLists(res.lists); })
-      .catch(() => { if (!cancelled) setLists([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [workspaceId]);
+  const { data: lists, loading, setData: setLists } = useAsyncData(
+    workspaceId,
+    async () => (await apiGetArchivedLists(workspaceId)).lists,
+    EMPTY_LISTS,
+  );
 
   const q = search.trim().toLowerCase();
   const filtered = useMemo(() => lists.filter((l) => !q || l.name.toLowerCase().includes(q)), [lists, q]);

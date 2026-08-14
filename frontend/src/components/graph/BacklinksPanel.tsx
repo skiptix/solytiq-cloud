@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
 import Icon from '../Icon';
 import EntityChip from '../EntityChip';
 import type { GraphEntityType, ResolvedLink } from '../../types';
 import { apiGetBacklinks } from '../../api/client';
+import useAsyncData from '../../hooks/useAsyncData';
 
 // ── BacklinksPanel ──────────────────────────────────────────────────────────
 // Read-only "what links here" — the incoming half of an entity's edges (both
@@ -18,16 +18,14 @@ interface BacklinksPanelProps {
 }
 
 export default function BacklinksPanel({ entityType, entityId, compact }: BacklinksPanelProps) {
-  const [backlinks, setBacklinks] = useState<ResolvedLink[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setBacklinks(null);
-    apiGetBacklinks(entityType, entityId)
-      .then((r) => { if (!cancelled) setBacklinks(r.backlinks); })
-      .catch(() => { if (!cancelled) setBacklinks([]); });
-    return () => { cancelled = true; };
-  }, [entityType, entityId]);
+  // `null` still means "not loaded yet" to the render below, which is exactly
+  // what `loading` is — so the two are combined rather than tracked twice.
+  const { data: loaded, loading, error } = useAsyncData(
+    { entityType, entityId },
+    async () => (await apiGetBacklinks(entityType, entityId)).backlinks,
+    null as ResolvedLink[] | null,
+  );
+  const backlinks: ResolvedLink[] | null = loading ? null : (loaded ?? (error ? [] : null));
 
   if (backlinks !== null && backlinks.length === 0 && compact) return null;
 
