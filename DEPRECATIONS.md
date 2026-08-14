@@ -89,21 +89,21 @@ just removing this flag.
 
 ---
 
-## `react-hooks/set-state-in-effect` is a warning, not an error
+## `react-hooks/set-state-in-effect` — resolved, back at `error`
 
-`frontend/eslint.config.js` downgrades this rule. That is a deliberate,
-reversible decision with a specific scope, recorded here so nobody re-raises
-it to `error` without also doing the work below.
+This entry used to record a deliberate downgrade to `warn`. That downgrade is
+gone: the rule is `error` in `frontend/eslint.config.js` and the codebase is
+at zero findings. The entry is kept because the *shape* it describes is the
+one a future contributor is most likely to re-introduce.
 
 The rule (from the React Compiler rule set) fires on any synchronous
 `setState` in an effect body. It found five genuine "you might not need an
-effect" cases in this codebase, all fixed — EntryInspector now resets by
-`key` instead of ten setters, UserSettingsModal clamps its tab at render,
-CommandPalette adjusts during render, GPSMergeWizard derives both its file
-list and its gap modes. Those were real: each painted one frame with the
-wrong value before correcting itself.
+effect" cases, all fixed — EntryInspector resets by `key` instead of ten
+setters, UserSettingsModal clamps its tab at render, CommandPalette adjusts
+during render, GPSMergeWizard derives both its file list and its gap modes.
+Those were real: each painted one frame with the wrong value.
 
-What remains is a single shape, repeated across ~24 files:
+The other ~35 findings were a single shape, repeated across ~24 files:
 
 ```tsx
 useEffect(() => {
@@ -113,19 +113,41 @@ useEffect(() => {
 }, [id]);
 ```
 
-Both flagged statements are load-bearing and neither is derivable — the
-value comes from the network. Remove the reset and the previous entity's
-data stays on screen while the new request is in flight; move it into the
+Both flagged statements are load-bearing, which is why the rule could not be
+obeyed at each call site: remove the reset and the previous entity's data
+stays on screen while the new request is in flight; move it into the
 `.then()` and you get the same flash, just later.
 
-**The principled fix** is a shared `useAsyncData(fetcher, deps)` hook that
-owns the loading flag and cancellation, so the rule fires once, inside it.
-That is worth doing on its own merits: those ~24 sites currently hand-roll
-cancellation three different ways (`cancelled`, `alive`, `reqId.current`),
-and about nine of them do something slightly different again. It is a
-refactor of the app's data-loading path, not a lint cleanup, which is why it
-was not folded into an animation sprint.
+**The fix was to stop writing that shape.** `frontend/src/hooks/useAsyncData.ts`
+stores the key the data was fetched FOR, not just the data, so:
 
-Until then: `npm run lint` still reports every one of them, so a genuinely
-new violation is visible; CI gates on `eslint . --quiet`, which fails on
-errors only.
+- `data` is the stored value only while its key still matches the current
+  one, otherwise `initial` — that IS the guard-reset, with no frame where
+  stale data shows against a new key;
+- `loading` is "the current key has no settled result yet", which becomes
+  true the instant the key changes without anyone setting it.
+
+It also replaced three different hand-rolled spellings of cancellation
+(`cancelled`, `alive`, `reqId.current`), takes `debounceMs` for the
+search-as-you-type callers that had a `setTimeout` in the effect, and
+`setData` for lists fetched once and then patched in place. Its tests
+(`hooks/__tests__/useAsyncData.test.tsx`) pin the two behaviours that matter:
+a key change clears the previous key's data in the SAME render, and a stale
+response that resolves after a newer one is discarded.
+
+**What still carries a disable, and why.** Twelve effects are not data loads
+and each has a line-scoped disable next to a `NOTE (set-state-in-effect):`
+comment giving its own reason:
+
+| Site | Why it is not a data load |
+|---|---|
+| `SlashCommandInput` | A DOM measurement — `getBoundingClientRect()` cannot be read during render, and the reset must be synchronous with layout or the popover flashes at its old position. |
+| `AutomationEditorScreen`, `MarkdownListScreen` | Seed EDITABLE buffers the user then types into. A key-derived `data` would discard their edits on the next render. The alternative is a child keyed on the loaded id so it remounts — a larger structural change than the rule warrants. |
+| `GraphScreen`, `KnowledgeScreen` | Consume a one-shot signal (a store field, a URL param) and clear it. There is nothing to key on: the signal IS the event, and it is gone afterwards. |
+| `FilesScreen` (upload wizard) | A drag/drop handoff — the files are already dropped when the wizard opens, and the upload starts here, so it cannot move into render. |
+| `SharePage` (auto-preview) | Starts a side effect on entering a state: an unprotected file fetches bytes and mints a blob URL. `previewKind` deliberately stays `'none'` until a preview actually starts. |
+| The five public share pages | Password-gated state MACHINES. One fetch picks between notfound / private / error / expired / password-required / ready, and the password branch waits for a credential nobody has typed yet. `data` derived from a key cannot express "which terminal state are we in". These are the app's only unauthenticated surface, so they keep the shape that has been verified. |
+
+If you add a data-loading site, use `useAsyncData` — do not re-introduce the
+effect shape above, and do not downgrade the rule again. A new finding is
+now signal, not noise.

@@ -22,8 +22,13 @@ import { motion } from '../components/animate-ui/motion';
 import { EASE_STANDARD } from '../components/animate-ui/motionTokens';
 import MotionIn from '../components/animate-ui/MotionIn';
 import MotionButton from '../components/animate-ui/MotionButton';
+import useAsyncData from '../hooks/useAsyncData';
 
 // ── Screen ────────────────────────────────────────────────────────────────────
+/** Stable identities — see useAsyncData's `initial`. */
+const EMPTY_WS_MEMBERS: WorkspaceMember[] = [];
+const EMPTY_MENTION_MEMBERS: MentionMember[] = [];
+
 export default function MarkdownListScreen() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -60,24 +65,19 @@ export default function MarkdownListScreen() {
   // shared workspace.
   const currentUserId = useAuthStore(s => s.userId);
   const [mdWorkspaceId, setMdWorkspaceId] = useState<string | null>(null);
-  const [wsMembers, setWsMembers] = useState<WorkspaceMember[]>([]);
-  const [mdInvitees, setMdInvitees] = useState<MentionMember[]>([]);
-  useEffect(() => {
-    if (!mdWorkspaceId) { setWsMembers([]); return; }
-    let alive = true;
-    apiGetWorkspaceMembers(mdWorkspaceId).then(r => { if (alive) setWsMembers(r.members); }).catch(() => {});
-    return () => { alive = false; };
-  }, [mdWorkspaceId]);
+  const { data: wsMembers } = useAsyncData<WorkspaceMember[]>(
+    mdWorkspaceId ?? null,
+    async () => (await apiGetWorkspaceMembers(mdWorkspaceId!)).members,
+    EMPTY_WS_MEMBERS,
+  );
   // People invited directly to this page can be @-mentioned even with no
   // workspace members (a private page in a solo workspace shared with someone).
-  useEffect(() => {
-    if (!mdId) { setMdInvitees([]); return; }
-    let alive = true;
-    apiGetItemMembers('markdownList', mdId)
-      .then(r => { if (alive) setMdInvitees(r.members.map(m => ({ id: m.userId, username: m.username, fullName: m.fullName }))); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, [mdId]);
+  const { data: mdInvitees } = useAsyncData<MentionMember[]>(
+    mdId ?? null,
+    async () => (await apiGetItemMembers('markdownList', mdId!)).members
+      .map(m => ({ id: m.userId, username: m.username, fullName: m.fullName })),
+    EMPTY_MENTION_MEMBERS,
+  );
   const mentionMembers: MentionMember[] = (() => {
     const byId = new Map<string, MentionMember>();
     for (const m of wsMembers) if (m.userId !== currentUserId) byId.set(m.userId, { id: m.userId, username: m.username, fullName: m.fullName ?? null });
@@ -85,9 +85,15 @@ export default function MarkdownListScreen() {
     return [...byId.values()];
   })();
 
+  // NOTE (set-state-in-effect): same case as
+  // AutomationEditorScreen: this SEEDS EDITABLE BUFFERS (name, emoji, colour,
+  // blocks) that the user then types into, so a key-derived `data` would
+  // overwrite their edits on the next render. The synchronous resets are what
+  // stop the previous page's content showing under a new id.
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see the note above
     setLoading(true);
     setNotFound(false);
     // Mint (or reuse a still-fresh cached) per-document image ticket ALONGSIDE

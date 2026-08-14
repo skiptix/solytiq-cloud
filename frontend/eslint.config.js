@@ -19,15 +19,11 @@ export default defineConfig([
       globals: globals.browser,
     },
     rules: {
-      // Sprint 04, Phase 7.1 — a warning, not an error, and deliberately so.
+      // An ERROR, and the codebase is at zero.
       //
       // This rule (from the React Compiler rule set) fires on any synchronous
-      // setState in an effect body. It caught five genuine "you might not need
-      // an effect" cases in this codebase, all now fixed by deriving at render
-      // or keying a component — see the Phase 7.1 commits.
-      //
-      // What remains is one shape, repeated across ~24 files, that the rule
-      // reads as a violation and is not:
+      // setState in an effect body. It arrived reporting ~40 findings across
+      // ~24 files, nearly all of them one shape:
       //
       //   useEffect(() => {
       //     if (!id) { setData([]); return; }   // clear the PREVIOUS id's data
@@ -35,21 +31,28 @@ export default defineConfig([
       //     fetchThing(id).then(r => setData(r));
       //   }, [id]);
       //
-      // Both flagged statements are load-bearing. Drop the reset and the
+      // Both flagged statements are load-bearing — drop the reset and the
       // previous entity's data stays on screen while the new request is in
-      // flight; move it into the async continuation and you get the same
-      // flash. Neither is derivable — the value comes from the network.
+      // flight — which is why the rule could not simply be obeyed at each call
+      // site. The answer was not to obey it there but to stop writing that
+      // shape: `hooks/useAsyncData.ts` stores the key the data was fetched FOR
+      // and derives both `data` and `loading` at render, so neither is ever
+      // set from an effect. Every data-loading site now goes through it.
       //
-      // Downgrading rather than disabling keeps every finding visible in
-      // `npm run lint`, so a future genuine case is still reported; the CI
-      // gate runs `eslint --quiet`, which fails on errors only.
+      // What is left is seven effects that are NOT data loads: a DOM
+      // measurement, two that seed editable form buffers, two that consume a
+      // one-shot navigation signal, one drag/drop handoff, and one that starts
+      // a side effect on entering a state. Each carries its own line-scoped
+      // disable directive next to a NOTE giving the specific reason. Plus the
+      // five public share pages, which are password-
+      // gated state machines rather than loads and disable the rule for the
+      // one effect that runs the machine.
       //
-      // The principled fix is a shared `useAsyncData` hook that owns the
-      // loading flag and cancellation (today ~24 sites hand-roll that with
-      // three different spellings: `cancelled`, `alive`, `reqId.current`).
-      // That is a real refactor of the app's data-loading path, out of scope
-      // for an animation sprint, and tracked in DEPRECATIONS.md.
-      'react-hooks/set-state-in-effect': 'warn',
+      // Keeping this at 'error' is the point: the ~40 findings are gone, so
+      // the next one to appear is a real "you might not need an effect" and
+      // should stop the build. If a new site genuinely needs an exception,
+      // add a disable WITH a reason — do not downgrade this rule again.
+      'react-hooks/set-state-in-effect': 'error',
     },
   },
 ])

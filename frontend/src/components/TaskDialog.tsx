@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import type { Task, TaskAttachment, SharedFile } from '../types';
@@ -28,6 +28,7 @@ import Spinner from '@/components/animate-ui/Spinner';
 import MotionButton from '@/components/animate-ui/MotionButton';
 import MotionIn from '@/components/animate-ui/MotionIn';
 import { useAttachmentDrop } from '../hooks/useAttachmentDrop';
+import useAsyncData from '../hooks/useAsyncData';
 
 function fmtAttSize(bytes: number): string {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
@@ -239,6 +240,12 @@ interface TaskDialogProps {
   isPublic?: boolean;
 }
 
+/** Stable identities — `data` is returned as-is, so an inline [] would be a
+ *  new reference every render and re-run every dependent memo. */
+const EMPTY_MEMBERS: WorkspaceMember[] = [];
+const EMPTY_MENTIONS: MentionMember[] = [];
+const EMPTY_ATTACHMENTS: TaskAttachment[] = [];
+
 export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDialogProps) {
   const isMobile = useMobile();
   const isListTask = task._source === 'list' && Boolean(task._listId);
@@ -257,8 +264,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
   const [creatingList, setCreatingList] = useState(false);
 
   // Attachments
-  const [attachments, setAttachments] = useState<TaskAttachment[]>([]);
-  const [attachLoading, setAttachLoading] = useState(true);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [removingAttId, setRemovingAttId] = useState<string | null>(null);
@@ -270,12 +275,17 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
   const backdropRef = useRef<HTMLDivElement>(null);
   const calBtnRef = useRef<HTMLButtonElement>(null);
 
-  const loadAttachments = useCallback(async () => {
-    try {
-      const r = await apiGetTaskAttachments(task.id);
-      setAttachments(r.attachments);
-    } catch { /* silent */ } finally { setAttachLoading(false); }
-  }, [task.id]);
+  // Loaded once per task, then patched locally as files are uploaded, linked
+  // and removed — hence setData rather than a refetch after every mutation.
+  const {
+    data: attachments,
+    loading: attachLoading,
+    setData: setAttachments,
+  } = useAsyncData(
+    task.id,
+    async () => (await apiGetTaskAttachments(task.id)).attachments,
+    EMPTY_ATTACHMENTS,
+  );
 
   const { lists, setLists, updateListTask, loadFromApi } = useAppStore();
   const { currentWorkspaceId } = useWorkspaceStore();
@@ -293,24 +303,19 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
 
   // Workspace members — powers both the Tag row's picker and the note's
   // @-mention typeahead. Only fetched for items that live in a workspace.
-  const [wsMembers, setWsMembers] = useState<WorkspaceMember[]>([]);
-  const [itemInvitees, setItemInvitees] = useState<MentionMember[]>([]);
-  useEffect(() => {
-    if (!taskWorkspaceId) { setWsMembers([]); return; }
-    let alive = true;
-    apiGetWorkspaceMembers(taskWorkspaceId).then(r => { if (alive) setWsMembers(r.members); }).catch(() => {});
-    return () => { alive = false; };
-  }, [taskWorkspaceId]);
+  const { data: wsMembers } = useAsyncData<WorkspaceMember[]>(
+    taskWorkspaceId ?? null,
+    async () => (await apiGetWorkspaceMembers(taskWorkspaceId!)).members,
+    EMPTY_MEMBERS,
+  );
   // People invited to the task's list can be @-mentioned too (covers a private
   // list in a solo/other workspace where there are no workspace members).
-  useEffect(() => {
-    if (!isListTask || !task._listId) { setItemInvitees([]); return; }
-    let alive = true;
-    apiGetItemMembers('list', task._listId)
-      .then(r => { if (alive) setItemInvitees(r.members.map(m => ({ id: m.userId, username: m.username, fullName: m.fullName }))); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, [isListTask, task._listId]);
+  const { data: itemInvitees } = useAsyncData<MentionMember[]>(
+    isListTask && task._listId ? task._listId : null,
+    async () => (await apiGetItemMembers('list', task._listId!)).members
+      .map(m => ({ id: m.userId, username: m.username, fullName: m.fullName })),
+    EMPTY_MENTIONS,
+  );
   const mentionMembers: MentionMember[] = (() => {
     const byId = new Map<string, MentionMember>();
     for (const m of wsMembers) if (m.userId !== currentUserId) byId.set(m.userId, { id: m.userId, username: m.username, fullName: m.fullName ?? null });
@@ -330,7 +335,6 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
     if (titleRef.current) resizeTA(titleRef.current);
   }, []);
 
-  useEffect(() => { loadAttachments(); }, [loadAttachments]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && !showCal) onClose(); };

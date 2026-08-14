@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useState } from 'react';
 import Icon from '../Icon';
 import EntityChip from '../EntityChip';
 import LinkPicker from '../LinkPicker';
@@ -6,6 +6,7 @@ import type { GraphEntityType, LinkTypeDef, ResolvedLink } from '../../types';
 import { apiGetEntityLinks, apiGetLinkTypes, apiCreateLink, apiDeleteLink } from '../../api/client';
 import { formatSrn } from '../../utils/srn';
 import { useEntitySearch } from '../../hooks/useEntitySearch';
+import useAsyncData from '../../hooks/useAsyncData';
 
 // ── RelationsPanel ──────────────────────────────────────────────────────────
 // Embeddable in any item editor (TaskDialog's properties panel, the milestone
@@ -23,10 +24,10 @@ interface RelationsPanelProps {
   compact?: boolean;
 }
 
+/** Stable identity — see useAsyncData's `initial`. */
+const EMPTY_TYPES: LinkTypeDef[] = [];
+
 export default function RelationsPanel({ entityType, entityId, workspaceId, compact }: RelationsPanelProps) {
-  const [linksByType, setLinksByType] = useState<Record<string, ResolvedLink[]> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [types, setTypes] = useState<LinkTypeDef[]>([]);
   const [adding, setAdding] = useState(false);
   const [newLinkType, setNewLinkType] = useState('references');
   const [query, setQuery] = useState('');
@@ -35,16 +36,18 @@ export default function RelationsPanel({ entityType, entityId, workspaceId, comp
 
   const src = formatSrn(entityType, entityId);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    apiGetEntityLinks(entityType, entityId)
-      .then((r) => setLinksByType(r.linksByType))
-      .catch(() => setLinksByType({}))
-      .finally(() => setLoading(false));
-  }, [entityType, entityId]);
-
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => { apiGetLinkTypes(workspaceId).then((r) => setTypes(r.types)).catch(() => setTypes([])); }, [workspaceId]);
+  // `load` was a useCallback the effect then called — the hook's own `reload`
+  // is the same thing without the round trip.
+  const { data: linksByType, loading, reload: load } = useAsyncData(
+    { entityType, entityId },
+    async () => (await apiGetEntityLinks(entityType, entityId)).linksByType,
+    null as Record<string, ResolvedLink[]> | null,
+  );
+  const { data: types } = useAsyncData(
+    workspaceId,
+    async () => (await apiGetLinkTypes(workspaceId)).types,
+    EMPTY_TYPES,
+  );
 
   const excludeSrns = [src, ...Object.values(linksByType ?? {}).flat().map((l) => (l.direction === 'out' ? l.dst : l.src))];
   const { results: pickerResults, loading: pickerLoading } = useEntitySearch(adding ? query : '', { excludeSrns, workspaceId });

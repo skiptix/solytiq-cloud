@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '../Icon';
 import { apiGetWorkspaceGraph } from '../../api/client';
@@ -6,6 +6,7 @@ import { nodeColor, nodeSize, radialLayout } from '../../utils/graphLayout';
 import useGraphStore from '../../store/useGraphStore';
 import type { GraphNode, GraphEdge } from '../../types';
 import { motion } from '../animate-ui/motion';
+import useAsyncData from '../../hooks/useAsyncData';
 
 const VIEW_W = 100;
 const VIEW_H = 90;
@@ -16,23 +17,25 @@ const PADDING = 10;
  *  a cosmetic stand-in), draws real edges, and clicking a node jumps straight
  *  to it on the full Graph screen. Stretches to fill its column like every
  *  other Dashboard box. */
+/** Stable identity — returned as `data`, so an inline literal would be a new reference every render. */
+const EMPTY_GRAPH: { nodes: GraphNode[]; edges: GraphEdge[] } = { nodes: [], edges: [] };
+
 export default function GraphMiniMap({ workspaceId }: { workspaceId: string }) {
   const navigate = useNavigate();
   const focusNode = useGraphStore((s) => s.focusNode);
-  const [nodes, setNodes] = useState<GraphNode[]>([]);
-  const [edges, setEdges] = useState<GraphEdge[]>([]);
-  const [loading, setLoading] = useState(true);
   const [hovered, setHovered] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    apiGetWorkspaceGraph(workspaceId, { limit: 80 })
-      .then((r) => { if (!cancelled) { setNodes(r.nodes); setEdges(r.edges); } })
-      .catch(() => { if (!cancelled) { setNodes([]); setEdges([]); } })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [workspaceId]);
+  // Nodes and edges arrive together, so they are ONE result rather than two
+  // states that could briefly disagree about which workspace they describe.
+  const { data: graph, loading } = useAsyncData(
+    workspaceId,
+    async () => {
+      const r = await apiGetWorkspaceGraph(workspaceId, { limit: 80 });
+      return { nodes: r.nodes, edges: r.edges };
+    },
+    EMPTY_GRAPH,
+  );
+  const { nodes, edges } = graph;
 
   const { positioned, linePoints } = useMemo(() => {
     const raw = radialLayout(nodes);

@@ -43,6 +43,7 @@ import Spinner from '@/components/animate-ui/Spinner';
 import MotionIn from '../components/animate-ui/MotionIn';
 import MotionButton from '../components/animate-ui/MotionButton';
 import { EASE_STANDARD, EASE_SETTLE, EASE_SPRING } from '../components/animate-ui/motionTokens';
+import useAsyncData from '../hooks/useAsyncData';
 
 function fmtAttSize(bytes: number): string {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
@@ -523,6 +524,10 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
 }
 
 // ── Timeline screen ────────────────────────────────────────────────────────────
+/** Stable identities — see useAsyncData's `initial`. */
+const EMPTY_WS_MEMBERS: WorkspaceMember[] = [];
+const EMPTY_MENTION_MEMBERS: MentionMember[] = [];
+
 export default function TimelineScreen() {
   const isMobile = useMobile();
   // Gates the rail's continuous decorative motion. The root MotionConfig only
@@ -546,23 +551,18 @@ export default function TimelineScreen() {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; milestone: Milestone } | null>(null);
 
   // Workspace members for the milestone note's @-mention typeahead.
-  const [wsMembers, setWsMembers] = useState<WorkspaceMember[]>([]);
-  const [timelineInvitees, setTimelineInvitees] = useState<MentionMember[]>([]);
   const timelineWorkspaceId = timeline?.workspaceId ?? null;
-  useEffect(() => {
-    if (!timelineWorkspaceId) { setWsMembers([]); return; }
-    let alive = true;
-    apiGetWorkspaceMembers(timelineWorkspaceId).then(r => { if (alive) setWsMembers(r.members); }).catch(() => {});
-    return () => { alive = false; };
-  }, [timelineWorkspaceId]);
-  useEffect(() => {
-    if (!timelineId) { setTimelineInvitees([]); return; }
-    let alive = true;
-    apiGetItemMembers('timeline', timelineId)
-      .then(r => { if (alive) setTimelineInvitees(r.members.map(m => ({ id: m.userId, username: m.username, fullName: m.fullName }))); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, [timelineId]);
+  const { data: wsMembers } = useAsyncData<WorkspaceMember[]>(
+    timelineWorkspaceId,
+    async () => (await apiGetWorkspaceMembers(timelineWorkspaceId!)).members,
+    EMPTY_WS_MEMBERS,
+  );
+  const { data: timelineInvitees } = useAsyncData<MentionMember[]>(
+    timelineId ?? null,
+    async () => (await apiGetItemMembers('timeline', timelineId!)).members
+      .map(m => ({ id: m.userId, username: m.username, fullName: m.fullName })),
+    EMPTY_MENTION_MEMBERS,
+  );
   const mentionMembers: MentionMember[] = (() => {
     const byId = new Map<string, MentionMember>();
     for (const m of wsMembers) if (m.userId !== currentUserId) byId.set(m.userId, { id: m.userId, username: m.username, fullName: m.fullName ?? null });

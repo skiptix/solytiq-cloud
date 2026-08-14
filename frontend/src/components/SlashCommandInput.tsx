@@ -77,7 +77,14 @@ export default function SlashCommandInput({
     if (rect) setDropdownPos({ top: rect.bottom + 6, left: rect.left, width: rect.width });
   }, []);
 
+  // NOTE (set-state-in-effect): a MEASUREMENT,
+  // not a data load. The dropdown's position comes from the input's
+  // getBoundingClientRect(), which cannot be read during render, so this is
+  // the layout effect it has to be. The setState here is the reset that
+  // unmounts the dropdown when the menu closes, and it must be synchronous
+  // with layout or the popover flashes at its previous position.
   useLayoutEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see the note above
     if (menu.kind === 'none') { setDropdownPos(null); return; }
     updatePos();
     window.addEventListener('scroll', updatePos, true);

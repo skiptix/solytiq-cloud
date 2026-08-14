@@ -181,7 +181,10 @@ describe.skipIf(!runnable)('B9 — 25-client / 60-second real load test (live Po
       });
     }
     await cleanupFixtures();
-    fs.rmSync(uploadDir, { recursive: true, force: true });
+    // Guarded: when beforeAll fails, `uploadDir` was never assigned, and an
+    // unguarded rmSync(undefined) throws a second, unrelated "path must be a
+    // string" error that buries the real cause in the report.
+    if (uploadDir) fs.rmSync(uploadDir, { recursive: true, force: true });
     await pool.end();
   }, 30_000);
 

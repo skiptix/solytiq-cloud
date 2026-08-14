@@ -127,6 +127,16 @@ export default function SharedTimelinePage() {
     }
   }, [token, fetchContent]);
 
+  // These pages are a state MACHINE, not a data load: one fetch decides
+  // between notfound / private / error / expired / password-required /
+  // ready, and the password branch then waits for a credential the visitor
+  // has not typed yet. useAsyncData's key-derived `data` cannot express
+  // "which of these terminal states are we in", and the synchronous resets
+  // below are what stop a previous token's content and password from being
+  // rendered against a new one. This is the app's only unauthenticated
+  // surface, so it keeps the shape that has been verified rather than being
+  // restructured for the rule's benefit.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!token) { setState('notfound'); return; }
     setState('loading');
@@ -145,6 +155,7 @@ export default function SharedTimelinePage() {
       })
       .catch(() => setState('error'));
   }, [token, fetchContent]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const accent = content?.timeline.color ?? meta?.color ?? 'var(--color-primary)';
   const colorBg = content?.timeline.colorBg ?? meta?.colorBg ?? 'var(--color-surface-gray)';

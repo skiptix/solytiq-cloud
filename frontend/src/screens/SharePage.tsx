@@ -123,6 +123,16 @@ export default function SharePage() {
   const fontBlobRef = useRef<string | null>(null);
   const fontCounterRef = useRef(0);
 
+  // These pages are a state MACHINE, not a data load: one fetch decides
+  // between notfound / private / error / expired / password-required /
+  // ready, and the password branch then waits for a credential the visitor
+  // has not typed yet. useAsyncData's key-derived `data` cannot express
+  // "which of these terminal states are we in", and the synchronous resets
+  // below are what stop a previous token's content and password from being
+  // rendered against a new one. This is the app's only unauthenticated
+  // surface, so it keeps the shape that has been verified rather than being
+  // restructured for the rule's benefit.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!token) { setState('notfound'); return; }
     fetch(`${BASE_URL}/share/${token}`)
@@ -136,6 +146,7 @@ export default function SharePage() {
       })
       .catch(() => setState('error'));
   }, [token]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     return () => {
@@ -216,10 +227,17 @@ export default function SharePage() {
   // `const` arrow function defined further down works at runtime (the effect
   // runs post-mount) but reads as a use-before-declare, which is exactly what
   // react-hooks/immutability flags.
+  // NOTE (set-state-in-effect): starting a
+  // SIDE EFFECT on entering a state: an unprotected file auto-loads its
+  // preview, which fetches bytes and mints a blob URL. previewKind is not
+  // derived from the mime type alone — it stays 'none' until a preview is
+  // actually started, which is what keeps the preview panel out of the
+  // layout before there is anything to put in it.
   useEffect(() => {
     if (state === 'ready' && info && !info.hasPassword) {
       const kind = getPreviewKind(info.mimeType);
       if (kind !== 'none') {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- see the note above
         setPreviewKind(kind);
         triggerPreviewLoad(kind, undefined);
       }

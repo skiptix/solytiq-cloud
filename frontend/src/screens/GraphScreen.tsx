@@ -92,10 +92,16 @@ function ExploreView({ isMobile }: { isMobile: boolean }) {
   // once the simulation has actually seeded a position for it. A short poll
   // rather than a single rAF: the force-sim's own data-sync effect commits
   // asynchronously after this component's first paint.
+  // NOTE (set-state-in-effect): consuming a
+  // one-shot SIGNAL, not deriving state: another screen set focusSrn and
+  // navigated here, and this effect both applies it and clears it
+  // (focusNode(null)) so it fires once. There is no key to derive from — the
+  // signal is the event.
   useEffect(() => {
     if (!focusSrn) return;
     const found = nodes.find((n) => n.srn === focusSrn);
     if (!found) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see the note above
     setSelected(found);
     let attempts = 0;
     const tryCenter = () => {

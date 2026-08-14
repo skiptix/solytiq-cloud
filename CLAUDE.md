@@ -723,9 +723,16 @@ npm run test:e2e           # RouteErrorBoundary chunk-retry regression
 ```
 
 > `npm run lint` reports warnings too; CI gates on `eslint . --quiet`, which
-> fails on errors only. See `react-hooks/set-state-in-effect` in
-> `eslint.config.js` and `DEPRECATIONS.md` for the one rule that is a warning
-> on purpose.
+> fails on errors only. The remaining warnings are all `exhaustive-deps` on
+> effects with a deliberately omitted dep.
+>
+> **Data loading goes through `frontend/src/hooks/useAsyncData.ts`.** It holds
+> the key the data was fetched FOR, so `data` and `loading` are derived at
+> render rather than set from an effect — which is what keeps
+> `react-hooks/set-state-in-effect` at `error` with zero findings. Do not
+> hand-roll the `if (!id) { setData([]); return; } setLoading(true); fetch…`
+> shape again; see `DEPRECATIONS.md` for the twelve non-data-load effects that
+> legitimately carry a disable, and why each one does.
 
 ### Backend
 

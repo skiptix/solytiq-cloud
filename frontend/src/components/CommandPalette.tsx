@@ -8,6 +8,7 @@ import { motion } from './animate-ui/motion';
 import { EASE_STANDARD } from './animate-ui/motionTokens';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import { apiGlobalSearch, apiKnowledgeSearch, type GlobalSearchResult } from '../api/client';
+import useAsyncData from '../hooks/useAsyncData';
 
 // These two open in-app affordances rather than a route — Profile Settings is
 // the account modal (not the admin /settings screen), and Sign Out ends the
@@ -18,6 +19,12 @@ const SETTINGS_RESULTS = [
 ];
 
 type Result = GlobalSearchResult | { type: 'setting'; label: string; sub: string; icon: string; action: 'account-settings' | 'sign-out' } | { type: 'knowledge'; id: string; label: string; sub: string; path: string };
+
+// Stable identities for "no query yet": useAsyncData hands `initial` straight
+// back, so a fresh [] would be a new array on every keystroke and re-run the
+// useMemo below for nothing.
+const EMPTY_SERVER_RESULTS: GlobalSearchResult[] = [];
+const EMPTY_KNOWLEDGE_RESULTS: Extract<Result, { type: 'knowledge' }>[] = [];
 
 const GROUP_COLORS: Record<string, string> = { task: 'var(--color-primary)', list: 'var(--color-blue-mid-7)', setting: 'var(--color-success)', timeline: 'var(--color-pink-mid-1)', milestone: 'var(--color-warning-alt)', meeting: 'var(--color-red-mid-2)', workspace: 'var(--color-purple-mid-3)', knowledge: 'var(--color-primary)' };
 const GROUP_LABELS: Record<string, string> = { task: 'Tasks', list: 'Boards', setting: 'Settings', timeline: 'Timelines', milestone: 'Milestones', meeting: 'Meetings', workspace: 'Workspaces', knowledge: 'From your content' };
@@ -55,9 +62,6 @@ export default function CommandPalette({ onClose, onNavigate, onOpenAccountSetti
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const [lastQuery, setLastQuery] = useState(query);
-  const [serverResults, setServerResults] = useState<GlobalSearchResult[]>([]);
-  const [knowledgeResults, setKnowledgeResults] = useState<Extract<Result, { type: 'knowledge' }>[]>([]);
-  const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -66,48 +70,38 @@ export default function CommandPalette({ onClose, onNavigate, onOpenAccountSetti
   }, []);
 
   const q = query.trim().toLowerCase();
+  // A query under two characters is "nothing to search", not "a search that
+  // returned nothing" — a null key, so both groups fall back to empty and
+  // `loading` goes false without anything setting it.
+  const searchKey = q.length >= 2 ? q : null;
 
-  useEffect(() => {
-    if (!q || q.length < 2) {
-      setServerResults([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const ac = new AbortController();
-    const timer = setTimeout(() => {
-      apiGlobalSearch(q, ac.signal)
-        .then(res => setServerResults(res.results))
-        .catch(err => { if (err.name !== 'AbortError') console.error(err); })
-        .finally(() => setLoading(false));
-    }, 250);
-    return () => { clearTimeout(timer); ac.abort(); };
-  }, [q]);
+  const { data: serverResults, loading } = useAsyncData(
+    searchKey,
+    (signal) => apiGlobalSearch(q, signal).then(res => res.results),
+    EMPTY_SERVER_RESULTS,
+    { debounceMs: 250 }
+  );
 
   // Knowledge Layer — semantic/lexical search over note & page CONTENT (not
   // just titles), kept as a separate lower-priority group appended after the
   // structural (title-match) results above. Best-effort: any failure (feature
   // disabled, no provider configured, transient error) just leaves this group
-  // empty rather than surfacing an error in the palette.
-  useEffect(() => {
-    if (!q || q.length < 2) { setKnowledgeResults([]); return; }
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      apiKnowledgeSearch({ q, limit: 5 })
-        .then(res => {
-          if (cancelled) return;
-          setKnowledgeResults(res.results.map(hit => ({
-            type: 'knowledge' as const,
-            id: hit.entity.srn,
-            label: hit.entity.title || 'Untitled',
-            sub: hit.chunkContent.slice(0, 100),
-            path: hit.entity.deepLink ?? '/dashboard',
-          })));
-        })
-        .catch(() => { if (!cancelled) setKnowledgeResults([]); });
-    }, 300);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [q]);
+  // empty rather than surfacing an error in the palette, hence the catch here
+  // rather than reading the hook's `error`.
+  const { data: knowledgeResults } = useAsyncData(
+    searchKey,
+    () => apiKnowledgeSearch({ q, limit: 5 })
+      .then(res => res.results.map(hit => ({
+        type: 'knowledge' as const,
+        id: hit.entity.srn,
+        label: hit.entity.title || 'Untitled',
+        sub: hit.chunkContent.slice(0, 100),
+        path: hit.entity.deepLink ?? '/dashboard',
+      })))
+      .catch(() => EMPTY_KNOWLEDGE_RESULTS),
+    EMPTY_KNOWLEDGE_RESULTS,
+    { debounceMs: 300 }
+  );
 
   const allResults: Result[] = useMemo(() => {
     const settingsResults = q ? SETTINGS_RESULTS.filter(s => s.label.toLowerCase().includes(q)).slice(0, 3) : [];

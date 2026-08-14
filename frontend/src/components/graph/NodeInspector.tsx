@@ -11,7 +11,6 @@
 // surfacing the raw internal type name again here would just be jargon.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ResolvedLink, LinkTypeDef } from '../../types';
 import type { NetRenderNode } from '../../utils/graphHierarchy';
@@ -21,6 +20,7 @@ import { nodeColor, nodeIcon, ENTITY_TYPE_LABEL } from '../../utils/graphLayout'
 import { EASE_SETTLE } from '../animate-ui/motionTokens';
 import MotionIn from '../animate-ui/MotionIn';
 import MotionButton from '../animate-ui/MotionButton';
+import useAsyncData from '../../hooks/useAsyncData';
 
 const POPUP_W = 292;
 const MAX_H = 400;
@@ -52,29 +52,27 @@ interface NodeInspectorProps {
   onBreadcrumbClick: (node: NetRenderNode) => void;
 }
 
+/** Stable identity — returned as `data`, so an inline literal would be a new reference every render. */
+const EMPTY_LINK_TYPES: Record<string, LinkTypeDef> = {};
+
 export default function NodeInspector({ node, breadcrumb, anchor, containerSize, workspaceId, onClose, onCenter, onBreadcrumbClick }: NodeInspectorProps) {
   const navigate = useNavigate();
-  const [linksByType, setLinksByType] = useState<Record<string, ResolvedLink[]> | null>(null);
-  const [linkTypeDefs, setLinkTypeDefs] = useState<Record<string, LinkTypeDef>>({});
-  const [loading, setLoading] = useState(false);
   const isWorkspace = node.type === 'workspace';
 
-  useEffect(() => {
-    if (isWorkspace) { setLinksByType(null); return; }
-    let cancelled = false;
-    setLoading(true);
-    apiGetEntityLinks(node.type, node.id)
-      .then((r) => { if (!cancelled) setLinksByType(r.linksByType); })
-      .catch(() => { if (!cancelled) setLinksByType({}); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [node.type, node.id, isWorkspace]);
+  // The synthetic workspace root is not a real entity and has no links to
+  // fetch — expressed as "nothing to load" rather than a guard that clears
+  // state after the fact.
+  const { data: linksByType, loading } = useAsyncData(
+    isWorkspace ? null : { type: node.type, id: node.id },
+    async () => (await apiGetEntityLinks(node.type, node.id)).linksByType,
+    null as Record<string, ResolvedLink[]> | null,
+  );
 
-  useEffect(() => {
-    apiGetLinkTypes(workspaceId)
-      .then((r) => setLinkTypeDefs(Object.fromEntries(r.types.map((t) => [t.key, t]))))
-      .catch(() => {});
-  }, [workspaceId]);
+  const { data: linkTypeDefs } = useAsyncData(
+    workspaceId,
+    async () => Object.fromEntries((await apiGetLinkTypes(workspaceId)).types.map((t) => [t.key, t])),
+    EMPTY_LINK_TYPES,
+  );
 
   const relationGroups = Object.entries(linksByType ?? {})
     .filter(([key]) => linkTypeDefs[key]?.showInGraph !== false)

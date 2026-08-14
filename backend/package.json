@@ -9,7 +9,7 @@
     "dev": "ts-node-dev --respawn src/index.ts",
     "test": "vitest run --exclude \"**/*.integration.test.ts\" --exclude \"**/*.perf.test.ts\"",
     "test:integration": "vitest run --no-file-parallelism --passWithNoTests .integration.test.ts",
-    "test:performance": "vitest run --passWithNoTests --testTimeout=300000 --hookTimeout=600000 .perf.test.ts"
+    "test:performance": "vitest run --no-file-parallelism --passWithNoTests --testTimeout=300000 --hookTimeout=600000 .perf.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1106.0",
