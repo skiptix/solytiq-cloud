@@ -138,16 +138,18 @@ export default function useAsyncData<T>(
 
   const reload = useCallback(() => setReloadTick((n) => n + 1), []);
 
-  const initialRef = useRef(initial);
-  initialRef.current = initial;
+  // `initial` is a dependency rather than a ref written during render: writing
+  // a ref mid-render is exactly what react-hooks/refs forbids, and callers are
+  // already expected to pass a stable identity here (see the EMPTY_* consts at
+  // every call site) precisely because `data` returns it as-is.
   const setData = useCallback((update: T | ((prev: T) => T)) => {
     setSettled((prev) => {
       if (keyId === null) return prev;
-      const base = prev?.key === keyId ? prev.data : initialRef.current;
+      const base = prev?.key === keyId ? prev.data : initial;
       const next = typeof update === 'function' ? (update as (p: T) => T)(base) : update;
       return { key: keyId, data: next };
     });
-  }, [keyId]);
+  }, [keyId, initial]);
 
   return {
     data: matches ? (settled as { key: string; data: T }).data : initial,

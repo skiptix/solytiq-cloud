@@ -34,6 +34,7 @@ import ModalIn from '@/components/animate-ui/ModalIn';
 import { EASE_SETTLE, EASE_STANDARD } from '../components/animate-ui/motionTokens';
 import MotionIn from '../components/animate-ui/MotionIn';
 import MotionButton from '../components/animate-ui/MotionButton';
+import useAsyncData from '../hooks/useAsyncData';
 
 // A term's bubble grows with how much its definition actually holds — summary,
 // aliases, and written block content — not just its explicit relation degree.
@@ -62,6 +63,9 @@ function entryIdFromSrn(srn: string): string | null {
   return srn.startsWith(ENTRY_PREFIX) ? srn.slice(ENTRY_PREFIX.length) : null;
 }
 
+/** Stable identities — see useAsyncData's `initial`. */
+const EMPTY_MENTION_MEMBERS: MentionMember[] = [];
+
 export default function KnowledgeScreen() {
   const isMobile = useMobile();
   const navigate = useNavigate();
@@ -84,7 +88,6 @@ export default function KnowledgeScreen() {
   const [createError, setCreateError] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [scanMessage, setScanMessage] = useState('');
-  const [members, setMembers] = useState<MentionMember[]>([]);
   const graphRef = useRef<{ centerOn: (srn: string) => void; resetCamera: () => void; hasNode: (srn: string) => boolean } | null>(null);
 
   // Term search — filters the loaded entries client-side and, on pick, centers
@@ -122,14 +125,13 @@ export default function KnowledgeScreen() {
   }, [canWrite]);
   useEffect(() => { if (base) void loadSuggestions(); }, [base, loadSuggestions]);
 
-  useEffect(() => {
-    if (!workspaceId) { setMembers([]); return; }
-    let alive = true;
-    apiGetWorkspaceMembers(workspaceId)
-      .then(r => { if (alive) setMembers(r.members.filter(m => m.userId !== currentUserId).map(m => ({ id: m.userId, username: m.username, fullName: m.fullName ?? null }))); })
-      .catch(() => { /* mentions simply stay unavailable */ });
-    return () => { alive = false; };
-  }, [workspaceId, currentUserId]);
+  const { data: members } = useAsyncData<MentionMember[]>(
+    workspaceId ? { workspaceId, currentUserId } : null,
+    async () => (await apiGetWorkspaceMembers(workspaceId!)).members
+      .filter(m => m.userId !== currentUserId)
+      .map(m => ({ id: m.userId, username: m.username, fullName: m.fullName ?? null })),
+    EMPTY_MENTION_MEMBERS,
+  );
 
   // Real relations for the net. The workspace graph payload is server-cached
   // and keyed on the workspace's sync cursor, so re-fetching it after an edit
