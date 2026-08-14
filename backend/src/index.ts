@@ -55,6 +55,8 @@ import agentRouter from './routes/agent';
 import { sweepExpiredProposals } from './agent/runtime';
 import { sweepMigrationVerification } from './graph/verifyMigration';
 import { sweepGraphMetrics } from './graph/metrics';
+import { sweepMemoryEmbeddings } from './quickAdd/embedder';
+import { sweepDirtyBubbles } from './quickAdd/kbBubble';
 import { isAppInstalled } from './appsRegistry';
 import { startSyncDispatcher, stopSyncDispatcher, SYNC_CHANNEL } from './syncLog';
 import { sweepScheduledAutomations, releaseUnstartedScheduleLeases } from './automationEngine';
@@ -1383,6 +1385,17 @@ async function start() {
     // embedding provider; every step degrades gracefully when pgvector or a
     // provider key isn't configured (see knowledge/embeddingWorker.ts).
     timers.push(setInterval(() => { void sweepEmbeddingQueue(); }, 2 * 60 * 1000));
+
+    // Quick Add: embed newly-learned placement memories so the semantic
+    // matching channel can use them, and reconcile the Knowledge Base bubble of
+    // any board whose memory changed. Both are debounced-by-sweep rather than
+    // per-write — a board being reorganized would otherwise mean a provider
+    // call and a JSONB rewrite per dragged card. Same degrade-gracefully
+    // contract as the embedding queue above: no pgvector or no provider key and
+    // the embedding pass is simply a no-op, with prediction continuing on its
+    // trigram channels.
+    timers.push(setInterval(() => { void sweepMemoryEmbeddings(); }, 3 * 60 * 1000));
+    timers.push(setInterval(() => { void sweepDirtyBubbles(); }, 2 * 60 * 1000));
 
     timers.push(setInterval(sweepExpiredAssetTickets, 5 * 60 * 1000));
     timers.push(setInterval(sweepExpiredShareSessions, 5 * 60 * 1000));

@@ -103,10 +103,27 @@ export interface List {
   viewMode?: 'list' | 'kanban' | 'timeline';   // Board screen's layout — persisted per list, synced across devices
   isArchived?: boolean;   // hidden from the normal workspace view; see the Archived modal
   archivedAt?: string | null;
+  quickAddEnabled?: boolean;      // shows the Quick Add bar + staging tray under the board's header
+  quickAddEntryId?: string | null; // this board's Knowledge Base bubble, where its learned placements are rendered
+  /** Items on this board that sit in NO section — the Quick Add staging tray,
+   *  rendered directly beneath the Quick Add bar. Real tasks: checkable,
+   *  openable, draggable into a section, and counted in the board's progress. */
+  stagedTasks?: Task[];
   linkedProgress?: {
     total: number;
     completed: number;
   };
+}
+
+/** One "move it to {SECTION}" suggestion from the Quick Add predictor. */
+export interface QuickAddSuggestion {
+  sectionId: string;
+  label: string;
+  emoji: string | null;
+  /** 0..1 — the winner's share of the vote, dampened by how much evidence backs it. */
+  confidence: number;
+  /** Why this section was suggested, e.g. `"Fix login bug" went here 4× before`. */
+  reason: string;
 }
 
 export interface Folder {

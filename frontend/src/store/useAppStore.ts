@@ -83,6 +83,13 @@ const normList = (l: List): List => ({
   ...l,
   parentTaskId: l.parentTaskId != null ? Number(l.parentTaskId) : null,
   sections: l.sections.map((s) => ({ ...s, tasks: s.tasks.map(normTask) })),
+  // The Quick Add tray needs the SAME id coercion as a section's tasks. Task
+  // ids are BIGINT, so they arrive from the API as strings; everything in the
+  // app compares them as numbers. Miss this and a staged item looks fine but
+  // no lookup by id ever matches it — which is exactly what happened when
+  // stagedTasks was first added to the payload and only the section path was
+  // normalized.
+  stagedTasks: (l.stagedTasks ?? []).map(normTask),
 });
 const normTimeline = (t: Timeline): Timeline => ({ ...t, milestones: t.milestones ?? [] });
 
@@ -404,10 +411,13 @@ const useAppStore = create<AppState>()(
       },
 
       updateListTask: (listId, taskId, updates) => {
-        const prevTask = get()
-          .lists.find((l) => l.id === listId)
-          ?.sections.flatMap((s) => s.tasks)
-          .find((t) => t.id === taskId);
+        const listBefore = get().lists.find((l) => l.id === listId);
+        // A Quick Add staged item is a real task on this board that simply
+        // isn't in a section yet, so every task action has to look in the tray
+        // as well — otherwise checking off a staged item silently no-ops.
+        const prevTask =
+          listBefore?.sections.flatMap((s) => s.tasks).find((t) => t.id === taskId) ??
+          listBefore?.stagedTasks?.find((t) => t.id === taskId);
         set((state) => ({
           lists: state.lists.map((list) => {
             if (list.id !== listId) return list;
@@ -417,10 +427,18 @@ const useAppStore = create<AppState>()(
                 t.id === taskId ? { ...t, ...updates } : t
               ),
             }));
-            const allTasks = updatedSections.flatMap((s) => s.tasks);
+            const updatedStaged = (list.stagedTasks ?? []).map((t) =>
+              t.id === taskId ? { ...t, ...updates } : t
+            );
+            // Staged items count toward the board's progress — they're work
+            // that exists, just not filed yet. This mirrors what the server
+            // counts, so the hero percentage doesn't jump when a suggestion is
+            // accepted and an item moves from the tray into a section.
+            const allTasks = [...updatedSections.flatMap((s) => s.tasks), ...updatedStaged];
             return {
               ...list,
               sections: updatedSections,
+              stagedTasks: updatedStaged,
               linkedProgress: {
                 total: allTasks.length,
                 completed: allTasks.filter((t) => t.checked).length,
@@ -439,6 +457,7 @@ const useAppStore = create<AppState>()(
                     ...sec,
                     tasks: sec.tasks.map((t) => (t.id === taskId ? prevTask : t)),
                   })),
+                  stagedTasks: (list.stagedTasks ?? []).map((t) => (t.id === taskId ? prevTask : t)),
                 };
               }),
             }));
@@ -463,6 +482,9 @@ const useAppStore = create<AppState>()(
                     ...sec,
                     tasks: sec.tasks.filter((t) => t.id !== taskId),
                   })),
+                  // The Quick Add tray holds real tasks — a delete has to reach
+                  // them too, or a deleted staged item lingers on screen.
+                  stagedTasks: (list.stagedTasks ?? []).filter((t) => t.id !== taskId),
                 }
           ),
         }));
@@ -737,14 +759,10 @@ const useAppStore = create<AppState>()(
           if (tasksRes && owns.tasks) update.dashTasks = tasksRes.tasks.map(t => ({ ...t, id: Number(t.id) }));
           if (foldersRes && owns.folders) update.folders = foldersRes.folders;
           if (timelinesRes && owns.timelines) update.timelines = timelinesRes.timelines.map(t => ({ ...t, milestones: t.milestones ?? [] }));
-          if (listsRes && owns.lists) update.lists = listsRes.lists.map(l => ({
-            ...l,
-            parentTaskId: l.parentTaskId != null ? Number(l.parentTaskId) : null,
-            sections: l.sections.map(s => ({
-              ...s,
-              tasks: s.tasks.map(t => ({ ...t, id: Number(t.id) })),
-            })),
-          }));
+          // Uses the shared normalizer rather than an inline copy of it. The
+          // copy that used to live here is precisely how the two data paths
+          // drifted the one time it mattered — see normList's own comment.
+          if (listsRes && owns.lists) update.lists = listsRes.lists.map(normList);
           if (trashRes && owns.trash) update.trashTasks = trashRes.trash.map(tr => ({
             id: Number(tr.id),
             taskId: Number(tr.taskId),

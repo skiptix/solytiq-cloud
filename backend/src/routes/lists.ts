@@ -17,6 +17,9 @@ import { isItemSharedWith } from '../itemShares';
 import { objectAccessCondition, workspaceMembersJoin } from '../objectPolicy';
 import { syncInlineLinksForText } from '../graph/inlineLinks';
 import { enqueueEmbedding } from '../knowledge/queue';
+import { recordPlacement, getMemoryStats } from '../quickAdd/memory';
+import { suggestSections } from '../quickAdd/predict';
+import { ensureBubble, syncBubble } from '../quickAdd/kbBubble';
 import { decodeKeysetCursor, encodeKeysetCursor, parsePageLimit, paginateRows, type KeysetCursor } from '../pagination';
 
 const router = Router();
@@ -51,6 +54,8 @@ interface ListRow {
   view_mode: string;
   is_archived?: boolean;
   archived_at?: string | null;
+  quick_add_enabled?: boolean;
+  quick_add_kb_entry_id?: string | null;
 }
 
 interface SectionRow {
@@ -126,10 +131,25 @@ function sanitizeSection(section: SectionRow, tasks: ReturnType<typeof sanitizeT
   };
 }
 
+/**
+ * Items belonging to this list that sit in NO section — the Quick Add staging
+ * tray, rendered directly under the Quick Add bar.
+ *
+ * `tasks.section_id` has always been `ON DELETE SET NULL`, so these rows could
+ * already exist before this feature: deleting a section orphaned its items into
+ * a state no screen rendered. They were still counted in the board's progress
+ * totals, which is what made an orphan look like data loss rather than a hidden
+ * row. Surfacing the tray gives every one of them a visible home again.
+ */
+function stagedTasksOf(tasksBySection: Record<string, ReturnType<typeof sanitizeTask>[]>, listId: string) {
+  return (tasksBySection['__none__'] ?? []).filter((t) => t.listId === listId);
+}
+
 function sanitizeList(
   list: ListRow,
   sections: ReturnType<typeof sanitizeSection>[],
-  linkedProgress?: { total: number; completed: number }
+  linkedProgress?: { total: number; completed: number },
+  stagedTasks: ReturnType<typeof sanitizeTask>[] = []
 ) {
   return {
     id:           list.id,
@@ -156,7 +176,10 @@ function sanitizeList(
     viewMode:     (list.view_mode === 'kanban' || list.view_mode === 'timeline' ? list.view_mode : 'list') as 'list' | 'kanban' | 'timeline',
     isArchived:   list.is_archived ?? false,
     archivedAt:   list.archived_at ?? null,
+    quickAddEnabled: list.quick_add_enabled ?? false,
+    quickAddEntryId: list.quick_add_kb_entry_id ?? null,
     sections,
+    stagedTasks,
     ...(linkedProgress !== undefined ? { linkedProgress } : {}),
   };
 }
@@ -253,7 +276,7 @@ export async function buildListsForUser(userId: string, workspaceId?: string, in
   );
 
   return listsResult.rows.map((list: ListRow) =>
-    sanitizeList(list, sectionsByList[list.id] ?? [], taskCountByList[list.id] ?? { total: 0, completed: 0 })
+    sanitizeList(list, sectionsByList[list.id] ?? [], taskCountByList[list.id] ?? { total: 0, completed: 0 }, stagedTasksOf(tasksBySection, list.id))
   );
 }
 
@@ -338,7 +361,7 @@ export async function buildListsPageForUser(
   }
 
   const lists = page.map((list) =>
-    sanitizeList(list, sectionsByList[list.id] ?? [], taskCountByList[list.id] ?? { total: 0, completed: 0 })
+    sanitizeList(list, sectionsByList[list.id] ?? [], taskCountByList[list.id] ?? { total: 0, completed: 0 }, stagedTasksOf(tasksBySection, list.id))
   );
   return { lists, nextCursor };
 }
@@ -382,7 +405,7 @@ export async function getListForUser(userId: string, listId: string) {
     total: tasksRes.rows.length,
     completed: tasksRes.rows.filter((t) => t.checked).length,
   };
-  return sanitizeList(list, sections, progress);
+  return sanitizeList(list, sections, progress, stagedTasksOf(tasksBySection, listId));
 }
 
 /**
@@ -442,7 +465,7 @@ export async function getListsForUserBatch(userId: string, listIds: string[]): P
   for (const list of listsRes.rows) {
     map.set(
       list.id,
-      sanitizeList(list, sectionsByList[list.id] ?? [], progressByList[list.id] ?? { total: 0, completed: 0 })
+      sanitizeList(list, sectionsByList[list.id] ?? [], progressByList[list.id] ?? { total: 0, completed: 0 }, stagedTasksOf(tasksBySection, list.id))
     );
   }
   return map;
@@ -762,7 +785,7 @@ router.put('/:listId/share', async (req: Request, res: Response) => {
 router.put('/:listId', async (req: Request, res: Response) => {
   try {
     const { listId } = req.params;
-    const { name, emoji, color, colorBg, subtitle, position, isPublic, folderId, cascade, viewMode } = req.body as {
+    const { name, emoji, color, colorBg, subtitle, position, isPublic, folderId, cascade, viewMode, quickAddEnabled } = req.body as {
       name?: string;
       emoji?: string;
       color?: string;
@@ -773,8 +796,10 @@ router.put('/:listId', async (req: Request, res: Response) => {
       folderId?: string | null;
       cascade?: boolean;
       viewMode?: string;
+      quickAddEnabled?: boolean;
     };
     const validViewMode = viewMode === 'list' || viewMode === 'kanban' || viewMode === 'timeline' ? viewMode : null;
+    const validQuickAdd = typeof quickAddEnabled === 'boolean' ? quickAddEnabled : null;
 
     const existing = await query<ListRow>('SELECT user_id, workspace_id, folder_id, name FROM lists WHERE id = $1', [listId]);
     if (existing.rows.length === 0) {
@@ -818,7 +843,7 @@ router.put('/:listId', async (req: Request, res: Response) => {
     }
 
     const updateParams: unknown[] = [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, isPublic ?? null, listId,
-      updateFolderId, folderId ?? null, validViewMode];
+      updateFolderId, folderId ?? null, validViewMode, validQuickAdd];
     const versionClause = versionGuardSql(updateParams, expectedVersion);
     const updateSql =
       `UPDATE lists
@@ -830,7 +855,8 @@ router.put('/:listId', async (req: Request, res: Response) => {
            position  = COALESCE($6, position),
            is_public = COALESCE($7, is_public),
            folder_id = CASE WHEN $9 THEN $10 ELSE folder_id END,
-           view_mode = COALESCE($11, view_mode)
+           view_mode = COALESCE($11, view_mode),
+           quick_add_enabled = COALESCE($12, quick_add_enabled)
        WHERE id = $8${versionClause}
        RETURNING *`;
 
@@ -852,6 +878,21 @@ router.put('/:listId', async (req: Request, res: Response) => {
       if (failure.notFound) { res.status(404).json({ error: 'List not found' }); return; }
       res.status(409).json({ error: 'version_conflict', currentVersion: failure.currentVersion, list: await getListForUser(req.userId!, listId) });
       return;
+    }
+
+    // Turning Quick Add on gives the board its Knowledge Base bubble (creating
+    // the workspace's Knowledge Base first if it doesn't have one) and fills it
+    // from whatever the board already remembers. Fire-and-forget: the toggle is
+    // saved either way, and the bubble sweep reconciles a failure on its next
+    // pass rather than turning a settings save into an error the user has to
+    // resolve.
+    if (validQuickAdd === true) {
+      const saved = result.rows[0];
+      if (saved.workspace_id) {
+        void ensureBubble({ listId, listName: saved.name, workspaceId: saved.workspace_id, userId: saved.user_id })
+          .then((entryId) => { if (entryId) return syncBubble(listId); })
+          .catch((e) => werr('quickAdd bubble provisioning failed (non-fatal):', e));
+      }
     }
 
     res.json({ list: sanitizeList(result.rows[0], []) });
@@ -1219,7 +1260,9 @@ router.delete('/sections/:sectionId', async (req: Request, res: Response) => {
 export async function createListTask(
   exec: QueryExec,
   listId: string,
-  sectionId: string,
+  // null = the Quick Add staging tray: a real item on this board that hasn't
+  // been filed into a section yet. See stagedTasksOf() above.
+  sectionId: string | null,
   userId: string,
   fields: {
     id?: number;
@@ -1236,17 +1279,23 @@ export async function createListTask(
   // An item ALWAYS inherits its parent list's workspace — never trust a
   // client-supplied workspaceId here, so an item can never drift out of the
   // workspace its list lives in (which would make it vanish on reload).
-  const sectionInfo = await exec(
-    `SELECT l.workspace_id, l.name FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
-    [sectionId, listId]
-  );
-  if (sectionInfo.rows.length === 0) return null;
-  const itemWorkspaceId = (sectionInfo.rows[0] as { workspace_id: string | null }).workspace_id;
-  const listName = (sectionInfo.rows[0] as { name: string }).name;
+  const listInfo = sectionId
+    ? await exec(
+        `SELECT l.workspace_id, l.name FROM sections s JOIN lists l ON s.list_id = l.id WHERE s.id = $1 AND l.id = $2`,
+        [sectionId, listId]
+      )
+    : await exec(`SELECT workspace_id, name FROM lists WHERE id = $1`, [listId]);
+  if (listInfo.rows.length === 0) return null;
+  const itemWorkspaceId = (listInfo.rows[0] as { workspace_id: string | null }).workspace_id;
+  const listName = (listInfo.rows[0] as { name: string }).name;
 
   const taskId = fields.id ?? (Date.now() * 1000 + crypto.randomInt(1000));
 
-  const posResult = await exec(`SELECT MAX(position) AS max FROM tasks WHERE section_id = $1`, [sectionId]);
+  // Staged items are positioned against the tray (the board's other
+  // section-less items), not against a section that doesn't apply to them.
+  const posResult = sectionId
+    ? await exec(`SELECT MAX(position) AS max FROM tasks WHERE section_id = $1`, [sectionId])
+    : await exec(`SELECT MAX(position) AS max FROM tasks WHERE list_id = $1 AND section_id IS NULL`, [listId]);
   const maxPos = (posResult.rows[0] as { max: string | null }).max;
   const nextPos = maxPos !== null ? parseInt(maxPos, 10) + 1 : 0;
 
@@ -1258,6 +1307,17 @@ export async function createListTask(
     [taskId, userId, fields.title, fields.note ?? null, fields.deadline ?? null, fields.priority ?? null, fields.badge ?? null, listId, sectionId, nextPos, fields.linkedListId ?? null, fields.linkedListType ?? null, itemWorkspaceId]
   );
   const task = result.rows[0] as unknown as TaskRow;
+
+  // Quick Add memory. A create straight into a section is evidence ("an item
+  // called this belongs there"); a create into the staging tray is recorded as
+  // history but teaches nothing yet — recordPlacement only updates the
+  // projection when the item actually landed somewhere.
+  await recordPlacement(exec, {
+    listId, taskId: task.id, title: task.title,
+    fromSectionId: null, toSectionId: sectionId,
+    eventType: sectionId ? 'created' : 'staged',
+    actor,
+  });
 
   if (itemWorkspaceId) {
     const { fireTrigger } = await import('../automationEngine');
@@ -1291,6 +1351,11 @@ export async function updateListTaskFields(
     badge?: string | null;
     position?: number | null;
     sectionId?: string | null;
+    /** Explicitly move the item BACK to the Quick Add staging tray. `sectionId: null`
+     *  can't express this — every other field here treats null as "unchanged"
+     *  (COALESCE), so clearing a column needs its own flag, the same shape
+     *  `updateLinkedList` already uses for the linked-list pair. */
+    clearSection?: boolean;
     updateLinkedList: boolean;
     linkedListId?: string | null;
     linkedListType?: string | null;
@@ -1317,7 +1382,7 @@ export async function updateListTaskFields(
          priority       = COALESCE($6, priority),
          badge          = COALESCE($7, badge),
          position       = COALESCE($8, position),
-         section_id     = COALESCE($9, section_id),
+         section_id     = CASE WHEN $15 THEN NULL ELSE COALESCE($9, section_id) END,
          linked_list_id   = CASE WHEN $11 THEN $12 ELSE linked_list_id END,
          linked_list_type = CASE WHEN $11 THEN $13 ELSE linked_list_type END
      WHERE id = $10
@@ -1337,6 +1402,7 @@ export async function updateListTaskFields(
       fields.linkedListId ?? null,
       fields.linkedListType ?? null,
       typeof fields.noteMarkdown === 'boolean' ? fields.noteMarkdown : null,
+      fields.clearSection === true,
     ]
   );
 
@@ -1352,6 +1418,26 @@ export async function updateListTaskFields(
     { title: saved.title, note: saved.note, deadline: saved.deadline, priority: saved.priority, badge: saved.badge, section_id: saved.section_id, checked: saved.checked },
     actor
   );
+
+  // Quick Add memory. THE choke point: every section move in the app —
+  // drag-and-drop between sections or Kanban columns, the TaskDialog, an
+  // accepted Quick Add suggestion, an automation's move_task — lands on this
+  // one UPDATE, so recording here catches all of them without each call site
+  // having to remember to teach the board anything.
+  //
+  // `beforeRow.section_id !== undefined` guards the same thing
+  // recordTaskChanges guards with its "only keys present in BOTH" rule: a
+  // caller that fetched a narrower before-state doesn't know where the item
+  // was, and `undefined !== 'sec_1'` would otherwise record a phantom move out
+  // of nowhere on an ordinary rename.
+  if (beforeRow.section_id !== undefined && beforeRow.section_id !== saved.section_id) {
+    await recordPlacement(exec, {
+      listId, taskId, title: saved.title,
+      fromSectionId: beforeRow.section_id, toSectionId: saved.section_id,
+      eventType: saved.section_id ? 'moved' : 'staged',
+      actor,
+    });
+  }
 
   // @-mention notifications — only for genuine USER note edits that changed the
   // text (an automation's writes never mention-notify). notifyNewMentions diffs
@@ -1405,9 +1491,34 @@ export async function updateListTaskFields(
   return saved;
 }
 
-export async function deleteTaskRow(exec: QueryExec, listId: string, taskId: string): Promise<boolean> {
+export async function deleteTaskRow(
+  exec: QueryExec,
+  listId: string,
+  taskId: string,
+  actor: MutationActor = { type: 'user', userId: 'unknown' }
+): Promise<boolean> {
+  // Read the row BEFORE deleting it: the placement history keeps a record of
+  // where an item was when it left, and after the DELETE there is nothing left
+  // to read it from.
+  //
+  // Note what this does NOT do — it does not clear the item's memory. "Where
+  // does an item called this belong" stays true after the specific task is
+  // gone, deleted or moved elsewhere, which is exactly the behaviour this
+  // feature was asked for: the board remembers items it no longer holds.
+  const before = await exec(`SELECT title, section_id FROM tasks WHERE id = $1 AND list_id = $2`, [taskId, listId]);
+  const row = before.rows[0] as { title: string; section_id: string | null } | undefined;
+
   const result = await exec(`DELETE FROM tasks WHERE id = $1 AND list_id = $2`, [taskId, listId]);
-  return (result.rowCount ?? 0) > 0;
+  const deleted = (result.rowCount ?? 0) > 0;
+
+  if (deleted && row) {
+    await recordPlacement(exec, {
+      listId, taskId, title: row.title,
+      fromSectionId: row.section_id, toSectionId: null,
+      eventType: 'deleted', actor,
+    });
+  }
+  return deleted;
 }
 
 export async function setListArchived(exec: QueryExec, listId: string, archived: boolean): Promise<ListRow | null> {
@@ -1490,7 +1601,7 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
   try {
     const { listId, taskId } = req.params;
     const {
-      title, note, noteMarkdown, checked, deadline, time_val, priority, badge, position, sectionId,
+      title, note, noteMarkdown, checked, deadline, time_val, priority, badge, position, sectionId, stage,
       linked_list_id: _ll_snake,
       linkedListId: _ll_camel,
       linked_list_type: _llt_snake,
@@ -1506,6 +1617,8 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
       badge?: string;
       position?: number;
       sectionId?: string;
+      /** Move this item back to the Quick Add staging tray (drag out of a section). */
+      stage?: boolean;
       linked_list_id?: string | null;
       linkedListId?: string | null;
       linked_list_type?: 'sublist' | 'link' | null;
@@ -1546,6 +1659,7 @@ router.put('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
       badge: badge ?? null,
       position: position ?? null,
       sectionId: sectionId ?? null,
+      clearSection: stage === true,
       updateLinkedList,
       linkedListId: linked_list_id ?? null,
       linkedListType: linked_list_type ?? null,
@@ -1585,7 +1699,7 @@ router.delete('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
       return;
     }
 
-    const deleted = await deleteTaskRow(query, listId, taskId);
+    const deleted = await deleteTaskRow(query, listId, taskId, { type: 'user', userId: req.userId! });
     if (!deleted) {
       res.status(404).json({ error: 'Task not found' });
       return;
@@ -1595,6 +1709,116 @@ router.delete('/:listId/tasks/:taskId', async (req: Request, res: Response) => {
     broadcastToUser(req.userId!, 'lists');
   } catch (err) {
     werr('list task DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Quick Add
+//
+// The staging tray + placement prediction (see backend/src/quickAdd/). Write
+// access is the same boundary as any other item mutation on this board — owner,
+// instance admin, or an item-share collaborator — so enabling Quick Add never
+// widens who can add to a board.
+// ---------------------------------------------------------------------------
+
+/** Owner/admin/collaborator check for a board, shared by the Quick Add endpoints. */
+async function assertCanWriteList(listId: string, req: Request): Promise<{ ok: true; list: { user_id: string; workspace_id: string | null; name: string; quick_add_enabled: boolean } } | { ok: false; status: number; error: string }> {
+  const r = await query<{ user_id: string; workspace_id: string | null; name: string; quick_add_enabled: boolean }>(
+    `SELECT user_id, workspace_id, name, quick_add_enabled FROM lists WHERE id = $1`,
+    [listId]
+  );
+  if (r.rows.length === 0) return { ok: false, status: 404, error: 'List not found' };
+  const list = r.rows[0];
+  if (list.user_id !== req.userId && !req.user?.isAdmin && !(await isItemSharedWith('list', listId, req.userId!))) {
+    return { ok: false, status: 403, error: 'Permission denied' };
+  }
+  return { ok: true, list };
+}
+
+// POST /api/lists/:listId/quick-add/predict — { title } → ranked section suggestions.
+// Drives the live hint while typing; `lexicalOnly` skips the embedding provider
+// round trip so a keystroke-debounced call stays local and free.
+router.post('/:listId/quick-add/predict', async (req: Request, res: Response) => {
+  try {
+    const { listId } = req.params;
+    const { title, lexicalOnly } = req.body as { title?: string; lexicalOnly?: boolean };
+    if (!title || !title.trim()) {
+      res.json({ suggestions: [] });
+      return;
+    }
+
+    const perm = await assertCanWriteList(listId, req);
+    if (!perm.ok) { res.status(perm.status).json({ error: perm.error }); return; }
+
+    const suggestions = await suggestSections(listId, title, { lexicalOnly: lexicalOnly === true });
+    res.json({ suggestions });
+  } catch (err) {
+    werr('quick-add predict error:', err);
+    // A prediction is an enhancement, never the point of the request — an empty
+    // suggestion list degrades to "no hint", which is a working Quick Add bar.
+    res.json({ suggestions: [] });
+  }
+});
+
+// POST /api/lists/:listId/quick-add/items — create an item in the STAGING TRAY
+// (no section) and return the suggestions for where it should go.
+router.post('/:listId/quick-add/items', async (req: Request, res: Response) => {
+  try {
+    const { listId } = req.params;
+    const { title, note, deadline, priority, badge } = req.body as {
+      title?: string; note?: string; deadline?: string; priority?: string; badge?: string;
+    };
+    if (!title || !title.trim()) {
+      res.status(400).json({ error: 'title is required' });
+      return;
+    }
+
+    const perm = await assertCanWriteList(listId, req);
+    if (!perm.ok) { res.status(perm.status).json({ error: perm.error }); return; }
+
+    // Predict BEFORE creating: the item about to be inserted would otherwise be
+    // its own strongest piece of evidence, and every suggestion would read
+    // "this went here last time" about the thing you are adding right now.
+    const suggestions = await suggestSections(listId, title);
+
+    const created = await createListTask(query, listId, null, req.userId!, {
+      title: title.trim(),
+      note: note ?? null,
+      deadline: deadline ?? null,
+      priority: priority ?? null,
+      badge: badge ?? null,
+    }, { type: 'user', userId: req.userId! });
+
+    if (!created) {
+      res.status(404).json({ error: 'List not found' });
+      return;
+    }
+
+    wlog(`quick-add CREATE ✓ id=${created.task.id} list=${listId} staged suggestions=${suggestions.length}`);
+    res.status(201).json({ task: sanitizeTask(created.task), suggestions });
+    broadcastToUser(req.userId!, 'lists');
+  } catch (err) {
+    werr('quick-add create error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/lists/:listId/quick-add/memory — what this board has learned.
+// Read-only, surfaced in the board's settings so the toggle isn't a black box.
+router.get('/:listId/quick-add/memory', async (req: Request, res: Response) => {
+  try {
+    const { listId } = req.params;
+    const perm = await assertCanWriteList(listId, req);
+    if (!perm.ok) { res.status(perm.status).json({ error: perm.error }); return; }
+
+    const entryRes = await query<{ quick_add_kb_entry_id: string | null }>(
+      `SELECT quick_add_kb_entry_id FROM lists WHERE id = $1`, [listId]
+    );
+    const stats = await getMemoryStats(listId);
+    res.json({ ...stats, entryId: entryRes.rows[0]?.quick_add_kb_entry_id ?? null });
+  } catch (err) {
+    werr('quick-add memory error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

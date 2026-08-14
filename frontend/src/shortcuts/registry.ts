@@ -40,6 +40,7 @@ export const SHORTCUT_DEFS: ShortcutDef[] = [
   { id: 'view-kanban', label: 'Kanban view', description: 'Switch this board to Kanban view.', defaultKey: '2', scope: 'list', scopeLabel: 'Inside a board' },
   { id: 'view-timeline', label: 'Timeline view', description: 'Switch this board to Timeline view.', defaultKey: '3', scope: 'list', scopeLabel: 'Inside a board' },
   { id: 'refresh-board', label: 'Refresh board', description: 'Reload this board\'s tasks and sections — the desktop equivalent of the mobile pull-to-refresh gesture.', defaultKey: 'r', scope: 'list', scopeLabel: 'Inside a board' },
+  { id: 'quick-add', label: 'Quick Add', description: "Focus this board's Quick Add bar. New items land in the tray below it, with a suggestion for which section they belong in.", defaultKey: 'q', scope: 'list', scopeLabel: 'Inside a board' },
   { id: 'create-milestone', label: 'New milestone', description: 'Open the editor to add a new milestone.', defaultKey: 'm', scope: 'timeline', scopeLabel: 'Inside a timeline' },
   { id: 'create-meeting', label: 'New meeting', description: 'Open the editor to add a new meeting.', defaultKey: 'c', scope: 'calendar', scopeLabel: 'Calendar page' },
   { id: 'delete-current', label: 'Delete open item / milestone', description: 'Ask to delete the item or milestone currently open in its editor.', defaultKey: 'backspace', scope: 'dialog', scopeLabel: 'Item / milestone editor' },

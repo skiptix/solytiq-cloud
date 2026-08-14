@@ -13,6 +13,7 @@
 import { pool, query as dbQuery } from './db';
 import { backfillHardLinks } from './graph/backfill';
 import { setPgvectorAvailable } from './knowledge/state';
+import { backfillSectionMemory } from './quickAdd/backfill';
 import { SYNC_CHANNEL } from './syncLog';
 import { encryptTotpSecret, isEncryptedTotpSecret } from './totpCrypto';
 import { runVersionedMigrations, VERSIONED_MIGRATIONS } from './versionedMigrations';
@@ -2418,6 +2419,85 @@ export async function runMigrations() {
   // Trigram index backing search_chat_history's on-demand lookups over past
   // sessions — pg_trgm is already enabled above (Knowledge Layer migration).
   await pool.query(`CREATE INDEX IF NOT EXISTS ai_chats_content_trgm ON ai_chats USING gin (content gin_trgm_ops)`);
+
+  // ── Quick Add: staging tray + placement memory ──────────────────────────
+  // Per-board opt-in. Off by default: a board with no history predicts
+  // nothing useful, and an always-on input bar would change every existing
+  // board's layout without being asked.
+  await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS quick_add_enabled BOOLEAN NOT NULL DEFAULT false`);
+  // The board's Knowledge Base bubble (quickAdd/kbBubble.ts). SET NULL rather
+  // than CASCADE: deleting the bubble from the Knowledge Base must not delete
+  // the board it describes.
+  await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS quick_add_kb_entry_id VARCHAR(100) REFERENCES knowledge_entries(id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS quick_add_memory_dirty BOOLEAN NOT NULL DEFAULT false`);
+
+  // Append-only placement history. Deliberately NOT read by the predictor —
+  // see quickAdd/memory.ts's header for why the projection below is a separate
+  // table rather than a "latest row" query over this one. Section ids are
+  // stored WITHOUT a foreign key, alongside a label snapshot, so history stays
+  // readable after a section is renamed or deleted.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS section_placement_events (
+      id                 BIGSERIAL PRIMARY KEY,
+      list_id            VARCHAR(100) NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+      task_id            VARCHAR(40) NOT NULL,
+      title              TEXT NOT NULL,
+      title_key          TEXT NOT NULL,
+      from_section_id    VARCHAR(100),
+      from_section_label TEXT,
+      to_section_id      VARCHAR(100),
+      to_section_label   TEXT,
+      event_type         VARCHAR(16) NOT NULL,
+      actor_type         VARCHAR(16) NOT NULL,
+      actor_id           VARCHAR(100),
+      occurred_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS section_placement_events_list_idx ON section_placement_events (list_id, occurred_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS section_placement_events_key_idx ON section_placement_events (list_id, title_key)`);
+
+  // The projection the predictor reads: exactly one row per (board, item
+  // title), holding that item's LAST section and nothing else. "Only the last
+  // placement may drive a suggestion" is enforced HERE, by the primary key —
+  // an UPSERT overwrites the previous section rather than appending — not by a
+  // WHERE clause a future query could omit.
+  //
+  // last_section_id CASCADEs: a memory pointing at a deleted section can only
+  // ever produce a suggestion that cannot be acted on. The event history keeps
+  // the deleted section's label either way.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS section_memory (
+      list_id         VARCHAR(100) NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+      title_key       TEXT NOT NULL,
+      title           TEXT NOT NULL,
+      last_section_id VARCHAR(100) NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
+      occurrences     INTEGER NOT NULL DEFAULT 1,
+      last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (list_id, title_key)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS section_memory_list_idx ON section_memory (list_id, last_seen_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS section_memory_section_idx ON section_memory (last_section_id)`);
+  // Backs both fuzzy channels in quickAdd/predict.ts — similarity() and
+  // word_similarity() over the NORMALIZED key, so matching never depends on
+  // how a title happened to be capitalized or punctuated.
+  await pool.query(`CREATE INDEX IF NOT EXISTS section_memory_key_trgm ON section_memory USING gin (title_key gin_trgm_ops)`);
+  if (pgvectorReady) {
+    await pool.query(`ALTER TABLE section_memory ADD COLUMN IF NOT EXISTS embedding vector(1536)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS section_memory_embedding_idx ON section_memory USING hnsw (embedding vector_cosine_ops)`).catch((err) => {
+      console.warn('⚠️  Could not create HNSW index on section_memory.embedding (non-fatal — semantic Quick Add matching will be slower):', (err as Error).message);
+    });
+  }
+
+  // Seed the projection from where every existing item currently sits, so a
+  // board that enables Quick Add predicts from day one instead of starting
+  // blank. Runs in TypeScript rather than SQL specifically so it reuses the
+  // REAL titleKey() — a hand-written SQL equivalent would be a second
+  // normalization implementation that has to agree with the first forever, and
+  // the day they disagree every backfilled row silently stops matching.
+  await backfillSectionMemory(pool).catch((err) => {
+    console.warn('⚠️  Quick Add memory backfill skipped (non-fatal — memory fills in as items are placed):', (err as Error).message);
+  });
 
   console.log('Database migrations applied.');
 }
