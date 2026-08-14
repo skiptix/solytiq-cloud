@@ -11,9 +11,10 @@ import useSharedItemsStore from '../store/useSharedItemsStore';
 import useAuthStore from '../store/useAuthStore';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import TaskItem, { QuickAdd } from '../components/TaskItem';
+import QuickAddBar from '../components/QuickAddBar';
 import TaskDialog from '../components/TaskDialog';
 import TaskTimelineView from '../components/TaskTimelineView';
-import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, apiCreateSublistTask, apiLinkListAsTask, apiReorderSectionTasks, apiReorderListSections, apiUpdateListTask } from '../api/client';
+import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, apiCreateSublistTask, apiLinkListAsTask, apiReorderSectionTasks, apiReorderListSections, apiUpdateListTask, apiStageListTask } from '../api/client';
 import Icon from '../components/Icon';
 import SaveStatusDot from '../components/SaveStatusDot';
 import EmojiSelector from '../components/EmojiSelector';
@@ -28,6 +29,11 @@ import MotionDraggable from '../components/animate-ui/MotionDraggable';
 // live pull distance. Matches the app's existing circular-spinner language for
 // the "refreshing" state; a rotating arrow gives the "pull further" affordance
 // before that, the same way native pull-to-refresh does.
+// The Quick Add tray is modelled as a pseudo-section for drag purposes. Giving
+// it a sentinel id lets the existing cross-section drop handlers move items in
+// and out of it unchanged, rather than growing a second parallel drag path.
+const STAGED = '__staged__';
+
 function PullToRefreshIndicator({ pullDistance, threshold, refreshing, settling }: { pullDistance: number; threshold: number; refreshing: boolean; settling: boolean }) {
   const height = refreshing ? threshold : pullDistance;
   if (height <= 0 && !settling) return null;
@@ -96,7 +102,10 @@ export default function ListScreen() {
   }, []);
 
   const isOwner = list?.userId === currentUserId;
-  const allTasks = list ? list.sections.flatMap(s => s.tasks) : [];
+  // Staged (Quick Add tray) items are real work on this board — counted in the
+  // hero's totals so accepting a suggestion moves an item without the progress
+  // percentage jumping, and matching what the server counts.
+  const allTasks = list ? [...list.sections.flatMap(s => s.tasks), ...(list.stagedTasks ?? [])] : [];
   const totalCount = allTasks.length;
   const completedCount = allTasks.filter(t => t.checked).length;
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
@@ -133,6 +142,54 @@ export default function ListScreen() {
     return () => window.removeEventListener('shortcut:refresh-board', onRefreshShortcut);
   }, [handleRefresh]);
 
+  // ── Quick Add ────────────────────────────────────────────────────────────
+  // Declared here, above the `if (!list)` early return, because they're hooks —
+  // the rest of the Quick Add wiring lives further down with the other drag
+  // handlers.
+
+  /** Move an item out of the tray into a real section (accepted suggestion, or a drag). */
+  const fileStagedTask = useCallback((taskId: number, sectionId: string) => {
+    let moved: Task | undefined;
+    setLists(prev => prev.map(l => {
+      if (l.id !== listId) return l;
+      moved = (l.stagedTasks ?? []).find(t => t.id === taskId);
+      if (!moved) return l;
+      const captured = moved;
+      return {
+        ...l,
+        stagedTasks: (l.stagedTasks ?? []).filter(t => t.id !== taskId),
+        sections: l.sections.map(s => s.id === sectionId ? { ...s, tasks: [...s.tasks, captured] } : s),
+      };
+    }));
+    if (moved) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      apiUpdateListTask(listId!, taskId, { sectionId } as any).catch(e => console.error('file staged task failed', e));
+    }
+  }, [listId, setLists]);
+
+  /** Move an item back OUT of its section into the tray. */
+  const unfileTask = useCallback((taskId: number, fromSectionId: string) => {
+    let moved: Task | undefined;
+    setLists(prev => prev.map(l => {
+      if (l.id !== listId) return l;
+      moved = l.sections.find(s => s.id === fromSectionId)?.tasks.find(t => t.id === taskId);
+      if (!moved) return l;
+      const captured = moved;
+      return {
+        ...l,
+        sections: l.sections.map(s => s.id === fromSectionId ? { ...s, tasks: s.tasks.filter(t => t.id !== taskId) } : s),
+        stagedTasks: [...(l.stagedTasks ?? []), captured],
+      };
+    }));
+    if (moved) {
+      apiStageListTask(listId!, taskId).catch(e => console.error('unfile task failed', e));
+    }
+  }, [listId, setLists]);
+
+  const addStagedTask = useCallback((task: Task) => {
+    setLists(prev => prev.map(l => l.id !== listId ? l : { ...l, stagedTasks: [...(l.stagedTasks ?? []), task] }));
+  }, [listId, setLists]);
+
   let pageTitle = 'Loading board...';
   if (!list && !listsLoading) {
     pageTitle = 'Board not found';
@@ -164,7 +221,13 @@ export default function ListScreen() {
 
   const toggle = (id: number) => {
     const section = list.sections.find(s => s.tasks.some(t => t.id === id));
-    if (!section) return;
+    if (!section) {
+      // A Quick Add tray item: still a real task to check off, but there's no
+      // section to auto-sort it within, so it just flips in place.
+      const stagedTask = (list.stagedTasks ?? []).find(t => t.id === id);
+      if (stagedTask) updateListTask(listId!, id, { checked: !stagedTask.checked });
+      return;
+    }
     const sectionId = section.id;
     const current = section.tasks.find(t => t.id === id);
     if (!current) return;
@@ -296,6 +359,7 @@ export default function ListScreen() {
     setSectionDragId(null); setSectionDragOverId(null);
   };
 
+
   const handleSectionDrop = (targetSectionId: string) => {
     if (!sectionDragId || sectionDragId === targetSectionId) { clearDragState(); return; }
     let newOrder: string[] = [];
@@ -318,6 +382,15 @@ export default function ListScreen() {
 
   const handleDrop = (targetSectionId: string, targetId: number) => {
     if (!draggedId || !draggedSectionId) return;
+
+    // Dropped from the Quick Add tray onto a task inside a section — file it
+    // there. Landing position within the section is left to the append that
+    // fileStagedTask does; a tray item has no prior order to preserve.
+    if (draggedSectionId === STAGED) {
+      fileStagedTask(draggedId, targetSectionId);
+      clearDragState();
+      return;
+    }
 
     if (draggedSectionId === targetSectionId) {
       // Same section — reorder
@@ -380,6 +453,11 @@ export default function ListScreen() {
 
   const handleDropOnSection = (targetSectionId: string) => {
     if (!draggedId || !draggedSectionId || draggedSectionId === targetSectionId) { clearDragState(); return; }
+    if (draggedSectionId === STAGED) {
+      fileStagedTask(draggedId, targetSectionId);
+      clearDragState();
+      return;
+    }
     const srcId = draggedSectionId;
     const movedId = draggedId;
     let movedTask: Task | undefined;
@@ -477,6 +555,30 @@ export default function ListScreen() {
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 11, color: 'var(--color-text-tertiary)' }}><strong style={{ color: 'var(--color-text-primary)' }}>{totalCount - completedCount}</strong> remaining</div>
           </div>
         </div>
+
+        {/* Quick Add — sits directly under the header box, above every view's
+            own layout, because prediction is a property of the board rather
+            than of how the board happens to be laid out right now. */}
+        {list.quickAddEnabled && (
+          <QuickAddBar
+            list={list}
+            isMobile={isMobile}
+            onFileTask={fileStagedTask}
+            onToggleTask={toggle}
+            onDeleteTask={deleteTask}
+            onUpdateTask={(id, upd) => updateListTask(listId!, id, upd)}
+            onRowClick={t => setSelectedTask(t)}
+            onStaged={addStagedTask}
+            availableLists={lists}
+            onDropIntoTray={() => {
+              if (draggedId && draggedSectionId && draggedSectionId !== STAGED) unfileTask(draggedId, draggedSectionId);
+              clearDragState();
+            }}
+            draggingFromSection={draggedId !== null && draggedSectionId !== null && draggedSectionId !== STAGED}
+            onTaskDragStart={id => { setDraggedId(id); setDraggedSectionId(STAGED); }}
+            onTaskDragEnd={clearDragState}
+          />
+        )}
 
         {/* Sections — List view (stacked) */}
         {effectiveViewMode === 'list' && <MotionIn key="view-list" style={{ display: 'flex', flexDirection: 'column', gap: 24 }} initial={{ opacity: 0, y: 8, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.22, ease: EASE_SETTLE }}>

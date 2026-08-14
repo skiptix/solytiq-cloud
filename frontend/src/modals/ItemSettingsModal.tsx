@@ -15,6 +15,7 @@ import { EASE_SETTLE, EASE_STANDARD, EASE_SPRING } from '../components/animate-u
 import {
   apiUpdateListShare, apiUpdateTimelineShare, apiUpdateMarkdownListShare, apiUpdateFolderShare,
   apiUpdateList, apiUpdateTimeline, apiUpdateFolder, apiUpdateMarkdownList,
+  apiGetQuickAddMemory,
   asVisibilityConflict, type VisibilityConflict,
   type ShareInfo, type ShareUpdate,
 } from '../api/client';
@@ -23,6 +24,7 @@ import useWorkspaceStore from '../store/useWorkspaceStore';
 import useAuthStore from '../store/useAuthStore';
 import useAppStore from '../store/useAppStore';
 import useMarkdownListsStore from '../store/useMarkdownListsStore';
+import useAsyncData from '../hooks/useAsyncData';
 
 const FOLDER_COLORS = [
   'var(--color-primary)', 'var(--color-blue-mid-7)', 'var(--color-green-deep-3)', 'var(--color-orange)',
@@ -49,6 +51,8 @@ export interface ItemSettingsUpdates {
   isPublic?: boolean;
   fullWidth?: boolean;
   folderId?: string | null;
+  /** Boards only — the Quick Add bar, staging tray and section prediction. */
+  quickAddEnabled?: boolean;
 }
 
 interface ItemSettingsModalProps {
@@ -451,6 +455,14 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
   const hasFolders = kind !== 'folder' && folders && folders.length > 0;
   const hasShare   = !!itemId;
   const currentList = kind === 'list' && itemId ? lists.find(l => l.id === itemId) : undefined;
+  // Buffered like `fw` above: the toggle flips instantly while the PUT is in
+  // flight, rather than waiting for the store round trip to repaint it.
+  const [quickAdd, setQuickAdd] = useState(Boolean(currentList?.quickAddEnabled));
+  const { data: memory } = useAsyncData(
+    quickAdd && kind === 'list' && itemId ? itemId : null,
+    () => apiGetQuickAddMemory(itemId!),
+    null as { remembered: number; events: number } | null,
+  );
   const currentTimeline = kind === 'timeline' && itemId ? timelines.find(t => t.id === itemId) : undefined;
   const currentMarkdownList = kind === 'markdownList' && itemId ? markdownLists.find(m => m.id === itemId) : undefined;
   const listItems = currentList?.sections.flatMap(s => s.tasks) ?? [];
@@ -618,6 +630,48 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                   <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', marginTop: 6, lineHeight: 1.4, paddingLeft: 2 }}>
                     Full width stretches sections and side-by-side columns across the whole app — great for wide tables of boxes.
                   </div>
+                </div>
+              )}
+
+              {/* Quick Add (boards only) */}
+              {kind === 'list' && (
+                <div style={{ marginTop: 20 }}>
+                  {sectionLabel('Quick Add')}
+                  <div style={{ ...card, padding: '4px', display: 'flex', gap: 4 }}>
+                    {([
+                      { label: 'Off', icon: 'block', val: false },
+                      { label: 'On', icon: 'bolt', val: true },
+                    ] as const).map(opt => {
+                      const selected = quickAdd === opt.val;
+                      return (
+                        <MotionButton key={opt.label}
+                          onClick={() => { if (quickAdd !== opt.val) { setQuickAdd(opt.val); onChange({ quickAddEnabled: opt.val }); } }}
+                          animate={{ background: selected ? 'var(--color-primary)' : 'transparent', color: selected ? 'var(--color-white)' : 'var(--color-primary)' }}
+                          transition={{ duration: 0.12 }}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500 }}>
+                          <Icon name={opt.icon} size={15} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
+                          {opt.label}
+                          {selected && <Icon name="check" size={13} color="var(--color-white)" />}
+                        </MotionButton>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', marginTop: 6, lineHeight: 1.4, paddingLeft: 2 }}>
+                    Adds an “Add new item” bar under this board's header. New items land in a tray right below it, and the board suggests
+                    which section each one belongs in — learned from where items on this board have ended up before.
+                  </div>
+                  {quickAdd && (
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)', marginTop: 8, lineHeight: 1.5, paddingLeft: 2, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                      <Icon name="school" size={14} color="var(--color-accent-purple-light)" />
+                      <span>
+                        {memory === null
+                          ? 'Checking what this board has learned…'
+                          : memory.remembered === 0
+                            ? 'Nothing learned yet — move a few items into sections and suggestions will start appearing.'
+                            : `Knows where ${memory.remembered} ${memory.remembered === 1 ? 'item belongs' : 'items belong'}, from ${memory.events} recorded ${memory.events === 1 ? 'placement' : 'placements'}. Kept as a bubble in this workspace's Knowledge Base.`}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </MotionIn>

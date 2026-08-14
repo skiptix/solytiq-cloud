@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationOwnerEntityType, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent, TaskChangeLogEntry, EntityLink, ResolvedLink, LinkTypeDef, GraphPayload, GraphCanvas, GraphCanvasLayout, AgentRun, AgentProposal, AgentPolicy, AgentMode, EntityIndexEntry, KnowledgeBase, KnowledgeEntry, KnowledgeSuggestion, KnowledgeLookupResult, AiSkill, AiSkillFile, AiSkillHint, AiMemoryEntry } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationOwnerEntityType, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent, TaskChangeLogEntry, EntityLink, ResolvedLink, LinkTypeDef, GraphPayload, GraphCanvas, GraphCanvasLayout, AgentRun, AgentProposal, AgentPolicy, AgentMode, EntityIndexEntry, KnowledgeBase, KnowledgeEntry, KnowledgeSuggestion, KnowledgeLookupResult, AiSkill, AiSkillFile, AiSkillHint, AiMemoryEntry, QuickAddSuggestion } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -468,6 +468,31 @@ export const apiUpdateListTask = (listId: string, taskId: number, data: Partial<
 
 export const apiDeleteListTask = (listId: string, taskId: number) =>
   apiFetch<{ success: boolean }>(`/lists/${listId}/tasks/${taskId}`, { method: 'DELETE' });
+
+// Quick Add — the staging tray + section prediction (see backend/src/quickAdd/).
+// `lexicalOnly` skips the embedding provider round trip: the while-typing hint
+// re-predicts on a debounce and must stay local, where the post-add suggestion
+// runs once and can afford the semantic channel.
+export const apiQuickAddPredict = (listId: string, title: string, lexicalOnly = false) =>
+  apiFetch<{ suggestions: QuickAddSuggestion[] }>(`/lists/${listId}/quick-add/predict`, {
+    method: 'POST',
+    body: JSON.stringify({ title, lexicalOnly }),
+  });
+
+export const apiQuickAddItem = (listId: string, data: { title: string; note?: string; deadline?: string; priority?: string; badge?: string }) =>
+  apiFetch<{ task: Task; suggestions: QuickAddSuggestion[] }>(`/lists/${listId}/quick-add/items`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+
+/** Move an item back OUT of every section, into the Quick Add staging tray. */
+export const apiStageListTask = (listId: string, taskId: number) =>
+  apiFetch<{ task: Task }>(`/lists/${listId}/tasks/${taskId}`, { method: 'PUT', body: JSON.stringify({ stage: true }) });
+
+export const apiGetQuickAddMemory = (listId: string) =>
+  apiFetch<{ remembered: number; events: number; lastLearnedAt: string | null; entryId: string | null }>(
+    `/lists/${listId}/quick-add/memory`
+  );
 
 // Timelines
 export const apiGetTimelines = (workspaceId?: string) =>
