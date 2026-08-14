@@ -6,6 +6,7 @@ import MotionIn from '../components/animate-ui/MotionIn';
 import MotionButton from '../components/animate-ui/MotionButton';
 import { EASE_SETTLE, EASE_SPRING, EASE_STANDARD } from '../components/animate-ui/motionTokens';
 import { useMobile } from '../hooks/useBreakpoint';
+import useAsyncData from '../hooks/useAsyncData';
 import useAuthStore from '../store/useAuthStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
 import useShortcutsStore from '../store/useShortcutsStore';
@@ -2031,9 +2032,6 @@ interface TwoFAWizardInlineProps {
 
 function TwoFAWizardInline({ onClose, onEnabled }: TwoFAWizardInlineProps) {
   const [step, setStep] = useState<'intro' | 'scan' | 'verify' | 'done'>('intro');
-  const [qrCode, setQrCode] = useState('');
-  const [secret, setSecret] = useState('');
-  const [loadingSetup, setLoadingSetup] = useState(false);
   // Step-up (S3): see TwoFAWizard.tsx's matching comment — a valid-but-stolen
   // session token alone must not be enough to silently (re)generate a user's
   // TOTP secret, so the account password is required before /2fa/setup.
@@ -2054,14 +2052,17 @@ function TwoFAWizardInline({ onClose, onEnabled }: TwoFAWizardInlineProps) {
   const otpRefs = [r0, r1, r2, r3, r4, r5];
   const otpComplete = otp.every(d => d !== '');
 
-  useEffect(() => {
-    if (step !== 'scan' || qrCode) return;
-    setLoadingSetup(true);
-    api2FASetup(password)
-      .then(data => { setQrCode(data.qrCode); setSecret(data.secret); })
-      .catch(() => setOtpError('Failed to generate QR code. Please try again.'))
-      .finally(() => setLoadingSetup(false));
-  }, [step, password, qrCode]);
+  // Same shape as TwoFAWizard.tsx: the key goes non-null once the wizard
+  // leaves the intro step and stays constant after that, so stepping back to
+  // scan reuses the already-minted secret rather than generating a second one.
+  const { data: setup, loading: loadingSetup, error: setupError } = useAsyncData(
+    step === 'intro' ? null : 'totp-setup',
+    () => api2FASetup(password),
+    null as { qrCode: string; secret: string } | null
+  );
+  const qrCode = setup?.qrCode ?? '';
+  const secret = setup?.secret ?? '';
+  const displayError = otpError || (setupError ? 'Failed to generate QR code. Please try again.' : '');
 
   useEffect(() => {
     if (step !== 'done') return;
@@ -2257,15 +2258,15 @@ function TwoFAWizardInline({ onClose, onEnabled }: TwoFAWizardInlineProps) {
                   onPaste={i === 0 ? handleOtpPaste : undefined}
                   animate={{
                     background: digit ? 'var(--color-surface-tint)' : 'var(--color-surface-gray)',
-                    borderColor: otpError ? 'var(--color-error-bg)' : digit ? 'var(--color-primary)' : 'var(--color-border-alt)',
+                    borderColor: displayError ? 'var(--color-error-bg)' : digit ? 'var(--color-primary)' : 'var(--color-border-alt)',
                   }}
                   transition={{ duration: 0.15 }}
                   style={{ width: 46, height: 56, textAlign: 'center', fontFamily: 'var(--font-heading)', fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)', borderWidth: 2, borderStyle: 'solid', borderRadius: 10, outline: 'none', caretColor: 'transparent' }}
                 />
               ))}
             </MotionIn>
-            {otpError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', textAlign: 'center', marginBottom: 16, marginTop: 4 }}>{otpError}</div>}
-            {!otpError && <div style={{ height: 20, marginBottom: 16 }} />}
+            {displayError && <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', textAlign: 'center', marginBottom: 16, marginTop: 4 }}>{displayError}</div>}
+            {!displayError && <div style={{ height: 20, marginBottom: 16 }} />}
             <div style={{ display: 'flex', gap: 10 }}>
               <MotionButton onClick={() => { setStep('scan'); setOtp(Array(6).fill('')); setOtpError(''); }}
                 style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)', border: '1.5px solid var(--color-border-alt)', borderRadius: 12, padding: '12px 0', cursor: 'pointer' }}

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import useAsyncData from '../hooks/useAsyncData';
 import Icon from '../components/Icon';
 import { api2FASetup, api2FAEnable } from '../api/client';
 import ModalIn from '../components/animate-ui/ModalIn';
@@ -14,9 +15,6 @@ interface TwoFAWizardProps {
 
 export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
   const [step, setStep] = useState<'intro' | 'scan' | 'verify' | 'done'>('intro');
-  const [qrCode, setQrCode] = useState('');
-  const [secret, setSecret] = useState('');
-  const [loadingSetup, setLoadingSetup] = useState(false);
   // Step-up (S3): the account password, collected on the intro step and sent
   // once to POST /2fa/setup — a valid-but-stolen session token alone must not
   // be enough to silently (re)generate a user's TOTP secret.
@@ -38,15 +36,20 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
 
   const otpComplete = otp.every(d => d !== '');
 
-  // Fetch QR code when transitioning to scan step
-  useEffect(() => {
-    if (step !== 'scan' || qrCode) return;
-    setLoadingSetup(true);
-    api2FASetup(password)
-      .then(data => { setQrCode(data.qrCode); setSecret(data.secret); })
-      .catch(() => setOtpError('Failed to generate QR code. Please try again.'))
-      .finally(() => setLoadingSetup(false));
-  }, [step, password, qrCode]);
+  // Mint the TOTP secret once the wizard leaves the intro step. The key stays
+  // constant from there on, so stepping back from verify to scan reuses the
+  // already-minted secret instead of generating a second one — which is what
+  // the old `|| qrCode` guard was protecting against.
+  const { data: setup, loading: loadingSetup, error: setupError } = useAsyncData(
+    step === 'intro' ? null : 'totp-setup',
+    () => api2FASetup(password),
+    null as { qrCode: string; secret: string } | null
+  );
+  const qrCode = setup?.qrCode ?? '';
+  const secret = setup?.secret ?? '';
+  // A setup failure and a wrong-code failure share the one error slot the
+  // verify step renders.
+  const displayError = otpError || (setupError ? 'Failed to generate QR code. Please try again.' : '');
 
   // Auto-close after success
   useEffect(() => {
@@ -323,7 +326,7 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
                   onPaste={i === 0 ? handleOtpPaste : undefined}
                   animate={{
                     background: digit ? 'var(--color-surface-tint)' : 'var(--color-surface-gray)',
-                    borderColor: otpError ? 'var(--color-error-bg)' : digit ? 'var(--color-primary)' : 'var(--color-border-alt)',
+                    borderColor: displayError ? 'var(--color-error-bg)' : digit ? 'var(--color-primary)' : 'var(--color-border-alt)',
                   }}
                   transition={{ duration: 0.15 }}
                   style={{
@@ -338,10 +341,10 @@ export default function TwoFAWizard({ onClose, onEnabled }: TwoFAWizardProps) {
               ))}
             </motion.div>
 
-            {otpError && (
-              <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', textAlign: 'center', marginBottom: 16, marginTop: 4 }}>{otpError}</div>
+            {displayError && (
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)', textAlign: 'center', marginBottom: 16, marginTop: 4 }}>{displayError}</div>
             )}
-            {!otpError && <div style={{ height: 20, marginBottom: 16 }} />}
+            {!displayError && <div style={{ height: 20, marginBottom: 16 }} />}
 
             <div style={{ display: 'flex', gap: 10 }}>
               <MotionButton

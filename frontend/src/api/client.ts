@@ -1757,12 +1757,12 @@ export const apiUpdateLink = (id: string, body: { props?: Record<string, unknown
   apiFetch<{ link: EntityLink | null }>(`/links/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 export const apiDeleteLink = (id: string) =>
   apiFetch<void>(`/links/${id}`, { method: 'DELETE' });
-export const apiSearchEntities = (q: string, opts: { types?: string[]; workspaceId?: string; limit?: number } = {}) => {
+export const apiSearchEntities = (q: string, opts: { types?: string[]; workspaceId?: string; limit?: number; signal?: AbortSignal } = {}) => {
   const params = new URLSearchParams({ q });
   if (opts.types?.length) params.set('types', opts.types.join(','));
   if (opts.workspaceId) params.set('workspaceId', opts.workspaceId);
   if (opts.limit) params.set('limit', String(opts.limit));
-  return apiFetch<{ results: EntityIndexEntry[] }>(`/links/search?${params.toString()}`);
+  return apiFetch<{ results: EntityIndexEntry[] }>(`/links/search?${params.toString()}`, { signal: opts.signal });
 };
 export const apiGetLinkTypes = (workspaceId?: string) =>
   apiFetch<{ types: LinkTypeDef[] }>(`/links/types${workspaceId ? `?workspaceId=${workspaceId}` : ''}`);

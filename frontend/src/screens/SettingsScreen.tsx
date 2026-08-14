@@ -1,5 +1,5 @@
 import { usePageTitle } from "../hooks/usePageTitle";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import { useMobile } from '../hooks/useBreakpoint';
@@ -20,6 +20,7 @@ import ModalIn from '../components/animate-ui/ModalIn';
 import MotionButton from '../components/animate-ui/MotionButton';
 import MotionIn from '../components/animate-ui/MotionIn';
 import useNow from '../hooks/useNow';
+import useAsyncData from '../hooks/useAsyncData';
 
 interface UserEntry {
   id: string;
@@ -36,6 +37,12 @@ type TabId = 'system' | 'ai' | 'ai_skills' | 'security' | 'api' | 'mobile' | 'us
 
 /** Milliseconds since `last_online` within which a user counts as online. */
 const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+
+// useAsyncData returns `initial` as-is whenever the current key has no result,
+// so these must be one stable identity rather than a fresh [] per render —
+// otherwise every consumer sees a "new" empty array on every pass.
+const EMPTY_USERS: UserEntry[] = [];
+const EMPTY_API_KEYS: AdminReadApiKey[] = [];
 
 // Module scope, not the component body: a component defined during render
 // is a NEW type every render, so React unmounts and remounts it each time —
@@ -132,14 +139,23 @@ export default function SettingsScreen() {
   const [nukePw, setNukePw] = useState('');
 
 
-  // Admin API keys
-  const [apiKeys, setApiKeys] = useState<AdminReadApiKey[]>([]);
-  const [apiKeysLoading, setApiKeysLoading] = useState(false);
+  // Admin API keys — only fetched while the API tab is open, hence the null
+  // key rather than a guard inside an effect.
+  const { data: apiKeys, loading: apiKeysLoading, setData: setApiKeys } = useAsyncData(
+    activeTab === 'api' && isAdmin ? 'admin-api-keys' : null,
+    async () => (await apiGetAdminReadApiKeys()).keys,
+    EMPTY_API_KEYS
+  );
   const [showApiKeyWizard, setShowApiKeyWizard] = useState(false);
 
   // Users state
-  const [users, setUsers] = useState<UserEntry[]>([]);
-  const [usersLoading, setUsersLoading] = useState(false);
+  const {
+    data: users, loading: usersLoading, setData: setUsers,
+  } = useAsyncData(
+    isAdmin ? 'admin-users' : null,
+    async () => (await apiGetUsers()).users,
+    EMPTY_USERS
+  );
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -177,9 +193,13 @@ export default function SettingsScreen() {
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'user'>('all');
   const [searchFocus, setSearchFocus] = useState(false);
 
-  // System storage state
-  const [storage, setStorage] = useState<{ total: number; used: number; available: number } | null>(null);
-  const [storageLoading, setStorageLoading] = useState(false);
+  // System storage state. A failed read renders the same "unable to read disk
+  // usage" branch as an empty one, so the error is folded into the value.
+  const { data: storage, loading: storageLoading } = useAsyncData(
+    isAdmin ? 'system-storage' : null,
+    () => apiGetSystemStorage().catch(() => null),
+    null as { total: number; used: number; available: number } | null
+  );
 
   // Discover Apps dialog
   const [showAppsStore, setShowAppsStore] = useState(false);
@@ -206,8 +226,11 @@ export default function SettingsScreen() {
   const [aiLoaded, setAiLoaded] = useState(false);
 
   // AI usage analytics
-  const [usage, setUsage] = useState<{ daily: AIUsageDay[]; byModel: AIUsageModel[]; totals: AIUsageTotals } | null>(null);
-  const [usageLoading, setUsageLoading] = useState(false);
+  const { data: usage, loading: usageLoading } = useAsyncData(
+    activeTab === 'ai' && isAdmin ? 'ai-usage' : null,
+    () => apiGetAIUsage().catch(() => null),
+    null as { daily: AIUsageDay[]; byModel: AIUsageModel[]; totals: AIUsageTotals } | null
+  );
   const [hoveredBar, setHoveredBar] = useState<{ x: number; y: number; date: string; total: number; prompt: number; completion: number } | null>(null);
 
   // Knowledge Layer (semantic search) settings
@@ -236,30 +259,12 @@ export default function SettingsScreen() {
   const [mobileSaving, setMobileSaving] = useState(false);
   const [showMobileDisableConfirm, setShowMobileDisableConfirm] = useState(false);
 
-  const loadUsers = useCallback(async () => {
-    if (!isAdmin) return;
-    setUsersLoading(true);
-    try {
-      const res = await apiGetUsers();
-      setUsers(res.users);
-    } catch (e) {
-      console.error('failed to load users', e);
-    } finally {
-      setUsersLoading(false);
-    }
-  }, [isAdmin]);
-
-  useEffect(() => {
-    if (isAdmin) loadUsers();
-  }, [isAdmin, loadUsers]);
-
+  // The app-settings load stays an effect: it fills a dozen EDITABLE form
+  // buffers rather than one loaded value, so there is nothing for
+  // useAsyncData's key-derived `data` to be. Its setState calls all happen in
+  // an async continuation, which is not what set-state-in-effect flags.
   useEffect(() => {
     if (!isAdmin) return;
-    setStorageLoading(true);
-    apiGetSystemStorage()
-      .then(setStorage)
-      .catch(() => setStorage(null))
-      .finally(() => setStorageLoading(false));
     apiGetAppSettings()
       .then(res => {
         const bytes = parseInt(res.settings['storage_quota_per_user'] ?? '0', 10);
@@ -291,25 +296,6 @@ export default function SettingsScreen() {
       })
       .catch(() => setAiLoaded(true));
   }, [isAdmin, aiLoaded]);
-
-  useEffect(() => {
-    if (activeTab !== 'ai' || !isAdmin) return;
-    setUsageLoading(true);
-    apiGetAIUsage()
-      .then(setUsage)
-      .catch(() => {})
-      .finally(() => setUsageLoading(false));
-  }, [activeTab, isAdmin]);
-
-
-  useEffect(() => {
-    if (activeTab !== 'api' || !isAdmin) return;
-    setApiKeysLoading(true);
-    apiGetAdminReadApiKeys()
-      .then(res => setApiKeys(res.keys))
-      .catch(() => setApiKeys([]))
-      .finally(() => setApiKeysLoading(false));
-  }, [activeTab, isAdmin]);
 
   useEffect(() => {
     if (activeTab !== 'ai_skills' || !isAdmin || aiSkillsLoaded) return;

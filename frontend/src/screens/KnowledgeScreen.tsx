@@ -65,6 +65,9 @@ function entryIdFromSrn(srn: string): string | null {
 
 /** Stable identities — see useAsyncData's `initial`. */
 const EMPTY_MENTION_MEMBERS: MentionMember[] = [];
+const EMPTY_RELATIONS: ResolvedLink[] = [];
+const EMPTY_EDGES: GraphEdge[] = [];
+const EMPTY_NODES: GraphNode[] = [];
 
 export default function KnowledgeScreen() {
   const isMobile = useMobile();
@@ -80,9 +83,7 @@ export default function KnowledgeScreen() {
   } = useKnowledgeBaseStore();
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [relations, setRelations] = useState<ResolvedLink[]>([]);
-  const [neighborNodes, setNeighborNodes] = useState<GraphNode[]>([]);
-  const [relationEdges, setRelationEdges] = useState<GraphEdge[]>([]);
+
   const [creating, setCreating] = useState(false);
   const [newTerm, setNewTerm] = useState('');
   const [createError, setCreateError] = useState('');
@@ -138,50 +139,55 @@ export default function KnowledgeScreen() {
   // is cheap and can never serve a stale generation.
   const entrySrnSet = useMemo(() => new Set(entries.map(e => `${ENTRY_PREFIX}${e.id}`)), [entries]);
 
-  const reloadGraph = useCallback(async () => {
-    if (!workspaceId || !base) { setRelationEdges([]); setNeighborNodes([]); return; }
-    try {
-      const g = await apiGetWorkspaceGraph(workspaceId, { limit: 2000 });
-      const bySrn = new Map(g.nodes.map(n => [n.srn, n]));
-      // `entry_of` is structural (the hierarchy already draws it) — showing it
-      // as a relation would bury the authored ones under scaffolding.
-      const touching = g.edges.filter(e =>
-        e.linkType !== 'entry_of' && (entrySrnSet.has(e.src) || entrySrnSet.has(e.dst))
-      );
-      setRelationEdges(touching);
-      // Anything an entry points at is worth rendering too — that's the whole
-      // point of a definition that references a board.
-      const neighbors = new Map<string, GraphNode>();
-      for (const e of touching) {
-        for (const srn of [e.src, e.dst]) {
-          if (entrySrnSet.has(srn) || srn.startsWith(KB_ROOT_PREFIX)) continue;
-          const n = bySrn.get(srn);
-          if (n) neighbors.set(srn, n);
-        }
+  // Fetching the payload and deriving what to draw from it are split on
+  // purpose: which edges touch an entry depends on entrySrnSet, which changes
+  // on every entry add/remove, and folding that into the fetch key would
+  // re-request the identical graph each time.
+  const { data: graph, reload: reloadGraph } = useAsyncData(
+    workspaceId && base ? workspaceId : null,
+    () => apiGetWorkspaceGraph(workspaceId!, { limit: 2000 }).catch(() => null),
+    null as { nodes: GraphNode[]; edges: GraphEdge[] } | null
+  );
+
+  // `entry_of` is structural (the hierarchy already draws it) — showing it as
+  // a relation would bury the authored ones under scaffolding.
+  const relationEdges = useMemo(
+    () => (graph?.edges ?? EMPTY_EDGES).filter(e =>
+      e.linkType !== 'entry_of' && (entrySrnSet.has(e.src) || entrySrnSet.has(e.dst))
+    ),
+    [graph, entrySrnSet]
+  );
+
+  // Anything an entry points at is worth rendering too — that's the whole
+  // point of a definition that references a board.
+  const neighborNodes = useMemo(() => {
+    if (!graph) return EMPTY_NODES;
+    const bySrn = new Map(graph.nodes.map(n => [n.srn, n]));
+    const neighbors = new Map<string, GraphNode>();
+    for (const e of relationEdges) {
+      for (const srn of [e.src, e.dst]) {
+        if (entrySrnSet.has(srn) || srn.startsWith(KB_ROOT_PREFIX)) continue;
+        const n = bySrn.get(srn);
+        if (n) neighbors.set(srn, n);
       }
-      setNeighborNodes([...neighbors.values()]);
-    } catch {
-      setRelationEdges([]);
-      setNeighborNodes([]);
     }
-  }, [workspaceId, base, entrySrnSet]);
+    return [...neighbors.values()];
+  }, [graph, relationEdges, entrySrnSet]);
 
-  useEffect(() => { void reloadGraph(); }, [reloadGraph]);
-
-  // The selected entry's own relation list, for the inspector.
-  useEffect(() => {
-    if (!selectedId) { setRelations([]); return; }
-    let alive = true;
-    apiGetEntityLinks('knowledgeEntry', selectedId)
-      .then(r => {
-        if (!alive) return;
-        setRelations(Object.entries(r.linksByType)
-          .filter(([type]) => type !== 'entry_of')
-          .flatMap(([, links]) => links));
-      })
-      .catch(() => { if (alive) setRelations([]); });
-    return () => { alive = false; };
-  }, [selectedId, entries]);
+  // The selected entry's own relation list, for the inspector. The entries'
+  // versions are in the key because editing an entry's body can add or remove
+  // an inline link, which changes this list without the selection changing —
+  // and a version bump is what a body edit produces.
+  const entriesRev = entries.map(e => `${e.id}:${e.version}`).join(',');
+  const { data: relations } = useAsyncData(
+    selectedId ? { id: selectedId, rev: entriesRev } : null,
+    () => apiGetEntityLinks('knowledgeEntry', selectedId!)
+      .then(r => Object.entries(r.linksByType)
+        .filter(([type]) => type !== 'entry_of')
+        .flatMap(([, links]) => links))
+      .catch(() => EMPTY_RELATIONS),
+    EMPTY_RELATIONS
+  );
 
   const rootNode = useMemo(
     () => (base && workspaceId ? buildKnowledgeRootNode(base.id, base.name, base.emoji, workspaceId) : null),

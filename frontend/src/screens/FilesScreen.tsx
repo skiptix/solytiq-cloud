@@ -6,6 +6,7 @@ import type { SharedFile } from '../types';
 import { apiGetFiles, apiUpdateFile, apiDeleteFile, apiUploadFile, apiUploadFilesBundle, apiGetStorageUsage, apiPreviewFile } from '../api/client';
 import useAuthStore from '../store/useAuthStore';
 import useSyncStore from '../store/useSyncStore';
+import useAsyncData from '../hooks/useAsyncData';
 import Icon from '../components/Icon';
 import CalendarPicker from '../components/CalendarPicker';
 import Spinner from '@/components/animate-ui/Spinner';
@@ -16,6 +17,10 @@ import { motion } from '../components/animate-ui/motion';
 import { EASE_STANDARD, EASE_SETTLE } from '../components/animate-ui/motionTokens';
 
 // ── Helpers ───────────────────────────────────────────────────────
+
+// useAsyncData returns `initial` as-is whenever nothing has loaded for the
+// current key, so this must be one stable identity, not a fresh [].
+const EMPTY_FILES: SharedFile[] = [];
 
 function fmtSize(bytes: number): string {
   if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
@@ -297,8 +302,25 @@ interface FileDetailModalProps {
 function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
   const isMobile = useMobile();
   const [closing, setClosing] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(true);
+  const isImage = file.mimeType.startsWith('image/');
+  const isVideo = file.mimeType.startsWith('video/');
+  const isPdf   = file.mimeType === 'application/pdf';
+  const canPreview = isImage || isVideo || isPdf;
+
+  // A file we cannot preview is "nothing to load" — a null key, so
+  // previewLoading is false from the first render rather than being switched
+  // off by the effect that used to guard on it.
+  const { data: previewUrl, loading: previewLoading } = useAsyncData(
+    canPreview ? file.id : null,
+    () => apiPreviewFile(file.id).catch(() => null),
+    null as string | null
+  );
+  // The blob URL is an owned resource, so it is released when it is replaced
+  // or the dialog closes. No setState here — this effect only disposes.
+  useEffect(() => {
+    if (!previewUrl) return;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
   const [name, setName] = useState(file.name);
   const [title, setTitle] = useState(file.title ?? '');
   const [note, setNote] = useState(file.note ?? '');
@@ -309,21 +331,6 @@ function FileDetailModal({ file, onClose, onSaved }: FileDetailModalProps) {
   const [showExpiryCal, setShowExpiryCal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  const isImage = file.mimeType.startsWith('image/');
-  const isVideo = file.mimeType.startsWith('video/');
-  const isPdf   = file.mimeType === 'application/pdf';
-  const canPreview = isImage || isVideo || isPdf;
-
-  useEffect(() => {
-    if (!canPreview) { setPreviewLoading(false); return; }
-    let objectUrl: string;
-    apiPreviewFile(file.id)
-      .then(url => { objectUrl = url; setPreviewUrl(url); })
-      .catch(() => {})
-      .finally(() => setPreviewLoading(false));
-    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [file.id]);
 
   const handleClose = () => { setClosing(true); setTimeout(() => onClose(), 190); };
 
@@ -568,8 +575,6 @@ export default function FilesScreen() {
   usePageTitle("Files");
   const isMobile = useMobile();
   const { userId } = useAuthStore();
-  const [files, setFiles] = useState<SharedFile[]>([]);
-  const [loading, setLoading] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
   const [editTarget, setEditTarget] = useState<SharedFile | null>(null);
@@ -577,40 +582,26 @@ export default function FilesScreen() {
   const [deleting, setDeleting] = useState(false);
   const [pageDragOver, setPageDragOver] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [storageInfo, setStorageInfo] = useState<{ used: number; quota: number | null; isAdmin: boolean } | null>(null);
 
-  const loadStorage = useCallback(async () => {
-    try {
-      const info = await apiGetStorageUsage();
-      setStorageInfo(info);
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await apiGetFiles();
-      setFiles(res.files);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); loadStorage(); }, [load, loadStorage]);
+  const { data: files, loading, setData: setFiles, reload: load } = useAsyncData(
+    'files', () => apiGetFiles().then(r => r.files), EMPTY_FILES
+  );
+  const { data: storageInfo, reload: loadStorage } = useAsyncData(
+    'storage', () => apiGetStorageUsage(), null as { used: number; quota: number | null; isAdmin: boolean } | null
+  );
 
   // Live cross-device file sync: the delta engine bumps this counter when a
   // shared file changes anywhere, and we refetch the file list + storage usage.
-  // Fetch without toggling the full-screen loader (this is a background refresh).
+  // `reload()` rather than a key change on purpose — the key is unchanged, so
+  // the already-loaded list stays on screen and `loading` stays false. That is
+  // exactly the "background refresh, don't flash the full-screen loader"
+  // behaviour this previously spelled out with a second bare fetch.
   const fileRev = useSyncStore(s => s.entityRevisions.file ?? 0);
   useEffect(() => {
     if (fileRev === 0) return;
-    apiGetFiles().then(r => setFiles(r.files)).catch(() => {});
-    apiGetStorageUsage().then(setStorageInfo).catch(() => {});
-  }, [fileRev]);
+    load();
+    loadStorage();
+  }, [fileRev, load, loadStorage]);
 
   const handleUploaded = (f: SharedFile) => {
     setFiles(prev => [f, ...prev]);
