@@ -165,7 +165,35 @@ jobs:
       # database to `solytiq_test`. Setting the plain PG* names has no effect —
       # verified the hard way locally, where 13 of 15 files skipped with
       # `role "solytiq_test" does not exist` while the job still went green.
-      - name: Integration tests (PostgreSQL)
+      # s3StorageAdapter.integration.test.ts skips itself without a reachable
+      # S3-compatible server, and a skipped suite is a green suite. Its whole
+      # point is proving the adapter works against real S3 wire semantics,
+      # which the mocked-SDK unit test cannot — so CI provides the server
+      # instead of letting the one suite that needs it quietly not run.
+      #
+      # A `docker run` step, not a `services:` entry: minio/minio needs the
+      # `server /data` COMMAND, and a service container can override the
+      # entrypoint but not append command args. (bitnami/minio, which does
+      # auto-create buckets and would have fit `services:`, no longer
+      # publishes tags.) Both this and the bucket are set up here instead.
+      - name: Start MinIO
+        working-directory: .
+        run: |
+          docker run -d --name ci-minio -p 19000:9000 \
+            -e MINIO_ROOT_USER=testminio -e MINIO_ROOT_PASSWORD=testminio123 \
+            minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:19000/minio/health/live >/dev/null && break
+            sleep 2
+          done
+          # The test's probe is a HeadBucket, so a running server with no
+          # bucket would still skip. Fail here instead if either is missing.
+          curl -fsS http://localhost:19000/minio/health/live > /dev/null
+          docker run --rm --network host --entrypoint sh minio/mc:latest -c \
+            'mc alias set t http://localhost:19000 testminio testminio123 && \
+             mc mb --ignore-existing t/solytiq-test-bucket && mc ls t'
+
+      - name: Integration tests (PostgreSQL + MinIO)
         run: npm run test:integration
         env:
           TZ: UTC
@@ -174,6 +202,10 @@ jobs:
           TEST_PGDATABASE: solytiq_test
           TEST_PGUSER: solytiq_test
           TEST_PGPASSWORD: solytiq_test_pw
+          TEST_S3_ENDPOINT: http://localhost:19000
+          TEST_S3_BUCKET: solytiq-test-bucket
+          TEST_S3_ACCESS_KEY_ID: testminio
+          TEST_S3_SECRET_ACCESS_KEY: testminio123
           JWT_SECRET: ci-only-not-a-real-secret-${{ github.run_id }}
 
   packaging:

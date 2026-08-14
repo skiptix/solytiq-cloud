@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres:
     # pgvector/pgvector:pg16 is a drop-in Postgres 16 image with the `vector`
