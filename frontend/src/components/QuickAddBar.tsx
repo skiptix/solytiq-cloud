@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import { EASE_SETTLE, EASE_SPRING, LAYOUT_TRANSITION, listItemVariants } from '@/components/animate-ui/motionTokens';
 import MotionButton from './animate-ui/MotionButton';
@@ -71,14 +71,30 @@ export default function QuickAddBar({
   const [value, setValue] = useState('');
   const [focused, setFocused] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  /** The item just added, and where the predictor thinks it belongs. */
-  const [pending, setPending] = useState<{ task: Task; suggestions: QuickAddSuggestion[] } | null>(null);
+  /**
+   * Suggestions PER STAGED ITEM, keyed by task id.
+   *
+   * This was originally a single `pending` slot holding the most recently added
+   * item — which meant adding a second item silently overwrote the first one's
+   * chips and stranded it in the tray with no way to file it but a drag. Every
+   * item in the tray owns its own suggestions, so the tray stays actionable
+   * however many things you throw into it.
+   *
+   * An entry present but empty means "asked, nothing worth suggesting" (or
+   * dismissed) — distinct from absent, which means "not asked yet".
+   */
+  const [suggestionsByTask, setSuggestionsByTask] = useState<Record<number, QuickAddSuggestion[]>>({});
   /** The id currently flying into a section — drives the exit animation. */
   const [filing, setFiling] = useState<number | null>(null);
   const [trayHover, setTrayHover] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  /** Task ids already asked about, so a re-render never re-requests them. */
+  const requestedRef = useRef<Set<number>>(new Set());
 
-  const staged = list.stagedTasks ?? [];
+  // Memoized so the `??  []` fallback doesn't mint a fresh array identity on
+  // every render, which would re-run the suggestion-backfill effect below
+  // constantly instead of only when the tray's contents actually change.
+  const staged = useMemo(() => list.stagedTasks ?? [], [list.stagedTasks]);
   const trimmed = value.trim();
   const hasText = trimmed.length > 0;
 
@@ -95,10 +111,14 @@ export default function QuickAddBar({
   // and the "discard a response whose key has moved on" rule — which matters
   // here more than anywhere: a slow early keystroke's response landing after a
   // fast later one would otherwise show a hint for text already replaced. The
-  // key going null (too short, or the post-add chips took over) resets `hint`
-  // to null by derivation, so nothing has to remember to clear it.
+  // key going null (text too short, or cleared) resets `hint` to null by
+  // derivation, so nothing has to remember to clear it.
+  //
+  // The hint tracks the INPUT only, so it no longer hides just because
+  // something is sitting in the tray — you can keep typing the next item while
+  // earlier ones still show their own chips below.
   const { data: hint, loading: hintLoading } = useAsyncData(
-    !pending && trimmed.length >= MIN_HINT_LENGTH ? { listId: list.id, title: trimmed } : null,
+    trimmed.length >= MIN_HINT_LENGTH ? { listId: list.id, title: trimmed } : null,
     () => apiQuickAddPredict(list.id, trimmed, true).then((r) => r.suggestions[0] ?? null),
     null as QuickAddSuggestion | null,
     { debounceMs: HINT_DEBOUNCE_MS },
@@ -112,7 +132,8 @@ export default function QuickAddBar({
       const task: Task = { ...res.task, id: Number(res.task.id) };
       onStaged(task);
       setValue('');
-      setPending(res.suggestions.length > 0 ? { task, suggestions: res.suggestions } : null);
+      requestedRef.current.add(task.id);
+      setSuggestionsByTask((prev) => ({ ...prev, [task.id]: res.suggestions }));
       return { task, suggestions: res.suggestions };
     } catch (e) {
       console.error('quick add failed', e);
@@ -122,10 +143,40 @@ export default function QuickAddBar({
     }
   }, [trimmed, submitting, list.id, onStaged]);
 
-  /** Accept a suggestion: play the item out of the tray, then file it for real. */
+  // Fill in suggestions for tray items that don't have any yet — items left
+  // over from a previous session, or dragged back out of a section. Without
+  // this, those rows would sit in the tray with no chip and no way to file them
+  // except another drag, which is the same dead end the single-slot bug created.
+  // The ref guard means each id is asked about exactly once; setState happens
+  // only in the async continuation, never in the effect body.
+  useEffect(() => {
+    const missing = staged.filter((t) => !requestedRef.current.has(t.id));
+    if (missing.length === 0) return;
+    for (const t of missing) requestedRef.current.add(t.id);
+    let cancelled = false;
+    Promise.all(
+      missing.map((t) =>
+        apiQuickAddPredict(list.id, t.title)
+          .then((r) => [t.id, r.suggestions] as const)
+          .catch(() => [t.id, [] as QuickAddSuggestion[]] as const)
+      )
+    ).then((pairs) => {
+      if (!cancelled) setSuggestionsByTask((prev) => ({ ...prev, ...Object.fromEntries(pairs) }));
+    });
+    return () => { cancelled = true; };
+  }, [staged, list.id]);
+
+  /** Accept a suggestion: play that ONE row out of the tray, then file it for real. */
   const accept = useCallback((taskId: number, sectionId: string) => {
     setFiling(taskId);
-    setPending(null);
+    // Forget this task entirely — if it ever comes back to the tray it should be
+    // predicted afresh rather than reusing a stale answer.
+    requestedRef.current.delete(taskId);
+    setSuggestionsByTask((prev) => {
+      const next = { ...prev };
+      delete next[taskId];
+      return next;
+    });
     // Let the exit animation run before the row leaves the tray's data — the
     // move itself is optimistic in the store, so the wait is purely visual.
     window.setTimeout(() => {
@@ -134,7 +185,11 @@ export default function QuickAddBar({
     }, 220);
   }, [onFileTask]);
 
-  const dismiss = useCallback(() => setPending(null), []);
+  /** Hide one item's chips without moving it. Kept as an asked-and-answered
+   *  empty entry so the effect above doesn't immediately re-fetch them. */
+  const dismiss = useCallback((taskId: number) => {
+    setSuggestionsByTask((prev) => ({ ...prev, [taskId]: [] }));
+  }, []);
 
   return (
     <div
@@ -167,7 +222,11 @@ export default function QuickAddBar({
               const hinted = hint.sectionId;
               void submit().then((res) => { if (res) accept(res.task.id, hinted); });
             }
-            if (e.key === 'Escape') { setValue(''); setPending(null); (e.target as HTMLInputElement).blur(); }
+            // Escape clears the INPUT only. It deliberately no longer wipes
+            // suggestions: those now belong to individual tray rows, and
+            // bulk-dismissing every one of them from the text field would be a
+            // surprising amount of destruction for an escape key.
+            if (e.key === 'Escape') { setValue(''); (e.target as HTMLInputElement).blur(); }
           }}
           placeholder={isMobile ? 'Add new item…' : 'Add new item — it lands below, then move it where it belongs'}
           animate={{ paddingRight: hasText ? 48 : 16, outlineColor: focused ? 'rgba(var(--color-primary-rgb), 0.18)' : 'rgba(var(--color-primary-rgb), 0)' }}
@@ -196,7 +255,7 @@ export default function QuickAddBar({
 
       {/* Live hint while typing — passive, states the prediction without acting on it. */}
       <AnimatePresence>
-        {!pending && hasText && (hint || hintLoading) && (
+        {hasText && (hint || hintLoading) && (
           <MotionIn
             key="hint"
             initial={{ opacity: 0, y: -4 }}
@@ -216,32 +275,6 @@ export default function QuickAddBar({
                 <span style={{ color: 'var(--color-text-quaternary)' }}>· {hint.reason}</span>
               </>
             ) : null}
-          </MotionIn>
-        )}
-      </AnimatePresence>
-
-      {/* Actionable suggestions for the item just added. */}
-      <AnimatePresence>
-        {pending && (
-          <MotionIn
-            key="suggestions"
-            initial={{ opacity: 0, y: -6, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: 'auto' }}
-            exit={{ opacity: 0, y: -6, height: 0 }}
-            transition={{ duration: 0.2, ease: EASE_SETTLE }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '0 2px', overflow: 'hidden' }}>
-            <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
-              “{pending.task.title}” →
-            </span>
-            {pending.suggestions.map((s, i) => (
-              <SuggestionChip key={s.sectionId} suggestion={s} primary={i === 0} onAccept={() => accept(pending.task.id, s.sectionId)} />
-            ))}
-            <MotionButton
-              onClick={dismiss}
-              title="Leave it below for now"
-              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer' }}>
-              <Icon name="close" size={14} color="var(--color-text-quaternary)" />
-            </MotionButton>
           </MotionIn>
         )}
       </AnimatePresence>
@@ -270,31 +303,60 @@ export default function QuickAddBar({
             ) : (
               <div style={{ padding: 4 }}>
                 <AnimatePresence initial={false}>
-                  {staged.map((task) => (
-                    <motion.div
-                      key={task.id}
-                      layout="position"
-                      variants={listItemVariants}
-                      initial="initial"
-                      animate="animate"
-                      // An accepted suggestion sends the row toward the sections
-                      // below rather than just fading — the motion is what makes
-                      // "it went somewhere" legible.
-                      exit={filing === task.id ? { opacity: 0, y: 24, scale: 0.96, transition: { duration: 0.22, ease: EASE_SETTLE } } : 'exit'}
-                      transition={LAYOUT_TRANSITION}>
-                      <TaskItem
-                        task={{ ...task, _source: 'list' as const, _listId: list.id, _listName: list.name }}
-                        onToggle={onToggleTask}
-                        onDelete={onDeleteTask}
-                        onUpdate={onUpdateTask}
-                        onRowClick={onRowClick}
-                        onDragStart={onTaskDragStart}
-                        onDragEnd={onTaskDragEnd}
-                        hideListBadge
-                        availableLists={availableLists}
-                        currentListId={list.id} />
-                    </motion.div>
-                  ))}
+                  {staged.map((task) => {
+                    // Absent = still being predicted; empty = asked, nothing to
+                    // offer (or dismissed). Only the first distinguishes a
+                    // pending answer from no answer.
+                    const chips = suggestionsByTask[task.id];
+                    return (
+                      <motion.div
+                        key={task.id}
+                        layout="position"
+                        variants={listItemVariants}
+                        initial="initial"
+                        animate="animate"
+                        // An accepted suggestion sends the row toward the sections
+                        // below rather than just fading — the motion is what makes
+                        // "it went somewhere" legible.
+                        exit={filing === task.id ? { opacity: 0, y: 24, scale: 0.96, transition: { duration: 0.22, ease: EASE_SETTLE } } : 'exit'}
+                        transition={LAYOUT_TRANSITION}>
+                        <TaskItem
+                          task={{ ...task, _source: 'list' as const, _listId: list.id, _listName: list.name }}
+                          onToggle={onToggleTask}
+                          onDelete={onDeleteTask}
+                          onUpdate={onUpdateTask}
+                          onRowClick={onRowClick}
+                          onDragStart={onTaskDragStart}
+                          onDragEnd={onTaskDragEnd}
+                          hideListBadge
+                          availableLists={availableLists}
+                          currentListId={list.id} />
+                        {/* This item's OWN suggestions, under its OWN row — so a
+                            tray holding five things offers five independent
+                            decisions rather than one. */}
+                        {chips && chips.length > 0 && (
+                          <MotionIn
+                            initial={{ opacity: 0, y: -4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.18, ease: EASE_SETTLE }}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+                              padding: isMobile ? '0 8px 10px 8px' : '0 8px 10px 38px',
+                            }}>
+                            {chips.map((s, i) => (
+                              <SuggestionChip key={s.sectionId} suggestion={s} primary={i === 0} onAccept={() => accept(task.id, s.sectionId)} />
+                            ))}
+                            <MotionButton
+                              onClick={() => dismiss(task.id)}
+                              title="Leave it here for now"
+                              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer' }}>
+                              <Icon name="close" size={14} color="var(--color-text-quaternary)" />
+                            </MotionButton>
+                          </MotionIn>
+                        )}
+                      </motion.div>
+                    );
+                  })}
                 </AnimatePresence>
               </div>
             )}
