@@ -9,6 +9,7 @@ import { authenticate } from '../middleware';
 import { verifyToken, hashPassword } from '../auth';
 import { broadcastToUser } from '../sse';
 import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, werr, QueryExec } from '../workspaceUtil';
+import { resolveFolderPlacement } from './folders';
 import { validateReorderIds, bulkSetPositions } from '../reorderUtil';
 import { buildRestrictConflict } from '../visibility';
 import { softDeleteListTreeExec } from '../trashUtil';
@@ -406,7 +407,10 @@ export interface CreateMarkdownListInput {
 
 export async function createMarkdownListForUser(userId: string, input: CreateMarkdownListInput) {
   const listId = input.id ?? `mdlist_${uuidv4()}`;
-  const resolvedWs = await resolveWorkspaceForUser(userId, input.workspaceId ?? undefined);
+  // A reachable folder (including one shared with this user) decides the
+  // workspace — see resolveFolderPlacement's comment in routes/folders.ts.
+  const placement = await resolveFolderPlacement(userId, input.folderId);
+  const resolvedWs = placement.workspaceId ?? await resolveWorkspaceForUser(userId, input.workspaceId ?? undefined);
 
   const posResult = await query<{ max: string | null }>('SELECT MAX(position) AS max FROM markdown_lists WHERE user_id = $1', [userId]);
   const nextPos = posResult.rows[0].max !== null ? parseInt(posResult.rows[0].max, 10) + 1 : 0;
@@ -415,7 +419,7 @@ export async function createMarkdownListForUser(userId: string, input: CreateMar
     `INSERT INTO markdown_lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, folder_id, workspace_id, position, content)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
     [listId, userId, input.name, input.emoji ?? null, input.color ?? null, input.colorBg ?? null, input.subtitle ?? null,
-      input.isPublic ?? false, input.folderId ?? null, resolvedWs, nextPos, JSON.stringify({ version: 1, blocks: [] })]
+      placement.inheritIsPublic ?? input.isPublic ?? false, placement.folderId, resolvedWs, nextPos, JSON.stringify({ version: 1, blocks: [] })]
   );
 
   wlog(`markdown-list CREATE ✓ id=${result.rows[0].id} owner=${userId} workspace=${resolvedWs}`);

@@ -17,6 +17,7 @@
 
 import { query } from './db';
 import { createNotification, NotificationType } from './notifications';
+import { itemShareExists } from './itemShares';
 
 // Usernames in this app are word-ish (letters/digits/underscore, plus . and -).
 // We capture a conservative token and match it case-insensitively against real
@@ -49,6 +50,12 @@ export interface MentionShareScope {
  * workspace OR they've been invited to the specific item (item_shares). A note
  * in a personal (no-workspace) item can still mention someone it's been shared
  * with. Nothing resolves when there's neither a workspace nor a share scope.
+ *
+ * The share half goes through `itemShareExists`, not a hand-rolled
+ * `item_shares` lookup: an invite is granted on one row but resolved over the
+ * containment tree, so a collaborator who reached this board through a shared
+ * FOLDER must be mentionable too. Matching the exact row only would silently
+ * resolve to nobody and send no notification, with no error to notice.
  */
 export async function resolveMentionUserIds(
   workspaceId: string | null,
@@ -58,22 +65,34 @@ export async function resolveMentionUserIds(
 ): Promise<string[]> {
   if (usernames.size === 0 || (!workspaceId && !shareItem)) return [];
   const lower = [...usernames];
-  const rows = await query<{ id: string }>(
-    `SELECT u.id
-       FROM users u
-      WHERE LOWER(u.username) = ANY($1::text[])
-        AND u.id <> $2
-        AND (
-          ($3::text IS NOT NULL AND EXISTS (
-            SELECT 1 FROM workspace_members wm WHERE wm.user_id = u.id AND wm.workspace_id = $3
-          ))
-          OR ($4::text IS NOT NULL AND $5::text IS NOT NULL AND EXISTS (
-            SELECT 1 FROM item_shares s WHERE s.user_id = u.id AND s.item_type = $4 AND s.item_id = $5
-          ))
-        )`,
-    [lower, actorId, workspaceId, shareItem?.itemType ?? null, shareItem?.itemId ?? null]
-  );
-  return rows.rows.map((r) => r.id);
+
+  const workspaceMatches = workspaceId
+    ? await query<{ id: string }>(
+        `SELECT u.id FROM users u
+          WHERE LOWER(u.username) = ANY($1::text[]) AND u.id <> $2
+            AND EXISTS (SELECT 1 FROM workspace_members wm WHERE wm.user_id = u.id AND wm.workspace_id = $3)`,
+        [lower, actorId, workspaceId]
+      )
+    : { rows: [] as { id: string }[] };
+
+  // `itemShareExists` is written for a query scanning the ITEM's table with a
+  // bound user id; here the item is fixed and the user varies, so the item's
+  // row is pinned in the FROM and `u.id` is the "user param".
+  const table = shareItem?.itemType === 'timeline' ? 'timelines'
+    : shareItem?.itemType === 'markdownList' ? 'markdown_lists' : 'lists';
+  const shareMatches = shareItem
+    ? await query<{ id: string }>(
+        `SELECT u.id FROM users u
+          WHERE LOWER(u.username) = ANY($1::text[]) AND u.id <> $2
+            AND EXISTS (
+              SELECT 1 FROM ${table} x
+               WHERE x.id = $3 AND ${itemShareExists('x', shareItem.itemType, 'u.id')}
+            )`,
+        [lower, actorId, shareItem.itemId]
+      )
+    : { rows: [] as { id: string }[] };
+
+  return [...new Set([...workspaceMatches.rows, ...shareMatches.rows].map((r) => r.id))];
 }
 
 /**

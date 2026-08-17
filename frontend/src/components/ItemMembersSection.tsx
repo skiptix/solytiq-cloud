@@ -9,12 +9,23 @@ import {
   type SharedItemType, type ItemMember,
 } from '../api/client';
 
-// ── "Invite people" section for a list / timeline / markdown page ─────────────
+// ── "Invite people" section for a folder / list / timeline / markdown page ────
 // Mirrors the workspace members UI, but scoped to one item. Only the owner (or
 // admin) sees the invite/remove affordances; everyone who can view the item sees
 // the member list. Invited users become full collaborators and get a notification.
+//
+// A member can also reach this item through a CONTAINER that was shared with
+// them — the folder it sits in, an ancestor board, or the markdown page it
+// mirrors — in which case the server reports them with `via: 'inherited'`.
+// Those rows render with the container's name and no Remove button: the grant
+// lives on the container, so a Remove here would delete nothing while looking
+// like it worked. Revoking is done where the invitation was made.
 
 interface BasicUser { id: string; username: string; fullName: string | null; hasImage: boolean }
+
+const VIA_ICON: Record<SharedItemType, string> = {
+  folder: 'folder', list: 'format_list_bulleted', timeline: 'timeline', markdownList: 'notes',
+};
 
 interface ItemMembersSectionProps {
   itemType: SharedItemType;
@@ -113,7 +124,15 @@ export default function ItemMembersSection({ itemType, itemId, canManage, onChan
           <div key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: 'var(--color-surface-tint-3)', border: '1px solid var(--color-purple-pale-23)' }}>
             <MemberAvatar userId={m.userId} size={26} fallbackName={nameOf(m)} />
             <span style={{ flex: 1, minWidth: 0, fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(m)}</span>
-            {(canManage || m.userId === currentUserId) && (
+            {m.via === 'inherited' ? (
+              <span
+                title={`Invited to ${m.viaName ? `“${m.viaName}”` : 'a parent item'} — remove them there`}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-heading)', fontSize: 9.5, fontWeight: 700, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', background: 'var(--color-surface-gray)', borderRadius: 9999, padding: '2px 8px', flexShrink: 0, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+              >
+                <Icon name={VIA_ICON[m.viaType ?? 'folder']} size={11} color="var(--color-text-tertiary)" />
+                {m.viaName ?? 'Inherited'}
+              </span>
+            ) : (canManage || m.userId === currentUserId) && (
               <button
                 onClick={() => void doRemove(m.userId)}
                 disabled={busy}

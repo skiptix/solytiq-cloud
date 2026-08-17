@@ -8,6 +8,7 @@ import { broadcastToUser } from '../sse';
 import { versionGuardSql, resolveVersionedUpdateFailure } from '../concurrency';
 import { validateReorderIds, bulkSetPositions } from '../reorderUtil';
 import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, werr } from '../workspaceUtil';
+import { resolveFolderPlacement } from './folders';
 import { snapshotTimelineToTrash } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestrictConflict } from '../visibility';
 import { notifyNewMentions } from '../mentions';
@@ -404,7 +405,10 @@ router.post('/', async (req: Request, res: Response) => {
     const validLayout = ['vertical', 'compact', 'detailed'].includes(layout ?? '') ? layout : 'vertical';
     const timelineId = id ?? `timeline_${uuidv4()}`;
 
-    const resolvedWs = await resolveWorkspaceForUser(req.userId!, workspaceId);
+    // A reachable folder (including one shared with this user) decides the
+    // workspace — see resolveFolderPlacement's comment in routes/folders.ts.
+    const placement = await resolveFolderPlacement(req.userId!, folderId);
+    const resolvedWs = placement.workspaceId ?? await resolveWorkspaceForUser(req.userId!, workspaceId);
 
     const posResult = await query<{ max: string | null }>(
       'SELECT MAX(position) AS max FROM timelines WHERE user_id = $1',
@@ -416,7 +420,7 @@ router.post('/', async (req: Request, res: Response) => {
       `INSERT INTO timelines (id, user_id, name, emoji, color, color_bg, subtitle, layout, is_public, folder_id, position, workspace_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
-      [timelineId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, validLayout, isPublic ?? false, folderId ?? null, nextPos, resolvedWs]
+      [timelineId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, validLayout, placement.inheritIsPublic ?? isPublic ?? false, placement.folderId, nextPos, resolvedWs]
     );
 
     wlog(`timeline CREATE ✓ id=${result.rows[0].id} name="${name}" workspace=${result.rows[0].workspace_id} owner=${req.userId}`);

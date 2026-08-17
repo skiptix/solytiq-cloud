@@ -1239,9 +1239,9 @@ export async function runMigrations() {
   await pool.query(`CREATE INDEX IF NOT EXISTS task_tags_user_idx ON task_tags (user_id)`);
 
   // Per-item invitations ("Shared with me") — grants one user full-collaborator
-  // access to a single list/timeline/markdown page, independent of workspace
-  // membership. Polymorphic (item_type + item_id), so no FK on item_id; the
-  // item's delete path removes its shares via deleteItemShares().
+  // access to a single folder/list/timeline/markdown page, independent of
+  // workspace membership. Polymorphic (item_type + item_id), so no FK on
+  // item_id; the item's delete path removes its shares via deleteItemShares().
   await pool.query(`
     CREATE TABLE IF NOT EXISTS item_shares (
       item_type   VARCHAR(20) NOT NULL,
@@ -1254,6 +1254,63 @@ export async function runMigrations() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS item_shares_user_idx ON item_shares (user_id, item_type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS item_shares_item_idx ON item_shares (item_type, item_id)`);
+  // Resolving a folder cascade means matching a share against an item's
+  // `folder_id`; without these the check degrades to a seq scan on every
+  // access-condition evaluation.
+  await pool.query(`CREATE INDEX IF NOT EXISTS lists_folder_idx          ON lists          (folder_id) WHERE folder_id IS NOT NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS timelines_folder_idx      ON timelines      (folder_id) WHERE folder_id IS NOT NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS markdown_lists_folder_idx ON markdown_lists (folder_id) WHERE folder_id IS NOT NULL`);
+
+  // The list half of the item-share cascade (see backend/src/itemShares.ts's
+  // header for the full containment model). A list is reachable when the
+  // caller was invited to it, to the folder it sits in, to the markdown page
+  // whose auto-managed Todo mirror it is, or to ANY of its ancestor lists —
+  // sublists nest arbitrarily deep, so this walks up `parent_task_id` → the
+  // owning task → that task's list until it runs out of parents.
+  //
+  // It lives in the database rather than in `itemShareExists`'s generated SQL
+  // because PostgreSQL does not allow a `WITH RECURSIVE` inside a subquery to
+  // reference the outer row, and because a single definition is what keeps the
+  // 20+ access-condition call sites from each re-deriving the recursion. STABLE
+  // (not VOLATILE) so the planner may cache it within a statement.
+  //
+  // The depth cap is a cycle guard, not a product limit: `lists.parent_task_id`
+  // is application-maintained, and a corrupted cycle must fail closed with a
+  // bounded query rather than spin.
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION item_share_grants_list(p_user UUID, p_list_id VARCHAR)
+    RETURNS BOOLEAN
+    LANGUAGE sql STABLE AS $fn$
+      WITH RECURSIVE anc(list_id, folder_id, parent_task_id, lvl) AS (
+        SELECT l.id, l.folder_id, l.parent_task_id, 0
+          FROM lists l
+         WHERE l.id = p_list_id
+        UNION ALL
+        SELECT pl.id, pl.folder_id, pl.parent_task_id, anc.lvl + 1
+          FROM anc
+          JOIN tasks pt ON pt.id = anc.parent_task_id
+          JOIN lists pl ON pl.id = pt.list_id
+         WHERE anc.lvl < 16
+      )
+      SELECT EXISTS (
+        SELECT 1 FROM anc
+         WHERE EXISTS (
+                 SELECT 1 FROM item_shares s
+                  WHERE s.user_id = p_user
+                    AND ((s.item_type = 'list'   AND s.item_id = anc.list_id)
+                      OR (s.item_type = 'folder' AND s.item_id = anc.folder_id))
+               )
+            OR EXISTS (
+                 SELECT 1 FROM markdown_lists m
+                  JOIN item_shares s2
+                    ON s2.user_id = p_user
+                   AND ((s2.item_type = 'markdownList' AND s2.item_id = m.id)
+                     OR (s2.item_type = 'folder'       AND s2.item_id = m.folder_id))
+                  WHERE m.todo_list_id = anc.list_id
+               )
+      );
+    $fn$
+  `);
 
   // Supports the hourly overdue-deadline sweep's `WHERE checked = false AND deadline < CURRENT_DATE`.
   await pool.query(`CREATE INDEX IF NOT EXISTS tasks_open_deadline_idx ON tasks (deadline) WHERE checked = false AND deadline IS NOT NULL`);
@@ -2373,6 +2430,16 @@ export async function runMigrations() {
   // real DATA tables (file path/size/mime metadata), not reference columns —
   // dropping a data table is a materially different risk class and gets its
   // own dedicated, separately-reviewed migration, never bundled into this gate.
+  //
+  // ONE MORE THING THIS BLOCK MUST DO BEFORE IT EVER RUNS FOR REAL:
+  // `item_share_grants_list()` (created earlier in this file) resolves the
+  // per-item-share cascade by reading `lists.parent_task_id` and
+  // `markdown_lists.todo_list_id`. PostgreSQL does not record function bodies
+  // as column dependencies, so these DROPs would succeed and leave that
+  // function — and therefore EVERY list access-condition in the app — failing
+  // at runtime, and the next startup unable to re-create it. Rewriting it
+  // against entity_links (`child_of` / `tracks` edges) belongs in the same
+  // change that opens this gate, not after it.
   const [migrationVerifiedRes, linksV2Res] = await Promise.all([
     pool.query<{ value: string }>(`SELECT value FROM app_settings WHERE key = 'graph_migration_verified'`),
     pool.query<{ value: string }>(`SELECT value FROM app_settings WHERE key = 'graph_links_v2'`),

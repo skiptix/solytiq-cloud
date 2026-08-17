@@ -1214,7 +1214,9 @@ export const apiRemoveTaskTag = (taskId: number | string, userId: string) =>
   apiFetch<{ tags: TaskTag[] }>(`/tasks/${taskId}/tags/${encodeURIComponent(userId)}`, { method: 'DELETE' });
 
 // ─── Per-item invitations ("Shared with me") ───────────────────────────────────
-export type SharedItemType = 'list' | 'timeline' | 'markdownList';
+// Inviting someone to a FOLDER hands them everything inside it — see the
+// cascade documented in backend/src/itemShares.ts.
+export type SharedItemType = 'list' | 'timeline' | 'markdownList' | 'folder';
 export interface ItemMember {
   userId: string;
   username: string;
@@ -1222,6 +1224,13 @@ export interface ItemMember {
   hasImage: boolean;
   invitedBy: string | null;
   createdAt: string;
+  /** `direct` = invited to this exact item (removable here); `inherited` = it
+   *  came from a container (the folder it sits in, an ancestor board, or the
+   *  markdown page it mirrors), and is only revocable on that container. */
+  via: 'direct' | 'inherited';
+  /** For `via: 'inherited'`, the container that granted access. */
+  viaName?: string;
+  viaType?: SharedItemType;
 }
 export const apiGetItemMembers = (type: SharedItemType, itemId: string) =>
   apiFetch<{ ownerId: string; members: ItemMember[] }>(`/item-shares/${type}/${encodeURIComponent(itemId)}/members`);
@@ -1230,7 +1239,7 @@ export const apiAddItemMember = (type: SharedItemType, itemId: string, username:
 export const apiRemoveItemMember = (type: SharedItemType, itemId: string, userId: string) =>
   apiFetch<{ members: ItemMember[] }>(`/item-shares/${type}/${encodeURIComponent(itemId)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' });
 export const apiGetSharedWithMe = () =>
-  apiFetch<{ lists: List[]; timelines: Timeline[]; markdownLists: MarkdownList[] }>('/shared-with-me');
+  apiFetch<{ folders: Folder[]; lists: List[]; timelines: Timeline[]; markdownLists: MarkdownList[] }>('/shared-with-me');
 
 // ─── Delta-sync engine ────────────────────────────────────────────────────────
 export interface BootstrapResponse {

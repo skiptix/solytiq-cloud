@@ -84,7 +84,12 @@ export default function UpcomingTimelineWidget({ folderId, accent = 'var(--color
 
   useEffect(() => {
     let cancelled = false;
-    apiGetUpcomingMilestones({ workspaceId: currentWorkspaceId ?? undefined, folderId, limit })
+    // A folder is already a precise scope — it lives in exactly one workspace —
+    // so also sending the ACTIVE workspace only narrows it wrongly: a folder
+    // shared with this user lives in a workspace they aren't a member of, and
+    // its timelines would silently vanish. The endpoint's access condition is
+    // what guards the read either way.
+    apiGetUpcomingMilestones({ workspaceId: folderId ? undefined : (currentWorkspaceId ?? undefined), folderId, limit })
       .then(res => { if (!cancelled) { setMilestones(res.milestones); setLoaded(true); } })
       .catch(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
