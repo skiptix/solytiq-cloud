@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Icon from './Icon';
 import MemberAvatar from './MemberAvatar';
-import PopIn from './animate-ui/PopIn';
+import AnchoredDropdown from './AnchoredDropdown';
+import MotionButton from './animate-ui/MotionButton';
 import useAuthStore from '../store/useAuthStore';
 import useMembersStore from '../store/useMembersStore';
 import {
@@ -50,7 +51,13 @@ export default function ItemMembersSection({ itemType, itemId, canManage, onChan
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [showSuggest, setShowSuggest] = useState(false);
+  // Folder invites only: does a new invitee also get everything inside the
+  // folder? Defaults to yes — handing over the contents is the point of sharing
+  // a folder, and the alternative is the deliberate, opt-in narrower case.
+  const [includeAll, setIncludeAll] = useState(true);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRowRef = useRef<HTMLDivElement>(null);
+  const suggestRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -67,7 +74,12 @@ export default function ItemMembersSection({ itemType, itemId, canManage, onChan
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setShowSuggest(false);
+      const target = e.target as Node;
+      // The suggestion list is portaled to document.body, so it is NOT inside
+      // wrapRef — without the second test, clicking a suggestion would count as
+      // a click outside and close the list before the pick registered.
+      if (wrapRef.current?.contains(target) || suggestRef.current?.contains(target)) return;
+      setShowSuggest(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -79,11 +91,11 @@ export default function ItemMembersSection({ itemType, itemId, canManage, onChan
     (invite.trim() === '' || nameOf(u).toLowerCase().includes(invite.toLowerCase()) || u.username.toLowerCase().includes(invite.toLowerCase()))
   ).slice(0, 6);
 
-  const doInvite = useCallback(async (username: string) => {
+  const doInvite = useCallback(async (username: string, scope = includeAll) => {
     if (!username.trim()) return;
     setBusy(true); setError('');
     try {
-      const r = await apiAddItemMember(itemType, itemId, username.trim());
+      const r = await apiAddItemMember(itemType, itemId, username.trim(), scope);
       setMembers(r.members);
       setInvite('');
       setShowSuggest(false);
@@ -91,7 +103,18 @@ export default function ItemMembersSection({ itemType, itemId, canManage, onChan
     } catch (e) {
       setError(e instanceof Error && /not found/i.test(e.message) ? 'No user with that username.' : 'Could not invite that user.');
     } finally { setBusy(false); }
-  }, [itemType, itemId, onChanged]);
+  }, [itemType, itemId, onChanged, includeAll]);
+
+  /** Flip an existing folder member between "everything inside" and
+   *  "folder only" — re-sending the invite with the other scope updates it. */
+  const doSetScope = async (m: ItemMember, scope: boolean) => {
+    setBusy(true);
+    try {
+      const r = await apiAddItemMember(itemType, itemId, m.username, scope);
+      setMembers(r.members);
+      onChanged?.();
+    } catch { /* silent */ } finally { setBusy(false); }
+  };
 
   const doRemove = async (userId: string) => {
     setBusy(true);
@@ -132,7 +155,24 @@ export default function ItemMembersSection({ itemType, itemId, canManage, onChan
                 <Icon name={VIA_ICON[m.viaType ?? 'folder']} size={11} color="var(--color-text-tertiary)" />
                 {m.viaName ?? 'Inherited'}
               </span>
-            ) : (canManage || m.userId === currentUserId) && (
+            ) : (
+              <>
+                {/* Folder members carry a scope; clicking flips it, so a choice
+                    made at invite time is never a one-way door. */}
+                {itemType === 'folder' && (
+                  <button
+                    onClick={canManage ? () => void doSetScope(m, !m.includeAll) : undefined}
+                    disabled={busy || !canManage}
+                    title={canManage
+                      ? (m.includeAll ? 'Has the folder and everything in it — click for folder only' : 'Has the folder only — click to include everything in it')
+                      : (m.includeAll ? 'Has the folder and everything in it' : 'Has the folder only')}
+                    style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-heading)', fontSize: 9.5, fontWeight: 700, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', background: 'var(--color-surface-gray)', border: 'none', borderRadius: 9999, padding: '3px 8px', flexShrink: 0, cursor: canManage && !busy ? 'pointer' : 'default' }}
+                  >
+                    <Icon name={m.includeAll ? 'folder_open' : 'folder'} size={11} color="var(--color-text-tertiary)" />
+                    {m.includeAll ? 'All items' : 'Folder only'}
+                  </button>
+                )}
+                {(canManage || m.userId === currentUserId) && (
               <button
                 onClick={() => void doRemove(m.userId)}
                 disabled={busy}
@@ -143,6 +183,8 @@ export default function ItemMembersSection({ itemType, itemId, canManage, onChan
               >
                 <Icon name="close" size={14} color="var(--color-error)" />
               </button>
+                )}
+              </>
             )}
           </div>
         ))}
@@ -151,10 +193,44 @@ export default function ItemMembersSection({ itemType, itemId, canManage, onChan
         )}
       </div>
 
+      {/* What a new invitee gets (folders only) — the folder's contents, or the
+          folder alone. Mirrors the public share link's own "What to share"
+          choice in ItemSettingsModal, so both sharing mechanisms read the same. */}
+      {canManage && itemType === 'folder' && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+            What they get
+          </div>
+          <div style={{ display: 'flex', gap: 4, background: 'var(--color-surface-tint)', borderRadius: 10, padding: 4 }}>
+            {([
+              { label: 'Folder + all items', icon: 'folder_open', val: true },
+              { label: 'Folder only', icon: 'folder', val: false },
+            ] as const).map(opt => {
+              const selected = includeAll === opt.val;
+              return (
+                <MotionButton key={opt.label}
+                  onClick={() => setIncludeAll(opt.val)}
+                  animate={{ background: selected ? 'var(--color-primary)' : 'transparent', color: selected ? 'var(--color-white)' : 'var(--color-primary)' }}
+                  transition={{ duration: 0.12 }}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '8px 8px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: selected ? 600 : 500 }}>
+                  <Icon name={opt.icon} size={14} color={selected ? 'var(--color-white)' : 'var(--color-primary)'} />
+                  {opt.label}
+                </MotionButton>
+              );
+            })}
+          </div>
+          <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)', marginTop: 6, lineHeight: 1.4, paddingLeft: 2 }}>
+            {includeAll
+              ? 'Every board, timeline and page in this folder — including ones you add later — becomes editable for the people you invite.'
+              : 'They see the folder itself. Boards, timelines and pages inside stay private unless you share them individually.'}
+          </div>
+        </div>
+      )}
+
       {/* Invite input (owner/admin only) */}
       {canManage && (
         <div ref={wrapRef} style={{ position: 'relative' }}>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div ref={inputRowRef} style={{ display: 'flex', gap: 8 }}>
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 9, padding: '8px 11px' }}>
               <Icon name="person_add" size={15} color="var(--color-text-quaternary)" />
               <input
@@ -176,8 +252,10 @@ export default function ItemMembersSection({ itemType, itemId, canManage, onChan
           </div>
           {error && <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-error)', marginTop: 6 }}>{error}</div>}
 
-          {showSuggest && suggestions.length > 0 && (
-            <PopIn duration={120} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 60, background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 10, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 6, maxHeight: 220, overflowY: 'auto' }}>
+          {/* Portaled, not absolutely positioned: this modal's body scrolls and
+              its card is transformed, either of which would hide the list.
+              See AnchoredDropdown's header. */}
+          <AnchoredDropdown anchorRef={inputRowRef} open={showSuggest && suggestions.length > 0} panelRef={suggestRef}>
               {suggestions.map(u => (
                 <button
                   key={u.id}
@@ -193,8 +271,7 @@ export default function ItemMembersSection({ itemType, itemId, canManage, onChan
                   </div>
                 </button>
               ))}
-            </PopIn>
-          )}
+          </AnchoredDropdown>
         </div>
       )}
     </div>
