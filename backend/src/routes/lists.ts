@@ -8,6 +8,7 @@ import { broadcastToUser } from '../sse';
 import { versionGuardSql, resolveVersionedUpdateFailure } from '../concurrency';
 import { validateReorderIds, bulkSetPositions } from '../reorderUtil';
 import { resolveWorkspaceForUser, userCanAccessWorkspace, wlog, wwarn, werr, QueryExec } from '../workspaceUtil';
+import { resolveFolderPlacement } from './folders';
 import { softDeleteListTree, collectDescendantListIds as collectDescendantListIdsShared } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestrictConflict } from '../visibility';
 import type { MutationActor } from '../automationEngine';
@@ -590,9 +591,12 @@ router.post('/', async (req: Request, res: Response) => {
 
     // Resolve to a workspace the user can actually access. Guarantees the list
     // lands in a real, visible workspace (never NULL / never a dangling id), so
-    // it reliably reappears on reload.
-    const resolvedWs = await resolveWorkspaceForUser(req.userId!, workspaceId);
-    wlog(`list CREATE workspace resolved user=${req.userId} id=${listId} requested=${workspaceId ?? 'none'} resolved=${resolvedWs}`);
+    // it reliably reappears on reload. A folder the user can reach — including
+    // one shared with them — dictates the workspace, since a folder and its
+    // contents must not disagree about which workspace they are in.
+    const placement = await resolveFolderPlacement(req.userId!, folderId);
+    const resolvedWs = placement.workspaceId ?? await resolveWorkspaceForUser(req.userId!, workspaceId);
+    wlog(`list CREATE workspace resolved user=${req.userId} id=${listId} requested=${workspaceId ?? 'none'} folder=${placement.folderId ?? 'root'} resolved=${resolvedWs}`);
 
     const posResult = await query<{ max: string | null }>(
       'SELECT MAX(position) AS max FROM lists WHERE user_id = $1',
@@ -606,7 +610,7 @@ router.post('/', async (req: Request, res: Response) => {
       `INSERT INTO lists (id, user_id, name, emoji, color, color_bg, subtitle, is_public, folder_id, position, parent_task_id, depth, workspace_id, view_mode)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING *`,
-      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, isPublic ?? false, folderId ?? null, nextPos, parentTaskId ?? null, depth ?? 0, resolvedWs, initialViewMode]
+      [listId, req.userId, name, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, placement.inheritIsPublic ?? isPublic ?? false, placement.folderId, nextPos, parentTaskId ?? null, depth ?? 0, resolvedWs, initialViewMode]
     );
 
     const persisted = result.rows[0];

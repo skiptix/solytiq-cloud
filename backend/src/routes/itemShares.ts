@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // /api/item-shares — manage per-item invitations (the "Invite people" control
-// on a list / timeline / markdown page, and the "share just this item" half of
-// the tag/mention prompt), plus /api/shared-with-me for discovery.
+// on a folder / list / timeline / markdown page, and the "share just this item"
+// half of the tag/mention prompt), plus /api/shared-with-me for discovery.
 //
 //   GET    /api/item-shares/:itemType/:itemId/members         → invited users
 //   POST   /api/item-shares/:itemType/:itemId/members {username}
@@ -10,6 +10,11 @@
 //
 // Only the item's owner (or an admin) can invite/remove; any user who can see
 // the item can read its member list. A new invite notifies the invited user.
+//
+// Inviting someone to a FOLDER hands them everything inside it — boards,
+// timelines and markdown pages alike, including ones added later. The cascade
+// is resolved at read/write time from the containment tree rather than
+// materialized as per-item rows; see backend/src/itemShares.ts's header.
 // ---------------------------------------------------------------------------
 
 import { Router, Request, Response } from 'express';
@@ -17,10 +22,14 @@ import { query } from '../db';
 import { authenticate } from '../middleware';
 import { werr } from '../workspaceUtil';
 import { createNotification } from '../notifications';
-import { addItemShare, removeItemShare, listItemShares, type SharedItemType } from '../itemShares';
-import { getListForUser } from './lists';
-import { getTimelineForUser } from './timelines';
+import {
+  addItemShare, removeItemShare, listItemShares, getSharedItemIdsForUser,
+  parseSharedItemType, type SharedItemType,
+} from '../itemShares';
+import { getListForUser, getListsForUserBatch } from './lists';
+import { getTimelineForUser, getTimelinesForUserBatch } from './timelines';
 import { getMarkdownListForUser } from './markdownLists';
+import { getFolderForUser, getFoldersForUserBatch } from './folders';
 
 const router = Router();
 // NOTE: this router is mounted at the broad `/api` prefix (see index.ts) so it
@@ -36,11 +45,8 @@ const TYPE_TABLE: Record<SharedItemType, string> = {
   list: 'lists',
   timeline: 'timelines',
   markdownList: 'markdown_lists',
+  folder: 'folders',
 };
-
-function parseType(raw: string): SharedItemType | null {
-  return raw === 'list' || raw === 'timeline' || raw === 'markdownList' ? raw : null;
-}
 
 interface ItemMeta { ownerId: string; workspaceId: string | null; name: string }
 
@@ -59,13 +65,14 @@ async function getItemMeta(type: SharedItemType, itemId: string): Promise<ItemMe
 async function canViewItem(type: SharedItemType, itemId: string, userId: string): Promise<boolean> {
   if (type === 'list') return (await getListForUser(userId, itemId)) !== null;
   if (type === 'timeline') return (await getTimelineForUser(userId, itemId)) !== null;
+  if (type === 'folder') return (await getFolderForUser(userId, itemId)) !== null;
   return (await getMarkdownListForUser(userId, itemId)) !== null;
 }
 
 // GET /api/item-shares/:itemType/:itemId/members
 router.get('/item-shares/:itemType/:itemId/members', authenticate, async (req: Request, res: Response) => {
   try {
-    const type = parseType(req.params.itemType);
+    const type = parseSharedItemType(req.params.itemType);
     if (!type) { res.status(400).json({ error: 'Invalid item type' }); return; }
     const { itemId } = req.params;
     const meta = await getItemMeta(type, itemId);
@@ -84,7 +91,7 @@ router.get('/item-shares/:itemType/:itemId/members', authenticate, async (req: R
 // POST /api/item-shares/:itemType/:itemId/members  { username }
 router.post('/item-shares/:itemType/:itemId/members', authenticate, async (req: Request, res: Response) => {
   try {
-    const type = parseType(req.params.itemType);
+    const type = parseSharedItemType(req.params.itemType);
     if (!type) { res.status(400).json({ error: 'Invalid item type' }); return; }
     const { itemId } = req.params;
     const { username } = req.body as { username?: string };
@@ -129,7 +136,7 @@ router.post('/item-shares/:itemType/:itemId/members', authenticate, async (req: 
 // DELETE /api/item-shares/:itemType/:itemId/members/:userId
 router.delete('/item-shares/:itemType/:itemId/members/:userId', authenticate, async (req: Request, res: Response) => {
   try {
-    const type = parseType(req.params.itemType);
+    const type = parseSharedItemType(req.params.itemType);
     if (!type) { res.status(400).json({ error: 'Invalid item type' }); return; }
     const { itemId, userId } = req.params;
     const meta = await getItemMeta(type, itemId);
@@ -154,29 +161,44 @@ router.delete('/item-shares/:itemType/:itemId/members/:userId', authenticate, as
   }
 });
 
-// GET /api/shared-with-me — every list/timeline/markdown page this user has been
-// INVITED to (they aren't the owner), fully hydrated so the client can render
-// them exactly like their own items, independent of the active workspace.
+// GET /api/shared-with-me — every folder/list/timeline/markdown page this user
+// has been INVITED to (they aren't the owner), fully hydrated so the client can
+// render them exactly like their own items, independent of the active workspace.
+//
+// A folder invite contributes the folder itself AND everything currently inside
+// it, so the sidebar can group the contents under their folder without knowing
+// the cascade rules. Deeper containment (sublists, a page's Todo mirror) is
+// intentionally left out: those are reachable, but they render nested under an
+// item that is already in this payload, never as a top-level row.
 router.get('/shared-with-me', authenticate, async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
-    const shares = await query<{ item_type: string; item_id: string }>(
-      `SELECT item_type, item_id FROM item_shares WHERE user_id = $1 ORDER BY created_at DESC`,
-      [userId]
-    );
+    const ids = await getSharedItemIdsForUser(userId);
 
-    // Hydrate each shared item through its per-user builder (double access-check),
-    // in parallel, then drop any that no longer resolve (deleted / access revoked).
-    const hydrated = await Promise.all(shares.rows.map(async (s) => {
-      if (s.item_type === 'list') return { kind: 'list' as const, item: await getListForUser(userId, s.item_id) };
-      if (s.item_type === 'timeline') return { kind: 'timeline' as const, item: await getTimelineForUser(userId, s.item_id) };
-      if (s.item_type === 'markdownList') return { kind: 'markdownList' as const, item: await getMarkdownListForUser(userId, s.item_id) };
-      return { kind: 'list' as const, item: null };
-    }));
+    // Hydrate through each type's BATCH per-user builder — a second,
+    // independent access check, in one query per type. One folder invite can
+    // expand to every board in that folder, and this endpoint re-fires on
+    // focus, on an invite notification, and ~300ms after any mutation, so the
+    // per-id variants would mean hundreds of round trips on a routine refresh.
+    // An id the caller can no longer see is simply absent from the returned Map
+    // — deleted, moved out of the shared folder, or the invite revoked.
+    const [folders, lists, timelines, markdownLists] = await Promise.all([
+      getFoldersForUserBatch(userId, ids.folders),
+      getListsForUserBatch(userId, ids.lists),
+      getTimelinesForUserBatch(userId, ids.timelines),
+      // Markdown pages have no batch builder (their detail payload is a single
+      // JSONB document, so there is no N+1 join fan-out to collapse).
+      Promise.all(ids.markdownLists.map((id) => getMarkdownListForUser(userId, id))),
+    ]);
+    // Preserve the order getSharedItemIdsForUser returned (most recent invite
+    // first, then folder contents) rather than the Map's insertion order.
+    const ordered = <T>(idList: string[], map: Map<string, T>): T[] =>
+      idList.map((id) => map.get(id)).filter((x): x is T => x !== undefined);
     res.json({
-      lists: hydrated.filter((h) => h.kind === 'list' && h.item).map((h) => h.item),
-      timelines: hydrated.filter((h) => h.kind === 'timeline' && h.item).map((h) => h.item),
-      markdownLists: hydrated.filter((h) => h.kind === 'markdownList' && h.item).map((h) => h.item),
+      folders: ordered(ids.folders, folders),
+      lists: ordered(ids.lists, lists),
+      timelines: ordered(ids.timelines, timelines),
+      markdownLists: markdownLists.filter(Boolean),
     });
   } catch (err) {
     werr('shared-with-me GET error:', err);

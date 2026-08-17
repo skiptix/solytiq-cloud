@@ -55,10 +55,20 @@ describe('canWriteEntity', () => {
   });
 
   it('an item_shares collaborator can write to a list/timeline/markdownList', async () => {
-    const { exec, calls } = makeExec([[{ owner_id: 'user-1' }], [{ '?column?': 1 }]]);
+    // Lists resolve through the containment cascade (see itemShares.ts), so the
+    // second call is the DB function, not a bare item_shares SELECT.
+    const { exec, calls } = makeExec([[{ owner_id: 'user-1' }], [{ granted: true }]]);
     expect(await canWriteEntity('user-2', false, 'list', 'list_1', exec)).toBe(true);
+    expect(calls[1].text).toContain('item_share_grants_list');
+    expect(calls[1].params).toEqual(['user-2', 'list_1']);
+  });
+
+  it('a timeline collaborator can write, and a folder invite reaches it too', async () => {
+    const { exec, calls } = makeExec([[{ owner_id: 'user-1' }], [{ '?column?': 1 }]]);
+    expect(await canWriteEntity('user-2', false, 'timeline', 'tl_1', exec)).toBe(true);
     expect(calls[1].text).toContain('item_shares');
-    expect(calls[1].params).toEqual(['list', 'list_1', 'user-2']);
+    expect(calls[1].text).toContain("s.item_type = 'folder'");
+    expect(calls[1].params).toEqual(['tl_1', 'user-2', 'timeline']);
   });
 
   it('item_shares collaboration does NOT extend to single-owner entity types (task/milestone/meeting/file/gpsFile/section)', async () => {

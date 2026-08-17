@@ -481,7 +481,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
     { id: 'access',       label: 'Access',     icon: 'shield_lock' },
     ...(hasFolders ? [{ id: 'organization' as const, label: 'Folder', icon: 'folder_open' }] : []),
     ...(hasShare   ? [{ id: 'share' as const,        label: 'Share',  icon: 'link' }]        : []),
-    ...(itemId && kind !== 'folder' ? [{ id: 'people' as const, label: 'People', icon: 'group' }] : []),
+    ...(itemId ? [{ id: 'people' as const, label: 'People', icon: 'group' }] : []),
     ...(isAdmin && itemId && kind !== 'folder' ? [{ id: 'admin' as const, label: 'Admin', icon: 'admin_panel_settings' }] : []),
   ];
 
@@ -788,10 +788,12 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
           )}
 
           {/* ── PEOPLE (per-item invitations) ── */}
-          {activeTab === 'people' && itemId && kind !== 'folder' && (
+          {activeTab === 'people' && itemId && (
             <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, ease: EASE_SETTLE }}>
               <p style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-tertiary)', margin: '0 0 14px', lineHeight: 1.5 }}>
-                Invite people to collaborate on this {kind === 'timeline' ? 'timeline' : kind === 'markdownList' ? 'page' : 'list'} directly — they can view and edit it even if it's not shared with the whole workspace.
+                {kind === 'folder'
+                  ? 'Invite people to collaborate on this folder — they can view and edit everything inside it (boards, timelines and pages, including ones you add later), even if they’re not in this workspace.'
+                  : `Invite people to collaborate on this ${KIND_DISPLAY_NAME[kind]} directly — they can view and edit it even if it's not shared with the whole workspace.`}
               </p>
               <ItemMembersSection itemType={kind as SharedItemType} itemId={itemId} canManage={creatorId === userId || isAdmin} />
             </MotionIn>

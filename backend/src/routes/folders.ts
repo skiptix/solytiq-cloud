@@ -13,6 +13,7 @@ import {
   type ConflictDescendant,
 } from '../visibility';
 import { decodeKeysetCursor, encodeKeysetCursor, parsePageLimit, paginateRows, type KeysetCursor } from '../pagination';
+import { itemShareExists } from '../itemShares';
 
 const router = Router();
 router.use(authenticate);
@@ -62,7 +63,10 @@ function sanitizeFolder(f: FolderRow) {
   };
 }
 
-const FOLDER_ACCESS = `(f.user_id = $1 OR (f.is_public = true AND (wm.user_id = $1 OR f.workspace_id IS NULL OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = f.workspace_id AND w.visibility = 'public'))))`;
+// Mirrors objectPolicy.ts's objectAccessCondition for lists/timelines: owner,
+// OR in-app-public to a member of its workspace, OR individually invited. As
+// there, `is_public` alone is never a grant to every signed-in user.
+const FOLDER_ACCESS = `(f.user_id = $1 OR (f.is_public = true AND (wm.user_id = $1 OR f.workspace_id IS NULL OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = f.workspace_id AND w.visibility = 'public'))) OR ${itemShareExists('f', 'folder')})`;
 
 // Build the folders the user can see, exactly as GET /api/folders returns them.
 // Reused by the sync bootstrap.
@@ -94,6 +98,53 @@ export async function getFolderForUser(userId: string, folderId: string) {
     [userId, folderId]
   );
   return r.rows[0] ? sanitizeFolder(r.rows[0]) : null;
+}
+
+/**
+ * Where a newly created board/timeline/markdown page dropped into `folderId`
+ * actually belongs.
+ *
+ * A folder and its contents must share one workspace (see PUT /:id/workspace,
+ * which moves them together for exactly this reason). Once a folder can be
+ * shared with someone who is NOT a member of its workspace, resolving the new
+ * item's workspace from the CLIENT's active workspace would put it in a
+ * different workspace from the folder it claims to sit in — a combination
+ * `runMigrations()` heals by nulling the folder_id, i.e. the item silently
+ * jumps out of the folder the user just put it in. So the folder wins: it is
+ * the more specific instruction, and it is the one the user can see.
+ *
+ * A folder the caller can't see is dropped rather than rejected (the item is
+ * still created, at the workspace root) — same forgiving posture as
+ * `resolveWorkspaceForUser`, which falls back instead of failing the write.
+ *
+ * `inheritIsPublic` is set only when the folder belongs to SOMEONE ELSE, and it
+ * carries that folder's own in-app visibility. A collaborator adding a board to
+ * a folder shared with them would otherwise create it `is_public = false` and
+ * owned by themselves — invisible to the folder's owner and to every workspace
+ * member, i.e. an item that vanishes from the folder it was just added to for
+ * everyone but its author. Other folder invitees always see it regardless (the
+ * cascade matches on `folder_id`, not on visibility); this is what closes the
+ * workspace-member half. Null when the caller owns the folder, so their own
+ * explicit choice in the create wizard still wins.
+ */
+export async function resolveFolderPlacement(
+  userId: string,
+  folderId: string | null | undefined
+): Promise<{ folderId: string | null; workspaceId: string | null; inheritIsPublic: boolean | null }> {
+  if (!folderId) return { folderId: null, workspaceId: null, inheritIsPublic: null };
+  const r = await query<FolderRow>(
+    `SELECT f.* FROM folders f
+     LEFT JOIN workspace_members wm ON wm.workspace_id = f.workspace_id AND wm.user_id = $1
+     WHERE f.id = $2 AND ${FOLDER_ACCESS}`,
+    [userId, folderId]
+  );
+  if (r.rows.length === 0) return { folderId: null, workspaceId: null, inheritIsPublic: null };
+  const folder = r.rows[0];
+  return {
+    folderId,
+    workspaceId: folder.workspace_id ?? null,
+    inheritIsPublic: folder.user_id === userId ? null : folder.is_public,
+  };
 }
 
 /**

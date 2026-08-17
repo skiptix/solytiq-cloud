@@ -34,6 +34,8 @@ export function notificationTarget(n: AppNotification): NotificationTarget {
     }
     case 'markdownList':
       return { path: n.entityId ? `/markdown-list/${n.entityId}` : '/dashboard', workspaceId: n.workspaceId };
+    case 'folder':
+      return { path: n.entityId ? `/folder/${n.entityId}` : '/dashboard', workspaceId: n.workspaceId };
     case 'automation':
       return { path: n.entityId ? `/automations/${n.entityId}` : '/automations', workspaceId: n.workspaceId };
     default:

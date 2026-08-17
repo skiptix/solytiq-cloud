@@ -16,6 +16,7 @@
 
 import type { QueryExec } from '../workspaceUtil';
 import { query } from '../db';
+import { isItemSharedWith } from '../itemShares';
 
 /** SQL fragment: "<alias> (an entity_index row) is visible to $<userParamIndex>". */
 export function visibleCondition(alias: string, userParamIndex: number): string {
@@ -27,6 +28,27 @@ export function visibleCondition(alias: string, userParamIndex: number): string 
       OR EXISTS (SELECT 1 FROM workspace_members wm WHERE wm.workspace_id = ${alias}.workspace_id AND wm.user_id = ${p})
       OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = ${alias}.workspace_id AND w.visibility = 'public')
       OR EXISTS (SELECT 1 FROM item_shares s WHERE s.user_id = ${p} AND s.item_type = ${alias}.entity_type AND s.item_id = ${alias}.entity_id)
+      OR (
+        -- Inherited through a shared CONTAINER (see backend/src/itemShares.ts).
+        -- This must mirror what canWriteEntity() grants below: a sublist of a
+        -- board in a shared folder that is writable but invisible would 404 on
+        -- read and never appear in the Net, entity search, or knowledge search.
+        -- The leading guard has no correlation to the outer row, so the planner
+        -- runs it once as an InitPlan and a user holding no invites at all
+        -- never pays for the lookups below.
+        EXISTS (SELECT 1 FROM item_shares sg WHERE sg.user_id = ${p})
+        AND (
+          (${alias}.entity_type = 'list' AND item_share_grants_list(${p}::uuid, ${alias}.entity_id))
+          OR (${alias}.entity_type IN ('timeline', 'markdownList') AND EXISTS (
+            SELECT 1 FROM item_shares sf
+             WHERE sf.user_id = ${p} AND sf.item_type = 'folder'
+               AND sf.item_id = (CASE ${alias}.entity_type
+                    WHEN 'timeline'     THEN (SELECT t.folder_id FROM timelines t      WHERE t.id = ${alias}.entity_id)
+                    WHEN 'markdownList' THEN (SELECT m.folder_id FROM markdown_lists m WHERE m.id = ${alias}.entity_id)
+                  END)
+          ))
+        )
+      )
     )
   )`;
 }
@@ -84,11 +106,11 @@ export async function canWriteEntity(
     return member.rows.length > 0;
   }
   if (entityType === 'list' || entityType === 'timeline' || entityType === 'markdownList') {
-    const shared = await exec(
-      `SELECT 1 FROM item_shares WHERE item_type = $1 AND item_id = $2 AND user_id = $3`,
-      [entityType, entityId, userId]
-    );
-    return shared.rows.length > 0;
+    // Delegates so the graph layer resolves the SAME containment cascade the
+    // app's own write checks do (a board inside a shared folder, a sublist of a
+    // shared board) instead of matching only the exact row someone was invited
+    // to — see backend/src/itemShares.ts.
+    return isItemSharedWith(entityType, entityId, userId, exec);
   }
   return false;
 }

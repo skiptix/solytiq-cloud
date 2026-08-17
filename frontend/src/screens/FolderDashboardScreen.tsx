@@ -4,6 +4,7 @@ import { useMobile } from '../hooks/useBreakpoint';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import type { Task, List } from '../types';
 import useAppStore from '../store/useAppStore';
+import useSharedItemsStore from '../store/useSharedItemsStore';
 import UpcomingTimelineWidget from '../components/UpcomingTimelineWidget';
 import Icon from '../components/Icon';
 import Spinner from '@/components/animate-ui/Spinner';
@@ -187,6 +188,11 @@ export default function FolderDashboardScreen() {
   const { folderId } = useParams<{ folderId: string }>();
   const navigate = useNavigate();
   const { folders, lists, listsLoading } = useAppStore();
+  // A folder someone shared with us can live in a workspace we're not a member
+  // of, so it never appears in the workspace-scoped app store. Same fallback
+  // ListScreen/TimelineScreen already use for individually shared items.
+  const sharedFolders = useSharedItemsStore(s => s.folders);
+  const sharedLists = useSharedItemsStore(s => s.lists);
   const isMobile = useMobile();
 
   // On a page refresh the workspace data is fetched asynchronously, so `folders`
@@ -201,7 +207,7 @@ export default function FolderDashboardScreen() {
     return () => clearTimeout(t);
   }, []);
 
-  const folder = folders.find(f => f.id === folderId);
+  const folder = folders.find(f => f.id === folderId) ?? sharedFolders.find(f => f.id === folderId);
 
   let pageTitle = 'Loading folder...';
   if (!folder && !listsLoading && graceElapsed) {
@@ -226,8 +232,11 @@ export default function FolderDashboardScreen() {
   const ac = folder.color ?? 'var(--color-primary)';
   const acBg = `${ac}15`;
 
-  const folderLists = lists
-    .filter(l => l.folderId === folderId)
+  // De-duped union: a shared folder's boards arrive via the shared store, and
+  // one that ALSO sits in the active workspace is already in `lists`.
+  const byId = new Map(lists.filter(l => l.folderId === folderId).map(l => [l.id, l]));
+  for (const l of sharedLists) if (l.folderId === folderId && !byId.has(l.id)) byId.set(l.id, l);
+  const folderLists = Array.from(byId.values())
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
   const allTasks = folderLists.flatMap(l =>

@@ -151,7 +151,7 @@ setMutationSettledHandler(() => {
     // active workspace's delta — refresh that set too, but only for users who
     // actually have shared items so it costs nothing for everyone else.
     const shared = useSharedItemsStore.getState();
-    if (shared.lists.length || shared.timelines.length || shared.markdownLists.length) {
+    if (shared.folders.length || shared.lists.length || shared.timelines.length || shared.markdownLists.length) {
       void shared.load();
     }
   }, 300);

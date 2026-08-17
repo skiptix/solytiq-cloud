@@ -1501,6 +1501,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
   const mdTodoListIds = new Set(markdownLists.map(m => m.todoListId).filter((x): x is string => !!x));
   // Items other users shared with me — de-duped against the current workspace's
   // own items (a same-workspace share already appears above in the normal view).
+  const sharedFolders = useSharedItemsStore(s => s.folders);
   const sharedLists = useSharedItemsStore(s => s.lists);
   const sharedTimelines = useSharedItemsStore(s => s.timelines);
   const sharedMarkdown = useSharedItemsStore(s => s.markdownLists);
@@ -1889,7 +1890,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           <ProfileCard collapsed={collapsed} />
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.83.0
+              v1.84.0
             </div>
           )}
         </div>
@@ -2229,12 +2230,29 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           const listIds = new Set(lists.map(l => l.id));
           const timelineIds = new Set(timelines.map(t => t.id));
           const mdIds = new Set(markdownLists.map(m => m.id));
+          const folderIds = new Set(folders.map(f => f.id));
+          const extraFolders = sharedFolders.filter(f => !folderIds.has(f.id));
           const extraLists = sharedLists.filter(l => !listIds.has(l.id));
           const extraTimelines = sharedTimelines.filter(t => !timelineIds.has(t.id));
           const extraMarkdown = sharedMarkdown.filter(m => !mdIds.has(m.id));
-          const total = extraLists.length + extraTimelines.length + extraMarkdown.length;
+          const total = extraFolders.length + extraLists.length + extraTimelines.length + extraMarkdown.length;
           if (total === 0) return null;
-          const row = (key: string, icon: string, color: string | undefined, emoji: string | null | undefined, name: string, activeRow: boolean, path: string) => (
+
+          // A folder invite arrives with its contents alongside it. Render each
+          // shared folder as a group with its own items nested underneath, and
+          // keep only the genuinely loose items at the top level — otherwise
+          // every board in a shared folder would also appear as a sibling of
+          // the folder that contains it.
+          // Collapsed, there is no room for a group heading or indentation, so
+          // grouping would just hide the folder's contents behind a folder icon.
+          // Fall back to the flat icon-row list the rail had before.
+          const sharedFolderIds = new Set(collapsed ? [] : extraFolders.map(f => f.id));
+          const inSharedFolder = (fid?: string | null) => !!fid && sharedFolderIds.has(fid);
+          const looseLists = extraLists.filter(l => !inSharedFolder(l.folderId));
+          const looseTimelines = extraTimelines.filter(t => !inSharedFolder(t.folderId));
+          const looseMarkdown = extraMarkdown.filter(m => !inSharedFolder(m.folderId));
+
+          const row = (key: string, icon: string, color: string | undefined, emoji: string | null | undefined, name: string, activeRow: boolean, path: string, indent = false) => (
             <MotionButton
               key={key}
               onClick={() => onNavigate(path)}
@@ -2242,7 +2260,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
               animate={{ background: activeRow ? 'var(--color-surface-tint)' : 'transparent' }}
               whileHover={!activeRow ? { background: 'var(--color-surface-tint-3)' } : undefined}
               transition={{ duration: 0.15 }}
-              style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : '8px 10px', justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', border: 'none', width: '100%', textAlign: 'left', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: activeRow ? 600 : 450, color: activeRow ? (color ?? 'var(--color-primary)') : 'var(--color-text-secondary)' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: collapsed ? 0 : 10, padding: collapsed ? '8px 0' : `8px 10px 8px ${indent ? 24 : 10}px`, justifyContent: collapsed ? 'center' : 'flex-start', borderRadius: 8, cursor: 'pointer', border: 'none', width: '100%', textAlign: 'left', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: activeRow ? 600 : 450, color: activeRow ? (color ?? 'var(--color-primary)') : 'var(--color-text-secondary)' }}>
               {emoji ? <span style={{ fontSize: 15, width: 18, textAlign: 'center', flexShrink: 0 }}>{emoji}</span> : <Icon name={icon} size={16} color={activeRow ? (color ?? 'var(--color-primary)') : 'var(--color-text-tertiary)'} />}
               {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>}
             </MotionButton>
@@ -2256,9 +2274,21 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
                 </div>
               )}
               {collapsed && <div style={{ height: 1, background: 'var(--color-border)', margin: '6px 8px' }} />}
-              {extraLists.map(l => row(`sl-${l.id}`, 'format_list_bulleted', l.color, l.emoji, l.name, active === 'list' && activeListId === l.id, `/list/${l.id}`))}
-              {extraTimelines.map(t => row(`st-${t.id}`, 'timeline', t.color ?? undefined, t.emoji, t.name, active === 'timeline' && activeTimelineId === t.id, `/timeline/${t.id}`))}
-              {extraMarkdown.map(m => row(`sm-${m.id}`, 'notes', m.color ?? undefined, m.emoji, m.name, active === 'markdownList' && activeMarkdownListId === m.id, `/markdown-list/${m.id}`))}
+              {extraFolders.map(f => (
+                <div key={`sf-${f.id}`}>
+                  {row(`sfr-${f.id}`, 'folder', f.color, f.emoji, f.name, active === 'folder' && activeFolderId === f.id, `/folder/${f.id}`)}
+                  {!collapsed && (
+                    <>
+                      {extraLists.filter(l => l.folderId === f.id).map(l => row(`sfl-${l.id}`, 'format_list_bulleted', l.color, l.emoji, l.name, active === 'list' && activeListId === l.id, `/list/${l.id}`, true))}
+                      {extraTimelines.filter(t => t.folderId === f.id).map(t => row(`sft-${t.id}`, 'timeline', t.color ?? undefined, t.emoji, t.name, active === 'timeline' && activeTimelineId === t.id, `/timeline/${t.id}`, true))}
+                      {extraMarkdown.filter(m => m.folderId === f.id).map(m => row(`sfm-${m.id}`, 'notes', m.color ?? undefined, m.emoji, m.name, active === 'markdownList' && activeMarkdownListId === m.id, `/markdown-list/${m.id}`, true))}
+                    </>
+                  )}
+                </div>
+              ))}
+              {looseLists.map(l => row(`sl-${l.id}`, 'format_list_bulleted', l.color, l.emoji, l.name, active === 'list' && activeListId === l.id, `/list/${l.id}`))}
+              {looseTimelines.map(t => row(`st-${t.id}`, 'timeline', t.color ?? undefined, t.emoji, t.name, active === 'timeline' && activeTimelineId === t.id, `/timeline/${t.id}`))}
+              {looseMarkdown.map(m => row(`sm-${m.id}`, 'notes', m.color ?? undefined, m.emoji, m.name, active === 'markdownList' && activeMarkdownListId === m.id, `/markdown-list/${m.id}`))}
             </div>
           );
         })()}
@@ -2268,7 +2298,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <ProfileCard collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.83.0
+            v1.84.0
           </div>
         )}
       </div>

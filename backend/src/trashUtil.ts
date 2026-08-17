@@ -346,6 +346,10 @@ export async function softDeleteFolderExec(exec: QueryExec, folderId: string): P
   const ok = await snapshotFolderToTrash(exec, folderId);
   if (!ok) return false;
   await exec('UPDATE lists SET folder_id = NULL WHERE folder_id = $1', [folderId]);
+  // Per-item invitations granted ON the folder — the shared path every folder
+  // delete funnels through, so no orphan item_shares row survives to grant
+  // access to a folder id that a later folder could reuse.
+  await exec(`DELETE FROM item_shares WHERE item_type = 'folder' AND item_id = $1`, [folderId]);
   await exec('DELETE FROM folders WHERE id = $1', [folderId]);
   return true;
 }
