@@ -78,7 +78,7 @@ export function itemShareExists(alias: string, type: SharedItemType, userParam =
       SELECT 1 FROM item_shares s
        WHERE s.user_id = ${userParam}
          AND ((s.item_type = '${t}' AND s.item_id = ${alias}.id)
-           OR (s.item_type = 'folder'  AND s.item_id = ${alias}.folder_id))
+           OR (s.item_type = 'folder'  AND s.item_id = ${alias}.folder_id AND s.include_all))
     )`;
   if (type !== 'list') return `(${anyShare} AND ${directOrFolder(type)})`;
 
@@ -102,7 +102,7 @@ export function itemShareExists(alias: string, type: SharedItemType, userParam =
            SELECT 1 FROM item_shares s2
             WHERE s2.user_id = ${userParam}
               AND ((s2.item_type = 'markdownList' AND s2.item_id = m.id)
-                OR (s2.item_type = 'folder'       AND s2.item_id = m.folder_id))
+                OR (s2.item_type = 'folder'       AND s2.item_id = m.folder_id AND s2.include_all))
          )
     )
     OR (${alias}.parent_task_id IS NOT NULL AND item_share_grants_list(${userParam}::uuid, ${alias}.id))
@@ -144,21 +144,52 @@ export async function isItemSharedWith(
           SELECT 1 FROM item_shares s
            WHERE s.user_id = $2
              AND ((s.item_type = $3 AND s.item_id = x.id)
-               OR (s.item_type = 'folder' AND s.item_id = x.folder_id))
+               OR (s.item_type = 'folder' AND s.item_id = x.folder_id AND s.include_all))
         )`,
     [itemId, userId, type]
   );
   return r.rows.length > 0;
 }
 
-/** Grant a user access to an item. Idempotent. Returns true if a NEW row was created. */
-export async function addItemShare(type: SharedItemType, itemId: string, userId: string, invitedBy: string): Promise<boolean> {
+/**
+ * Grant a user access to an item. Idempotent. Returns true if a NEW row was
+ * created (i.e. whether this is a first-time invite worth notifying about).
+ *
+ * `includeAll` is meaningful for FOLDER invites only — see the column comment in
+ * migrations.ts. Re-inviting someone who is already a member updates their
+ * scope rather than erroring, so the UI can offer "switch this person to
+ * folder-only" through the same call and never has to special-case an existing
+ * member.
+ */
+export async function addItemShare(
+  type: SharedItemType,
+  itemId: string,
+  userId: string,
+  invitedBy: string,
+  includeAll = true
+): Promise<boolean> {
   const r = await query(
-    `INSERT INTO item_shares (item_type, item_id, user_id, invited_by)
-     VALUES ($1, $2, $3, $4) ON CONFLICT (item_type, item_id, user_id) DO NOTHING`,
-    [type, itemId, userId, invitedBy]
+    `INSERT INTO item_shares (item_type, item_id, user_id, invited_by, include_all)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (item_type, item_id, user_id)
+       DO UPDATE SET include_all = EXCLUDED.include_all
+       WHERE item_shares.include_all IS DISTINCT FROM EXCLUDED.include_all`,
+    [type, itemId, userId, invitedBy, includeAll]
   );
+  // A no-op re-invite reports 0 rows; a scope CHANGE reports 1 but is not a new
+  // member, so callers must not treat rowCount alone as "newly invited".
   return (r.rowCount ?? 0) > 0;
+}
+
+/** Is this user already a member of this exact item (a DIRECT grant)? Lets the
+ *  invite route tell a first-time invite from a scope change, since
+ *  `addItemShare` reports a row was written for both. */
+export async function directShareExists(type: SharedItemType, itemId: string, userId: string): Promise<boolean> {
+  const r = await query(
+    `SELECT 1 FROM item_shares WHERE item_type = $1 AND item_id = $2 AND user_id = $3`,
+    [type, itemId, userId]
+  );
+  return r.rows.length > 0;
 }
 
 /** Revoke a user's access to an item. Returns true if a row was actually removed.
@@ -198,6 +229,9 @@ export interface ItemShareMember {
   /** For `via: 'inherited'`, the container that granted access. */
   viaName?: string;
   viaType?: SharedItemType;
+  /** FOLDER invites only: does this person also get everything inside the
+   *  folder, or just the folder itself? */
+  includeAll?: boolean;
 }
 
 /**
@@ -235,11 +269,15 @@ const CONTAINERS_CTE = `
       JOIN folders mf ON mf.id = m.folder_id
   )`;
 
+/** A container only confers access when it actually cascades — a folder invite
+ *  scoped to "just the folder" grants nothing to the items inside it. */
+const CONTAINER_CASCADES = `(c.item_type <> 'folder' OR s.include_all)`;
+
 /** Everyone invited to an item (joined to user profile basics), including the
  *  people who reach it through a container that was shared with them. */
 export async function listItemShares(type: SharedItemType, itemId: string): Promise<ItemShareMember[]> {
-  const direct = await query<{ user_id: string; username: string; full_name: string | null; has_image: boolean; invited_by: string | null; created_at: string }>(
-    `SELECT s.user_id, u.username, u.full_name, (u.profile_image IS NOT NULL) AS has_image, s.invited_by, s.created_at
+  const direct = await query<{ user_id: string; username: string; full_name: string | null; has_image: boolean; invited_by: string | null; created_at: string; include_all: boolean }>(
+    `SELECT s.user_id, u.username, u.full_name, (u.profile_image IS NOT NULL) AS has_image, s.invited_by, s.created_at, s.include_all
        FROM item_shares s JOIN users u ON u.id = s.user_id
       WHERE s.item_type = $1 AND s.item_id = $2
       ORDER BY s.created_at ASC`,
@@ -253,6 +291,7 @@ export async function listItemShares(type: SharedItemType, itemId: string): Prom
     invitedBy: x.invited_by ?? null,
     createdAt: x.created_at,
     via: 'direct',
+    includeAll: x.include_all,
   }));
 
   // Nothing contains a folder, so its roster is exactly its direct invitees.
@@ -263,6 +302,7 @@ export async function listItemShares(type: SharedItemType, itemId: string): Prom
        FROM containers c
        JOIN item_shares s ON s.item_type = c.item_type AND s.item_id = c.item_id
        JOIN users u ON u.id = s.user_id
+      WHERE ${CONTAINER_CASCADES}
       ORDER BY s.created_at ASC`;
 
   const inherited = type === 'list'
@@ -310,18 +350,24 @@ export async function getSharedItemIdsForUser(userId: string): Promise<{
   timelines: string[];
   markdownLists: string[];
 }> {
-  const rows = await query<{ item_type: string; item_id: string }>(
-    `SELECT item_type, item_id FROM item_shares WHERE user_id = $1 ORDER BY created_at DESC`,
+  const rows = await query<{ item_type: string; item_id: string; include_all: boolean }>(
+    `SELECT item_type, item_id, include_all FROM item_shares WHERE user_id = $1 ORDER BY created_at DESC`,
     [userId]
   );
   const out = { folders: [] as string[], lists: [] as string[], timelines: [] as string[], markdownLists: [] as string[] };
+  // A folder invite scoped to "just the folder" still lists the folder — it is
+  // a real grant and the person should see it — but contributes no contents.
+  const cascadingFolders: string[] = [];
   for (const r of rows.rows) {
-    if (r.item_type === 'folder') out.folders.push(r.item_id);
+    if (r.item_type === 'folder') {
+      out.folders.push(r.item_id);
+      if (r.include_all) cascadingFolders.push(r.item_id);
+    }
     else if (r.item_type === 'list') out.lists.push(r.item_id);
     else if (r.item_type === 'timeline') out.timelines.push(r.item_id);
     else if (r.item_type === 'markdownList') out.markdownLists.push(r.item_id);
   }
-  if (out.folders.length === 0) return out;
+  if (cascadingFolders.length === 0) return out;
 
   const contents = await query<{ kind: string; id: string }>(
     `SELECT 'list' AS kind, id FROM lists          WHERE folder_id = ANY($1::varchar[])
@@ -329,7 +375,7 @@ export async function getSharedItemIdsForUser(userId: string): Promise<{
      SELECT 'timeline',      id FROM timelines     WHERE folder_id = ANY($1::varchar[])
      UNION ALL
      SELECT 'markdownList',  id FROM markdown_lists WHERE folder_id = ANY($1::varchar[])`,
-    [out.folders]
+    [cascadingFolders]
   );
   const push = (arr: string[], id: string) => { if (!arr.includes(id)) arr.push(id); };
   for (const c of contents.rows) {

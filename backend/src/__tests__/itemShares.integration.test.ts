@@ -262,6 +262,34 @@ describe.skipIf(!dbAvailable)('Per-item invitations — the folder cascade', () 
     expect(onFolder.find((m) => m.userId === guestId)?.via).toBe('direct');
   });
 
+  it('shares the folder ALONE when the invite is scoped that way, and restores on switch back', async () => {
+    // The invite dialog's "Folder only" choice. The folder itself stays
+    // reachable — it is a real grant — but nothing inside it does, including
+    // the sublists and Todo mirror the cascade would otherwise reach.
+    const { addItemShare, getSharedItemIdsForUser: sharedIds } = await import('../itemShares');
+    await addItemShare('folder', sharedFolder, guestId, ownerId, false);
+
+    expect(await getFolderForUser(guestId, sharedFolder)).not.toBeNull();
+    for (const id of [boardIn, sublist, subSublist, todoMirror]) {
+      expect(await isItemSharedWith('list', id, guestId)).toBe(false);
+    }
+    expect(await isItemSharedWith('timeline', timeline, guestId)).toBe(false);
+    expect(await isItemSharedWith('markdownList', page, guestId)).toBe(false);
+
+    // "Shared with me" still lists the folder, contributing no contents.
+    const narrow = await sharedIds(guestId);
+    expect(narrow.folders).toContain(sharedFolder);
+    expect(narrow.lists).not.toContain(boardIn);
+    expect(narrow.timelines).not.toContain(timeline);
+
+    // Re-inviting with the wider scope updates the existing row rather than
+    // erroring, so the choice is never a one-way door.
+    await addItemShare('folder', sharedFolder, guestId, ownerId, true);
+    expect(await isItemSharedWith('list', boardIn, guestId)).toBe(true);
+    expect(await isItemSharedWith('list', subSublist, guestId)).toBe(true);
+    expect(await isItemSharedWith('timeline', timeline, guestId)).toBe(true);
+  });
+
   it('surfaces the folder AND its contents in "Shared with me", but not nested items', async () => {
     const ids = await getSharedItemIdsForUser(guestId);
     expect(ids.folders).toContain(sharedFolder);

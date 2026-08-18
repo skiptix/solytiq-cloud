@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from './Icon';
 import MemberAvatar from './MemberAvatar';
-import PopIn from './animate-ui/PopIn';
+import AnchoredDropdown from './AnchoredDropdown';
 import ModalIn from './animate-ui/ModalIn';
 import useMembersStore from '../store/useMembersStore';
 import useSharedItemsStore from '../store/useSharedItemsStore';
@@ -50,6 +50,8 @@ export default function TaggedUsersRow({ taskId, workspaceId, listId, creatorId,
   const membersStore = useMembersStore((s) => s.members);
   const refreshShared = useSharedItemsStore((s) => s.load);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const tagBtnRef = useRef<HTMLButtonElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
 
   const workspaceMemberIds = new Set((membersProp ?? []).map((m) => m.userId));
 
@@ -75,7 +77,12 @@ export default function TaggedUsersRow({ taskId, workspaceId, listId, creatorId,
   useEffect(() => {
     if (!adding) return;
     const handler = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) { setAdding(false); setSearch(''); }
+      const target = e.target as Node;
+      // The picker is portaled to document.body, so it is NOT inside wrapRef —
+      // without the second test, clicking a person would read as a click
+      // outside and close the picker before the pick registered.
+      if (wrapRef.current?.contains(target) || pickerRef.current?.contains(target)) return;
+      setAdding(false); setSearch('');
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -159,6 +166,7 @@ export default function TaggedUsersRow({ taskId, workspaceId, listId, creatorId,
       {canEdit && (
         <div style={{ position: 'relative' }}>
           <MotionButton
+            ref={tagBtnRef}
             onClick={() => { setAdding((v) => !v); loadUsers(); }}
             title="Tag a person"
             transition={{ duration: 0.12 }} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 9999, border: '1px dashed var(--color-purple-pale-44)', background: adding ? 'var(--color-surface-tint)' : 'transparent', cursor: 'pointer', fontFamily: 'var(--font-body)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', }}
@@ -167,8 +175,10 @@ export default function TaggedUsersRow({ taskId, workspaceId, listId, creatorId,
             <Icon name="add" size={13} color="var(--color-primary)" /> Tag
           </MotionButton>
 
-          {adding && (
-            <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 60, width: Math.min(260, window.innerWidth - 32), background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 12, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', padding: 8 }}>
+          {/* Portaled, not absolutely positioned: TaskDialog's card has
+              `overflow: hidden` AND a transform, either of which would hide
+              this list. See AnchoredDropdown's header. */}
+          <AnchoredDropdown anchorRef={tagBtnRef} open={adding} panelRef={pickerRef} width={260} maxHeight={300}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--color-surface-gray)', border: '1px solid var(--color-border-alt)', borderRadius: 8, padding: '6px 9px', marginBottom: 6 }}>
                 <Icon name="search" size={14} color="var(--color-text-quaternary)" />
                 <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search people…"
@@ -191,8 +201,7 @@ export default function TaggedUsersRow({ taskId, workspaceId, listId, creatorId,
                   </button>
                 ))}
               </div>
-            </PopIn>
-          )}
+          </AnchoredDropdown>
         </div>
       )}
 

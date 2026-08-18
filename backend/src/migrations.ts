@@ -1254,6 +1254,15 @@ export async function runMigrations() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS item_shares_user_idx ON item_shares (user_id, item_type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS item_shares_item_idx ON item_shares (item_type, item_id)`);
+  // Folder invites only: does this person get the folder's CONTENTS too, or
+  // just the folder itself? Mirrors `folders.share_include_all`, which already
+  // draws exactly this distinction for the public share link, so the two
+  // sharing mechanisms stay conceptually the same shape. Defaults to true —
+  // handing over the contents is the point of sharing a folder, and it is the
+  // behaviour every existing row was created under.
+  // MUST be added before item_share_grants_list() below: a LANGUAGE sql body is
+  // validated at CREATE time, and that body reads this column.
+  await pool.query(`ALTER TABLE item_shares ADD COLUMN IF NOT EXISTS include_all BOOLEAN NOT NULL DEFAULT true`);
   // Resolving a folder cascade means matching a share against an item's
   // `folder_id`; without these the check degrades to a seq scan on every
   // access-condition evaluation.
@@ -1298,14 +1307,14 @@ export async function runMigrations() {
                  SELECT 1 FROM item_shares s
                   WHERE s.user_id = p_user
                     AND ((s.item_type = 'list'   AND s.item_id = anc.list_id)
-                      OR (s.item_type = 'folder' AND s.item_id = anc.folder_id))
+                      OR (s.item_type = 'folder' AND s.item_id = anc.folder_id AND s.include_all))
                )
             OR EXISTS (
                  SELECT 1 FROM markdown_lists m
                   JOIN item_shares s2
                     ON s2.user_id = p_user
                    AND ((s2.item_type = 'markdownList' AND s2.item_id = m.id)
-                     OR (s2.item_type = 'folder'       AND s2.item_id = m.folder_id))
+                     OR (s2.item_type = 'folder'       AND s2.item_id = m.folder_id AND s2.include_all))
                   WHERE m.todo_list_id = anc.list_id
                )
       );

@@ -95,6 +95,23 @@ describe('itemShareExists', () => {
     }
   });
 
+  it('honours the folder invite scope: a cascade branch requires include_all, a direct one never does', () => {
+    // "Folder only" invites exist precisely so a folder can be shared without
+    // its contents. A cascade branch that forgot this gate would silently hand
+    // over every board in the folder anyway.
+    for (const type of ['list', 'timeline', 'markdownList'] as const) {
+      const sql = itemShareExists('x', type);
+      expect(sql).toContain("s.item_type = 'folder'  AND s.item_id = x.folder_id AND s.include_all");
+      // The item's OWN invite is unconditional — include_all is a folder-only
+      // concept and must not gate a direct grant.
+      expect(sql).toContain(`s.item_type = '${type}' AND s.item_id = x.id)`);
+    }
+    // Reaching a page's Todo mirror through the page's folder is a cascade too.
+    expect(itemShareExists('l', 'list')).toContain("s2.item_type = 'folder'       AND s2.item_id = m.folder_id AND s2.include_all");
+    // The folder row itself is always granted — you were invited to it.
+    expect(itemShareExists('f', 'folder')).not.toContain('include_all');
+  });
+
   it('front-loads a non-correlated guard so users with no invitations pay one probe', () => {
     // Not cosmetic: this subquery does not reference the outer row, so the
     // planner hoists it into a once-per-statement InitPlan. Without it every

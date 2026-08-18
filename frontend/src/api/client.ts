@@ -1231,11 +1231,17 @@ export interface ItemMember {
   /** For `via: 'inherited'`, the container that granted access. */
   viaName?: string;
   viaType?: SharedItemType;
+  /** FOLDER invites only: does this person also get everything inside the
+   *  folder, or just the folder itself? */
+  includeAll?: boolean;
 }
 export const apiGetItemMembers = (type: SharedItemType, itemId: string) =>
   apiFetch<{ ownerId: string; members: ItemMember[] }>(`/item-shares/${type}/${encodeURIComponent(itemId)}/members`);
-export const apiAddItemMember = (type: SharedItemType, itemId: string, username: string) =>
-  apiFetch<{ members: ItemMember[] }>(`/item-shares/${type}/${encodeURIComponent(itemId)}/members`, { method: 'POST', body: JSON.stringify({ username }) });
+/** `includeAll` applies to FOLDER invites only — true (default) also hands over
+ *  every board/timeline/page inside it; false shares the folder alone. Re-sending
+ *  for an existing member changes their scope instead of erroring. */
+export const apiAddItemMember = (type: SharedItemType, itemId: string, username: string, includeAll?: boolean) =>
+  apiFetch<{ members: ItemMember[] }>(`/item-shares/${type}/${encodeURIComponent(itemId)}/members`, { method: 'POST', body: JSON.stringify({ username, includeAll }) });
 export const apiRemoveItemMember = (type: SharedItemType, itemId: string, userId: string) =>
   apiFetch<{ members: ItemMember[] }>(`/item-shares/${type}/${encodeURIComponent(itemId)}/members/${encodeURIComponent(userId)}`, { method: 'DELETE' });
 export const apiGetSharedWithMe = () =>

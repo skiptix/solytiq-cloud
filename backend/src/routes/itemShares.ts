@@ -23,7 +23,7 @@ import { authenticate } from '../middleware';
 import { werr } from '../workspaceUtil';
 import { createNotification } from '../notifications';
 import {
-  addItemShare, removeItemShare, listItemShares, getSharedItemIdsForUser,
+  addItemShare, removeItemShare, listItemShares, getSharedItemIdsForUser, directShareExists,
   parseSharedItemType, type SharedItemType,
 } from '../itemShares';
 import { getListForUser, getListsForUserBatch } from './lists';
@@ -94,8 +94,11 @@ router.post('/item-shares/:itemType/:itemId/members', authenticate, async (req: 
     const type = parseSharedItemType(req.params.itemType);
     if (!type) { res.status(400).json({ error: 'Invalid item type' }); return; }
     const { itemId } = req.params;
-    const { username } = req.body as { username?: string };
+    const { username, includeAll } = req.body as { username?: string; includeAll?: boolean };
     if (!username || !username.trim()) { res.status(400).json({ error: 'username is required' }); return; }
+    // Folder invites carry a scope: everything inside, or the folder alone.
+    // Meaningless for the other types, so it is not read for them.
+    const scopeIncludeAll = type === 'folder' ? includeAll !== false : true;
 
     const meta = await getItemMeta(type, itemId);
     if (!meta) { res.status(404).json({ error: 'Item not found' }); return; }
@@ -112,8 +115,11 @@ router.post('/item-shares/:itemType/:itemId/members', authenticate, async (req: 
     const invitee = userRes.rows[0];
     if (invitee.id === meta.ownerId) { res.status(400).json({ error: 'The owner already has access' }); return; }
 
-    const created = await addItemShare(type, itemId, invitee.id, req.userId!);
-    if (created) {
+    // Distinguish a first-time invite from a scope change on an existing
+    // member: both write a row, but only the former is news to the invitee.
+    const alreadyMember = await directShareExists(type, itemId, invitee.id);
+    await addItemShare(type, itemId, invitee.id, req.userId!, scopeIncludeAll);
+    if (!alreadyMember) {
       await createNotification({
         userId: invitee.id,
         type: 'item_invite',
