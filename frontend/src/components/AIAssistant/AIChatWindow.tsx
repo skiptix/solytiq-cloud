@@ -542,7 +542,7 @@ export default function AIChatWindow({
             background: 'rgba(var(--color-white-rgb), 0.12)', border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
-          whileHover={{ background: 'rgba(var(--color-white-rgb), 0.24)', transform: 'scale(1.08)' }}
+          whileHover={{ background: 'rgba(var(--color-white-rgb), 0.24)', scale: 1.08 }}
           transition={{ duration: 0.18 }}
         >
           <Icon name="history" size={15} color="rgba(var(--color-white-rgb), 0.85)" />
@@ -555,7 +555,7 @@ export default function AIChatWindow({
             background: 'rgba(var(--color-white-rgb), 0.12)', border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
-          whileHover={{ background: 'rgba(var(--color-white-rgb), 0.24)', transform: 'scale(1.08)' }}
+          whileHover={{ background: 'rgba(var(--color-white-rgb), 0.24)', scale: 1.08 }}
           transition={{ duration: 0.18 }}
         >
           <Icon name="delete_sweep" size={15} color="rgba(var(--color-white-rgb), 0.85)" />
@@ -568,7 +568,7 @@ export default function AIChatWindow({
             background: 'rgba(var(--color-white-rgb), 0.12)', border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
-          whileHover={{ background: 'rgba(var(--color-white-rgb), 0.24)', transform: 'scale(1.08)' }}
+          whileHover={{ background: 'rgba(var(--color-white-rgb), 0.24)', scale: 1.08 }}
           transition={{ duration: 0.18 }}
         >
           <Icon name="close" size={15} color="rgba(var(--color-white-rgb), 0.85)" />
@@ -992,7 +992,7 @@ export default function AIChatWindow({
                 fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)',
                 border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer',
               }}
-              whileHover={{ background: 'var(--color-border)', transform: 'scale(1.02)' }}
+              whileHover={{ background: 'var(--color-border)', scale: 1.02 }}
               transition={{ duration: 0.18 }}
             >
               Cancel
@@ -1004,7 +1004,7 @@ export default function AIChatWindow({
                 fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-error)',
                 border: 'none', borderRadius: 10, padding: '10px 0', cursor: 'pointer',
               }}
-              whileHover={{ background: 'var(--color-red-deep-2)', transform: 'scale(1.02)' }}
+              whileHover={{ background: 'var(--color-red-deep-2)', scale: 1.02 }}
               transition={{ duration: 0.18 }}
             >
               Clear

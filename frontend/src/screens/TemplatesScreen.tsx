@@ -144,7 +144,7 @@ function TemplateCard({ template, index, onUse, onRename, onEditStructure, onTog
         </div>
         <MotionButton onClick={onUse}
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-white)', background: accent, border: 'none', borderRadius: 8, padding: '7px 14px', cursor: 'pointer' }}
-          whileHover={{ transform: 'scale(1.05)', filter: 'brightness(1.08)' }}
+          whileHover={{ scale: 1.05, filter: 'brightness(1.08)' }}
           transition={{ duration: 0.15 }}
           onMouseDown={(e) => { e.currentTarget.style.transform = 'scale(0.96)'; }}
           onMouseUp={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}>

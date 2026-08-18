@@ -113,6 +113,20 @@ const PATTERNS = [
   { kind: 'animation-prop', re: /(?<![\w-])animation(?:Name|-name)?\s*:(?!\s*\{)/g, category: (rel) => classify(rel) },
   { kind: 'transition-prop', re: /(?<![\w-])transition(?:Property|Duration|TimingFunction|Delay|-property|-duration|-timing-function|-delay)?\s*:(?!\s*\{)/g, category: (rel) => classify(rel) },
   { kind: 'motion-import', re: /from\s+['"](motion\/react|framer-motion)['"]/g, category: () => 'central-boundary' },
+  // A raw `transform:` string inside a Motion animation target
+  // (`animate`/`initial`/`exit`/`while*`). Motion composes `transform` itself
+  // from its own keys (`scale`, `x`, `rotate`, ...) and has no value type for
+  // the shorthand, so it mixes the string against the element's computed
+  // origin — usually the literal `none`, which shares no numeric format with
+  // `scale(1.08)`. The tween then resolves to garbage and settles on
+  // `scale(0)`: the element silently shrinks to nothing on hover and can
+  // never be clicked again. `filter` and friends have a `getAnimatableNone`
+  // that synthesises a matching origin; `transform` does not, and never will,
+  // because Motion owns that property outright. Use `scale: 1.08` instead.
+  // Static `style={{ transform: 'translateY(-50%)' }}` is untouched — this
+  // only matches inside an animation target, where Motion is the one reading
+  // the value.
+  { kind: 'motion-transform-string', re: /\b(?:animate|initial|exit|whileHover|whileTap|whileFocus|whileDrag|whileInView)=\{\{[^}]*\btransform\s*:/g, category: (rel) => classify(rel) },
   { kind: 'motion-jsx-usage', re: /<motion\.\w+|\bAnimatePresence\b/g, category: (rel) => classify(rel) },
   { kind: 'web-animations-api', re: /\.animate\(\s*\[/g, category: (rel) => classify(rel) },
   { kind: 'raf-loop', re: /\brequestAnimationFrame\s*\(/g, category: (rel) => classify(rel) },

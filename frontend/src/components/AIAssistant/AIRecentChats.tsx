@@ -73,7 +73,7 @@ export default function AIRecentChats({ sessions, onSelect, onDelete, onClose }:
             justifyContent: 'center',
             flexShrink: 0,
           }}
-          whileHover={{ background: 'rgba(var(--color-white-rgb), 0.24)', transform: 'scale(1.08)' }}
+          whileHover={{ background: 'rgba(var(--color-white-rgb), 0.24)', scale: 1.08 }}
           transition={{ duration: 0.18 }}
         >
           <Icon name="arrow_back" size={15} color="rgba(var(--color-white-rgb), 0.85)" />
