@@ -190,12 +190,6 @@ export default function BlockEditor({
   const [linkDraft, setLinkDraft] = useState({ url: '', title: '', description: '' });
   const [dragBlockId, setDragBlockId] = useState<string | null>(null);
   const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
-  // Columns layout (up to 2 sections side by side, see `divider.layout`):
-  // which handle is currently being dragged (its divider + which side it's
-  // on), and which columns row is hovered (reveals both outside handles plus
-  // the row's Stack/delete control bar together, since the pair is one unit).
-  const [dragColumnHandle, setDragColumnHandle] = useState<{ dividerId: string; col: 0 | 1 } | null>(null);
-  const [hoveredColumnsRowId, setHoveredColumnsRowId] = useState<string | null>(null);
   // Which block currently shows a raw, editable textarea. Every other
   // text-bearing block shows its formatted (bold/italic/strikethrough)
   // rendering instead — click it to switch into edit mode.
@@ -846,13 +840,14 @@ export default function BlockEditor({
   // Renders a `layout: 'columns'` divider's two flanking sections as a
   // side-by-side grid (capped at 2 boxes). An always-visible toolbar sits above
   // the row with a one-click **Swap** (the only possible reorder with exactly
-  // 2 boxes), **Stack** (un-split), and **Remove**. Each box also carries a
-  // top grip handle so it can be dragged onto the other box to swap — while a
-  // drag is in flight the target column lights up so the drop is obvious.
+  // 2 boxes), **Stack** (un-split), and **Remove**.
+  //
+  // The boxes deliberately carry NO drag grip. Each one used to grow a handle
+  // on row hover, which meant merely moving the pointer across a block nudged
+  // the whole row down as the handle animated in — and with exactly two boxes
+  // it could only ever do what the Swap button above already does in one
+  // click. Removing it costs no capability.
   const renderColumnsRow = (leftBlocks: MarkdownBlock[], rightBlocks: MarkdownBlock[], divider: MarkdownDividerBlock) => {
-    const rowHovered = hoveredColumnsRowId === divider.id;
-    const dragging = dragColumnHandle?.dividerId === divider.id;
-
     const toolbarBtn = {
       style: {
         display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 999,
@@ -866,8 +861,6 @@ export default function BlockEditor({
 
     return (
       <MotionIn key={divider.id}
-        onMouseEnter={() => setHoveredColumnsRowId(divider.id)}
-        onMouseLeave={() => setHoveredColumnsRowId(prev => prev === divider.id ? null : prev)}
         initial={{ opacity: 0, y: 8, scale: 0.985 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.26, ease: EASE_SETTLE }}>
@@ -888,50 +881,17 @@ export default function BlockEditor({
           </MotionButton>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, alignItems: 'start' }}>
-          {[leftBlocks, rightBlocks].map((sideBlocks, colIdx) => {
-            const col = colIdx as 0 | 1;
-            const isDropTarget = dragging && dragColumnHandle!.col !== col;
-            const isSource = dragging && dragColumnHandle!.col === col;
-            return (
-              <MotionIn key={colIdx}
-                onDragOver={e => { if (dragging) e.preventDefault(); }}
-                onDrop={e => {
-                  e.preventDefault();
-                  if (dragColumnHandle && dragColumnHandle.dividerId === divider.id && dragColumnHandle.col !== col) swapColumns(divider.id);
-                  setDragColumnHandle(null);
-                }}
-                style={{
-                  position: 'relative', minWidth: 0,
-                  borderWidth: 1.5, borderStyle: 'solid',
-                  borderRadius: 12,
-                  padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2,
-                }}
-                animate={{
-                  borderColor: isDropTarget ? 'var(--color-primary)' : 'var(--color-border-alt)',
-                  background: isDropTarget ? 'var(--color-surface-tint)' : 'var(--color-surface-gray)',
-                  boxShadow: isDropTarget ? '0 0 0 3px rgba(var(--color-primary-rgb), 0.12)' : '0 0 0 0 rgba(var(--color-primary-rgb), 0)',
-                  opacity: isSource ? 0.55 : 1,
-                }}
-                transition={{ duration: 0.14, ease: EASE_STANDARD }}>
-                {!isMobile && (
-                  <motion.div
-                    animate={{ height: rowHovered || dragging ? 16 : 0, marginBottom: rowHovered || dragging ? 2 : 0, opacity: rowHovered || dragging ? 1 : 0 }}
-                    transition={{ opacity: { duration: 0.14, ease: EASE_STANDARD }, default: { duration: 0.2, ease: EASE_SETTLE } }}
-                    style={{ display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
-                    <span
-                      draggable
-                      onDragStart={() => setDragColumnHandle({ dividerId: divider.id, col })}
-                      onDragEnd={() => setDragColumnHandle(null)}
-                      title="Drag onto the other column to swap"
-                      style={{ cursor: 'grab', display: 'flex', alignItems: 'center', gap: 2, padding: '0 12px', borderRadius: 999, lineHeight: 1 }}>
-                      <Icon name="drag_indicator" size={14} color="var(--color-border-strong)" />
-                    </span>
-                  </motion.div>
-                )}
-                {sideBlocks.map(b => renderBlock(b, blockIndexById[b.id]))}
-              </MotionIn>
-            );
-          })}
+          {[leftBlocks, rightBlocks].map((sideBlocks, colIdx) => (
+            <div key={colIdx}
+              style={{
+                position: 'relative', minWidth: 0,
+                borderWidth: 1.5, borderStyle: 'solid', borderColor: 'var(--color-border-alt)',
+                borderRadius: 12, background: 'var(--color-surface-gray)',
+                padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2,
+              }}>
+              {sideBlocks.map(b => renderBlock(b, blockIndexById[b.id]))}
+            </div>
+          ))}
         </div>
       </MotionIn>
     );
