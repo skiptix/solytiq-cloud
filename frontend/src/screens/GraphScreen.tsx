@@ -334,7 +334,7 @@ function CanvasView({ isMobile }: { isMobile: boolean }) {
         <MotionButton
           onClick={() => setCreating(true)}
           style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 9, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, cursor: 'pointer', marginBottom: 18 }}
-          whileHover={{ transform: 'scale(1.03)' }}
+          whileHover={{ scale: 1.03 }}
           transition={{ duration: 0.15 }}
         >
           <Icon name="add" size={16} color="var(--color-white)" /> New canvas

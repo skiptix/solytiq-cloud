@@ -16,7 +16,7 @@
 // business knowing which one it is rendering for.
 // ---------------------------------------------------------------------------
 
-import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, Fragment } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { motion } from '@/components/animate-ui/motion';
 import { LAYOUT_TRANSITION } from '@/components/animate-ui/motionTokens';
@@ -676,6 +676,10 @@ export default function BlockEditor({
   const renderBlock = (block: MarkdownBlock, index: number) => {
     const hovered = hoveredBlockId === block.id;
     const lineCenter = firstLineCenter(block);
+    // One resolution shared by the focused textarea and the unfocused
+    // renderer — they must agree exactly, or swapping between them shifts the
+    // text.
+    const textStyle = headingStyleFor(block, isMobile);
     return (
       <motion.div key={block.id}
         layout="position"
@@ -760,15 +764,19 @@ export default function BlockEditor({
                   onChange={v => handleTextChange(block, v)}
                   onKeyDown={e => handleKeyDown(e, block, index)}
                   onBlur={() => setFocusedBlockId(prev => (prev === block.id ? null : prev))}
-                  style={headingStyleFor(block, isMobile).style}
-                  animate={headingStyleFor(block, isMobile).animate}
+                  style={textStyle.style}
+                  animate={textStyle.animate}
                 />
               ) : (
                 <motion.div
                   onClick={() => focusBlock(block.id, true)}
-                  animate={headingStyleFor(block, isMobile).animate}
+                  // Mounts fresh whenever focus leaves this block, so it needs
+                  // the same no-tween-on-mount treatment the textarea does —
+                  // see AutoTextarea's `initial`.
+                  initial={textStyle.animate}
+                  animate={textStyle.animate}
                   transition={BLOCK_MORPH_TRANSITION}
-                  style={{ ...headingStyleFor(block, isMobile).style, cursor: 'text', whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: '1.6em' }}>
+                  style={{ ...textStyle.style, cursor: 'text', whiteSpace: 'pre-wrap', wordBreak: 'break-word', minHeight: '1.6em' }}>
                   {block.text
                     ? renderInline(block.text, block.id)
                     : <span style={{ color: 'var(--color-text-quaternary)' }}>{index === 0 && blocks.length === 1 ? placeholder : ' '}</span>}
@@ -1123,7 +1131,11 @@ interface AutoTextareaProps {
 function AutoTextarea({ value, placeholder, onChange, onKeyDown, onBlur, style, animate, innerRef }: AutoTextareaProps) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const resize = () => { const el = ref.current; if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; } };
-  useEffect(resize, [value]);
+  // Before paint, not after: the textarea mounts at `rows={1}` and this is
+  // what gives it its real height. In a plain effect the browser paints the
+  // one-line box first, which is a visible jump every time a multi-line block
+  // is clicked into.
+  useLayoutEffect(resize, [value]);
   return (
     <motion.textarea
       ref={el => { ref.current = el; innerRef(el); }}
@@ -1135,13 +1147,30 @@ function AutoTextarea({ value, placeholder, onChange, onKeyDown, onBlur, style, 
       onKeyDown={onKeyDown}
       onFocus={resize}
       onBlur={onBlur}
+      // Start AT the target typography rather than tweening up to it. This
+      // element mounts fresh on every click into a block (the unfocused
+      // renderer is a different element — see `renderBlock`), and without an
+      // `initial` Motion reads the origin off the DOM: the browser's own
+      // textarea defaults, ~13.3px/no padding. Every focus swap then played a
+      // 240ms font-size morph nobody asked for, and the height measured
+      // during it settled short, leaving the block with a scrollbar. A real
+      // type morph (paragraph -> heading) still animates: the element stays
+      // mounted across it, so only `animate` changes and `initial` is moot.
+      initial={animate}
       animate={animate}
       transition={BLOCK_MORPH_TRANSITION}
       // The morph changes font-size and padding, so the auto-grow height has
       // to be recomputed as it tweens — `resize` otherwise only runs on a
       // value change and the box would lag a frame behind its own text.
       onUpdate={resize}
-      style={style}
+      // `onUpdate` fires with the frame's values before the browser has
+      // re-laid-out at them, so the last in-tween measurement is one frame
+      // stale. One final pass once the morph lands settles the exact height.
+      onAnimationComplete={resize}
+      // An auto-grown textarea sizes itself to its content, so its own
+      // scrollbar can only ever be a sub-pixel rounding artefact of
+      // `scrollHeight` — same reason NotesEditor.tsx hides it.
+      style={{ ...style, overflowY: 'hidden' }}
     />
   );
 }

@@ -155,7 +155,7 @@ export default function NodeInspector({ node, breadcrumb, anchor, containerSize,
           <MotionButton
             onClick={() => navigate(node.deepLink!)}
             style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px 10px', borderRadius: 8, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
-            whileHover={{ transform: 'scale(1.02)' }}
+            whileHover={{ scale: 1.02 }}
             transition={{ duration: 0.15 }}
           >
             <Icon name="open_in_new" size={14} color="var(--color-white)" /> Open
