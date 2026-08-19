@@ -726,7 +726,7 @@ export default function SettingsScreen() {
         {isAdmin ? (
           <>
             {/* Tab bar */}
-            <div style={{ display: 'flex', gap: 4, background: 'var(--color-surface-tint)', borderRadius: 14, padding: 4, overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch', flexShrink: 0 }}>
+            <div style={{ display: 'flex', flexWrap: isMobile ? 'nowrap' : 'wrap', gap: 4, background: 'var(--color-surface-tint)', borderRadius: 14, padding: 4, overflowX: isMobile ? 'auto' : undefined, WebkitOverflowScrolling: 'touch', flexShrink: 0 }}>
               {TABS.map(tab => {
                 const active = activeTab === tab.id;
                 const isDanger = tab.id === 'danger';
