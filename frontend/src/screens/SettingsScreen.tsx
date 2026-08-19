@@ -6,7 +6,7 @@ import { useMobile } from '../hooks/useBreakpoint';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import useAIStore from '../store/useAIStore';
-import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiUpdateAppSettingsMcp, apiUpdateAppSettingsMobile, apiGetAIUsage, apiGetAdminReadApiKeys, apiRevokeAdminReadApiKey, apiUpdateAppSettingsKnowledge, apiGetKnowledgeStatus, apiKnowledgeReindex, type AdminReadApiKey, type AIUsageDay, type AIUsageModel, type AIUsageTotals, type KnowledgeStatus } from '../api/client';
+import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiUpdateAppSettingsMcp, apiUpdateAppSettingsMobile, apiGetAIUsage, apiGetAdminReadApiKeys, apiRevokeAdminReadApiKey, apiUpdateAppSettingsKnowledge, apiGetKnowledgeStatus, apiKnowledgeReindex, apiUpdateAppSettingsResend, apiSendResendTestEmail, type AdminReadApiKey, type AIUsageDay, type AIUsageModel, type AIUsageTotals, type KnowledgeStatus } from '../api/client';
 import Icon from '../components/Icon';
 import AdminApiKeyWizard from '../modals/AdminApiKeyWizard';
 import AppsStoreModal from '../modals/AppsStoreModal';
@@ -33,7 +33,7 @@ interface UserEntry {
   createdAt: string;
 }
 
-type TabId = 'system' | 'ai' | 'ai_skills' | 'security' | 'api' | 'mobile' | 'users' | 'danger';
+type TabId = 'system' | 'ai' | 'ai_skills' | 'email' | 'security' | 'api' | 'mobile' | 'users' | 'danger';
 
 /** Milliseconds since `last_online` within which a user counts as online. */
 const ONLINE_WINDOW_MS = 5 * 60 * 1000;
@@ -244,6 +244,18 @@ export default function SettingsScreen() {
   const [reindexing, setReindexing] = useState(false);
   const [reindexResult, setReindexResult] = useState<number | null>(null);
 
+  // Email notifications (Resend) settings
+  const [resendEnabled, setResendEnabled] = useState(false);
+  const [resendApiKeyInput, setResendApiKeyInput] = useState('');
+  const [resendApiKeyConfigured, setResendApiKeyConfigured] = useState(false);
+  const [resendApiKeyHint, setResendApiKeyHint] = useState('');
+  const [resendFromEmail, setResendFromEmail] = useState('');
+  const [resendFromName, setResendFromName] = useState('Solytiq Cloud');
+  const [resendSaving, setResendSaving] = useState(false);
+  const [resendSaved, setResendSaved] = useState(false);
+  const [resendTesting, setResendTesting] = useState(false);
+  const [resendTestResult, setResendTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+
   // Security / 2FA feature flag
   const [twoFAFeatureEnabled, setTwoFAFeatureEnabled] = useState(true);
   const [securitySaving, setSecuritySaving] = useState(false);
@@ -277,6 +289,11 @@ export default function SettingsScreen() {
         setEmbeddingModel(res.settings['embedding_model'] ?? '');
         const budget = parseInt(res.settings['embedding_monthly_token_budget'] ?? '0', 10);
         setEmbeddingBudget(budget > 0 ? String(budget) : '');
+        setResendEnabled(res.settings['resend_enabled'] === 'true');
+        setResendApiKeyConfigured(res.settings['resend_api_key_configured'] === 'true');
+        setResendApiKeyHint(res.settings['resend_api_key_hint'] ?? '');
+        setResendFromEmail(res.settings['resend_from_email'] ?? '');
+        setResendFromName(res.settings['resend_from_name'] || 'Solytiq Cloud');
       })
       .catch(() => setQuotaGb('15'));
   }, [isAdmin]);
@@ -358,6 +375,59 @@ export default function SettingsScreen() {
       console.error('Failed to save Knowledge Search settings', e);
     } finally {
       setKnowledgeSaving(false);
+    }
+  };
+
+  const handleSaveResend = async () => {
+    setResendSaving(true);
+    setResendSaved(false);
+    setResendTestResult(null);
+    try {
+      const res = await apiUpdateAppSettingsResend({
+        resendEnabled,
+        // Only send a key when the admin actually typed a new one — leaving
+        // the field blank (and the key already configured) must NOT clear it.
+        ...(resendApiKeyInput.trim() ? { resendApiKey: resendApiKeyInput.trim() } : {}),
+        resendFromEmail,
+        resendFromName,
+      });
+      setResendApiKeyInput('');
+      setResendApiKeyConfigured(res.settings['resend_api_key_configured'] === 'true');
+      setResendApiKeyHint(res.settings['resend_api_key_hint'] ?? '');
+      setResendSaved(true);
+      setTimeout(() => setResendSaved(false), 2500);
+    } catch (e) {
+      console.error('Failed to save Email settings', e);
+    } finally {
+      setResendSaving(false);
+    }
+  };
+
+  const handleClearResendKey = async () => {
+    setResendSaving(true);
+    setResendTestResult(null);
+    try {
+      const res = await apiUpdateAppSettingsResend({ resendApiKey: '' });
+      setResendApiKeyInput('');
+      setResendApiKeyConfigured(res.settings['resend_api_key_configured'] === 'true');
+      setResendApiKeyHint('');
+    } catch (e) {
+      console.error('Failed to clear the Resend API key', e);
+    } finally {
+      setResendSaving(false);
+    }
+  };
+
+  const handleTestResend = async () => {
+    setResendTesting(true);
+    setResendTestResult(null);
+    try {
+      const res = await apiSendResendTestEmail();
+      setResendTestResult({ ok: true, message: `Sent to ${res.to}.` });
+    } catch (e) {
+      setResendTestResult({ ok: false, message: e instanceof Error ? e.message : 'Send failed' });
+    } finally {
+      setResendTesting(false);
     }
   };
 
@@ -640,6 +710,7 @@ export default function SettingsScreen() {
     { id: 'system',   label: 'System',      icon: 'storage' },
     { id: 'ai',       label: 'AI',          icon: 'smart_toy' },
     { id: 'ai_skills', label: 'AI Skills',  icon: 'auto_awesome' },
+    { id: 'email',    label: 'Email',       icon: 'mail' },
     { id: 'security', label: 'Security',    icon: 'shield_lock' },
     { id: 'api',      label: 'API',         icon: 'key' },
     { id: 'mobile',   label: 'Mobile',      icon: 'smartphone' },
@@ -1322,6 +1393,100 @@ export default function SettingsScreen() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ── Email Tab (Resend) ── */}
+            {activeTab === 'email' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {sectionLabel('Email Notifications')}
+                <div style={card}>
+                  <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Enable email delivery</div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>Send notification emails via Resend, on top of the in-app bell. Each user chooses which types they get in Account Settings → Notifications.</div>
+                      </div>
+                      <MotionButton
+                        onClick={() => { setResendEnabled(v => !v); setResendSaved(false); }}
+                        style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}
+                        animate={{ background: resendEnabled ? 'var(--color-primary)' : 'var(--color-border)' }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <motion.span animate={{ left: resendEnabled ? 22 : 2 }} transition={{ duration: 0.2 }} style={{ position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)' }} />
+                      </MotionButton>
+                    </div>
+
+                    <div style={{ height: 1, background: 'var(--color-surface-tint-2)' }} />
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 6 }}>Resend API key</div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <input
+                            type="password"
+                            value={resendApiKeyInput}
+                            onChange={e => { setResendApiKeyInput(e.target.value); setResendSaved(false); }}
+                            placeholder={resendApiKeyConfigured ? `Configured — ends in •••• ${resendApiKeyHint}` : 're_xxxxxxxxxxxxxxxxxxxxxxxx'}
+                            style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '8px 10px', outline: 'none' }}
+                            autoComplete="off"
+                          />
+                          {resendApiKeyConfigured && (
+                            <button
+                              onClick={handleClearResendKey}
+                              disabled={resendSaving}
+                              style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 12px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: resendSaving ? 'default' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-error)', flexShrink: 0 }}
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', marginTop: 6 }}>
+                          Stored encrypted. Leave blank to keep the current key. Get one from <code style={{ background: 'var(--color-surface-tint-2)', padding: '1px 5px', borderRadius: 4 }}>resend.com</code> after verifying your sending domain.
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 6 }}>From email</div>
+                        <input
+                          type="email"
+                          value={resendFromEmail}
+                          onChange={e => { setResendFromEmail(e.target.value); setResendSaved(false); }}
+                          placeholder="notifications@yourdomain.com"
+                          style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '8px 10px', outline: 'none' }}
+                        />
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 6 }}>From name</div>
+                        <input
+                          value={resendFromName}
+                          onChange={e => { setResendFromName(e.target.value); setResendSaved(false); }}
+                          placeholder="Solytiq Cloud"
+                          style={{ width: '100%', fontFamily: 'var(--font-body)', fontSize: 13, border: '1.5px solid var(--color-border)', borderRadius: 8, padding: '8px 10px', outline: 'none' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ height: 1, background: 'var(--color-surface-tint-2)' }} />
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <button
+                        onClick={handleTestResend}
+                        disabled={resendTesting || !resendApiKeyConfigured}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: (resendTesting || !resendApiKeyConfigured) ? 'default' : 'pointer', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-text-secondary)', opacity: (resendTesting || !resendApiKeyConfigured) ? 0.6 : 1 }}
+                      >
+                        <Icon name={resendTesting ? 'progress_activity' : 'send'} size={14} color="var(--color-text-tertiary)" />
+                        {resendTesting ? 'Sending…' : 'Send test email'}
+                      </button>
+                      {resendTestResult && (
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: resendTestResult.ok ? 'var(--color-success)' : 'var(--color-error)' }}>{resendTestResult.message}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <SaveButton onClick={handleSaveResend} saving={resendSaving} saved={resendSaved} />
+                </div>
               </div>
             )}
 

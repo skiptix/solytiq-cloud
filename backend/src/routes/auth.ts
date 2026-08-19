@@ -51,20 +51,24 @@ interface UserRow {
   token_version: number;
   keyboard_shortcuts: Record<string, { key?: string; enabled?: boolean }>;
   last_route: string | null;
+  email_notification_prefs: Record<string, boolean>;
+  meeting_reminder_lead_minutes: number;
 }
 
 function sanitizeUser(user: UserRow) {
   return {
-    id:                user.id,
-    username:          user.username,
-    email:             user.email,
-    fullName:          user.full_name,
-    profileImage:      user.profile_image ?? null,
-    isAdmin:           user.is_admin,
-    createdAt:         user.created_at,
-    totpEnabled:       user.totp_enabled,
-    keyboardShortcuts: user.keyboard_shortcuts ?? {},
-    lastRoute:         user.last_route ?? null,
+    id:                        user.id,
+    username:                  user.username,
+    email:                     user.email,
+    fullName:                  user.full_name,
+    profileImage:              user.profile_image ?? null,
+    isAdmin:                   user.is_admin,
+    createdAt:                 user.created_at,
+    totpEnabled:               user.totp_enabled,
+    keyboardShortcuts:         user.keyboard_shortcuts ?? {},
+    lastRoute:                 user.last_route ?? null,
+    emailNotificationPrefs:    user.email_notification_prefs ?? {},
+    meetingReminderLeadMinutes: user.meeting_reminder_lead_minutes ?? 30,
   };
 }
 
@@ -455,6 +459,79 @@ router.put('/shortcuts', authenticate, async (req: Request, res: Response) => {
     res.json({ user: sanitizeUser(result.rows[0]) });
   } catch (err) {
     console.error('shortcuts update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Every NotificationType email-notifications.ts knows how to gate on — kept
+// as a plain string list (not an import from notifications.ts's type) so
+// this validation stays a cheap allow-list check with no risk of a circular
+// module dependency between auth.ts and notifications.ts.
+const EMAIL_PREF_TYPES = new Set([
+  'workspace_added', 'item_invite', 'meeting_invite', 'item_tagged', 'mention',
+  'automation_run', 'meeting_reminder', 'deadline_overdue',
+  'agent_run_complete', 'agent_proposal', 'agent_change',
+]);
+const ALLOWED_REMINDER_LEAD_MINUTES = new Set([0, 15, 30, 60, 120]);
+
+// PUT /api/auth/email-notifications — save this user's per-type email
+// preferences (sparse override map, same convention as /shortcuts above) and
+// their meeting-reminder lead time. Either field may be omitted to leave it
+// unchanged.
+router.put('/email-notifications', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { prefs, meetingReminderLeadMinutes } = req.body as {
+      prefs?: unknown;
+      meetingReminderLeadMinutes?: unknown;
+    };
+
+    let prefsJson: string | null = null;
+    if (prefs !== undefined) {
+      if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs)) {
+        res.status(400).json({ error: 'prefs must be an object' });
+        return;
+      }
+      const entries = Object.entries(prefs as Record<string, unknown>);
+      if (entries.length > EMAIL_PREF_TYPES.size) {
+        res.status(400).json({ error: 'Too many preference entries' });
+        return;
+      }
+      for (const [type, v] of entries) {
+        if (!EMAIL_PREF_TYPES.has(type)) {
+          res.status(400).json({ error: `Unknown notification type: ${type}` });
+          return;
+        }
+        if (typeof v !== 'boolean') {
+          res.status(400).json({ error: 'Invalid preference value' });
+          return;
+        }
+      }
+      prefsJson = JSON.stringify(prefs);
+    }
+
+    let leadMinutes: number | null = null;
+    if (meetingReminderLeadMinutes !== undefined) {
+      if (typeof meetingReminderLeadMinutes !== 'number' || !ALLOWED_REMINDER_LEAD_MINUTES.has(meetingReminderLeadMinutes)) {
+        res.status(400).json({ error: 'Invalid reminder lead time' });
+        return;
+      }
+      leadMinutes = meetingReminderLeadMinutes;
+    }
+
+    const result = await query<UserRow>(
+      `UPDATE users SET
+         email_notification_prefs = COALESCE($1::jsonb, email_notification_prefs),
+         meeting_reminder_lead_minutes = COALESCE($2::int, meeting_reminder_lead_minutes)
+       WHERE id = $3 RETURNING *`,
+      [prefsJson, leadMinutes, req.userId]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    res.json({ user: sanitizeUser(result.rows[0]) });
+  } catch (err) {
+    console.error('email-notifications update error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

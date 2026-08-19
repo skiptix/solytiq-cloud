@@ -21,6 +21,8 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { query } from './db';
+import { sendEmail } from './email/resendClient';
+import { buildNotificationEmail } from './email/templates';
 
 export type NotificationType =
   | 'workspace_added'
@@ -32,7 +34,93 @@ export type NotificationType =
   | 'deadline_overdue'
   | 'agent_run_complete'
   | 'agent_proposal'
-  | 'agent_change';
+  | 'agent_change'
+  | 'meeting_reminder';
+
+// ---------------------------------------------------------------------------
+// Email notifications (via Resend) — an additive channel on top of the
+// existing in-app feed, not a replacement. Every notification still writes
+// its `notifications` row exactly as before; a SUBSET of types also emails
+// the recipient, gated on (a) Resend actually being configured/enabled
+// (resendClient.ts's own check), (b) that recipient's own per-type
+// preference (`users.email_notification_prefs`, sparse override map — same
+// "only overrides stored" convention as `keyboard_shortcuts`), and (c) a
+// per-type filter for cases where "every notification of this type" would be
+// noise rather than signal (see shouldEmailNotification below).
+// ---------------------------------------------------------------------------
+
+/** Default email-on-off per type when the recipient has no override. Kept
+ *  deliberately conservative for high-frequency/low-urgency types — a user
+ *  who wants those can opt in from Account Settings → Notifications. */
+export const DEFAULT_EMAIL_PREFS: Record<NotificationType, boolean> = {
+  workspace_added: true,
+  item_invite: true,
+  meeting_invite: true,
+  item_tagged: true,
+  mention: true,
+  automation_run: true,
+  meeting_reminder: true,
+  deadline_overdue: false,
+  agent_run_complete: false,
+  agent_proposal: false,
+  agent_change: false,
+};
+
+/** Per-type extra filter beyond the recipient's on/off preference — e.g. a
+ *  successful automation run is exactly the kind of thing the in-app feed is
+ *  fine for, but a FAILED one is worth interrupting someone's inbox for. */
+export function shouldEmailNotification(type: NotificationType, data: Record<string, unknown> | undefined): boolean {
+  if (type === 'automation_run') return (data as { status?: string } | undefined)?.status === 'failed';
+  return true;
+}
+
+function ctaForNotification(input: CreateNotificationInput): { label: string; path: string } {
+  switch (input.entityType) {
+    case 'list': return { label: 'Open board', path: input.entityId ? `/list/${input.entityId}` : '/dashboard' };
+    case 'timeline': return { label: 'Open timeline', path: input.entityId ? `/timeline/${input.entityId}` : '/dashboard' };
+    case 'markdownList': return { label: 'Open page', path: input.entityId ? `/markdown-list/${input.entityId}` : '/dashboard' };
+    case 'folder': return { label: 'Open folder', path: input.entityId ? `/folder/${input.entityId}` : '/dashboard' };
+    case 'automation': return { label: 'Open automation', path: input.entityId ? `/automations/${input.entityId}` : '/automations' };
+    case 'meeting': return { label: 'Open calendar', path: '/calendar?show=meetings' };
+    case 'task': return { label: 'Open Solytiq Cloud', path: '/dashboard' };
+    default: return { label: 'Open Solytiq Cloud', path: '/dashboard' };
+  }
+}
+
+interface RecipientRow {
+  email: string | null;
+  email_notification_prefs: Record<string, boolean> | null;
+}
+
+/** Best-effort — never throws, never blocks/undoes the notification write it
+ *  follows. A missing/unconfigured Resend setup, a recipient with no email,
+ *  or an opted-out preference are all silent no-ops here, not errors. */
+async function maybeSendEmail(input: CreateNotificationInput): Promise<void> {
+  try {
+    if (!shouldEmailNotification(input.type, input.data as Record<string, unknown> | undefined)) return;
+    const r = await query<RecipientRow>(
+      `SELECT email, email_notification_prefs FROM users WHERE id = $1`,
+      [input.userId]
+    );
+    const recipient = r.rows[0];
+    if (!recipient?.email) return;
+    const prefs = recipient.email_notification_prefs ?? {};
+    const enabled = prefs[input.type] ?? DEFAULT_EMAIL_PREFS[input.type];
+    if (!enabled) return;
+
+    const cta = ctaForNotification(input);
+    const { subject, html } = buildNotificationEmail({
+      heading: input.title,
+      bodyText: input.body ?? input.title,
+      ctaLabel: cta.label,
+      ctaPath: cta.path,
+    });
+    const result = await sendEmail({ to: recipient.email, subject, html });
+    if (!result.ok) nerr('email send failed', input.type, input.userId, result.error);
+  } catch (err) {
+    nerr('maybeSendEmail failed', input.type, input.userId, err);
+  }
+}
 
 export interface CreateNotificationInput {
   /** Recipient user id. */
@@ -71,7 +159,7 @@ export async function createNotification(input: CreateNotificationInput): Promis
     if (input.actorId && input.actorId === input.userId) return; // never notify yourself
 
     const id = `notif_${uuidv4()}`;
-    await query(
+    const inserted = await query(
       // The dedupe uniqueness is a PARTIAL index (WHERE dedupe_key IS NOT NULL),
       // so the ON CONFLICT arbiter MUST repeat that predicate — otherwise
       // Postgres can't infer the partial index and the whole INSERT throws at
@@ -95,6 +183,10 @@ export async function createNotification(input: CreateNotificationInput): Promis
         input.dedupeKey ?? null,
       ]
     );
+    // Only a genuinely NEW row (not a dedupe no-op) should ever email — a
+    // repeat overdue-deadline sweep hitting the ON CONFLICT DO NOTHING branch
+    // must not re-send mail every hour just because it re-ran the insert.
+    if ((inserted.rowCount ?? 0) > 0) void maybeSendEmail(input);
   } catch (err) {
     nerr('createNotification failed', input.type, input.userId, err);
   }

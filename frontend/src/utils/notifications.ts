@@ -61,6 +61,8 @@ export function notificationVisual(n: AppNotification): NotificationVisual {
       return { icon: 'person_add', color: 'var(--color-primary)', bg: 'var(--color-surface-tint)' };
     case 'meeting_invite':
       return { icon: 'event', color: 'var(--color-blue-mid-7)', bg: 'var(--color-blue-pale-2)' };
+    case 'meeting_reminder':
+      return { icon: 'notifications_active', color: 'var(--color-blue-mid-7)', bg: 'var(--color-blue-pale-2)' };
     case 'item_tagged':
       return { icon: 'sell', color: 'var(--color-primary)', bg: 'var(--color-surface-tint)' };
     case 'mention':
