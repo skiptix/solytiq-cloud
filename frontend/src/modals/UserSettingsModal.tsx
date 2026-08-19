@@ -1476,10 +1476,16 @@ function EmailNotificationsSection() {
   const toggle = async (id: string) => {
     const prevValue = isEnabled(id);
     const nextValue = !prevValue;
-    setData(d => ({ ...d, prefs: { ...d.prefs, [id]: nextValue } }));
+    // The backend stores `prefs` as a single JSONB column and REPLACES it
+    // wholesale on every save (same as /shortcuts) — it does not merge keys
+    // server-side. So the client must send the full, already-merged map here,
+    // not just the one changed key, or every toggle would silently wipe out
+    // every previously saved preference except this one.
+    const nextPrefs = { ...prefs, [id]: nextValue };
+    setData(d => ({ ...d, prefs: nextPrefs }));
     setSavingId(id);
     try {
-      await apiUpdateEmailNotificationPrefs({ prefs: { [id]: nextValue } });
+      await apiUpdateEmailNotificationPrefs({ prefs: nextPrefs });
     } catch {
       setData(d => ({ ...d, prefs: { ...d.prefs, [id]: prevValue } }));
     } finally {
