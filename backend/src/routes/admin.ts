@@ -11,6 +11,8 @@ import { generateAdminApiKey, sanitizeScopes } from '../adminApiKey';
 import { broadcastNukeToAll } from '../sse';
 import { UPLOAD_DIR } from './files';
 import { validatePassword } from '../passwordPolicy';
+import { getResendApiKeyHint, setResendApiKey, sendEmail } from '../email/resendClient';
+import { buildNotificationEmail } from '../email/templates';
 
 const execFileAsync = promisify(execFile);
 
@@ -328,6 +330,14 @@ router.get('/settings', authenticate, requireAdmin, async (_req: Request, res: R
     const result = await query<{ key: string; value: string }>('SELECT key, value FROM app_settings');
     const settings: Record<string, string> = {};
     for (const row of result.rows) settings[row.key] = row.value;
+    // The Resend API key is encrypted at rest, but it's still never sent to
+    // the client raw — replace it with a presence flag + a last-4 hint so the
+    // admin UI can show "configured, ends in •••• ab12" without ever
+    // round-tripping the actual secret.
+    const hadKey = 'resend_api_key' in settings;
+    delete settings.resend_api_key;
+    settings.resend_api_key_configured = hadKey ? 'true' : 'false';
+    settings.resend_api_key_hint = hadKey ? ((await getResendApiKeyHint()) ?? '') : '';
     res.json({ settings });
   } catch (err) {
     console.error('admin/settings GET error:', err);
@@ -341,6 +351,7 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
     const {
       storageQuotaPerUser, aiAssistantEnabled, aiModel, twoFAFeatureEnabled, mcpEnabled, mobileAppEnabled,
       knowledgeSearchEnabled, embeddingBaseUrl, embeddingModel, embeddingMonthlyTokenBudget,
+      resendEnabled, resendApiKey, resendFromEmail, resendFromName,
     } = req.body as {
       storageQuotaPerUser?: number;
       aiAssistantEnabled?: boolean;
@@ -352,6 +363,12 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
       embeddingBaseUrl?: string;
       embeddingModel?: string;
       embeddingMonthlyTokenBudget?: number;
+      resendEnabled?: boolean;
+      /** New key to store. Omit to leave the current key untouched; pass an
+       *  empty string to clear it — see setResendApiKey(). */
+      resendApiKey?: string;
+      resendFromEmail?: string;
+      resendFromName?: string;
     };
     if (storageQuotaPerUser !== undefined) {
       const bytes = Math.max(0, Math.round(Number(storageQuotaPerUser)));
@@ -433,12 +450,68 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
         [String(tokens)]
       );
     }
+    if (resendEnabled !== undefined) {
+      await query(
+        `INSERT INTO app_settings (key, value) VALUES ('resend_enabled', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [resendEnabled ? 'true' : 'false']
+      );
+    }
+    if (resendApiKey !== undefined) {
+      await setResendApiKey(resendApiKey);
+    }
+    if (resendFromEmail !== undefined) {
+      await query(
+        `INSERT INTO app_settings (key, value) VALUES ('resend_from_email', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [resendFromEmail.trim()]
+      );
+    }
+    if (resendFromName !== undefined) {
+      await query(
+        `INSERT INTO app_settings (key, value) VALUES ('resend_from_name', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [resendFromName.trim()]
+      );
+    }
+
     const result = await query<{ key: string; value: string }>('SELECT key, value FROM app_settings');
     const settings: Record<string, string> = {};
     for (const row of result.rows) settings[row.key] = row.value;
+    const hadKey = 'resend_api_key' in settings;
+    delete settings.resend_api_key;
+    settings.resend_api_key_configured = hadKey ? 'true' : 'false';
+    settings.resend_api_key_hint = hadKey ? ((await getResendApiKeyHint()) ?? '') : '';
     res.json({ settings });
   } catch (err) {
     console.error('admin/settings PUT error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/admin/settings/resend/test — send a test email to the calling
+// admin's own address, so Resend configuration (key, sender domain
+// verification) can be verified from the UI without leaving Settings.
+router.post('/settings/resend/test', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const userResult = await query<{ email: string | null }>('SELECT email FROM users WHERE id = $1', [req.userId]);
+    const to = userResult.rows[0]?.email;
+    if (!to) {
+      res.status(400).json({ error: 'Your account has no email address on file' });
+      return;
+    }
+    const { subject, html } = buildNotificationEmail({
+      heading: 'Test email',
+      bodyText: 'This is a test email from Solytiq Cloud — if you got this, your Resend configuration works.',
+    });
+    const result = await sendEmail({ to, subject, html });
+    if (!result.ok) {
+      res.status(400).json({ error: result.error ?? 'Send failed' });
+      return;
+    }
+    res.json({ success: true, to });
+  } catch (err) {
+    console.error('admin/settings/resend/test error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

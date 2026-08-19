@@ -762,6 +762,11 @@ export interface AuthUser {
   totpEnabled?: boolean;
   keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>;
   lastRoute?: string | null;
+  /** Sparse per-NotificationType email on/off overrides — absent key falls
+   *  back to the backend's DEFAULT_EMAIL_PREFS. See AppNotification['type']. */
+  emailNotificationPrefs?: Record<string, boolean>;
+  /** Minutes before a meeting to email a reminder; 0 = reminders off. */
+  meetingReminderLeadMinutes?: number;
 }
 
 export interface AuthState {

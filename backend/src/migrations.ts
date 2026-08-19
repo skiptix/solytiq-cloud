@@ -453,6 +453,30 @@ export async function runMigrations() {
     ON CONFLICT (key) DO NOTHING
   `);
 
+  // Email notifications (Resend) — off by default until an admin configures
+  // an API key + sender address from Settings → Email. The key itself is
+  // never seeded here; its absence IS "not configured" (see resendClient.ts).
+  await pool.query(`
+    INSERT INTO app_settings (key, value) VALUES ('resend_enabled', 'false')
+    ON CONFLICT (key) DO NOTHING
+  `);
+  await pool.query(`
+    INSERT INTO app_settings (key, value) VALUES ('resend_from_email', '')
+    ON CONFLICT (key) DO NOTHING
+  `);
+  await pool.query(`
+    INSERT INTO app_settings (key, value) VALUES ('resend_from_name', 'Solytiq Cloud')
+    ON CONFLICT (key) DO NOTHING
+  `);
+
+  // Per-user email-notification preferences (sparse overrides only — same
+  // convention as keyboard_shortcuts; a type absent here falls back to
+  // notifications.ts's DEFAULT_EMAIL_PREFS) and this user's own lead time for
+  // meeting-reminder emails (0 = off). 30 minutes is a reasonable default —
+  // long enough to still act on, short enough to stay relevant.
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_notification_prefs JSONB NOT NULL DEFAULT '{}'::jsonb`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS meeting_reminder_lead_minutes INTEGER NOT NULL DEFAULT 30`);
+
   // ── Workspaces ──────────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS workspaces (

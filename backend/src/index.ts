@@ -61,6 +61,7 @@ import { isAppInstalled } from './appsRegistry';
 import { startSyncDispatcher, stopSyncDispatcher, SYNC_CHANNEL } from './syncLog';
 import { sweepScheduledAutomations, releaseUnstartedScheduleLeases } from './automationEngine';
 import { sweepOverdueDeadlines } from './notifications';
+import { sweepMeetingReminders } from './meetingReminders';
 import { getPublicBaseUrl } from './publicUrl';
 import { comparePassword } from './auth';
 import { mintShareSession, isValidShareSession, sweepExpiredShareSessions, type ShareKind } from './shareSessions';
@@ -1356,6 +1357,13 @@ async function start() {
     // once per (task, deadline). Hourly is plenty — deadlines have day precision.
     sweepOverdueDeadlines();
     timers.push(setInterval(sweepOverdueDeadlines, 60 * 60 * 1000));
+
+    // Notifications: alert meeting organizers + attendees shortly before a
+    // meeting starts, on each recipient's own configured lead time. 5-minute
+    // cadence to keep the reminder window reasonably tight (same granularity
+    // as the Automation Hub's schedule sweep).
+    sweepMeetingReminders();
+    timers.push(setInterval(() => { void sweepMeetingReminders(); }, 5 * 60 * 1000));
 
     // Agent Runtime: expire stale pending proposals (7-day TTL). Hourly is
     // plenty — approvals are a human-timescale action, not a hot path.

@@ -29,6 +29,8 @@ import {
   apiGetCaldavStatus,
   apiGenerateCaldavPassword,
   apiRevokeCaldav,
+  apiUpdateEmailNotificationPrefs,
+  apiVerifySessionToken,
   type ApiAccessToken,
   type MobileConnection,
   type HomescreenConnection,
@@ -86,7 +88,7 @@ const rowStyle: React.CSSProperties = {
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
-type SettingsTab = 'profile' | 'preferences' | 'controls' | 'security' | 'connections' | 'mobile' | 'calendar';
+type SettingsTab = 'profile' | 'preferences' | 'notifications' | 'controls' | 'security' | 'connections' | 'mobile' | 'calendar';
 
 /** Tabs with no pill on the mobile layout — see the clamp in the component. */
 const MOBILE_HIDDEN_TABS = new Set<SettingsTab>(['controls', 'mobile', 'calendar']);
@@ -374,8 +376,9 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
   // apply from a phone already running the mobile web app — hidden on mobile
   // to keep the tab bar short enough to not need horizontal scrolling.
   const TABS: { id: SettingsTab; label: string; icon: string }[] = [
-    { id: 'profile',     label: 'Profile',     icon: 'person' },
-    { id: 'preferences', label: 'Preferences', icon: 'tune' },
+    { id: 'profile',       label: 'Profile',       icon: 'person' },
+    { id: 'preferences',   label: 'Preferences',   icon: 'tune' },
+    { id: 'notifications', label: 'Notifications', icon: 'mail' },
     ...(isMobile ? [] : [{ id: 'controls' as SettingsTab, label: 'Controls', icon: 'keyboard' }]),
     { id: 'security',    label: 'Security',    icon: 'shield_lock' },
     ...(mcpVisible ? [{ id: 'connections' as SettingsTab, label: 'Connections', icon: 'smart_toy' }] : []),
@@ -667,6 +670,14 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
                 <div style={{ height: 1, background: 'var(--color-surface-tint-2)' }} />
                 <MemorySection />
               </div>
+            </MotionIn>
+            )}
+
+            {/* ── NOTIFICATIONS (email) ── */}
+            {activeTab === 'notifications' && (
+            <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, delay: 0.05, ease: EASE_SETTLE }}>
+              {sectionLabel('Email Notifications')}
+              <EmailNotificationsSection />
             </MotionIn>
             )}
 
@@ -1418,6 +1429,139 @@ function ClaudeMcpSection() {
 // ── Mobile app (connected devices) ─────────────────────────────────────────────
 
 // ── Controls (keyboard shortcuts) ───────────────────────────────────────────
+
+// The four notification types this app can actually raise an email for
+// today (see backend/src/notifications.ts's DEFAULT_EMAIL_PREFS) — all
+// default ON server-side when the user has no override, which is why an
+// absent key here safely reads as `true` rather than needing the full
+// default map mirrored on the frontend.
+const EMAIL_NOTIFICATION_DEFS: { id: string; label: string; description: string; icon: string }[] = [
+  { id: 'mention', label: 'Mentions & tags', description: 'Someone @-mentions you in a note, or tags you on an item.', icon: 'alternate_email' },
+  { id: 'workspace_added', label: 'Workspace invitations', description: "You're added to a workspace.", icon: 'group_add' },
+  { id: 'automation_run', label: 'Automation failures', description: 'An automation you own fails to run. (Successful runs stay in-app only.)', icon: 'bolt' },
+  { id: 'meeting_reminder', label: 'Meeting reminders', description: 'A meeting on your calendar is about to start.', icon: 'event' },
+];
+
+const REMINDER_LEAD_OPTIONS = [
+  { value: 0, label: 'Off' },
+  { value: 15, label: '15 min' },
+  { value: 30, label: '30 min' },
+  { value: 60, label: '1 hour' },
+  { value: 120, label: '2 hours' },
+];
+
+interface EmailNotificationSettings {
+  prefs: Record<string, boolean>;
+  leadMinutes: number;
+}
+const DEFAULT_EMAIL_NOTIFICATION_SETTINGS: EmailNotificationSettings = { prefs: {}, leadMinutes: 30 };
+
+function EmailNotificationsSection() {
+  const token = useAuthStore(s => s.token);
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const { data, loading, setData } = useAsyncData<EmailNotificationSettings>(
+    token,
+    async () => {
+      const r = await apiVerifySessionToken(token as string);
+      return { prefs: r.user.emailNotificationPrefs ?? {}, leadMinutes: r.user.meetingReminderLeadMinutes ?? 30 };
+    },
+    DEFAULT_EMAIL_NOTIFICATION_SETTINGS,
+    { enabled: !!token }
+  );
+  const { prefs, leadMinutes } = data;
+
+  const isEnabled = (id: string) => prefs[id] ?? true;
+
+  const toggle = async (id: string) => {
+    const prevValue = isEnabled(id);
+    const nextValue = !prevValue;
+    setData(d => ({ ...d, prefs: { ...d.prefs, [id]: nextValue } }));
+    setSavingId(id);
+    try {
+      await apiUpdateEmailNotificationPrefs({ prefs: { [id]: nextValue } });
+    } catch {
+      setData(d => ({ ...d, prefs: { ...d.prefs, [id]: prevValue } }));
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const setLead = async (value: number) => {
+    const prev = leadMinutes;
+    setData(d => ({ ...d, leadMinutes: value }));
+    try {
+      await apiUpdateEmailNotificationPrefs({ meetingReminderLeadMinutes: value });
+    } catch {
+      setData(d => ({ ...d, leadMinutes: prev }));
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Intro / explainer */}
+      <div style={{ ...card, padding: '14px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name="mail" size={19} color="var(--color-primary)" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+              Email Notifications
+            </div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-tertiary)', lineHeight: 1.5, marginTop: 3 }}>
+              Choose which notifications also send you an email, on top of the in-app bell. Only sends if an admin has configured email delivery for this instance.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ ...card, opacity: loading ? 0.6 : 1 }}>
+        {EMAIL_NOTIFICATION_DEFS.map((def, i) => {
+          const enabled = isEnabled(def.id);
+          const isMeetingReminder = def.id === 'meeting_reminder';
+          return (
+            <MotionIn key={def.id} animate={{ opacity: 1 }} transition={{ duration: 0.15 }} style={{ ...rowStyle, flexWrap: 'wrap', borderTop: i === 0 ? 'none' : '1px solid var(--color-surface-tint-2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: '1 1 220px' }}>
+                <Icon name={def.icon} size={17} color="var(--color-text-tertiary)" />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>{def.label}</div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>{def.description}</div>
+                </div>
+              </div>
+              <MotionButton
+                onClick={() => toggle(def.id)}
+                disabled={savingId === def.id}
+                title={enabled ? 'Turn off' : 'Turn on'}
+                style={{ width: 38, height: 22, borderRadius: 9999, border: 'none', cursor: savingId === def.id ? 'wait' : 'pointer', position: 'relative', flexShrink: 0 }}
+                animate={{ background: enabled ? 'var(--color-primary)' : 'var(--color-border-alt)' }}
+                transition={{ duration: 0.15 }}
+              >
+                <MotionIn animate={{ left: enabled ? 18 : 2 }} transition={{ duration: 0.15 }} style={{ position: 'absolute', top: 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.2)' }} />
+              </MotionButton>
+              {isMeetingReminder && enabled && (
+                <div style={{ flexBasis: '100%', display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                  {REMINDER_LEAD_OPTIONS.map(opt => (
+                    <MotionButton
+                      key={opt.value}
+                      onClick={() => setLead(opt.value)}
+                      style={{ fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, border: 'none', borderRadius: 8, padding: '6px 11px', cursor: 'pointer' }}
+                      animate={{ color: leadMinutes === opt.value ? 'var(--color-white)' : 'var(--color-primary)', background: leadMinutes === opt.value ? 'var(--color-primary)' : 'var(--color-surface-tint)' }}
+                      whileHover={leadMinutes !== opt.value ? { background: 'var(--color-surface-tint-4)' } : undefined}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {opt.label}
+                    </MotionButton>
+                  ))}
+                </div>
+              )}
+            </MotionIn>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function ShortcutsSection() {
   const overrides = useShortcutsStore(s => s.overrides);

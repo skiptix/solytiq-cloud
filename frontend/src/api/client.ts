@@ -212,6 +212,8 @@ type SessionUserPayload = {
   isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean;
   keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>;
   lastRoute?: string | null;
+  emailNotificationPrefs?: Record<string, boolean>;
+  meetingReminderLeadMinutes?: number;
 };
 
 /** Sign in an ADDITIONAL account while one is already active. Same endpoint and
@@ -327,6 +329,9 @@ export const apiUpdateShortcuts = (shortcuts: Record<string, { key?: string; ena
   apiFetch<{ user: { id: string; username: string; email: string; fullName: string; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }> } }>(
     '/auth/shortcuts', { method: 'PUT', body: JSON.stringify({ shortcuts }) }
   );
+
+export const apiUpdateEmailNotificationPrefs = (data: { prefs?: Record<string, boolean>; meetingReminderLeadMinutes?: number }) =>
+  apiFetch<{ user: SessionUserPayload }>('/auth/email-notifications', { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiUpdateLastRoute = (route: string) =>
   apiFetch<{ ok: boolean }>('/auth/last-route', { method: 'PUT', body: JSON.stringify({ route }) });
@@ -1135,6 +1140,19 @@ export const apiUpdateAppSettingsKnowledge = (data: {
     body: JSON.stringify(data),
   });
 
+// Email notifications (Resend) — admin config. `resendApiKey` omitted leaves
+// the stored key untouched; an empty string clears it (see setResendApiKey()).
+export const apiUpdateAppSettingsResend = (data: {
+  resendEnabled?: boolean; resendApiKey?: string; resendFromEmail?: string; resendFromName?: string;
+}) =>
+  apiFetch<{ settings: Record<string, string> }>('/admin/settings', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+
+export const apiSendResendTestEmail = () =>
+  apiFetch<{ success: boolean; to: string }>('/admin/settings/resend/test', { method: 'POST' });
+
 // Workspaces
 export const apiGetWorkspaces = () =>
   apiFetch<{ workspaces: Workspace[] }>('/workspaces');
@@ -1166,7 +1184,7 @@ export interface NotificationActor {
 }
 export interface AppNotification {
   id: string;
-  type: 'workspace_added' | 'item_invite' | 'meeting_invite' | 'item_tagged' | 'mention' | 'automation_run' | 'deadline_overdue' | string;
+  type: 'workspace_added' | 'item_invite' | 'meeting_invite' | 'item_tagged' | 'mention' | 'automation_run' | 'deadline_overdue' | 'meeting_reminder' | string;
   actorId: string | null;
   actor: NotificationActor | null;
   title: string;
