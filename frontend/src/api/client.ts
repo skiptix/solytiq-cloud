@@ -690,6 +690,41 @@ export const apiUpdateUser = (id: string, data: { username?: string; password?: 
 export const apiDeleteUser = (id: string) =>
   apiFetch<{ success: boolean }>(`/admin/users/${id}`, { method: 'DELETE' });
 
+// ─── User Invitations (admin) ───────────────────────────────────────────────
+export interface AdminInvitation {
+  id: string;
+  email: string;
+  isAdmin: boolean;
+  invitedByUsername: string | null;
+  acceptedByUsername: string | null;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export const apiInviteUser = (data: { email: string; isAdmin?: boolean }) =>
+  apiFetch<{ id: string; inviteUrl: string | null; emailSent: boolean; expiresAt: string }>(
+    '/admin/invitations', { method: 'POST', body: JSON.stringify(data) }
+  );
+
+export const apiGetInvitations = () =>
+  apiFetch<{ invitations: AdminInvitation[] }>('/admin/invitations');
+
+export const apiRevokeInvitation = (id: string) =>
+  apiFetch<{ success: boolean }>(`/admin/invitations/${id}`, { method: 'DELETE' });
+
+// The accept-invitation pair is UNAUTHENTICATED by necessity (the caller has
+// no account yet) — apiFetch still attaches an ambient token if the browser
+// happens to have one, but these routes never check it, so that's harmless.
+export const apiCheckInvitation = (token: string) =>
+  apiFetch<{ email: string }>(`/auth/invitations/${encodeURIComponent(token)}`);
+
+export const apiAcceptInvitation = (token: string, data: { username: string; password: string }) =>
+  apiFetch<{ success: boolean }>(
+    `/auth/invitations/${encodeURIComponent(token)}/accept`, { method: 'POST', body: JSON.stringify(data) }
+  );
+
 export const apiNuke = (password: string) =>
   apiFetch<{ success: boolean }>('/admin/nuke', { method: 'DELETE', body: JSON.stringify({ password }) });
 

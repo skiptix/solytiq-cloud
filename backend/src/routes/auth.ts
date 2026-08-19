@@ -11,6 +11,7 @@ import { getInstalledAppIds } from '../appsRegistry';
 import { validatePassword } from '../passwordPolicy';
 import { encryptTotpSecret, decryptTotpSecret } from '../totpCrypto';
 import { mintAssetTicket, isValidAssetTicketScope } from '../assetTickets';
+import { findPendingInvitation, hashInvitationToken } from '../userInvitations';
 
 // ---------------------------------------------------------------------------
 // Admin password reset — in-memory, single active code, 15-min TTL
@@ -237,6 +238,122 @@ router.post('/register', async (req: Request, res: Response) => {
     }
   } catch (err) {
     console.error('register error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// User Invitations — public, unauthenticated endpoints reachable only via a
+// one-time link an admin sent by email (see routes/admin.ts's POST
+// /invitations for creation). Both endpoints return a PLAIN 404 for every
+// invalid case (nonexistent / already accepted / revoked / expired token) —
+// never a distinguishing error — so neither a phishing attempt nor a used
+// link ever confirms it once pointed at something real. See
+// userInvitations.ts's header comment for the full rationale.
+// ---------------------------------------------------------------------------
+
+// GET /api/auth/invitations/:token — check a raw invite token and, only
+// when it's genuinely still pending, return the invited email for the
+// registration screen to prefill (read-only — the email is fixed by the
+// invite, not user-editable).
+router.get('/invitations/:token', async (req: Request, res: Response) => {
+  try {
+    const invite = await findPendingInvitation(req.params.token);
+    if (!invite) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    res.json({ email: invite.email });
+  } catch (err) {
+    console.error('invitations GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST /api/auth/invitations/:token/accept — complete registration from an
+// invitation: pick a username and password, and become the user that
+// invite's email belongs to. Deliberately does NOT auto-login (unlike
+// /register) — a public, emailed link is not the place to silently
+// establish a session; the frontend sends the new user to /login instead.
+router.post('/invitations/:token/accept', async (req: Request, res: Response) => {
+  try {
+    const { username, password } = req.body as { username?: string; password?: string };
+    if (!username || !username.trim() || !password) {
+      res.status(400).json({ error: 'username and password are required' });
+      return;
+    }
+    if (username.trim().length > 50) {
+      res.status(400).json({ error: 'Username is too long' });
+      return;
+    }
+    const pwCheck = validatePassword(password);
+    if (!pwCheck.ok) {
+      res.status(400).json({ error: pwCheck.error });
+      return;
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Lock the invitation row for the duration of this transaction so two
+      // concurrent accept requests for the same link can't both pass the
+      // pending check and both create an account.
+      const inviteRes = await client.query<{
+        id: string; email: string; is_admin: boolean;
+      }>(
+        `SELECT id, email, is_admin FROM user_invitations
+         WHERE token_hash = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > NOW()
+         FOR UPDATE`,
+        [hashInvitationToken(req.params.token)]
+      );
+      const invite = inviteRes.rows[0];
+      if (!invite) {
+        await client.query('ROLLBACK');
+        res.status(404).json({ error: 'Not found' });
+        return;
+      }
+
+      const passwordHash = await hashPassword(password);
+
+      let inserted;
+      try {
+        inserted = await client.query<UserRow>(
+          `INSERT INTO users (username, email, password_hash, is_admin)
+           VALUES ($1, $2, $3, $4)
+           RETURNING *`,
+          [username.trim(), invite.email, passwordHash, invite.is_admin]
+        );
+      } catch (err: unknown) {
+        await client.query('ROLLBACK');
+        const msg = err instanceof Error ? err.message : '';
+        if (msg.includes('unique') || msg.includes('duplicate')) {
+          res.status(409).json({ error: 'Username or email already taken' });
+          return;
+        }
+        throw err;
+      }
+
+      const newUser = inserted.rows[0];
+      const wsId = await ensurePersonalWorkspace((text, params) => client.query(text, params), newUser.id);
+      wlog(`invitation accepted: user ${newUser.id} provisioned with workspace ${wsId}`);
+
+      await client.query(
+        `UPDATE user_invitations SET accepted_at = NOW(), accepted_by = $2 WHERE id = $1`,
+        [invite.id, newUser.id]
+      );
+
+      await client.query('COMMIT');
+      res.status(201).json({ success: true });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error('invitations accept error:', err);
+      res.status(500).json({ error: 'Internal server error' });
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error('invitations accept error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

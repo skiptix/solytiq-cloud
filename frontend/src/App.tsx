@@ -83,6 +83,8 @@ const KnowledgeScreen = lazy(() => import('./screens/KnowledgeScreen'));
 const AutomationEditorScreen = lazy(() => import('./screens/AutomationEditorScreen'));
 const MarkdownListScreen = lazy(() => import('./screens/MarkdownListScreen'));
 const AdminPasswordResetScreen = lazy(() => import('./screens/AdminPasswordResetScreen'));
+const AcceptInviteScreen = lazy(() => import('./screens/AcceptInviteScreen'));
+const NotFoundScreen = lazy(() => import('./screens/NotFoundScreen'));
 
 // Sign out on any 401 (expired / revoked JWT) so the user is redirected to
 // /login instead of seeing the "no workspace" forced-creation wizard.
@@ -113,7 +115,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 // on) — a persisted lastRoute is never allowed to point at one of these, so
 // a stale/malformed value can't create a redirect loop or land the user
 // somewhere unexpected.
-const NON_RESUMABLE_ROUTE_PREFIXES = ['/login', '/setup', '/admin-reset', '/nuke', '/share', '/oauth'];
+const NON_RESUMABLE_ROUTE_PREFIXES = ['/login', '/setup', '/admin-reset', '/nuke', '/share', '/oauth', '/invite'];
 
 /** The path to send an already-logged-in user to when they land on a
  *  "front door" route (app root, /login, /setup, …) — their last visited
@@ -548,7 +550,7 @@ function AppLayout() {
                   <Route path="/automations/:id" element={!appsLoaded ? <RouteFallback /> : automationsInstalled ? <AutomationEditorScreen /> : <Navigate to="/dashboard" replace />} />
                   <Route path="/gps" element={!appsLoaded ? <RouteFallback /> : gpsInstalled ? <GPSScreen /> : <Navigate to="/dashboard" replace />} />
                   <Route path="/markdown-list/:id" element={<MarkdownListScreen />} />
-                  <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="*" element={<NotFoundScreen standalone={false} />} />
                 </Routes>
               </Suspense>
             </RouteErrorBoundary>
@@ -664,6 +666,7 @@ export default function App() {
           <Route path="/login" element={loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> : setupRequired === true ? <Navigate to="/setup" replace /> : setupRequired === null ? <RouteFallback /> : <LoginScreen />} />
           <Route path="/setup" element={loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> : <SetupWizard />} />
           <Route path="/admin-reset" element={loggedIn ? <Navigate to={resolveHomeRoute(lastRoute)} replace /> : <AdminPasswordResetScreen />} />
+          <Route path="/invite/:token" element={<AcceptInviteScreen />} />
           <Route path="/nuke" element={loggedIn && isAdmin ? <NukeScreen /> : <Navigate to={loggedIn ? '/dashboard' : '/login'} replace />} />
           <Route path="/gps/:id/edit" element={
             !loggedIn ? <Navigate to="/login" replace /> :

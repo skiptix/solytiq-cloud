@@ -477,6 +477,30 @@ export async function runMigrations() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_notification_prefs JSONB NOT NULL DEFAULT '{}'::jsonb`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS meeting_reminder_lead_minutes INTEGER NOT NULL DEFAULT 30`);
 
+  // User Invitations — admin invites a new user by email; only a SHA-256 hash
+  // of the raw one-time link token is ever stored (same convention as
+  // api_tokens/admin_api_keys — see userInvitations.ts). A row is "pending"
+  // (still usable) exactly when accepted_at/revoked_at are both NULL and
+  // expires_at is in the future; every other state (used, revoked, expired,
+  // or simply a token that never existed) is deliberately indistinguishable
+  // to an unauthenticated caller — see routes/auth.ts's invitation endpoints.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_invitations (
+      id           VARCHAR(100) PRIMARY KEY,
+      email        VARCHAR(255) NOT NULL,
+      token_hash   TEXT NOT NULL UNIQUE,
+      is_admin     BOOLEAN NOT NULL DEFAULT false,
+      invited_by   UUID REFERENCES users(id) ON DELETE SET NULL,
+      accepted_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+      accepted_at  TIMESTAMPTZ,
+      revoked_at   TIMESTAMPTZ,
+      expires_at   TIMESTAMPTZ NOT NULL,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_invitations_token_hash ON user_invitations(token_hash)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_invitations_email ON user_invitations(lower(email))`);
+
   // ── Workspaces ──────────────────────────────────────────────────────────────
   await pool.query(`
     CREATE TABLE IF NOT EXISTS workspaces (
