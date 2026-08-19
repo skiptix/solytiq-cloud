@@ -38,18 +38,12 @@ describe('shouldEmailNotification', () => {
 });
 
 describe('DEFAULT_EMAIL_PREFS', () => {
-  it('defaults the four explicitly-requested types to on', () => {
-    expect(DEFAULT_EMAIL_PREFS.mention).toBe(true);
+  it('defaults only workspace_added to on', () => {
     expect(DEFAULT_EMAIL_PREFS.workspace_added).toBe(true);
-    expect(DEFAULT_EMAIL_PREFS.automation_run).toBe(true);
-    expect(DEFAULT_EMAIL_PREFS.meeting_reminder).toBe(true);
-  });
-
-  it('defaults low-urgency agent/deadline types to off', () => {
-    expect(DEFAULT_EMAIL_PREFS.deadline_overdue).toBe(false);
-    expect(DEFAULT_EMAIL_PREFS.agent_run_complete).toBe(false);
-    expect(DEFAULT_EMAIL_PREFS.agent_proposal).toBe(false);
-    expect(DEFAULT_EMAIL_PREFS.agent_change).toBe(false);
+    for (const [type, enabled] of Object.entries(DEFAULT_EMAIL_PREFS)) {
+      if (type === 'workspace_added') continue;
+      expect(enabled, `${type} should default to off`).toBe(false);
+    }
   });
 });
 

@@ -1433,8 +1433,11 @@ function ClaudeMcpSection() {
 // The four notification types this app can actually raise an email for
 // today (see backend/src/notifications.ts's DEFAULT_EMAIL_PREFS) — all
 // default ON server-side when the user has no override, which is why an
-// absent key here safely reads as `true` rather than needing the full
-// default map mirrored on the frontend.
+// Only `workspace_added` defaults ON server-side (notifications.ts's
+// DEFAULT_EMAIL_PREFS) — DEFAULT_ON_EMAIL_TYPES below mirrors just that one
+// exception rather than the full default map, since every other type here
+// defaults to the same `false` an absent key already falls back to.
+const DEFAULT_ON_EMAIL_TYPES = new Set(['workspace_added']);
 const EMAIL_NOTIFICATION_DEFS: { id: string; label: string; description: string; icon: string }[] = [
   { id: 'mention', label: 'Mentions & tags', description: 'Someone @-mentions you in a note, or tags you on an item.', icon: 'alternate_email' },
   { id: 'workspace_added', label: 'Workspace invitations', description: "You're added to a workspace.", icon: 'group_add' },
@@ -1471,7 +1474,7 @@ function EmailNotificationsSection() {
   );
   const { prefs, leadMinutes } = data;
 
-  const isEnabled = (id: string) => prefs[id] ?? true;
+  const isEnabled = (id: string) => prefs[id] ?? DEFAULT_ON_EMAIL_TYPES.has(id);
 
   const toggle = async (id: string) => {
     const prevValue = isEnabled(id);
