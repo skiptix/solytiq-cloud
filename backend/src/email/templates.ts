@@ -18,7 +18,15 @@ export interface EmailContent {
   html: string;
 }
 
-const FONT_STACK = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+// Same two-family split as the app itself (index.css's --font-heading /
+// --font-body) — Hanken Grotesk for headings/labels/buttons, Inter for body
+// copy. Both degrade to the system font stack when a client won't load the
+// Google Fonts <link> below (most notably Gmail, which never loads web
+// fonts in mail at all) — the fallback is deliberately the same platform
+// sans-serif stack either family would otherwise render in.
+const SYSTEM_FALLBACK = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+const HEADING_FONT_STACK = `'Hanken Grotesk', ${SYSTEM_FALLBACK}`;
+const BODY_FONT_STACK = `'Inter', ${SYSTEM_FALLBACK}`;
 
 function escapeHtml(s: string): string {
   return s
@@ -66,7 +74,7 @@ export function buildNotificationEmail(opts: {
                   <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 8px 0 0;">
                     <tr>
                       <td style="border-radius: 10px; background-color: #5e4dbb;">
-                        <a href="${ctaUrl}" style="display: inline-block; padding: 12px 26px; font-family: ${FONT_STACK}; font-size: 14px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 10px;">
+                        <a href="${ctaUrl}" style="display: inline-block; padding: 12px 26px; font-family: ${HEADING_FONT_STACK}; font-size: 14px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 10px;">
                           ${escapeHtml(opts.ctaLabel ?? 'Open Solytiq Cloud')}
                         </a>
                       </td>
@@ -82,8 +90,13 @@ export function buildNotificationEmail(opts: {
     <meta name="color-scheme" content="light" />
     <meta name="supported-color-schemes" content="light" />
     <title>${heading}</title>
+    <!--[if !mso]><!-->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+    <!--<![endif]-->
   </head>
-  <body style="margin: 0; padding: 0; background-color: #EEEAFB; font-family: ${FONT_STACK};">
+  <body style="margin: 0; padding: 0; background-color: #EEEAFB; font-family: ${BODY_FONT_STACK};">
     <div style="display: none; max-height: 0; overflow: hidden; opacity: 0; mso-hide: all;">
       ${preheader}&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;
     </div>
@@ -96,7 +109,7 @@ export function buildNotificationEmail(opts: {
             <tr>
               <td align="center" style="padding: 0 0 24px;">
                 <img src="${LOGO_DATA_URI}" width="60" height="60" alt="Solytiq Cloud" style="display: block; width: 60px; height: 60px; border-radius: 16px; box-shadow: 0 10px 24px rgba(94, 77, 187, 0.28);" />
-                <div style="margin-top: 14px; font-family: ${FONT_STACK}; font-size: 12px; font-weight: 700; color: #6f5fd1; letter-spacing: 0.12em; text-transform: uppercase;">Solytiq Cloud</div>
+                <div style="margin-top: 14px; font-family: ${HEADING_FONT_STACK}; font-size: 12px; font-weight: 700; color: #6f5fd1; letter-spacing: 0.12em; text-transform: uppercase;">Solytiq Cloud</div>
               </td>
             </tr>
 
@@ -109,12 +122,12 @@ export function buildNotificationEmail(opts: {
                   </tr>
                   <tr>
                     <td style="padding: 32px 36px 4px;">
-                      <div style="font-family: ${FONT_STACK}; font-size: 20px; font-weight: 700; color: #1c1b22; line-height: 1.35;">${heading}</div>
+                      <div style="font-family: ${HEADING_FONT_STACK}; font-size: 20px; font-weight: 700; color: #1c1b22; line-height: 1.35;">${heading}</div>
                     </td>
                   </tr>
                   <tr>
                     <td style="padding: 10px 36px 4px;">
-                      <div style="font-family: ${FONT_STACK}; font-size: 14.5px; color: #4b4758; line-height: 1.65;">${bodyHtml}</div>
+                      <div style="font-family: ${BODY_FONT_STACK}; font-size: 14.5px; color: #4b4758; line-height: 1.65;">${bodyHtml}</div>
                     </td>
                   </tr>
                   <tr>
@@ -129,7 +142,7 @@ export function buildNotificationEmail(opts: {
             <!-- Footer, outside the card -->
             <tr>
               <td align="center" style="padding: 28px 24px 0;">
-                <div style="font-family: ${FONT_STACK}; font-size: 12px; color: #8983a8; line-height: 1.6;">
+                <div style="font-family: ${BODY_FONT_STACK}; font-size: 12px; color: #8983a8; line-height: 1.6;">
                   You're receiving this because of your notification preferences in Solytiq Cloud.<br />
                   You can change them anytime in Account Settings → Notifications.
                 </div>
