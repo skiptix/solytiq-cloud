@@ -49,17 +49,18 @@ export type NotificationType =
 // noise rather than signal (see shouldEmailNotification below).
 // ---------------------------------------------------------------------------
 
-/** Default email-on-off per type when the recipient has no override. Kept
- *  deliberately conservative for high-frequency/low-urgency types — a user
- *  who wants those can opt in from Account Settings → Notifications. */
+/** Default email-on-off per type when the recipient has no override. Only
+ *  `workspace_added` defaults ON — every other type is opt-in, so a fresh
+ *  account's inbox stays quiet until the user explicitly turns more on from
+ *  Account Settings → Notifications. */
 export const DEFAULT_EMAIL_PREFS: Record<NotificationType, boolean> = {
   workspace_added: true,
-  item_invite: true,
-  meeting_invite: true,
-  item_tagged: true,
-  mention: true,
-  automation_run: true,
-  meeting_reminder: true,
+  item_invite: false,
+  meeting_invite: false,
+  item_tagged: false,
+  mention: false,
+  automation_run: false,
+  meeting_reminder: false,
   deadline_overdue: false,
   agent_run_complete: false,
   agent_proposal: false,
