@@ -12,7 +12,8 @@ import { broadcastNukeToAll } from '../sse';
 import { UPLOAD_DIR } from './files';
 import { validatePassword } from '../passwordPolicy';
 import { getResendApiKeyHint, setResendApiKey, sendEmail } from '../email/resendClient';
-import { buildNotificationEmail } from '../email/templates';
+import { buildNotificationEmail, getAppBaseUrlForEmail } from '../email/templates';
+import { createInvitation, listInvitations, revokeInvitation } from '../userInvitations';
 
 const execFileAsync = promisify(execFile);
 
@@ -238,6 +239,103 @@ router.delete('/users/:id', authenticate, requireAdmin, async (req: Request, res
     res.json({ success: true });
   } catch (err) {
     console.error('admin/users DELETE error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// User Invitations — admin invites a new person by email instead of setting
+// a password for them directly (POST /users above still exists for that).
+// The raw one-time link is returned to the admin exactly once, here, in the
+// creation response — it is never persisted or retrievable again (see
+// userInvitations.ts) — so the admin UI must show/copy it immediately.
+// Sending the email is best-effort on top of that: creation always succeeds
+// and always returns the link, `emailSent` just tells the admin whether
+// Resend actually delivered it, so an unconfigured/failed Resend setup
+// never blocks inviting someone — the admin can still copy-paste the link.
+// ---------------------------------------------------------------------------
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// POST /api/admin/invitations
+router.post('/invitations', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { email, isAdmin } = req.body as { email?: string; isAdmin?: boolean };
+    if (!email || !email.trim()) {
+      res.status(400).json({ error: 'email is required' });
+      return;
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail.length > 255 || !EMAIL_RE.test(normalizedEmail)) {
+      res.status(400).json({ error: 'Invalid email address' });
+      return;
+    }
+
+    const existingUser = await query('SELECT id FROM users WHERE lower(email) = $1', [normalizedEmail]);
+    if (existingUser.rows.length > 0) {
+      res.status(409).json({ error: 'A user with this email already exists' });
+      return;
+    }
+
+    const { id, rawToken, expiresAt } = await createInvitation(normalizedEmail, req.userId!, !!isAdmin);
+
+    const baseUrl = getAppBaseUrlForEmail();
+    const inviteUrl = baseUrl ? `${baseUrl}/invite/${rawToken}` : null;
+
+    let emailSent = false;
+    if (inviteUrl) {
+      const inviterRow = await query<{ username: string; full_name: string | null }>(
+        'SELECT username, full_name FROM users WHERE id = $1',
+        [req.userId]
+      );
+      const inviterName = inviterRow.rows[0]?.full_name || inviterRow.rows[0]?.username || 'An admin';
+      const { subject, html } = buildNotificationEmail({
+        heading: "You've been invited to Solytiq Cloud",
+        bodyText: `${inviterName} invited you to join their Solytiq Cloud instance. This link is valid for 7 days and can only be used once.`,
+        ctaLabel: 'Accept invitation',
+        ctaPath: `/invite/${rawToken}`,
+      });
+      const sendResult = await sendEmail({ to: normalizedEmail, subject, html });
+      emailSent = sendResult.ok;
+    }
+
+    res.status(201).json({ id, inviteUrl, emailSent, expiresAt });
+  } catch (err) {
+    console.error('admin/invitations POST error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET /api/admin/invitations
+router.get('/invitations', authenticate, requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const rows = await listInvitations();
+    res.json({
+      invitations: rows.map(r => ({
+        id: r.id,
+        email: r.email,
+        isAdmin: r.is_admin,
+        invitedByUsername: r.invited_by_username,
+        acceptedByUsername: r.accepted_by_username,
+        acceptedAt: r.accepted_at,
+        revokedAt: r.revoked_at,
+        expiresAt: r.expires_at,
+        createdAt: r.created_at,
+      })),
+    });
+  } catch (err) {
+    console.error('admin/invitations GET error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/admin/invitations/:id — revoke a still-pending invitation.
+router.delete('/invitations/:id', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    await revokeInvitation(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('admin/invitations DELETE error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

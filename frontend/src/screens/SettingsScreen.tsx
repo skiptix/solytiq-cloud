@@ -6,7 +6,7 @@ import { useMobile } from '../hooks/useBreakpoint';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 import useAIStore from '../store/useAIStore';
-import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiUpdateAppSettingsMcp, apiUpdateAppSettingsMobile, apiGetAIUsage, apiGetAdminReadApiKeys, apiRevokeAdminReadApiKey, apiUpdateAppSettingsKnowledge, apiGetKnowledgeStatus, apiKnowledgeReindex, apiUpdateAppSettingsResend, apiSendResendTestEmail, type AdminReadApiKey, type AIUsageDay, type AIUsageModel, type AIUsageTotals, type KnowledgeStatus } from '../api/client';
+import { apiGetUsers, apiCreateUser, apiUpdateUser, apiDeleteUser, apiGetSystemStorage, apiGetAppSettings, apiUpdateAppSettings, apiUpdateAppSettingsAI, apiGetAISettings, apiUpdateFeatureFlags, apiUpdateAppSettingsMcp, apiUpdateAppSettingsMobile, apiGetAIUsage, apiGetAdminReadApiKeys, apiRevokeAdminReadApiKey, apiUpdateAppSettingsKnowledge, apiGetKnowledgeStatus, apiKnowledgeReindex, apiUpdateAppSettingsResend, apiSendResendTestEmail, apiInviteUser, apiGetInvitations, apiRevokeInvitation, type AdminReadApiKey, type AdminInvitation, type AIUsageDay, type AIUsageModel, type AIUsageTotals, type KnowledgeStatus } from '../api/client';
 import Icon from '../components/Icon';
 import AdminApiKeyWizard from '../modals/AdminApiKeyWizard';
 import AppsStoreModal from '../modals/AppsStoreModal';
@@ -43,6 +43,7 @@ const ONLINE_WINDOW_MS = 5 * 60 * 1000;
 // otherwise every consumer sees a "new" empty array on every pass.
 const EMPTY_USERS: UserEntry[] = [];
 const EMPTY_API_KEYS: AdminReadApiKey[] = [];
+const EMPTY_INVITATIONS: AdminInvitation[] = [];
 
 // Module scope, not the component body: a component defined during render
 // is a NEW type every render, so React unmounts and remounts it each time —
@@ -156,6 +157,17 @@ export default function SettingsScreen() {
     async () => (await apiGetUsers()).users,
     EMPTY_USERS
   );
+  // Pending invitations — loaded alongside the Users tab, same gating as
+  // the API-keys tab's own lazy load above.
+  const {
+    data: invitations, loading: invitationsLoading, setData: setInvitations,
+  } = useAsyncData(
+    activeTab === 'users' && isAdmin ? 'admin-invitations' : null,
+    async () => (await apiGetInvitations()).invitations,
+    EMPTY_INVITATIONS
+  );
+  const pendingInvitations = invitations.filter(i => !i.acceptedAt && !i.revokedAt && new Date(i.expiresAt).getTime() > now);
+
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [newUsername, setNewUsername] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -170,6 +182,17 @@ export default function SettingsScreen() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [passwordCopied, setPasswordCopied] = useState(false);
   const [copiedUserId, setCopiedUserId] = useState<string | null>(null);
+
+  // Invite user state
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteEmailFocus, setInviteEmailFocus] = useState(false);
+  const [inviteAsAdmin, setInviteAsAdmin] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteResult, setInviteResult] = useState<{ inviteUrl: string | null; emailSent: boolean } | null>(null);
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
+  const [revokingInvitationId, setRevokingInvitationId] = useState<string | null>(null);
 
   // Edit user state
   const [editUserOpen, setEditUserOpen] = useState(false);
@@ -676,6 +699,60 @@ export default function SettingsScreen() {
       setCreateError(msg.includes('taken') || msg.includes('409') ? 'Username or email already taken.' : 'Failed to create user. Try again.');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const openInvite = () => {
+    setInviteEmail('');
+    setInviteAsAdmin(false);
+    setInviteError(null);
+    setInviteResult(null);
+    setInviteLinkCopied(false);
+    setInviteOpen(true);
+  };
+
+  const closeInvite = () => {
+    setInviteOpen(false);
+    setInviteError(null);
+  };
+
+  const handleInviteUser = async () => {
+    const email = inviteEmail.trim();
+    if (!email) { setInviteError('Email is required.'); return; }
+    setInviting(true);
+    setInviteError(null);
+    try {
+      const res = await apiInviteUser({ email, isAdmin: inviteAsAdmin });
+      setInviteResult({ inviteUrl: res.inviteUrl, emailSent: res.emailSent });
+      setInvitations(prev => [
+        { id: res.id, email, isAdmin: inviteAsAdmin, invitedByUsername: null, acceptedByUsername: null, acceptedAt: null, revokedAt: null, expiresAt: res.expiresAt, createdAt: new Date().toISOString() },
+        ...prev,
+      ]);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '';
+      setInviteError(msg.includes('exists') || msg.includes('409') ? 'A user with this email already exists.' : 'Failed to send invitation. Try again.');
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const copyInviteLink = () => {
+    if (!inviteResult?.inviteUrl) return;
+    navigator.clipboard.writeText(inviteResult.inviteUrl).then(() => {
+      setInviteLinkCopied(true);
+      setTimeout(() => setInviteLinkCopied(false), 2000);
+    }).catch(() => {});
+  };
+
+  const handleRevokeInvitation = async (id: string) => {
+    setRevokingInvitationId(id);
+    try {
+      await apiRevokeInvitation(id);
+      setInvitations(prev => prev.map(i => i.id === id ? { ...i, revokedAt: new Date().toISOString() } : i));
+    } catch (e) {
+      console.error('revoke invitation failed', e);
+    } finally {
+      setRevokingInvitationId(null);
     }
   };
 
@@ -1669,15 +1746,26 @@ export default function SettingsScreen() {
             {activeTab === 'users' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 {sectionLabel('Users',
-                  <MotionButton
-                    onClick={openAddUser}
-                    style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer' }}
-                    whileHover={{ background: 'var(--color-surface-tint-4)' }}
-                    transition={{ duration: 0.15 }}
-                  >
-                    <Icon name="person_add" size={14} color="var(--color-primary)" />
-                    Add User
-                  </MotionButton>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <MotionButton
+                      onClick={openInvite}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer' }}
+                      whileHover={{ background: 'var(--color-surface-tint-4)' }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <Icon name="mail" size={14} color="var(--color-primary)" />
+                      Invite User
+                    </MotionButton>
+                    <MotionButton
+                      onClick={openAddUser}
+                      style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', border: 'none', borderRadius: 8, padding: '5px 12px', cursor: 'pointer' }}
+                      whileHover={{ background: 'var(--color-surface-tint-4)' }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <Icon name="person_add" size={14} color="var(--color-primary)" />
+                      Add User
+                    </MotionButton>
+                  </div>
                 )}
                 <div style={card}>
                   {usersLoading ? (
@@ -1753,6 +1841,53 @@ export default function SettingsScreen() {
                     </>
                   )}
                 </div>
+
+                {(invitationsLoading || pendingInvitations.length > 0) && (
+                  <>
+                    {sectionLabel('Pending Invitations')}
+                    <div style={card}>
+                      {invitationsLoading ? (
+                        <div style={{ ...row, justifyContent: 'center' }}>
+                          <div style={{ fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-quaternary)' }}>Loading…</div>
+                        </div>
+                      ) : (
+                        pendingInvitations.map((inv, i) => (
+                          <div key={inv.id} style={{ ...row, borderBottom: i < pendingInvitations.length - 1 ? '1px solid var(--color-surface-tint-2)' : 'none' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                              <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <Icon name="mail" size={17} color="var(--color-primary)" />
+                              </div>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {inv.email}
+                                  </div>
+                                  {inv.isAdmin && (
+                                    <span style={{ fontFamily: 'var(--font-body)', fontSize: 10, fontWeight: 700, color: 'var(--color-primary)', background: 'var(--color-surface-tint)', borderRadius: 9999, padding: '1px 7px', textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>Admin</span>
+                                  )}
+                                </div>
+                                <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 1 }}>
+                                  {inv.invitedByUsername ? `Invited by @${inv.invitedByUsername} · ` : ''}Expires {new Date(inv.expiresAt).toLocaleDateString()}
+                                </div>
+                              </div>
+                            </div>
+                            <MotionButton
+                              onClick={() => handleRevokeInvitation(inv.id)}
+                              disabled={revokingInvitationId === inv.id}
+                              title="Revoke invitation"
+                              style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 600, color: 'var(--color-error)', background: 'transparent', border: 'none', borderRadius: 8, padding: '6px 10px', cursor: revokingInvitationId === inv.id ? 'wait' : 'pointer', flexShrink: 0 }}
+                              whileHover={{ background: 'var(--color-error-bg-alt)' }}
+                              transition={{ duration: 0.12 }}
+                            >
+                              <Icon name="close" size={14} color="var(--color-error)" />
+                              {revokingInvitationId === inv.id ? 'Revoking…' : 'Revoke'}
+                            </MotionButton>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -1983,6 +2118,110 @@ export default function SettingsScreen() {
                 </MotionButton>
               </div>
             </div>
+          </ModalIn>
+        </div>,
+        document.body
+      )}
+
+      {/* ── Invite User Modal ── */}
+      {inviteOpen && createPortal(
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(var(--color-black-rgb), 0.22)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={e => { if (e.target === e.currentTarget) closeInvite(); }}
+        >
+          <ModalIn
+            duration={280}
+            style={{ background: 'var(--color-white)', borderRadius: 20, width: '100%', maxWidth: 420, boxShadow: '0 12px 40px rgba(var(--color-black-rgb), 0.18)', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 24px 0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--color-surface-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name="mail" size={18} color="var(--color-primary)" />
+                </div>
+                <div style={{ fontFamily: 'var(--font-heading)', fontSize: 17, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                  {inviteResult ? 'Invitation Sent' : 'Invite User'}
+                </div>
+              </div>
+              <MotionButton
+                onClick={closeInvite}
+                style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--color-surface-tint-2)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                whileHover={{ background: 'var(--color-border)' }}
+                transition={{ duration: 0.15 }}
+              >
+                <Icon name="close" size={15} color="var(--color-text-secondary)" />
+              </MotionButton>
+            </div>
+
+            {inviteResult ? (
+              <div style={{ padding: '20px 24px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 14px', background: inviteResult.emailSent ? 'rgba(var(--color-success-rgb), 0.08)' : 'var(--color-surface-tint)', borderRadius: 8, marginBottom: 16 }}>
+                  <Icon name={inviteResult.emailSent ? 'mark_email_read' : 'info'} size={16} color={inviteResult.emailSent ? 'var(--color-success)' : 'var(--color-warning)'} />
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                    {inviteResult.emailSent
+                      ? 'The invitation email was sent.'
+                      : inviteResult.inviteUrl
+                        ? 'Email delivery is not configured (Settings → Email) — copy the link below and share it manually.'
+                        : 'Set PUBLIC_URL/FRONTEND_URL on this instance to generate a shareable link.'}
+                  </span>
+                </div>
+                {inviteResult.inviteUrl && (
+                  <>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Invite Link — shown once</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 20 }}>
+                      <input readOnly value={inviteResult.inviteUrl} onFocus={e => e.currentTarget.select()} style={{ ...fi, flex: 1, background: 'var(--color-surface-tint)', borderRadius: 8, padding: '8px 10px' }} />
+                      <MotionButton onClick={copyInviteLink} title={inviteLinkCopied ? 'Copied!' : 'Copy link'} transition={{ duration: 0.12 }} style={{ width: 34, height: 34, borderRadius: 8, background: inviteLinkCopied ? 'rgba(var(--color-success-rgb), 0.10)' : 'var(--color-surface-tint)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Icon name={inviteLinkCopied ? 'check' : 'content_copy'} size={16} color={inviteLinkCopied ? 'var(--color-success)' : 'var(--color-primary)'} />
+                      </MotionButton>
+                    </div>
+                  </>
+                )}
+                <button onClick={closeInvite} style={{ width: '100%', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-primary)'; }}>Done</button>
+              </div>
+            ) : (
+              <div style={{ padding: '20px 24px' }}>
+                <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-tertiary)', lineHeight: 1.5, marginBottom: 18 }}>
+                  Sends a one-time link to set a username and password. The link works only once and expires after 7 days.
+                </div>
+                <MotionIn animate={{ borderBottomWidth: inviteEmailFocus ? 2 : 1, borderBottomColor: inviteEmailFocus ? 'var(--color-primary)' : 'var(--color-border)' }} transition={{ duration: 0.15 }} style={{ borderBottomStyle: 'solid', paddingBottom: 10, marginBottom: 16 }}>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Email <span style={{ color: 'var(--color-error)' }}>*</span></div>
+                  <input
+                    type="email" value={inviteEmail}
+                    onChange={e => { setInviteEmail(e.target.value); setInviteError(null); }}
+                    placeholder="jane@example.com" style={fi}
+                    onFocus={() => setInviteEmailFocus(true)} onBlur={() => setInviteEmailFocus(false)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleInviteUser(); }}
+                    autoFocus
+                  />
+                </MotionIn>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>Grant admin access</div>
+                    <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)', marginTop: 1 }}>They'll become an instance admin once they accept.</div>
+                  </div>
+                  <MotionButton
+                    onClick={() => setInviteAsAdmin(v => !v)}
+                    style={{ width: 38, height: 22, borderRadius: 9999, border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}
+                    animate={{ background: inviteAsAdmin ? 'var(--color-primary)' : 'var(--color-border-alt)' }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <MotionIn animate={{ left: inviteAsAdmin ? 18 : 2 }} transition={{ duration: 0.15 }} style={{ position: 'absolute', top: 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.2)' }} />
+                  </MotionButton>
+                </div>
+                {inviteError && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, padding: '10px 14px', background: 'var(--color-error-bg-alt)', borderRadius: 8, border: '1px solid var(--color-error-bg)' }}>
+                    <Icon name="error" size={15} color="var(--color-error)" />
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-error)' }}>{inviteError}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={closeInvite} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', background: 'var(--color-surface-tint-2)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: 'pointer' }} onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-border)'; }} onMouseLeave={e => { e.currentTarget.style.background = 'var(--color-surface-tint-2)'; }}>Cancel</button>
+                  <MotionButton onClick={handleInviteUser} disabled={inviting || !inviteEmail.trim()} transition={{ duration: 0.15 }} style={{ flex: 1, fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-white)', background: inviting || !inviteEmail.trim() ? 'var(--color-border-strong)' : 'var(--color-primary)', border: 'none', borderRadius: 8, padding: '11px 0', cursor: inviting || !inviteEmail.trim() ? 'not-allowed' : 'pointer' }} onMouseEnter={e => { if (!inviting && inviteEmail.trim()) e.currentTarget.style.background = 'var(--color-purple-mid-11)'; }} onMouseLeave={e => { if (!inviting && inviteEmail.trim()) e.currentTarget.style.background = 'var(--color-primary)'; }}>
+                    {inviting ? 'Sending…' : 'Send Invite'}
+                  </MotionButton>
+                </div>
+              </div>
+            )}
           </ModalIn>
         </div>,
         document.body

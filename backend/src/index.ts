@@ -344,6 +344,10 @@ app.use('/api/auth/login', authLimiter, accountLoginLimiter);
 app.use('/api/auth/2fa/verify', authLimiter, accountTwoFaLimiter);
 app.use('/api/auth/register', setupLimiter);
 app.use('/api/auth/request-setup-token', setupLimiter);
+// User Invitations: both the token-check and the accept endpoint are
+// unauthenticated by necessity (the caller has no account yet) — same tier
+// as /register, since accept() is exactly a second registration entry point.
+app.use('/api/auth/invitations', setupLimiter);
 app.use('/api/auth/admin-password-reset', setupLimiter);
 app.use('/api/admin/nuke', setupLimiter);
 // SECURITY (S3): Dynamic Client Registration (POST /api/oauth/register) is
