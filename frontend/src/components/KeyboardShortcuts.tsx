@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import useShortcutsStore from '../store/useShortcutsStore';
 import useAppStore from '../store/useAppStore';
+import useAIStore from '../store/useAIStore';
 import { SHORTCUT_DEFS, bindingFor, comboFromEvent } from '../shortcuts/registry';
 
 const SIDEBAR_MINI = 60;
@@ -32,6 +33,21 @@ export default function KeyboardShortcuts() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Sol's chat is a full-screen modal — while it's open, any OTHER
+      // global shortcut would still act on the app underneath it (switch
+      // views, collapse the sidebar, ...) invisibly behind the overlay.
+      // Only Escape is let through, to close the chat; everything else is
+      // swallowed here, whether or not focus happens to be inside the
+      // chat's own textarea (which is why this runs BEFORE the typing-
+      // target check below — that check alone would also block Escape).
+      if (useAIStore.getState().isOpen) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          useAIStore.getState().setOpen(false);
+        }
+        return;
+      }
+
       if (isTypingTarget(e.target)) return;
       const id = comboMap.get(comboFromEvent(e));
       if (!id) return;

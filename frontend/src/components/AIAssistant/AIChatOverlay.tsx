@@ -318,8 +318,21 @@ export default function AIChatOverlay({
           keyboard. Sizing to the actual visible area keeps the whole column
           above it instead, and animating the change (rather than snapping)
           is what makes the input read as sliding up with the keyboard
-          instead of jumping. */}
+          instead of jumping.
+          `initial={false}` is required here: without it, Motion has no
+          declared "from" state for `top`/`height` and falls back to the
+          browser's own default box for a `position:fixed` element with
+          neither set (collapsed near the top), then animates DOWN into its
+          real size on mount. That drags every child along with the
+          container's own top-to-bottom unfurl — swamping the input pill's
+          own, much smaller, bottom-up entrance below and making the whole
+          panel read as sliding in from the top instead. `initial={false}`
+          renders this container at its correct final bounds on the very
+          first frame, so only the children's own animations are visible;
+          it does NOT stop `animate` from still tweening `top`/`height` on
+          later keyboard-driven updates, which is exactly what's wanted. */}
       <motion.div
+        initial={false}
         animate={{ top: viewportTop, height: viewportHeight }}
         transition={{ duration: 0.25, ease: EASE_STANDARD }}
         style={{ position: 'fixed', left: 0, right: 0, zIndex: 9001, display: 'flex', flexDirection: 'column', pointerEvents: 'none' }}
@@ -488,7 +501,7 @@ export default function AIChatOverlay({
               keyboard instead of sitting flush above it. */}
           <div style={{ padding: `0 12px ${keyboardOpen ? '14px' : 'calc(env(safe-area-inset-bottom, 0px) + 14px)'}`, pointerEvents: 'auto' }}>
             <MotionIn
-              initial={{ opacity: 0, y: 24 }}
+              initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 16 }}
               transition={{ duration: 0.3, ease: EASE_SETTLE }}

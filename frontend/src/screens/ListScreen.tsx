@@ -18,8 +18,8 @@ import { apiAddListTask, apiCreateSection, apiUpdateSection, apiDeleteSection, a
 import Icon from '../components/Icon';
 import SaveStatusDot from '../components/SaveStatusDot';
 import EmojiSelector from '../components/EmojiSelector';
-import AutomationsButton from '../components/AutomationsButton';
-import HideEmptySectionsButton from '../components/HideEmptySectionsButton';
+import ContextMenu, { type ContextMenuEntry } from '../components/ContextMenu';
+import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import Spinner from '@/components/animate-ui/Spinner';
 import MotionIn from '../components/animate-ui/MotionIn';
 import MotionButton from '../components/animate-ui/MotionButton';
@@ -92,6 +92,14 @@ export default function ListScreen() {
   const [newSectionLabel, setNewSectionLabel] = useState('');
   const [newSectionEmoji, setNewSectionEmoji] = useState('');
   const newSectionInputRef = useRef<HTMLInputElement>(null);
+  // Header "..." overflow menu — Hide empty sections / Automations, the
+  // board's own display controls, tucked away instead of sitting as loose
+  // buttons next to the view switcher. Same shared ContextMenu component the
+  // Sidebar's own "..." triggers use.
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const [headerMenuPos, setHeaderMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const headerMenuBtnRef = useRef<HTMLButtonElement>(null);
+  const automationsInstalled = useInstalledAppsStore(s => s.isInstalled('automations'));
 
   // "New item" shortcut — focuses the first section's quick-add field.
   useEffect(() => {
@@ -538,12 +546,42 @@ export default function ListScreen() {
             ))}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {list?.quickAddEnabled && (
-              <HideEmptySectionsButton active={shouldHideEmptySections} onToggle={toggleHideEmptySections} isMobile={isMobile} />
+            {list && (list.quickAddEnabled || automationsInstalled) && (
+              <button
+                ref={headerMenuBtnRef}
+                onClick={() => {
+                  const rect = headerMenuBtnRef.current?.getBoundingClientRect();
+                  if (rect) setHeaderMenuPos({ top: rect.bottom + 4, left: rect.right - 200 });
+                  setHeaderMenuOpen(o => !o);
+                }}
+                title="Board options"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer', flexShrink: 0 }}>
+                <Icon name="more_vert" size={16} color="var(--color-text-tertiary)" />
+              </button>
             )}
-            {list && <AutomationsButton ownerType="list" ownerId={list.id} isMobile={isMobile} />}
           </div>
         </div>
+
+        {headerMenuOpen && headerMenuPos && list && (() => {
+          const items: ContextMenuEntry[] = [];
+          if (list.quickAddEnabled) {
+            items.push({
+              key: 'hide-empty',
+              label: shouldHideEmptySections ? 'Show empty sections' : 'Hide empty sections',
+              icon: shouldHideEmptySections ? 'visibility' : 'visibility_off',
+              onClick: toggleHideEmptySections,
+            });
+          }
+          if (automationsInstalled) {
+            items.push({
+              key: 'automations',
+              label: 'Automations',
+              icon: 'bolt',
+              onClick: () => navigate(`/automations?ownerType=list&ownerId=${list.id}`),
+            });
+          }
+          return <ContextMenu x={headerMenuPos.left} y={headerMenuPos.top} items={items} minWidth={200} onClose={() => setHeaderMenuOpen(false)} />;
+        })()}
 
         {/* Hero */}
         <div style={{ background: list.colorBg ?? 'var(--color-surface-gray)', border: `1px solid ${list.color ?? 'var(--color-border-alt)'}40`, borderRadius: 16, padding: '20px 24px', position: 'relative', overflow: 'hidden' }}>

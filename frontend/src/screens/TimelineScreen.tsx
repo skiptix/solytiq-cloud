@@ -30,7 +30,7 @@ import CreatorBubble from '../components/CreatorBubble';
 import NotesEditor from '../components/NotesEditor';
 import RelationsPanel from '../components/graph/RelationsPanel';
 import MarkdownView from '../components/MarkdownView';
-import AutomationsButton from '../components/AutomationsButton';
+import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import { FilePicker, AttachBadge, AttachDropOverlay } from '../components/TaskDialog';
 import { useAttachmentDrop } from '../hooks/useAttachmentDrop';
 import AttachmentPreviewModal from '../components/AttachmentPreview';
@@ -560,6 +560,11 @@ export default function TimelineScreen() {
   const [renaming, setRenaming] = useState<Milestone | null>(null);
   const [moving, setMoving] = useState<Milestone | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; milestone: Milestone } | null>(null);
+  // Header "..." overflow menu — Automations, tucked away instead of sitting
+  // as its own loose button next to "+ Milestone".
+  const [headerMenu, setHeaderMenu] = useState<{ x: number; y: number } | null>(null);
+  const headerMenuBtnRef = useRef<HTMLButtonElement>(null);
+  const automationsInstalled = useInstalledAppsStore(s => s.isInstalled('automations'));
 
   // Workspace members for the milestone note's @-mention typeahead.
   const timelineWorkspaceId = timeline?.workspaceId ?? null;
@@ -731,7 +736,21 @@ export default function TimelineScreen() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <AutomationsButton ownerType="timeline" ownerId={timeline.id} isMobile={isMobile} />
+            {automationsInstalled && (
+              <button
+                ref={headerMenuBtnRef}
+                onClick={() => {
+                  setHeaderMenu(prev => {
+                    if (prev) return null;
+                    const rect = headerMenuBtnRef.current?.getBoundingClientRect();
+                    return rect ? { x: rect.right - 200, y: rect.bottom + 4 } : null;
+                  });
+                }}
+                title="Timeline options"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: 8, border: '1px solid var(--color-border)', background: 'var(--color-white)', cursor: 'pointer', flexShrink: 0 }}>
+                <Icon name="more_vert" size={16} color="var(--color-text-tertiary)" />
+              </button>
+            )}
             {isOwner && (
               <button onClick={() => setAdding(true)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 10, border: 'none', background: accent, color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', flexShrink: 0, boxShadow: `0 4px 14px ${accent}40` }}>
@@ -914,6 +933,16 @@ export default function TimelineScreen() {
         ];
         return <ContextMenu x={contextMenu.x} y={contextMenu.y} items={items} onClose={() => setContextMenu(null)} />;
       })()}
+
+      {headerMenu && timeline && (
+        <ContextMenu
+          x={headerMenu.x}
+          y={headerMenu.y}
+          minWidth={200}
+          items={[{ key: 'automations', label: 'Automations', icon: 'bolt', onClick: () => navigate(`/automations?ownerType=timeline&ownerId=${timeline.id}`) }]}
+          onClose={() => setHeaderMenu(null)}
+        />
+      )}
 
       {renaming && (
         <RenameDialog

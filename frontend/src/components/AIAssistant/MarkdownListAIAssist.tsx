@@ -6,7 +6,6 @@ import { apiGetAISettings, apiAIChat, apiGetAiToolDefs, apiExecuteAiTool } from 
 import type { MarkdownList } from '../../types';
 import Spinner from '@/components/animate-ui/Spinner';
 import PopIn from '@/components/animate-ui/PopIn';
-import MotionButton from '../animate-ui/MotionButton';
 
 // ── Scoped "full access" AI editor for a single Markdown page ──────────────
 // Unlike the global Sol assistant (which can touch every list/task/timeline
@@ -64,12 +63,15 @@ interface MarkdownListAIAssistProps {
   /** Called after any mutation with the freshly re-fetched page, so both its
    *  content (blocks/todo mirror) and its settings (name/emoji/…) stay live. */
   onUpdated: (md: MarkdownList) => void;
+  /** Controlled open state — the trigger lives in the page's own "..." menu
+   *  now, not on this component, so the host owns when the panel is open. */
+  open: boolean;
+  onClose: () => void;
 }
 
-export default function MarkdownListAIAssist({ markdownListId, markdownListName, onUpdated }: MarkdownListAIAssistProps) {
+export default function MarkdownListAIAssist({ markdownListId, markdownListName, onUpdated, open, onClose }: MarkdownListAIAssistProps) {
   const { settings, settingsLoaded, setSettings, setSettingsLoaded } = useAIStore();
   const { getDetail } = useMarkdownListsStore();
-  const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<LogEntry[]>([]);
@@ -139,27 +141,17 @@ export default function MarkdownListAIAssist({ markdownListId, markdownListName,
     }
   }, [busy, markdownListId, markdownListName, refreshDoc]);
 
-  if (!settings.enabled) return null;
+  if (!settings.enabled || !open) return null;
 
   return (
     <div style={{ position: 'relative' }}>
-      <MotionButton
-        type="button"
-        title="Ask AI to edit this page"
-        onClick={() => setOpen((o) => !o)}
-        transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', gap: 5, height: 32, padding: '0 11px', borderRadius: 8, border: `1px solid ${open ? 'var(--color-primary)' : 'var(--color-border)'}`, background: open ? 'var(--color-surface-tint)' : 'var(--color-white)', cursor: 'pointer', }}>
-        <Icon name="auto_awesome" size={15} color="var(--color-primary)" />
-        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: 'var(--color-primary)' }}>Ask AI</span>
-      </MotionButton>
-
-      {open && (
-        <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 250, width: Math.min(360, window.innerWidth - 32), maxHeight: 460, display: 'flex', flexDirection: 'column', background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 14, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', overflow: 'hidden' }}>
+      <PopIn duration={140} style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 250, width: Math.min(360, window.innerWidth - 32), maxHeight: 460, display: 'flex', flexDirection: 'column', background: 'var(--color-white)', border: '1px solid var(--color-border)', borderRadius: 14, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.16)', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid var(--color-purple-pale-23)', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
               <Icon name="auto_awesome" size={15} color="var(--color-primary)" />
               <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 700, color: 'var(--color-text-primary)' }}>Edit with AI</span>
             </div>
-            <button type="button" onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}>
+            <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2 }}>
               <Icon name="close" size={15} color="var(--color-text-quaternary)" />
             </button>
           </div>
@@ -228,7 +220,6 @@ export default function MarkdownListAIAssist({ markdownListId, markdownListName,
             </button>
           </div>
         </PopIn>
-      )}
     </div>
   );
 }
