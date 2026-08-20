@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { useReducedMotion, motion, useDragControls, type PanInfo } from '@/components/animate-ui/motion';
+import { useReducedMotion, motion } from '@/components/animate-ui/motion';
 import type { AIChatMessage, AISession } from '../../store/useAIStore';
 import type { AIFile } from '../../types';
 import Icon from '../Icon';
 import AIRecentChats from './AIRecentChats';
-import { apiUploadAIFile, apiDeleteAIFile } from '../../api/client';
-import { EASE_STANDARD, SWIPE_DISMISS_DISTANCE, SWIPE_DISMISS_VELOCITY, backdropVariants, desktopWindowVariants, sheetVariants } from '@/components/animate-ui/motionTokens';
+import { useAIFileUpload, formatFileSize, fileIcon, FILE_INPUT_ACCEPT } from './useAIFileUpload';
+import { EASE_STANDARD, desktopWindowVariants } from '@/components/animate-ui/motionTokens';
 import MotionButton from '../animate-ui/MotionButton';
 import MotionIn from '../animate-ui/MotionIn';
 
+// Desktop-only: the anchored corner window. Mobile gets its own, visually
+// unrelated floating overlay — see AIMobileChat.tsx (and index.tsx, which
+// picks between the two).
 interface Props {
   messages: AIChatMessage[];
   isThinking: boolean;
@@ -27,7 +30,6 @@ interface Props {
   onAddFile: (file: AIFile) => void;
   onRemoveFile: (id: string) => void;
   sessionId: string | null;
-  isMobile?: boolean;
 }
 
 const VIEW_LABELS: Record<string, string> = {
@@ -38,50 +40,6 @@ const VIEW_LABELS: Record<string, string> = {
   settings: 'Settings',
   general: 'App',
 };
-
-const ACCEPTED_MIME_PREFIXES = ['application/pdf', 'text/', 'image/'];
-const ACCEPTED_MIME_EXACT = new Set([
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-]);
-// Extensions whose MIME type may be wrong in the browser (e.g. .ts → video/mp2t)
-const ACCEPTED_EXTENSIONS = new Set([
-  'ts', 'tsx', 'js', 'jsx', 'mjs',
-  'md', 'markdown',
-  'html', 'htm',
-  'csv',
-  'xlsx', 'xls',
-  'json', 'yaml', 'yml', 'toml', 'xml', 'sql', 'py', 'rb', 'go', 'rs',
-  'txt', 'log',
-]);
-
-function getExt(name: string) {
-  return (name.split('.').pop() ?? '').toLowerCase();
-}
-
-function isAccepted(file: File) {
-  if (ACCEPTED_MIME_PREFIXES.some((p) => file.type === p || file.type.startsWith(p))) return true;
-  if (ACCEPTED_MIME_EXACT.has(file.type)) return true;
-  return ACCEPTED_EXTENSIONS.has(getExt(file.name));
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function fileIcon(mime: string, name: string): string {
-  if (mime === 'application/pdf') return 'picture_as_pdf';
-  if (mime.startsWith('image/')) return 'image';
-  const ext = getExt(name);
-  if (ext === 'xlsx' || ext === 'xls') return 'table_chart';
-  if (ext === 'csv') return 'table_rows';
-  if (ext === 'ts' || ext === 'tsx' || ext === 'js' || ext === 'jsx') return 'code';
-  if (ext === 'md' || ext === 'markdown') return 'article';
-  if (ext === 'html' || ext === 'htm') return 'html';
-  return 'description';
-}
 
 function ThinkingDots() {
   // Continuous decorative motion — paused explicitly under reduced motion.
@@ -104,7 +62,10 @@ function ThinkingDots() {
   );
 }
 
-function UserMessage({ msg }: { msg: AIChatMessage }) {
+// Exported so AIMobileChat.tsx can render the exact same speech-bubble
+// language floating over its blurred overlay — the bubble shapes/colors were
+// already right, only the surrounding window chrome needed to go.
+export function UserMessage({ msg }: { msg: AIChatMessage }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
       <div
@@ -127,7 +88,7 @@ function UserMessage({ msg }: { msg: AIChatMessage }) {
   );
 }
 
-function AssistantMessage({ msg }: { msg: AIChatMessage }) {
+export function AssistantMessage({ msg }: { msg: AIChatMessage }) {
   if (msg.isThinking) {
     return (
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginBottom: 10 }}>
@@ -247,12 +208,6 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
   );
 }
 
-interface UploadingFile {
-  name: string;
-  progress: number;
-  id: string;
-}
-
 export default function AIChatWindow({
   messages,
   isThinking,
@@ -270,26 +225,17 @@ export default function AIChatWindow({
   onAddFile,
   onRemoveFile,
   sessionId,
-  isMobile,
 }: Props) {
   // Continuous decorative motion — paused explicitly under reduced motion.
   const reduceMotion = useReducedMotion();
   const [input, setInput] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const { uploadingFiles, uploadError, uploadFiles, handleRemoveFile } = useAIFileUpload({ sessionId, onAddFile, onRemoveFile });
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
-  const sheetDragControls = useDragControls();
-
-  const handleSheetDragEnd = useCallback((_e: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
-    if (info.offset.y > SWIPE_DISMISS_DISTANCE || info.velocity.y > SWIPE_DISMISS_VELOCITY) {
-      onClose();
-    }
-  }, [onClose]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -302,13 +248,12 @@ export default function AIChatWindow({
 
   // Sending disables the textarea while Sol is thinking, which the browser
   // blurs automatically — re-focus once it's re-enabled so the user can keep
-  // typing the next message without an extra click. Skipped on mobile, where
-  // it would pop the on-screen keyboard back over the just-arrived reply.
+  // typing the next message without an extra click.
   const wasThinking = useRef(isThinking);
   useEffect(() => {
-    if (wasThinking.current && !isThinking && !isMobile) inputRef.current?.focus();
+    if (wasThinking.current && !isThinking) inputRef.current?.focus();
     wasThinking.current = isThinking;
-  }, [isThinking, isMobile]);
+  }, [isThinking]);
 
   const handleSend = () => {
     const text = input.trim();
@@ -323,35 +268,6 @@ export default function AIChatWindow({
       handleSend();
     }
   };
-
-  const uploadFile = useCallback(async (file: File) => {
-    if (!isAccepted(file)) {
-      setUploadError(`Unsupported type. Use PDF, XLSX, CSV, HTML, Markdown, TypeScript, or images.`);
-      setTimeout(() => setUploadError(null), 4000);
-      return;
-    }
-    if (file.size > 25 * 1024 * 1024) {
-      setUploadError('File too large — max 25 MB.');
-      setTimeout(() => setUploadError(null), 4000);
-      return;
-    }
-
-    const tempId = crypto.randomUUID();
-    setUploadingFiles((prev) => [...prev, { name: file.name, progress: 0, id: tempId }]);
-    setUploadError(null);
-
-    try {
-      const result = await apiUploadAIFile(file, sessionId, (pct) => {
-        setUploadingFiles((prev) => prev.map((u) => u.id === tempId ? { ...u, progress: pct } : u));
-      });
-      onAddFile(result);
-    } catch {
-      setUploadError(`Failed to upload "${file.name}". Please try again.`);
-      setTimeout(() => setUploadError(null), 4000);
-    } finally {
-      setUploadingFiles((prev) => prev.filter((u) => u.id !== tempId));
-    }
-  }, [sessionId, onAddFile]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -377,108 +293,47 @@ export default function AIChatWindow({
     e.stopPropagation();
     dragCounterRef.current = 0;
     setIsDragOver(false);
-    const files = Array.from(e.dataTransfer.files);
-    for (const file of files.slice(0, 3)) {
-      await uploadFile(file);
-    }
-  }, [uploadFile]);
+    await uploadFiles(Array.from(e.dataTransfer.files));
+  }, [uploadFiles]);
 
   const handleFilePickerChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    for (const file of files.slice(0, 3)) {
-      await uploadFile(file);
-    }
+    await uploadFiles(Array.from(e.target.files ?? []));
     e.target.value = '';
-  }, [uploadFile]);
-
-  const handleRemoveFile = useCallback(async (id: string) => {
-    onRemoveFile(id);
-    await apiDeleteAIFile(id).catch(() => {});
-  }, [onRemoveFile]);
+  }, [uploadFiles]);
 
   const viewLabel = VIEW_LABELS[contextView] ?? contextView;
   const hasFiles = uploadedFiles.length > 0 || uploadingFiles.length > 0;
 
-  const sheetStyle: React.CSSProperties = isMobile
-    ? {
-        position: 'fixed',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: 'min(88vh, 680px)',
-        maxHeight: '88vh',
-        background: 'var(--color-white)',
-        borderRadius: '22px 22px 0 0',
-        boxShadow: '0 -12px 40px rgba(var(--color-purple-deep-4-rgb), 0.24)',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        border: `1.5px solid ${isDragOver ? 'rgba(var(--color-purple-mid-8-rgb), 0.5)' : 'rgba(var(--color-primary-rgb), 0.12)'}`,
-        borderBottom: 'none',
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        zIndex: 9001,
-      }
-    : {
-        position: 'absolute',
-        bottom: 64,
-        right: 0,
-        width: Math.min(360, window.innerWidth - 24),
-        height: Math.min(520, window.innerHeight - 140),
-        background: 'var(--color-white)',
-        borderRadius: 20,
-        boxShadow: '0 20px 60px rgba(var(--color-purple-deep-4-rgb), 0.2), 0 4px 16px rgba(var(--color-primary-rgb), 0.1)',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        transformOrigin: 'bottom right',
-        border: `1.5px solid ${isDragOver ? 'rgba(var(--color-purple-mid-8-rgb), 0.5)' : 'rgba(var(--color-primary-rgb), 0.12)'}`,
-      };
+  const sheetStyle: React.CSSProperties = {
+    position: 'absolute',
+    bottom: 64,
+    right: 0,
+    width: Math.min(360, window.innerWidth - 24),
+    height: Math.min(520, window.innerHeight - 140),
+    background: 'var(--color-white)',
+    borderRadius: 20,
+    boxShadow: '0 20px 60px rgba(var(--color-purple-deep-4-rgb), 0.2), 0 4px 16px rgba(var(--color-primary-rgb), 0.1)',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    transformOrigin: 'bottom right',
+    border: `1.5px solid ${isDragOver ? 'rgba(var(--color-purple-mid-8-rgb), 0.5)' : 'rgba(var(--color-primary-rgb), 0.12)'}`,
+  };
 
   return (
     <>
-      {isMobile && (
-        <motion.div
-          onClick={onClose}
-          variants={backdropVariants}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(var(--color-black-rgb), 0.4)',
-            backdropFilter: 'blur(2px)',
-            zIndex: 9000,
-          }}
-        />
-      )}
       <motion.div
         style={sheetStyle}
-        variants={isMobile ? sheetVariants : desktopWindowVariants}
+        variants={desktopWindowVariants}
         initial="initial"
         animate="animate"
         exit="exit"
-        drag={isMobile ? 'y' : false}
-        dragListener={false}
-        dragControls={sheetDragControls}
-        dragConstraints={isMobile ? { top: 0, bottom: 0 } : undefined}
-        dragElastic={isMobile ? { top: 0, bottom: 0.5 } : undefined}
-        onDragEnd={isMobile ? handleSheetDragEnd : undefined}
         onClick={(e) => e.stopPropagation()}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
-        {/* Drag handle — mobile bottom sheet only; swipe down past a distance/velocity threshold dismisses */}
-        {isMobile && (
-          <div
-            onPointerDown={(e) => sheetDragControls.start(e)}
-            style={{ display: 'flex', justifyContent: 'center', paddingTop: 8, paddingBottom: 4, flexShrink: 0, touchAction: 'none', cursor: 'grab' }}
-          >
-            <div style={{ width: 36, height: 4, borderRadius: 9999, background: 'var(--color-border-strong)' }} />
-          </div>
-        )}
       {/* Header */}
       <div
         style={{
@@ -877,7 +732,7 @@ export default function AIChatWindow({
         ref={fileInputRef}
         type="file"
         multiple
-        accept=".pdf,.xlsx,.xls,.csv,.html,.htm,.md,.markdown,.ts,.tsx,.js,.jsx,.txt,.json,.yaml,.yml,.xml,.sql,.log,image/*"
+        accept={FILE_INPUT_ACCEPT}
         style={{ display: 'none' }}
         onChange={handleFilePickerChange}
       />
