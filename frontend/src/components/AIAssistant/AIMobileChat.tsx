@@ -9,6 +9,7 @@ import MotionButton from '../animate-ui/MotionButton';
 import MotionIn from '../animate-ui/MotionIn';
 import { UserMessage, AssistantMessage } from './AIChatWindow';
 import { useAIFileUpload, formatFileSize, fileIcon, FILE_INPUT_ACCEPT } from './useAIFileUpload';
+import { useVisualViewport } from '../../hooks/useVisualViewport';
 
 interface Props {
   messages: AIChatMessage[];
@@ -41,15 +42,21 @@ export default function AIMobileChat({ messages, isThinking, contextView, onSend
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadingFiles, uploadError, uploadFiles, handleRemoveFile } = useAIFileUpload({ sessionId, onAddFile, onRemoveFile });
+  // The overlay opens WITHOUT focusing the input — tapping the badge should
+  // only ever reveal the input, never pop the keyboard open on its own.
+  // Typing starts on its own deliberate tap, same as tapping a suggestion
+  // chip below (which does focus — picking one is exactly that deliberate
+  // "I want to type/send now" gesture).
+  const { height: viewportHeight, top: viewportTop } = useVisualViewport();
 
+  // Re-pins to the latest message on a new message AND whenever the visible
+  // viewport height changes — the keyboard opening shrinks it, and without
+  // this the most recent bubble (and the input sitting right above the
+  // keyboard) could end up scrolled out of view above the fold.
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages]);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  }, [messages, viewportHeight]);
 
   const handleSend = useCallback(() => {
     const text = input.trim();
@@ -98,13 +105,21 @@ export default function AIMobileChat({ messages, isThinking, contextView, onSend
         }}
       />
 
-      {/* The content layer covers the full viewport so its children can be
-          laid out with plain flexbox, but it never captures a tap itself —
-          only the actual floating pieces (close button, messages, input) opt
-          back in via pointerEvents:'auto'. That's what makes tapping any
-          bare patch of blurred background dismiss the sheet without a maze
-          of onClick/stopPropagation on every bubble and chip. */}
-      <div style={{ position: 'fixed', inset: 0, zIndex: 9001, display: 'flex', flexDirection: 'column', pointerEvents: 'none' }}>
+      {/* The content layer covers the VISIBLE viewport (not the full layout
+          viewport `inset:0` would use) so its children can be laid out with
+          plain flexbox, but it never captures a tap itself — only the actual
+          floating pieces (close button, messages, input) opt back in via
+          pointerEvents:'auto'. That's what makes tapping any bare patch of
+          blurred background dismiss the sheet without a maze of
+          onClick/stopPropagation on every bubble and chip.
+          `top`/`height` come from useVisualViewport rather than `inset: 0`:
+          iOS Safari's on-screen keyboard shrinks the visual viewport without
+          shrinking the layout viewport `inset: 0` sizes against, so a plain
+          full-inset box would keep its original height with its bottom
+          portion — the input bar included — rendered underneath the
+          keyboard. Sizing to the actual visible area keeps the whole column
+          (and the input specifically) above it instead. */}
+      <div style={{ position: 'fixed', left: 0, right: 0, top: viewportTop, height: viewportHeight, zIndex: 9001, display: 'flex', flexDirection: 'column', pointerEvents: 'none' }}>
         <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)', pointerEvents: 'auto' }}>
           {/* Raw motion.button (not MotionButton) — this one needs an `exit`
               target for AnimatePresence, which MotionButton's prop surface
