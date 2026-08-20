@@ -8,6 +8,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import type { Milestone, MilestoneStatus, TimelineLayout, MilestoneAttachment, SharedFile, WorkspaceMember } from '../types';
 import type { MentionMember } from '../utils/mention';
 import useAppStore from '../store/useAppStore';
+import useAIStore from '../store/useAIStore';
 import useSharedItemsStore from '../store/useSharedItemsStore';
 import useAuthStore from '../store/useAuthStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
@@ -162,6 +163,15 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showTime]);
+
+  // Same chrome as TaskDialog (blurred backdrop, near-full-screen on
+  // mobile) — tell the floating AI Assistant badge to go inert and blur
+  // itself for as long as this editor is open, same as that dialog does.
+  useEffect(() => {
+    const { openBlockingDialog, closeBlockingDialog } = useAIStore.getState();
+    openBlockingDialog();
+    return () => closeBlockingDialog();
+  }, []);
 
   // "Delete open item / milestone" shortcut — only applies in edit mode (a new,
   // unsaved milestone has nothing to delete yet).

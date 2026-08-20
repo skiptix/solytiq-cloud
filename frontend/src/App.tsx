@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import type { List, Timeline } from './types';
 import useAuthStore from './store/useAuthStore';
+import useAIStore from './store/useAIStore';
 import useAppStore from './store/useAppStore';
 import useSyncStore from './store/useSyncStore';
 import useMembersStore from './store/useMembersStore';
@@ -142,6 +143,16 @@ function AppLayout() {
   const [modal, setModal] = useState<'add' | null>(null);
   const [addWizardMode, setAddWizardMode] = useState<'list' | 'timeline' | undefined>(undefined);
   const isMobile = useMobile();
+
+  // The AddWizard is this shell's own blurred-backdrop modal — tell the
+  // floating AI Assistant badge to go inert and blur itself while it's open,
+  // same as TaskDialog/the milestone editor do for themselves.
+  useEffect(() => {
+    if (!modal) return;
+    const { openBlockingDialog, closeBlockingDialog } = useAIStore.getState();
+    openBlockingDialog();
+    return () => closeBlockingDialog();
+  }, [modal]);
   // The mobile drawer remembers WHICH navigation it was opened on, so a route
   // change closes it by derivation rather than by an effect reaching in and
   // setting it — the same key-vs-value trick useAsyncData plays (see the
