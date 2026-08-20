@@ -34,9 +34,6 @@ import {
   apiUpdateListTask,
   apiDeleteListTask,
   apiCreateAISession,
-  apiGetAISessions,
-  apiGetAISessionMessages,
-  apiDeleteAISession,
   apiCreateList,
   apiUpdateList,
   apiDeleteList,
@@ -124,21 +121,16 @@ export default function AIAssistant() {
     messages,
     isThinking,
     settingsLoaded,
-    recentSessions,
-    showRecentChats,
     uploadedFiles,
     blockingDialogCount,
     setOpen,
     setSettings,
-    setMessages,
     addMessage,
     removeMessage,
     setThinking,
     setSettingsLoaded,
     clearHistory,
     setCurrentSessionId,
-    setRecentSessions,
-    setShowRecentChats,
     addUploadedFile,
     removeUploadedFile,
     clearUploadedFiles,
@@ -1115,40 +1107,6 @@ export default function AIAssistant() {
     await apiClearAIHistory().catch(() => {});
   }, [clearHistory]);
 
-  // Load recent sessions when the panel is opened
-  const handleShowRecentChats = useCallback(async () => {
-    setShowRecentChats(true);
-    apiGetAISessions()
-      .then((data) => setRecentSessions(data.sessions))
-      .catch(() => {});
-  }, [setShowRecentChats, setRecentSessions]);
-
-  // Load messages from a past session
-  const handleSelectSession = useCallback(async (sessionId: string) => {
-    setShowRecentChats(false);
-    clearHistory();
-    setCurrentSessionId(sessionId);
-    apiGetAISessionMessages(sessionId)
-      .then((data) => {
-        const msgs: AIChatMessage[] = data.messages
-          .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .map((m) => ({
-            id: String(m.id),
-            role: m.role as 'user' | 'assistant',
-            content: m.content,
-            createdAt: m.createdAt,
-            actionSummary: (m.metadata as { actionSummary?: string } | null)?.actionSummary,
-          }));
-        setMessages(msgs);
-      })
-      .catch(() => {});
-  }, [setShowRecentChats, clearHistory, setCurrentSessionId, setMessages]);
-
-  const handleDeleteSession = useCallback(async (sessionId: string) => {
-    setRecentSessions(recentSessions.filter((s) => s.id !== sessionId));
-    await apiDeleteAISession(sessionId).catch(() => {});
-  }, [recentSessions, setRecentSessions]);
-
   // Don't render if AI is disabled
   if (!settings.enabled) return null;
 
@@ -1189,12 +1147,6 @@ export default function AIAssistant() {
               onSend={handleSend}
               onClose={() => setOpen(false)}
               onClearHistory={handleClearHistory}
-              onShowRecentChats={handleShowRecentChats}
-              showRecentChats={showRecentChats}
-              recentSessions={recentSessions}
-              onSelectSession={handleSelectSession}
-              onDeleteSession={handleDeleteSession}
-              onCloseRecentChats={() => setShowRecentChats(false)}
               uploadedFiles={uploadedFiles}
               onAddFile={addUploadedFile}
               onRemoveFile={removeUploadedFile}
