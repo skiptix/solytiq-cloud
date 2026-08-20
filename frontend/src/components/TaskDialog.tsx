@@ -342,15 +342,16 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
     return () => document.removeEventListener('keydown', handler);
   }, [onClose, showCal]);
 
-  // On mobile this dialog is a near-full-screen sheet — tell the floating AI
-  // Assistant bubble (fixed, zIndex 9000) to hide itself for as long as we're
-  // open, so it doesn't float on top of the Notes section.
+  // Tell the floating AI Assistant badge (fixed, zIndex 9000) to go inert
+  // and blur itself for as long as this dialog is open, on both mobile
+  // (where it's a near-full-screen sheet the badge would float on top of)
+  // and desktop (where the badge otherwise stays clickable right through
+  // this dialog's own blurred backdrop).
   useEffect(() => {
-    if (!isMobile) return;
     const { openBlockingDialog, closeBlockingDialog } = useAIStore.getState();
     openBlockingDialog();
     return () => closeBlockingDialog();
-  }, [isMobile]);
+  }, []);
 
   // "Delete open item / milestone" shortcut — same as the delete icon button.
   useEffect(() => {

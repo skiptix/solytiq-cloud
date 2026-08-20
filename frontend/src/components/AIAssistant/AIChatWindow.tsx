@@ -304,10 +304,10 @@ export default function AIChatWindow({
   const viewLabel = VIEW_LABELS[contextView] ?? contextView;
   const hasFiles = uploadedFiles.length > 0 || uploadingFiles.length > 0;
 
+  // No `position` of its own — index.tsx's wrapper is what's fixed and
+  // centered above the badge; this is just a normal-flow flex child within
+  // it (see index.tsx's DESKTOP_CHAT_CLEARANCE comment).
   const sheetStyle: React.CSSProperties = {
-    position: 'absolute',
-    bottom: 64,
-    right: 0,
     width: Math.min(360, window.innerWidth - 24),
     height: Math.min(520, window.innerHeight - 140),
     background: 'var(--color-white)',
@@ -316,7 +316,7 @@ export default function AIChatWindow({
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
-    transformOrigin: 'bottom right',
+    transformOrigin: 'bottom center',
     border: `1.5px solid ${isDragOver ? 'rgba(var(--color-purple-mid-8-rgb), 0.5)' : 'rgba(var(--color-primary-rgb), 0.12)'}`,
   };
 
