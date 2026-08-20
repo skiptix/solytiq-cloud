@@ -66,21 +66,11 @@ import useGpsStore from '../../store/useGpsStore';
 import AIBubble from './AIBubble';
 import Spinner from '@/components/animate-ui/Spinner';
 // AIAssistant's own root (this file) is always mounted app-wide as a
-// floating bubble; the full chat window (tool-calling UI, session list,
+// floating badge; the full chat surface (tool-calling UI, session list,
 // file uploads, ~1000 lines) is only ever rendered once the user actually
 // opens it — lazy-loaded so every page's initial chunk only pays for the
-// small always-visible bubble, not the whole chat surface.
-const AIChatWindow = lazy(() => import('./AIChatWindow'));
-// Mobile's floating-bubble overlay (see AIMobileChat.tsx) — a genuinely
-// different layout from the desktop window, not another isMobile branch
-// inside it, so it gets its own lazy chunk too.
-const AIMobileChat = lazy(() => import('./AIMobileChat'));
-
-// Desktop's window and badge are independently fixed-positioned (see the
-// render below) rather than stacked in one shared wrapper, so the window
-// needs its own explicit clearance to float above the badge: the badge's
-// own 20px bottom margin + its 44px height + a small gap.
-const DESKTOP_CHAT_CLEARANCE = 20 + 44 + 14;
+// small always-visible badge, not the whole chat surface.
+const AIChatOverlay = lazy(() => import('./AIChatOverlay'));
 
 interface ToolCall {
   id: string;
@@ -1164,123 +1154,65 @@ export default function AIAssistant() {
   // milestone editor, a top-level App.tsx modal, …) — see AIBubble's own
   // `blocked` prop — rather than disappearing; it just goes inert and blurs
   // itself. That's independent of the two reasons the badge is HIDDEN
-  // outright, both mobile-only: the overlay itself is open (it has its own
-  // close affordance) or the Calendar page is dense enough (see
-  // CalendarScreen) that the badge is dropped there rather than repositioned.
+  // outright: the overlay itself is open (it has its own close affordance,
+  // on both platforms now — see AIChatOverlay.tsx) or, mobile-only, the
+  // Calendar page is dense enough (see CalendarScreen) that the badge is
+  // dropped there rather than repositioned.
   const blocked = blockingDialogCount > 0;
-  const hideBubble = isMobile && (isOpen || location.pathname.startsWith('/calendar'));
+  const hideBubble = isOpen || (isMobile && location.pathname.startsWith('/calendar'));
 
-  if (isMobile) {
-    return (
-      <>
-        <AnimatePresence>
-          {isOpen && (
-            <Suspense
-              fallback={
-                <div role="status" aria-live="polite" style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(var(--color-black-rgb), 0.45)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Spinner size={28} thickness={3} durationMs={700} aria-hidden />
-                  <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>Loading Sol…</span>
-                </div>
-              }
-            >
-              <AIMobileChat
-                key="ai-mobile-chat"
-                messages={messages}
-                isThinking={isThinking}
-                contextView={ctx.view}
-                onSend={handleSend}
-                onClose={() => setOpen(false)}
-                uploadedFiles={uploadedFiles}
-                onAddFile={addUploadedFile}
-                onRemoveFile={removeUploadedFile}
-                sessionId={useAIStore.getState().currentSessionId}
-              />
-            </Suspense>
-          )}
-        </AnimatePresence>
-        {/* Its own independent fixed wrapper, spanning the full width so the
-            badge can be centered with flexbox — never `transform`, which
-            would turn this wrapper into the containing block for any
-            `position: fixed` descendant (see Mobile Responsiveness rules).
-            There are none today since the overlay above renders as a
-            sibling, not nested in here, but the wrapper stays transform-free
-            on principle. pointerEvents:'none' on the empty strip either side
-            of the badge keeps it from shadowing whatever sits at this
-            height beneath it. 20px above the safe area, per design — right
-            down at the edge rather than floating higher up the screen. */}
-        {!hideBubble && (
-          <div style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)', zIndex: 9000, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-            <div style={{ pointerEvents: 'auto' }}>
-              <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} blocked={blocked} />
-            </div>
-          </div>
-        )}
-      </>
-    );
-  }
-
-  // Desktop mirrors mobile now: the badge sits bottom-CENTER, 20px off the
-  // bottom edge, and the window (when open) floats independently above it —
-  // no longer a shared bottom-right column, so the window needs its own
-  // clearance to sit above the badge rather than the badge's old `bottom:64`
-  // offset baked into AIChatWindow's own sheetStyle.
   return (
     <>
-      <div style={{ position: 'fixed', left: 0, right: 0, bottom: DESKTOP_CHAT_CLEARANCE, zIndex: 9000, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', pointerEvents: 'none' }}>
-        <div style={{ pointerEvents: 'auto' }}>
-          <AnimatePresence>
-            {isOpen && (
-              <Suspense
-                fallback={
-                  <div
-                    role="status"
-                    aria-live="polite"
-                    style={{
-                      width: 380,
-                      height: 560,
-                      maxHeight: 'calc(100dvh - 40px)',
-                      borderRadius: 20,
-                      background: 'var(--color-white)',
-                      boxShadow: '0 8px 40px rgba(94,77,187,0.10)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Spinner size={28} thickness={3} durationMs={700} aria-hidden />
-                    <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>Loading Sol…</span>
-                  </div>
-                }
-              >
-                <AIChatWindow
-                  key="ai-chat-window"
-                  messages={messages}
-                  isThinking={isThinking}
-                  contextView={ctx.view}
-                  onSend={handleSend}
-                  onClose={() => setOpen(false)}
-                  onClearHistory={handleClearHistory}
-                  onShowRecentChats={handleShowRecentChats}
-                  showRecentChats={showRecentChats}
-                  recentSessions={recentSessions}
-                  onSelectSession={handleSelectSession}
-                  onDeleteSession={handleDeleteSession}
-                  onCloseRecentChats={() => setShowRecentChats(false)}
-                  uploadedFiles={uploadedFiles}
-                  onAddFile={addUploadedFile}
-                  onRemoveFile={removeUploadedFile}
-                  sessionId={useAIStore.getState().currentSessionId}
-                />
-              </Suspense>
-            )}
-          </AnimatePresence>
+      <AnimatePresence>
+        {isOpen && (
+          <Suspense
+            fallback={
+              <div role="status" aria-live="polite" style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(var(--color-black-rgb), 0.45)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Spinner size={28} thickness={3} durationMs={700} aria-hidden />
+                <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>Loading Sol…</span>
+              </div>
+            }
+          >
+            <AIChatOverlay
+              key="ai-chat-overlay"
+              isMobile={isMobile}
+              messages={messages}
+              isThinking={isThinking}
+              contextView={ctx.view}
+              onSend={handleSend}
+              onClose={() => setOpen(false)}
+              onClearHistory={handleClearHistory}
+              onShowRecentChats={handleShowRecentChats}
+              showRecentChats={showRecentChats}
+              recentSessions={recentSessions}
+              onSelectSession={handleSelectSession}
+              onDeleteSession={handleDeleteSession}
+              onCloseRecentChats={() => setShowRecentChats(false)}
+              uploadedFiles={uploadedFiles}
+              onAddFile={addUploadedFile}
+              onRemoveFile={removeUploadedFile}
+              sessionId={useAIStore.getState().currentSessionId}
+            />
+          </Suspense>
+        )}
+      </AnimatePresence>
+      {/* Its own independent fixed wrapper, spanning the full width so the
+          badge can be centered with flexbox — never `transform`, which
+          would turn this wrapper into the containing block for any
+          `position: fixed` descendant (see Mobile Responsiveness rules).
+          There are none today since the overlay above renders as a
+          sibling, not nested in here, but the wrapper stays transform-free
+          on principle. pointerEvents:'none' on the empty strip either side
+          of the badge keeps it from shadowing whatever sits at this height
+          beneath it. 20px off the bottom edge on both platforms — safe-area
+          aware on mobile, plain on desktop (no notch to clear there). */}
+      {!hideBubble && (
+        <div style={{ position: 'fixed', left: 0, right: 0, bottom: isMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 20px)' : 20, zIndex: 9000, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+          <div style={{ pointerEvents: 'auto' }}>
+            <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} blocked={blocked} />
+          </div>
         </div>
-      </div>
-      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 20, zIndex: 9000, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-        <div style={{ pointerEvents: 'auto' }}>
-          <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} blocked={blocked} />
-        </div>
-      </div>
+      )}
     </>
   );
 }

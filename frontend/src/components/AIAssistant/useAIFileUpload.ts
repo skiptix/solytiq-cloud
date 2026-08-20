@@ -2,11 +2,10 @@ import { useCallback, useState } from 'react';
 import type { AIFile } from '../../types';
 import { apiUploadAIFile, apiDeleteAIFile } from '../../api/client';
 
-// Shared between AIChatWindow (desktop + the old mobile sheet) and
-// AIMobileChat (the mobile floating overlay) — extracted rather than
-// duplicated because it's real, non-trivial logic (validation, size limits,
-// per-file progress), not a handful of lines a second copy would be cheaper
-// than.
+// Used by AIChatOverlay.tsx (the one chat surface, on both platforms) —
+// factored out of it because it's real, non-trivial logic (validation, size
+// limits, per-file progress), not a handful of lines that would be cheaper
+// to just re-render inline.
 
 const ACCEPTED_MIME_PREFIXES = ['application/pdf', 'text/', 'image/'];
 const ACCEPTED_MIME_EXACT = new Set([
