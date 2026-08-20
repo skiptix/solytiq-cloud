@@ -1,5 +1,12 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; width: 100%; }
+/* `body` already carries the app's own background (below), but `html` never
+   did. In an iOS Home Screen install, a keyboard-open viewport resize or an
+   overscroll bounce can momentarily expose `html`'s own box outside of
+   `body`'s — with no background of its own it fell through to the
+   WKWebView's native backing colour (white), reading as a stray white bar
+   at the screen edge. Giving `html` the same colour closes that gap. */
+html { background: var(--color-page-bg); }
 
 /* ─── Responsive design tokens ───────────────────────────────────────────── */
 :root {
