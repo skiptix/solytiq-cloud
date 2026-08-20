@@ -117,6 +117,7 @@ async function getSharedToolDefs(): Promise<AiToolDef[]> {
 export default function AIAssistant() {
   const isMobile = useMobile();
   const location = useLocation();
+  const hideAiBubble = useUserPrefsStore((s) => s.hideAiBubble);
   const {
     isOpen,
     settings,
@@ -165,8 +166,10 @@ export default function AIAssistant() {
       setOpen(false);
       return;
     }
-    // Belt-and-braces alongside AIBubble's own `disabled` state: a blocking
-    // dialog open anywhere means Sol doesn't open on top of it.
+    // A blocking dialog open anywhere means Sol doesn't open on top of it —
+    // relevant mainly on mobile, where the badge itself still hides for one
+    // (see hideBubble below); on desktop the badge stays visible but sits
+    // behind the dialog by z-index, so this is the actual guard there.
     if (blockingDialogCount > 0) return;
     // Start fresh
     clearHistory();
@@ -1151,15 +1154,19 @@ export default function AIAssistant() {
 
   const ctx = buildContext(location.pathname, appStore);
 
-  // The badge hides completely — faded out, not blurred-but-present —
-  // whenever anything else takes over the screen: the chat overlay itself
-  // (own close affordance), a blocking dialog (TaskDialog, the milestone
-  // editor, App.tsx's AddWizard modal, and — mobile only — the Sidebar
-  // drawer and the Notifications panel; see the openBlockingDialog call
-  // sites for each), or, mobile-only, the Calendar page (dense enough — see
-  // CalendarScreen — that the badge is dropped there rather than
-  // repositioned).
-  const hideBubble = isOpen || blockingDialogCount > 0 || (isMobile && location.pathname.startsWith('/calendar'));
+  // The badge hides completely — faded out, not blurred-but-present — only
+  // for the chat overlay itself (own close affordance) and, mobile only, a
+  // blocking dialog (TaskDialog, the milestone editor, App.tsx's AddWizard
+  // modal, the Sidebar drawer, the Notifications panel) or the dense
+  // Calendar page. On DESKTOP a blocking dialog no longer hides the badge —
+  // it stays put and simply sits BEHIND the dialog (its z-index of 100 in
+  // the render below is below the ≥400 floor every fixed overlay uses), so
+  // opening a window never makes Sol disappear there; mobile keeps the
+  // fade-hide because those same surfaces are near-full-screen sheets on a
+  // phone, not just something the badge sits behind. `hideAiBubble` is a
+  // user preference (Account Settings → AI) that hides the badge outright,
+  // on both platforms, independent of any of the above.
+  const hideBubble = isOpen || hideAiBubble || (isMobile && (blockingDialogCount > 0 || location.pathname.startsWith('/calendar')));
 
   return (
     <>
@@ -1207,18 +1214,19 @@ export default function AIAssistant() {
           beneath it. 20px off the bottom edge on both platforms — safe-area
           aware on mobile, plain on desktop (no notch to clear there).
           The badge itself fades fully in/out (never blurred-but-present)
-          in sync with whatever's covering the screen — see `hideBubble`
-          above — using the same duration/ease as that surface's own
-          backdrop animate-in (`backdropVariants` in motionTokens.ts).
-          Its z-index (100, both platforms) is deliberately LOW — below the
-          ≥400 floor every fixed overlay in the app is required to use (see
-          Mobile Responsiveness rules) and below every dropdown/popover z-
-          index in the codebase too. `hideBubble` above only covers the
-          handful of surfaces that explicitly register a blocking dialog;
-          this is the general-purpose backstop that keeps the badge from
-          ever rendering on top of a window we haven't wired up — any
-          properly-layered window sits above it by construction, not by
-          each one remembering to ask the badge to hide. Only ordinary page
+          for the surfaces `hideBubble` above actually hides it for — using
+          the same duration/ease as that surface's own backdrop animate-in
+          (`backdropVariants` in motionTokens.ts). Its z-index (100, both
+          platforms) is deliberately LOW — below the ≥400 floor every fixed
+          overlay in the app is required to use (see Mobile Responsiveness
+          rules) and below every dropdown/popover z-index in the codebase
+          too. This is what keeps the badge from ever rendering on top of
+          ANY window: on desktop it's the ONLY mechanism (a dialog opening
+          there never touches `hideBubble`, it just sits above the badge by
+          z-index, badge included), and on mobile it's a backstop behind the
+          handful of surfaces `hideBubble` explicitly fades out for. Any
+          properly-layered window sits above the badge by construction, not
+          by each one remembering to ask it to hide. Only ordinary page
           content (not itself a window) uses a lower z-index than this. */}
       <AnimatePresence>
         {!hideBubble && (

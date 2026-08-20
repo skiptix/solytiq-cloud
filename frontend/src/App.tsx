@@ -144,9 +144,10 @@ function AppLayout() {
   const [addWizardMode, setAddWizardMode] = useState<'list' | 'timeline' | undefined>(undefined);
   const isMobile = useMobile();
 
-  // The AddWizard is this shell's own blurred-backdrop modal — tell the
-  // floating AI Assistant badge to hide (faded out, not just blurred) while
-  // it's open, same as TaskDialog/the milestone editor do for themselves.
+  // The AddWizard is this shell's own blurred-backdrop modal — register it
+  // as a blocking dialog while it's open, same as TaskDialog/the milestone
+  // editor do for themselves (see TaskDialog's own comment on what this does
+  // on mobile vs desktop).
   useEffect(() => {
     if (!modal) return;
     const { openBlockingDialog, closeBlockingDialog } = useAIStore.getState();

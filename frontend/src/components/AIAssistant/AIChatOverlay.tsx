@@ -286,7 +286,18 @@ export default function AIChatOverlay({
         exit="exit"
         style={{
           position: 'fixed',
-          inset: 0,
+          // Outset well past every edge instead of plain `inset: 0`. A
+          // `backdrop-filter: blur()` element sized exactly to the viewport
+          // can show a faint lighter seam right at its own edge — Safari
+          // samples pixels near an element's boundary less reliably than its
+          // interior — and on iOS the layout viewport this sizes against can
+          // itself momentarily disagree with what's actually visible while
+          // the browser's own chrome (URL bar, home indicator area) is
+          // animating. Either way the fix is the same: push the element's
+          // real edges far off-screen so the visible screen is always deep
+          // in its interior, never at a boundary. `position:fixed` elements
+          // don't affect document scroll size, so this is free.
+          top: -100, left: -100, right: -100, bottom: -100,
           background: 'rgba(var(--color-black-rgb), 0.45)',
           backdropFilter: 'blur(10px)',
           WebkitBackdropFilter: 'blur(10px)',

@@ -165,8 +165,9 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
   }, [showTime]);
 
   // Same chrome as TaskDialog (blurred backdrop, near-full-screen on
-  // mobile) — tell the floating AI Assistant badge to hide (faded out) for
-  // as long as this editor is open, same as that dialog does.
+  // mobile) — register as a blocking dialog for as long as this editor is
+  // open, same as that dialog does (see TaskDialog's own comment on what
+  // this does on each platform).
   useEffect(() => {
     const { openBlockingDialog, closeBlockingDialog } = useAIStore.getState();
     openBlockingDialog();
