@@ -19,6 +19,7 @@ import Icon from '../components/Icon';
 import SaveStatusDot from '../components/SaveStatusDot';
 import EmojiSelector from '../components/EmojiSelector';
 import AutomationsButton from '../components/AutomationsButton';
+import HideEmptySectionsButton from '../components/HideEmptySectionsButton';
 import Spinner from '@/components/animate-ui/Spinner';
 import MotionIn from '../components/animate-ui/MotionIn';
 import MotionButton from '../components/animate-ui/MotionButton';
@@ -135,6 +136,24 @@ export default function ListScreen() {
     };
   }, [setViewMode]);
 
+  // Hide-empty-sections is a Quick Add sub-setting (ItemSettingsModal) but
+  // also toggleable in-place from the board header, right next to the
+  // Automations button — both write the same persisted field, so a change
+  // made here shows up in Settings too and vice versa.
+  const hideEmptySections = list?.quickAddHideEmptySections ?? true;
+  const shouldHideEmptySections = Boolean(list?.quickAddEnabled) && hideEmptySections;
+  const toggleHideEmptySections = useCallback(() => {
+    if (list) updateList(list.id, { quickAddHideEmptySections: !hideEmptySections });
+  }, [list, hideEmptySections, updateList]);
+
+  // "e" shortcut — only meaningful on a Quick Add board, since the toggle
+  // itself is hidden otherwise.
+  useEffect(() => {
+    const onToggleEmpty = () => { if (list?.quickAddEnabled) toggleHideEmptySections(); };
+    window.addEventListener('shortcut:toggle-empty-sections', onToggleEmpty);
+    return () => window.removeEventListener('shortcut:toggle-empty-sections', onToggleEmpty);
+  }, [list?.quickAddEnabled, toggleHideEmptySections]);
+
   // "r" shortcut — the desktop equivalent of the mobile pull-to-refresh gesture.
   useEffect(() => {
     const onRefreshShortcut = () => { void handleRefresh(); };
@@ -218,6 +237,14 @@ export default function ListScreen() {
       </div>
     );
   }
+
+  // Sections rendered in List/Kanban/Timeline — filtered when the board has
+  // Quick Add on and the hide-empty-sections setting is active. The raw
+  // `list.sections` is kept around for the "no sections yet" empty state and
+  // the hidden-count hint below, so a board whose sections are ALL empty
+  // never looks like it has none at all.
+  const visibleSections = shouldHideEmptySections ? list.sections.filter(s => s.tasks.length > 0) : list.sections;
+  const hiddenEmptySectionCount = list.sections.length - visibleSections.length;
 
   const toggle = (id: number) => {
     const section = list.sections.find(s => s.tasks.some(t => t.id === id));
@@ -489,7 +516,7 @@ export default function ListScreen() {
       {isMobile && <PullToRefreshIndicator pullDistance={pullDistance} threshold={pullThreshold} refreshing={refreshing} settling={pullSettling} />}
       <div style={{ maxWidth: effectiveViewMode === 'list' ? 680 : 1400, margin: '0 auto', padding: isMobile ? '16px 12px 48px' : '32px 32px 48px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
 
-        {/* View switcher (top-left) + Automations entry point (top-right) —
+        {/* View switcher (top-left) + per-board display controls (top-right) —
             Kanban's side-scrolling columns aren't offered on mobile at all. */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ display: 'inline-flex', background: 'var(--color-surface-tint)', borderRadius: 10, padding: 3, gap: 2, flexWrap: 'wrap', maxWidth: '100%' }}>
@@ -510,7 +537,12 @@ export default function ListScreen() {
               </button>
             ))}
           </div>
-          {list && <AutomationsButton ownerType="list" ownerId={list.id} isMobile={isMobile} />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {list?.quickAddEnabled && (
+              <HideEmptySectionsButton active={shouldHideEmptySections} onToggle={toggleHideEmptySections} isMobile={isMobile} />
+            )}
+            {list && <AutomationsButton ownerType="list" ownerId={list.id} isMobile={isMobile} />}
+          </div>
         </div>
 
         {/* Hero */}
@@ -582,7 +614,7 @@ export default function ListScreen() {
 
         {/* Sections — List view (stacked) */}
         {effectiveViewMode === 'list' && <MotionIn key="view-list" style={{ display: 'flex', flexDirection: 'column', gap: 24 }} initial={{ opacity: 0, y: 8, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.22, ease: EASE_SETTLE }}>
-        {list.sections.map(section => {
+        {visibleSections.map(section => {
           const isSectionDropTarget = dragOverSectionId === section.id && draggedSectionId !== null && draggedSectionId !== section.id;
           const isSectionReorderTarget = sectionDragOverId === section.id && sectionDragId !== null && sectionDragId !== section.id;
           const isBeingDraggedSection = sectionDragId === section.id;
@@ -751,6 +783,19 @@ export default function ListScreen() {
           </div>
         )}
 
+        {/* Sections DO exist, they're just hidden — otherwise a board whose
+            sections are all empty would look identical to one with none at
+            all, which is exactly the "did my data disappear?" moment this
+            feature must never cause. */}
+        {hiddenEmptySectionCount > 0 && (
+          <button
+            onClick={toggleHideEmptySections}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-quaternary)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '2px 4px', textAlign: 'center' }}>
+            <Icon name="visibility_off" size={13} color="var(--color-text-quaternary)" />
+            {hiddenEmptySectionCount} empty {hiddenEmptySectionCount === 1 ? 'section' : 'sections'} hidden — click to show
+          </button>
+        )}
+
         {/* Add Section — full-width at bottom */}
         {addingSection ? (
           <MotionIn style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: EASE_SETTLE }}>
@@ -788,7 +833,7 @@ export default function ListScreen() {
         {/* Sections — Kanban view (columns) */}
         {effectiveViewMode === 'kanban' && (
           <MotionIn key="view-kanban" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 12, alignItems: 'flex-start' }} initial={{ opacity: 0, y: 8, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.22, ease: EASE_SETTLE }}>
-            {list.sections.map((section, idx) => {
+            {visibleSections.map((section, idx) => {
               const isSectionDropTarget = dragOverSectionId === section.id && draggedSectionId !== null && draggedSectionId !== section.id;
               const isSectionReorderTarget = sectionDragOverId === section.id && sectionDragId !== null && sectionDragId !== section.id;
               const isBeingDraggedSection = sectionDragId === section.id;
@@ -992,6 +1037,7 @@ export default function ListScreen() {
             isMobile={isMobile}
             onToggle={toggle}
             onRowClick={t => setSelectedTask(t)}
+            hideEmptySections={shouldHideEmptySections}
           />
         )}
       </div>

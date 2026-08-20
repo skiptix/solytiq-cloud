@@ -105,6 +105,7 @@ export interface List {
   archivedAt?: string | null;
   quickAddEnabled?: boolean;      // shows the Quick Add bar + staging tray under the board's header
   quickAddEntryId?: string | null; // this board's Knowledge Base bubble, where its learned placements are rendered
+  quickAddHideEmptySections?: boolean; // hides sections with no tasks from List/Kanban/Timeline once Quick Add is on; defaults true
   /** Items on this board that sit in NO section — the Quick Add staging tray,
    *  rendered directly beneath the Quick Add bar. Real tasks: checkable,
    *  openable, draggable into a section, and counted in the board's progress. */

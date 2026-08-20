@@ -20,10 +20,12 @@ import {
   type ShareInfo, type ShareUpdate,
 } from '../api/client';
 import VisibilityConflictModal from '../components/VisibilityConflictModal';
+import NoKnowledgeBaseModal from './NoKnowledgeBaseModal';
 import useWorkspaceStore from '../store/useWorkspaceStore';
 import useAuthStore from '../store/useAuthStore';
 import useAppStore from '../store/useAppStore';
 import useMarkdownListsStore from '../store/useMarkdownListsStore';
+import useKnowledgeBaseStore from '../store/useKnowledgeBaseStore';
 import useAsyncData from '../hooks/useAsyncData';
 
 const FOLDER_COLORS = [
@@ -53,6 +55,8 @@ export interface ItemSettingsUpdates {
   folderId?: string | null;
   /** Boards only — the Quick Add bar, staging tray and section prediction. */
   quickAddEnabled?: boolean;
+  /** Boards only — hides sections with no tasks once Quick Add is on. */
+  quickAddHideEmptySections?: boolean;
 }
 
 interface ItemSettingsModalProps {
@@ -458,11 +462,46 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
   // Buffered like `fw` above: the toggle flips instantly while the PUT is in
   // flight, rather than waiting for the store round trip to repaint it.
   const [quickAdd, setQuickAdd] = useState(Boolean(currentList?.quickAddEnabled));
+  const [hideEmptySections, setHideEmptySections] = useState(currentList?.quickAddHideEmptySections ?? true);
   const { data: memory } = useAsyncData(
     quickAdd && kind === 'list' && itemId ? itemId : null,
     () => apiGetQuickAddMemory(itemId!),
     null as { remembered: number; events: number } | null,
   );
+  // Quick Add has nowhere to keep what it learns without a Knowledge Base —
+  // see NoKnowledgeBaseModal's header comment. The store is loaded once per
+  // workspace on mount (App.tsx), so by the time this modal opens it already
+  // reflects reality; the real gate is still server-side (routes/lists.ts).
+  const activeWorkspaceId = useWorkspaceStore(s => s.currentWorkspaceId);
+  const kbBase = useKnowledgeBaseStore(s => s.base);
+  const createKnowledgeBase = useKnowledgeBaseStore(s => s.create);
+  const [showNoKbConfirm, setShowNoKbConfirm] = useState(false);
+  const [creatingKb, setCreatingKb] = useState(false);
+
+  const enableQuickAdd = () => {
+    setQuickAdd(true);
+    onChange({ quickAddEnabled: true });
+  };
+
+  const handleQuickAddToggle = (next: boolean) => {
+    if (next === quickAdd) return;
+    if (!next) { setQuickAdd(false); onChange({ quickAddEnabled: false }); return; }
+    if (!kbBase) { setShowNoKbConfirm(true); return; }
+    enableQuickAdd();
+  };
+
+  const handleCreateKbAndEnable = async () => {
+    const wsId = currentList?.workspaceId ?? activeWorkspaceId;
+    if (!wsId || creatingKb) return;
+    setCreatingKb(true);
+    try {
+      await createKnowledgeBase(wsId);
+      enableQuickAdd();
+      setShowNoKbConfirm(false);
+    } finally {
+      setCreatingKb(false);
+    }
+  };
   const currentTimeline = kind === 'timeline' && itemId ? timelines.find(t => t.id === itemId) : undefined;
   const currentMarkdownList = kind === 'markdownList' && itemId ? markdownLists.find(m => m.id === itemId) : undefined;
   const listItems = currentList?.sections.flatMap(s => s.tasks) ?? [];
@@ -645,7 +684,7 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                       const selected = quickAdd === opt.val;
                       return (
                         <MotionButton key={opt.label}
-                          onClick={() => { if (quickAdd !== opt.val) { setQuickAdd(opt.val); onChange({ quickAddEnabled: opt.val }); } }}
+                          onClick={() => handleQuickAddToggle(opt.val)}
                           animate={{ background: selected ? 'var(--color-primary)' : 'transparent', color: selected ? 'var(--color-white)' : 'var(--color-primary)' }}
                           transition={{ duration: 0.12 }}
                           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flex: 1, padding: '10px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: selected ? 600 : 500 }}>
@@ -670,6 +709,33 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
                             ? 'Nothing learned yet — move a few items into sections and suggestions will start appearing.'
                             : `Knows where ${memory.remembered} ${memory.remembered === 1 ? 'item belongs' : 'items belong'}, from ${memory.events} recorded ${memory.events === 1 ? 'placement' : 'placements'}. Kept as a bubble in this workspace's Knowledge Base.`}
                       </span>
+                    </div>
+                  )}
+
+                  {/* Hide empty sections — a Quick Add sub-setting: boards that
+                      lean on the tray tend to accumulate sections nobody has
+                      filed anything into yet. Defaults on (see the migration's
+                      column default), matching this option's own default. */}
+                  {quickAdd && (
+                    <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--color-surface-tint-2)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                        <div>
+                          <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>Hide empty sections</div>
+                          <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-quaternary)', marginTop: 2, lineHeight: 1.4 }}>
+                            Sections with no tasks stay out of the way until something lands in them.
+                          </div>
+                        </div>
+                        <MotionButton
+                          onClick={() => { const next = !hideEmptySections; setHideEmptySections(next); onChange({ quickAddHideEmptySections: next }); }}
+                          animate={{ background: hideEmptySections ? 'var(--color-primary)' : 'var(--color-surface-tint-2)' }}
+                          transition={{ duration: 0.14 }}
+                          style={{ position: 'relative', width: 40, height: 24, borderRadius: 9999, border: 'none', cursor: 'pointer', flexShrink: 0, padding: 0 }}>
+                          <motion.span
+                            animate={{ x: hideEmptySections ? 18 : 2 }}
+                            transition={{ duration: 0.14 }}
+                            style={{ position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.25)' }} />
+                        </MotionButton>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -815,5 +881,16 @@ export default function ItemSettingsModal({ kind, name, emoji, color, isPublic, 
     </motion.div>
   );
 
-  return createPortal(modal, document.body);
+  return (
+    <>
+      {createPortal(modal, document.body)}
+      {showNoKbConfirm && (
+        <NoKnowledgeBaseModal
+          busy={creatingKb}
+          onConfirm={() => void handleCreateKbAndEnable()}
+          onCancel={() => setShowNoKbConfirm(false)}
+        />
+      )}
+    </>
+  );
 }
