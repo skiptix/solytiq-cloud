@@ -24,8 +24,8 @@ interface Props {
  */
 export default function AIBubble({ isOpen, isThinking, onClick, blocked }: Props) {
   // Continuous decorative motion — paused explicitly under reduced motion,
-  // same convention as the rest of this feature (AIChatWindow's ThinkingDots,
-  // AIMobileChat's entrances, ...).
+  // same convention as the rest of this feature (AIChatOverlay's
+  // ThinkingDots, message entrances, ...).
   const reduceMotion = useReducedMotion();
   const [hovered, setHovered] = useState(false);
 
