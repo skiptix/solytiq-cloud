@@ -145,8 +145,8 @@ function AppLayout() {
   const isMobile = useMobile();
 
   // The AddWizard is this shell's own blurred-backdrop modal — tell the
-  // floating AI Assistant badge to go inert and blur itself while it's open,
-  // same as TaskDialog/the milestone editor do for themselves.
+  // floating AI Assistant badge to hide (faded out, not just blurred) while
+  // it's open, same as TaskDialog/the milestone editor do for themselves.
   useEffect(() => {
     if (!modal) return;
     const { openBlockingDialog, closeBlockingDialog } = useAIStore.getState();
@@ -392,6 +392,25 @@ function AppLayout() {
     (open: boolean) => setDrawer({ open, navKey: open ? location.key : '' }),
     [location.key]
   );
+
+  // Mobile only: the Sidebar drawer and the Notifications slide-in panel are
+  // near-full-screen overlays there (unlike their desktop rail/side-panel
+  // presentation), so they hide the floating AI Assistant badge exactly like
+  // a blocking dialog does. Desktop never registers here — "for desktop it
+  // can stay" — since neither surface covers the badge's corner there.
+  const notificationsPanelOpen = useNotificationsStore((s) => s.panelOpen);
+  useEffect(() => {
+    if (!isMobile || !drawerOpen) return;
+    const { openBlockingDialog, closeBlockingDialog } = useAIStore.getState();
+    openBlockingDialog();
+    return () => closeBlockingDialog();
+  }, [isMobile, drawerOpen]);
+  useEffect(() => {
+    if (!isMobile || !notificationsPanelOpen) return;
+    const { openBlockingDialog, closeBlockingDialog } = useAIStore.getState();
+    openBlockingDialog();
+    return () => closeBlockingDialog();
+  }, [isMobile, notificationsPanelOpen]);
 
   // Remember the current screen as the "resume here" target for this user's
   // next new tab / reload (desktop and mobile alike) — see resolveHomeRoute()
