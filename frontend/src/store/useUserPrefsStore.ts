@@ -45,6 +45,13 @@ interface UserPrefsState {
   graphNodePositions: Record<string, Record<string, { x: number; y: number }>>;
   setGraphNodePosition: (workspaceId: string, srn: string, x: number, y: number) => void;
   clearGraphNodePositions: (workspaceId: string) => void;
+
+  // Sol / AI Assistant: hides the floating badge trigger (desktop and
+  // mobile alike) for a user who doesn't want it on screen. A display
+  // preference only — it doesn't touch the feature itself, chat history, or
+  // any admin-level enable/disable setting. See Account Settings → AI.
+  hideAiBubble: boolean;
+  setHideAiBubble: (v: boolean) => void;
 }
 
 const CALENDAR_DEFAULTS = {
@@ -92,6 +99,9 @@ const useUserPrefsStore = create<UserPrefsState>()(
         delete next[workspaceId];
         return { graphNodePositions: next };
       }),
+
+      hideAiBubble: false,
+      setHideAiBubble: (v) => set({ hideAiBubble: v }),
     }),
     {
       name: 'solytiq_user_prefs',

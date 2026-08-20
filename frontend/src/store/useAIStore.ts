@@ -19,12 +19,6 @@ export interface AISettings {
   model: string;
 }
 
-export interface AISession {
-  id: string;
-  title: string | null;
-  created_at: string;
-}
-
 interface AIStore {
   isOpen: boolean;
   settings: AISettings;
@@ -32,8 +26,6 @@ interface AIStore {
   isThinking: boolean;
   settingsLoaded: boolean;
   currentSessionId: string | null;
-  recentSessions: AISession[];
-  showRecentChats: boolean;
   uploadedFiles: AIFile[];
   /** Count of currently-open mobile full-screen dialogs (e.g. the item detail
    *  dialog) that the floating AI bubble would otherwise float on top of.
@@ -52,8 +44,6 @@ interface AIStore {
   setSettingsLoaded: (v: boolean) => void;
   clearHistory: () => void;
   setCurrentSessionId: (id: string | null) => void;
-  setRecentSessions: (sessions: AISession[]) => void;
-  setShowRecentChats: (v: boolean) => void;
   addUploadedFile: (file: AIFile) => void;
   removeUploadedFile: (id: string) => void;
   clearUploadedFiles: () => void;
@@ -68,8 +58,6 @@ const useAIStore = create<AIStore>()((set) => ({
   isThinking: false,
   settingsLoaded: false,
   currentSessionId: null,
-  recentSessions: [],
-  showRecentChats: false,
   uploadedFiles: [],
   blockingDialogCount: 0,
 
@@ -86,8 +74,6 @@ const useAIStore = create<AIStore>()((set) => ({
   setSettingsLoaded: (v) => set({ settingsLoaded: v }),
   clearHistory: () => set({ messages: [], uploadedFiles: [] }),
   setCurrentSessionId: (id) => set({ currentSessionId: id }),
-  setRecentSessions: (sessions) => set({ recentSessions: sessions }),
-  setShowRecentChats: (v) => set({ showRecentChats: v }),
   addUploadedFile: (file) => set((s) => ({ uploadedFiles: [...s.uploadedFiles, file] })),
   removeUploadedFile: (id) => set((s) => ({ uploadedFiles: s.uploadedFiles.filter((f) => f.id !== id) })),
   clearUploadedFiles: () => set({ uploadedFiles: [] }),

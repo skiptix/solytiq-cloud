@@ -342,11 +342,12 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
     return () => document.removeEventListener('keydown', handler);
   }, [onClose, showCal]);
 
-  // Tell the floating AI Assistant badge (fixed, zIndex 9000) to hide
-  // (faded out) for as long as this dialog is open, on both mobile
-  // (where it's a near-full-screen sheet the badge would float on top of)
-  // and desktop (where the badge otherwise stays clickable right through
-  // this dialog's own blurred backdrop).
+  // Register this dialog as a blocking dialog for as long as it's open. On
+  // mobile (where this is a near-full-screen sheet) the floating AI
+  // Assistant badge fades out entirely for it; on desktop the badge stays
+  // put but already sits behind this dialog by z-index (see index.tsx), so
+  // registering here mainly guards `handleToggle` against opening chat on
+  // top of it.
   useEffect(() => {
     const { openBlockingDialog, closeBlockingDialog } = useAIStore.getState();
     openBlockingDialog();

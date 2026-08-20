@@ -2,13 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { AnimatePresence, motion, useReducedMotion } from '@/components/animate-ui/motion';
 import { EASE_SETTLE, EASE_SPRING, EASE_STANDARD, backdropVariants } from '@/components/animate-ui/motionTokens';
-import type { AIChatMessage, AISession } from '../../store/useAIStore';
+import type { AIChatMessage } from '../../store/useAIStore';
 import type { AIFile } from '../../types';
 import Icon from '../Icon';
 import Spinner from '@/components/animate-ui/Spinner';
 import MotionButton from '../animate-ui/MotionButton';
 import MotionIn from '../animate-ui/MotionIn';
-import AIRecentChats from './AIRecentChats';
 import { useAIFileUpload, formatFileSize, fileIcon, FILE_INPUT_ACCEPT } from './useAIFileUpload';
 import { useVisualViewport } from '../../hooks/useVisualViewport';
 import { useLockBodyScroll } from '../../hooks/useLockBodyScroll';
@@ -20,12 +19,6 @@ interface Props {
   onSend: (text: string) => void;
   onClose: () => void;
   onClearHistory: () => void;
-  onShowRecentChats: () => void;
-  showRecentChats: boolean;
-  recentSessions: AISession[];
-  onSelectSession: (sessionId: string) => void;
-  onDeleteSession: (sessionId: string) => void;
-  onCloseRecentChats: () => void;
   uploadedFiles: AIFile[];
   onAddFile: (file: AIFile) => void;
   onRemoveFile: (id: string) => void;
@@ -203,13 +196,12 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
  * phone's own messaging app looks, with the input pinned as a floating pill
  * near the bottom instead of a footer strip. Desktop differs only in degree,
  * not in kind: a capped content width so lines don't stretch across a wide
- * monitor, an "X" instead of a swipe-down chevron to close, and small
- * history/clear-chat icons next to it (mobile is one ephemeral conversation
- * by design — see the History/clear icons below).
+ * monitor, and an "X" instead of a swipe-down chevron to close. There is no
+ * cross-session history browser on either platform — each open is a fresh
+ * conversation; the "Clear chat" icon (desktop only) resets the CURRENT one.
  */
 export default function AIChatOverlay({
   messages, isThinking, contextView, onSend, onClose, onClearHistory,
-  onShowRecentChats, showRecentChats, recentSessions, onSelectSession, onDeleteSession, onCloseRecentChats,
   uploadedFiles, onAddFile, onRemoveFile, sessionId, isMobile,
 }: Props) {
   const [input, setInput] = useState('');
@@ -286,7 +278,18 @@ export default function AIChatOverlay({
         exit="exit"
         style={{
           position: 'fixed',
-          inset: 0,
+          // Outset well past every edge instead of plain `inset: 0`. A
+          // `backdrop-filter: blur()` element sized exactly to the viewport
+          // can show a faint lighter seam right at its own edge — Safari
+          // samples pixels near an element's boundary less reliably than its
+          // interior — and on iOS the layout viewport this sizes against can
+          // itself momentarily disagree with what's actually visible while
+          // the browser's own chrome (URL bar, home indicator area) is
+          // animating. Either way the fix is the same: push the element's
+          // real edges far off-screen so the visible screen is always deep
+          // in its interior, never at a boundary. `position:fixed` elements
+          // don't affect document scroll size, so this is free.
+          top: -100, left: -100, right: -100, bottom: -100,
           background: 'rgba(var(--color-black-rgb), 0.45)',
           backdropFilter: 'blur(10px)',
           WebkitBackdropFilter: 'blur(10px)',
@@ -316,21 +319,6 @@ export default function AIChatOverlay({
         style={{ position: 'fixed', left: 0, right: 0, zIndex: 9001, display: 'flex', flexDirection: 'column', pointerEvents: 'none' }}
       >
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)', pointerEvents: 'auto' }}>
-          {!isMobile && (
-            <MotionButton
-              onClick={onShowRecentChats}
-              title="Recent chats"
-              whileHover={{ background: 'rgba(var(--color-white-rgb), 1)', scale: 1.06 }}
-              transition={{ duration: 0.18 }}
-              style={{
-                width: 36, height: 36, borderRadius: '50%', border: '1px solid rgba(var(--color-black-rgb), 0.06)',
-                background: 'rgba(var(--color-white-rgb), 0.9)', boxShadow: '0 4px 16px rgba(var(--color-black-rgb), 0.16)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-              }}
-            >
-              <Icon name="history" size={17} color="var(--color-text-secondary)" />
-            </MotionButton>
-          )}
           {/* Raw motion.button (not MotionButton) — this one needs an `exit`
               target for AnimatePresence, which MotionButton's prop surface
               deliberately doesn't expose (see its own header comment). */}
@@ -570,22 +558,6 @@ export default function AIChatOverlay({
           onChange={handleFilePickerChange}
         />
       </motion.div>
-
-      {/* Recent chats — desktop only (see the header comment above). Floats
-          as its own card over the same blur rather than living inside a
-          window, since there's no window anymore. */}
-      {!isMobile && showRecentChats && (
-        <div
-          style={{
-            position: 'fixed', top: '50%', left: '50%', translate: '-50% -50%',
-            width: Math.min(380, window.innerWidth - 32), height: Math.min(560, window.innerHeight - 100),
-            zIndex: 9002, pointerEvents: 'auto', borderRadius: 20,
-            boxShadow: '0 20px 60px rgba(var(--color-black-rgb), 0.32)',
-          }}
-        >
-          <AIRecentChats sessions={recentSessions} onSelect={onSelectSession} onDelete={onDeleteSession} onClose={onCloseRecentChats} />
-        </div>
-      )}
 
       {/* Clear history confirmation — desktop only, same reasoning. */}
       {!isMobile && showClearConfirm && (

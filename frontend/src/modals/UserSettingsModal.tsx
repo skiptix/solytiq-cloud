@@ -88,7 +88,7 @@ const rowStyle: React.CSSProperties = {
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
-type SettingsTab = 'profile' | 'preferences' | 'notifications' | 'controls' | 'security' | 'connections' | 'mobile' | 'calendar';
+type SettingsTab = 'profile' | 'preferences' | 'notifications' | 'controls' | 'security' | 'ai' | 'mobile' | 'calendar';
 
 /** Tabs with no pill on the mobile layout — see the clamp in the component. */
 const MOBILE_HIDDEN_TABS = new Set<SettingsTab>(['controls', 'mobile', 'calendar']);
@@ -381,7 +381,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
     { id: 'notifications', label: 'Notifications', icon: 'mail' },
     ...(isMobile ? [] : [{ id: 'controls' as SettingsTab, label: 'Controls', icon: 'keyboard' }]),
     { id: 'security',    label: 'Security',    icon: 'shield_lock' },
-    ...(mcpVisible ? [{ id: 'connections' as SettingsTab, label: 'Connections', icon: 'smart_toy' }] : []),
+    { id: 'ai',           label: 'AI',           icon: 'smart_toy' },
     ...(mobileEnabled && !isMobile ? [{ id: 'mobile' as SettingsTab, label: 'Mobile', icon: 'smartphone' }] : []),
     ...(isMobile ? [] : [{ id: 'calendar' as SettingsTab, label: 'Calendar Sync', icon: 'event_available' }]),
   ];
@@ -991,11 +991,18 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
             </MotionIn>
             )}
 
-            {/* ── CONNECTIONS (Claude MCP) ── */}
-            {activeTab === 'connections' && mcpVisible && (
+            {/* ── AI (Sol bubble preference + Claude MCP) ── */}
+            {activeTab === 'ai' && (
             <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, ease: EASE_SETTLE }}>
-              {sectionLabel('Claude MCP')}
-              <ClaudeMcpSection />
+              {sectionLabel('AI Assistant')}
+              <AiAssistantSection />
+
+              {mcpVisible && (
+                <div style={{ marginTop: 28 }}>
+                  {sectionLabel('Claude MCP')}
+                  <ClaudeMcpSection />
+                </div>
+              )}
             </MotionIn>
             )}
 
@@ -1292,6 +1299,37 @@ function MemorySection() {
           </button>
         )
       )}
+    </div>
+  );
+}
+
+function AiAssistantSection() {
+  const hideAiBubble = useUserPrefsStore(s => s.hideAiBubble);
+  const setHideAiBubble = useUserPrefsStore(s => s.setHideAiBubble);
+  const bubbleVisible = !hideAiBubble;
+
+  return (
+    <div style={card}>
+      <div style={rowStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: '1 1 220px' }}>
+          <Icon name="auto_awesome" size={17} color="var(--color-text-tertiary)" />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>Sol bubble</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+              Show the floating Sol button. Turning this off hides it everywhere — you can bring it back here any time.
+            </div>
+          </div>
+        </div>
+        <MotionButton
+          onClick={() => setHideAiBubble(bubbleVisible)}
+          title={bubbleVisible ? 'Hide the Sol bubble' : 'Show the Sol bubble'}
+          style={{ width: 38, height: 22, borderRadius: 9999, border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}
+          animate={{ background: bubbleVisible ? 'var(--color-primary)' : 'var(--color-border-alt)' }}
+          transition={{ duration: 0.15 }}
+        >
+          <MotionIn animate={{ left: bubbleVisible ? 18 : 2 }} transition={{ duration: 0.15 }} style={{ position: 'absolute', top: 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.2)' }} />
+        </MotionButton>
+      </div>
     </div>
   );
 }
