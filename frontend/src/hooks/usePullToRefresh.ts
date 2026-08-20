@@ -7,6 +7,15 @@ interface UsePullToRefreshOptions {
   threshold?: number;
 }
 
+// How far (px) a touch has to move down before it's treated as a pull
+// gesture rather than a tap. Touch events bubble through this container from
+// every button inside it (view switcher, Automations, Hide Empty Sections,
+// …), so without a dead-zone the ordinary few pixels of finger jitter during
+// a tap were enough to call preventDefault() on touchmove — which cancels
+// the tap's synthesized click on most mobile browsers instead of letting the
+// button handle it.
+const DRAG_DEADZONE = 10;
+
 /**
  * Mobile "pull down at the top to refresh" gesture for a scrollable container.
  * Attaches native (non-passive) touch listeners via a ref rather than React's
@@ -44,6 +53,14 @@ export function usePullToRefresh({ onRefresh, disabled = false, threshold = 64 }
       if (settleTimer.current) clearTimeout(settleTimer.current);
       setSettling(false);
       if (refreshing || el.scrollTop > 0) { startY = null; pulling = false; return; }
+      // A touch that starts on a button/link/input is a tap target, not a
+      // drag handle — never let it seed a pull gesture, however the finger
+      // moves afterward. This is on top of (not instead of) the dead-zone
+      // below, which covers the same tap's stray jitter over plain content.
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('button, a, input, textarea, select, [role="button"], [data-no-pull-refresh]')) {
+        startY = null; pulling = false; return;
+      }
       startY = e.touches[0].clientY;
       pulling = true;
     };
@@ -52,9 +69,18 @@ export function usePullToRefresh({ onRefresh, disabled = false, threshold = 64 }
       if (!pulling || startY === null) return;
       if (el.scrollTop > 0) { pulling = false; distance = 0; setPullDistance(0); return; }
       const delta = e.touches[0].clientY - startY;
-      if (delta <= 0) { distance = 0; setPullDistance(0); return; }
-      // Rubber-band damping so the indicator eases rather than tracking 1:1.
-      distance = Math.min(delta * 0.5, threshold * 1.6);
+      if (delta <= DRAG_DEADZONE) {
+        // Still inside the tap's normal jitter range — don't touch the
+        // indicator and, crucially, don't preventDefault() yet, so a genuine
+        // tap's click still fires. Only a downward delta past the dead-zone
+        // commits this touch to being a pull gesture.
+        if (delta <= 0) { distance = 0; setPullDistance(0); }
+        return;
+      }
+      // Rubber-band damping so the indicator eases rather than tracking 1:1,
+      // measured from the dead-zone edge so it doesn't jump the moment the
+      // gesture is recognized as a pull.
+      distance = Math.min((delta - DRAG_DEADZONE) * 0.5, threshold * 1.6);
       setPullDistance(distance);
       e.preventDefault();
     };
