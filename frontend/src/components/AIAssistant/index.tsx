@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useRef, lazy, Suspense } from 'react';
-import { AnimatePresence } from '@/components/animate-ui/motion';
+import { AnimatePresence, motion } from '@/components/animate-ui/motion';
+import { DURATION, EASE_SETTLE } from '@/components/animate-ui/motionTokens';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMobile } from '../../hooks/useBreakpoint';
 import useAIStore, {
@@ -1150,16 +1151,15 @@ export default function AIAssistant() {
 
   const ctx = buildContext(location.pathname, appStore);
 
-  // The badge stays visible while a blocking dialog is open (TaskDialog, the
-  // milestone editor, a top-level App.tsx modal, …) — see AIBubble's own
-  // `blocked` prop — rather than disappearing; it just goes inert and blurs
-  // itself. That's independent of the two reasons the badge is HIDDEN
-  // outright: the overlay itself is open (it has its own close affordance,
-  // on both platforms now — see AIChatOverlay.tsx) or, mobile-only, the
-  // Calendar page is dense enough (see CalendarScreen) that the badge is
-  // dropped there rather than repositioned.
-  const blocked = blockingDialogCount > 0;
-  const hideBubble = isOpen || (isMobile && location.pathname.startsWith('/calendar'));
+  // The badge hides completely — faded out, not blurred-but-present —
+  // whenever anything else takes over the screen: the chat overlay itself
+  // (own close affordance), a blocking dialog (TaskDialog, the milestone
+  // editor, App.tsx's AddWizard modal, and — mobile only — the Sidebar
+  // drawer and the Notifications panel; see the openBlockingDialog call
+  // sites for each), or, mobile-only, the Calendar page (dense enough — see
+  // CalendarScreen — that the badge is dropped there rather than
+  // repositioned).
+  const hideBubble = isOpen || blockingDialogCount > 0 || (isMobile && location.pathname.startsWith('/calendar'));
 
   return (
     <>
@@ -1205,14 +1205,37 @@ export default function AIAssistant() {
           on principle. pointerEvents:'none' on the empty strip either side
           of the badge keeps it from shadowing whatever sits at this height
           beneath it. 20px off the bottom edge on both platforms — safe-area
-          aware on mobile, plain on desktop (no notch to clear there). */}
-      {!hideBubble && (
-        <div style={{ position: 'fixed', left: 0, right: 0, bottom: isMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 20px)' : 20, zIndex: 9000, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
-          <div style={{ pointerEvents: 'auto' }}>
-            <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} blocked={blocked} />
+          aware on mobile, plain on desktop (no notch to clear there).
+          The badge itself fades fully in/out (never blurred-but-present)
+          in sync with whatever's covering the screen — see `hideBubble`
+          above — using the same duration/ease as that surface's own
+          backdrop animate-in (`backdropVariants` in motionTokens.ts).
+          Its z-index (100, both platforms) is deliberately LOW — below the
+          ≥400 floor every fixed overlay in the app is required to use (see
+          Mobile Responsiveness rules) and below every dropdown/popover z-
+          index in the codebase too. `hideBubble` above only covers the
+          handful of surfaces that explicitly register a blocking dialog;
+          this is the general-purpose backstop that keeps the badge from
+          ever rendering on top of a window we haven't wired up — any
+          properly-layered window sits above it by construction, not by
+          each one remembering to ask the badge to hide. Only ordinary page
+          content (not itself a window) uses a lower z-index than this. */}
+      <AnimatePresence>
+        {!hideBubble && (
+          <div style={{ position: 'fixed', left: 0, right: 0, bottom: isMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 20px)' : 20, zIndex: 100, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+            <motion.div
+              key="ai-badge"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: DURATION.base, ease: EASE_SETTLE }}
+              style={{ pointerEvents: 'auto' }}
+            >
+              <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} />
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
     </>
   );
 }

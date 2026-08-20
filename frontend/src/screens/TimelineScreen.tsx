@@ -165,8 +165,8 @@ function MilestoneEditor({ accent, initial, onSave, onDelete, onClose, ownerId, 
   }, [showTime]);
 
   // Same chrome as TaskDialog (blurred backdrop, near-full-screen on
-  // mobile) — tell the floating AI Assistant badge to go inert and blur
-  // itself for as long as this editor is open, same as that dialog does.
+  // mobile) — tell the floating AI Assistant badge to hide (faded out) for
+  // as long as this editor is open, same as that dialog does.
   useEffect(() => {
     const { openBlockingDialog, closeBlockingDialog } = useAIStore.getState();
     openBlockingDialog();

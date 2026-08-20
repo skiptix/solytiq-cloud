@@ -342,8 +342,8 @@ export default function TaskDialog({ task, onUpdate, onDelete, onClose }: TaskDi
     return () => document.removeEventListener('keydown', handler);
   }, [onClose, showCal]);
 
-  // Tell the floating AI Assistant badge (fixed, zIndex 9000) to go inert
-  // and blur itself for as long as this dialog is open, on both mobile
+  // Tell the floating AI Assistant badge (fixed, zIndex 9000) to hide
+  // (faded out) for as long as this dialog is open, on both mobile
   // (where it's a near-full-screen sheet the badge would float on top of)
   // and desktop (where the badge otherwise stays clickable right through
   // this dialog's own blurred backdrop).
