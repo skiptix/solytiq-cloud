@@ -71,6 +71,10 @@ import Spinner from '@/components/animate-ui/Spinner';
 // opens it — lazy-loaded so every page's initial chunk only pays for the
 // small always-visible bubble, not the whole chat surface.
 const AIChatWindow = lazy(() => import('./AIChatWindow'));
+// Mobile's floating-bubble overlay (see AIMobileChat.tsx) — a genuinely
+// different layout from the desktop window, not another isMobile branch
+// inside it, so it gets its own lazy chunk too.
+const AIMobileChat = lazy(() => import('./AIMobileChat'));
 
 interface ToolCall {
   id: string;
@@ -1147,12 +1151,67 @@ export default function AIAssistant() {
 
   const ctx = buildContext(location.pathname, appStore);
 
+  // Hide the bubble entirely while the mobile overlay is open (it has its
+  // own close affordance), a full-screen mobile dialog is up (the bubble's
+  // z-index would otherwise float on top of it), or on the Calendar page
+  // (dense enough on mobile — see CalendarScreen — that the bubble is
+  // dropped there rather than repositioned).
+  const hideBubble = isMobile && (isOpen || blockingDialogCount > 0 || location.pathname.startsWith('/calendar'));
+
+  if (isMobile) {
+    return (
+      <>
+        <AnimatePresence>
+          {isOpen && (
+            <Suspense
+              fallback={
+                <div role="status" aria-live="polite" style={{ position: 'fixed', inset: 0, zIndex: 9000, background: 'rgba(var(--color-black-rgb), 0.45)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Spinner size={28} thickness={3} durationMs={700} aria-hidden />
+                  <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>Loading Sol…</span>
+                </div>
+              }
+            >
+              <AIMobileChat
+                key="ai-mobile-chat"
+                messages={messages}
+                isThinking={isThinking}
+                contextView={ctx.view}
+                onSend={handleSend}
+                onClose={() => setOpen(false)}
+                uploadedFiles={uploadedFiles}
+                onAddFile={addUploadedFile}
+                onRemoveFile={removeUploadedFile}
+                sessionId={useAIStore.getState().currentSessionId}
+              />
+            </Suspense>
+          )}
+        </AnimatePresence>
+        {/* Its own independent fixed wrapper, spanning the full width so the
+            bubble can be centered with flexbox — never `transform`, which
+            would turn this wrapper into the containing block for any
+            `position: fixed` descendant (see Mobile Responsiveness rules).
+            There are none today since the overlay above renders as a
+            sibling, not nested in here, but the wrapper stays transform-free
+            on principle. pointerEvents:'none' on the empty strip either side
+            of the bubble keeps it from shadowing whatever sits at this
+            height beneath it. */}
+        {!hideBubble && (
+          <div style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(env(safe-area-inset-bottom, 0px) + 60px)', zIndex: 9000, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+            <div style={{ pointerEvents: 'auto' }}>
+              <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} size={44} />
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <div
       style={{
         position: 'fixed',
-        bottom: isMobile ? 'calc(env(safe-area-inset-bottom, 0px) + 60px)' : 30,
-        right: isMobile ? 14 : 30,
+        bottom: 30,
+        right: 30,
         zIndex: 9000,
         display: 'flex',
         flexDirection: 'column',
@@ -1167,10 +1226,10 @@ export default function AIAssistant() {
                 role="status"
                 aria-live="polite"
                 style={{
-                  width: isMobile ? '100vw' : 380,
-                  height: isMobile ? '100dvh' : 560,
+                  width: 380,
+                  height: 560,
                   maxHeight: 'calc(100dvh - 40px)',
-                  borderRadius: isMobile ? 0 : 20,
+                  borderRadius: 20,
                   background: 'var(--color-white)',
                   boxShadow: '0 8px 40px rgba(94,77,187,0.10)',
                   display: 'flex',
@@ -1201,21 +1260,11 @@ export default function AIAssistant() {
               onAddFile={addUploadedFile}
               onRemoveFile={removeUploadedFile}
               sessionId={useAIStore.getState().currentSessionId}
-              isMobile={isMobile}
             />
           </Suspense>
         )}
       </AnimatePresence>
-      {/* On mobile the open chat is a full-screen bottom sheet with its own
-          close button — the floating bubble would just sit uselessly under it.
-          Same story while a mobile full-screen dialog (e.g. the item detail
-          dialog) is open — the bubble's high z-index would otherwise float on
-          top of it, overlapping its content. The Calendar page is dense
-          enough on mobile (see CalendarScreen) that the bubble is dropped
-          there entirely rather than just repositioned. */}
-      {!(isMobile && (isOpen || blockingDialogCount > 0 || location.pathname.startsWith('/calendar'))) && (
-        <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} size={isMobile ? 44 : 52} />
-      )}
+      <AIBubble isOpen={isOpen} isThinking={isThinking} onClick={handleToggle} size={52} />
     </div>
   );
 }
