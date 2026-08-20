@@ -1890,7 +1890,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
           <ProfileCard collapsed={collapsed} />
           {!collapsed && (
             <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-              v1.89.4
+              v1.90.0
             </div>
           )}
         </div>
@@ -2298,7 +2298,7 @@ export default function Sidebar({ active, activeListId, activeTimelineId, active
         <ProfileCard collapsed={collapsed} />
         {!collapsed && (
           <div style={{ padding: '6px 10px 2px', fontFamily: 'var(--font-body)', fontSize: 10.5, color: 'var(--color-purple-tint-10)', letterSpacing: '0.03em', userSelect: 'none' }}>
-            v1.89.4
+            v1.90.0
           </div>
         )}
       </div>

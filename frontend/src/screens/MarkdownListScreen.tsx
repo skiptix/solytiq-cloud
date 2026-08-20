@@ -11,17 +11,17 @@ import { type MentionMember } from '../utils/mention';
 import { apiUploadMarkdownImage, markdownImageUrl, apiGetWorkspaceMembers, apiGetItemMembers, ensureAssetTicket, type ShareInfo } from '../api/client';
 import type { WorkspaceMember } from '../types';
 import useAuthStore from '../store/useAuthStore';
+import useAIStore from '../store/useAIStore';
 import ItemSettingsModal, { type ItemSettingsUpdates } from '../modals/ItemSettingsModal';
 import MarkdownListAIAssist from '../components/AIAssistant/MarkdownListAIAssist';
 import SaveStatusDot from '../components/SaveStatusDot';
 import BacklinksPanel from '../components/graph/BacklinksPanel';
-import AutomationsButton from '../components/AutomationsButton';
+import useInstalledAppsStore from '../store/useInstalledAppsStore';
 import PopIn from '../components/animate-ui/PopIn';
 import ModalIn from '../components/animate-ui/ModalIn';
 import { motion } from '../components/animate-ui/motion';
 import { EASE_STANDARD } from '../components/animate-ui/motionTokens';
 import MotionIn from '../components/animate-ui/MotionIn';
-import MotionButton from '../components/animate-ui/MotionButton';
 import useAsyncData from '../hooks/useAsyncData';
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -55,8 +55,15 @@ export default function MarkdownListScreen() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   // "Reorder" mode: when on, every block's drag grip is shown so blocks can be
   // dragged to reorder; when off (default) the grips stay hidden for a clean,
-  // no-movement reading/editing experience (toggled from the header button).
+  // no-movement reading/editing experience (toggled from the "..." menu).
   const [reorderMode, setReorderMode] = useState(false);
+  const [askAiOpen, setAskAiOpen] = useState(false);
+  const automationsInstalled = useInstalledAppsStore(s => s.isInstalled('automations'));
+  // Same shared store MarkdownListAIAssist itself reads/populates — gates the
+  // "Ask AI" menu item so it doesn't sit there as a dead click when Sol is
+  // disabled instance-wide, matching what the old standalone button did by
+  // simply not rendering itself in that case.
+  const aiAssistEnabled = useAIStore(s => s.settings.enabled);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -254,16 +261,6 @@ export default function MarkdownListScreen() {
             {subtitle && <div style={{ fontFamily: 'var(--font-body)', fontSize: 13.5, color: 'var(--color-text-tertiary)', marginTop: 4 }}>{subtitle}</div>}
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexShrink: 0 }}>
-          <MotionButton
-            onClick={() => setReorderMode(r => !r)}
-            title={reorderMode ? 'Done reordering' : 'Reorder blocks'}
-            transition={{ duration: 0.12 }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, height: 32, width: isMobile ? 32 : undefined, padding: isMobile ? 0 : '0 11px', borderRadius: 8, border: `1px solid ${reorderMode ? 'var(--color-primary)' : 'var(--color-border)'}`, background: reorderMode ? 'var(--color-primary)' : 'var(--color-white)', cursor: 'pointer', flexShrink: 0 }}
-            onMouseEnter={e => { if (!reorderMode) e.currentTarget.style.background = 'var(--color-surface-tint)'; }}
-            onMouseLeave={e => { if (!reorderMode) e.currentTarget.style.background = 'var(--color-white)'; }}>
-            <Icon name="swap_vert" size={15} color={reorderMode ? 'var(--color-white)' : 'var(--color-primary)'} />
-            {!isMobile && <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, color: reorderMode ? 'var(--color-white)' : 'var(--color-primary)' }}>{reorderMode ? 'Done' : 'Reorder'}</span>}
-          </MotionButton>
-          {mdId && <AutomationsButton ownerType="markdownList" ownerId={mdId} isMobile={isMobile} />}
           {todoListId && (
             <motion.button
               initial={{ opacity: 0, scale: 0.88, y: -6 }}
@@ -288,6 +285,8 @@ export default function MarkdownListScreen() {
           <MarkdownListAIAssist
             markdownListId={mdId}
             markdownListName={name}
+            open={askAiOpen}
+            onClose={() => setAskAiOpen(false)}
             onUpdated={(md) => {
               const updatedBlocks = md.content.blocks;
               setBlocks(updatedBlocks.length > 0 ? updatedBlocks : [makeEmptyBlock('paragraph')]);
@@ -309,7 +308,24 @@ export default function MarkdownListScreen() {
             {menuOpen && (
               <>
                 <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 190 }} />
-                <PopIn duration={160} style={{ position: 'absolute', top: 38, right: 0, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', border: '1px solid var(--color-border)', minWidth: 180, zIndex: 200, overflow: 'hidden' }}>
+                <PopIn duration={160} style={{ position: 'absolute', top: 38, right: 0, background: 'var(--color-white)', borderRadius: 10, boxShadow: '0 8px 32px rgba(var(--color-black-rgb), 0.14)', border: '1px solid var(--color-border)', minWidth: 200, zIndex: 200, overflow: 'hidden' }}>
+                  {aiAssistEnabled && (
+                    <button onClick={() => { setMenuOpen(false); setAskAiOpen(true); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-text-primary)', textAlign: 'left' }}>
+                      <Icon name="auto_awesome" size={16} color="var(--color-primary)" /> Ask AI
+                    </button>
+                  )}
+                  <button onClick={() => { setMenuOpen(false); setReorderMode(r => !r); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-text-primary)', textAlign: 'left' }}>
+                    <Icon name="swap_vert" size={16} color="var(--color-text-tertiary)" /> {reorderMode ? 'Done reordering' : 'Reorder blocks'}
+                  </button>
+                  {automationsInstalled && mdId && (
+                    <button onClick={() => { setMenuOpen(false); navigate(`/automations?ownerType=markdownList&ownerId=${mdId}`); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-text-primary)', textAlign: 'left' }}>
+                      <Icon name="bolt" size={16} color="var(--color-warning-alt)" /> Automations
+                    </button>
+                  )}
+                  <div style={{ height: 1, background: 'var(--color-divider)', margin: '4px 0' }} />
                   {todoListId && (
                     <button onClick={() => { setMenuOpen(false); navigate(`/list/${todoListId}`); }}
                       style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-text-primary)', textAlign: 'left' }}>
