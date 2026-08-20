@@ -215,7 +215,7 @@ export default function AIChatOverlay({
   // Typing starts on its own deliberate tap, same as tapping a suggestion
   // chip below (which does focus — picking one is exactly that deliberate
   // "I want to type/send now" gesture).
-  const { height: viewportHeight, top: viewportTop } = useVisualViewport();
+  const { height: viewportHeight, top: viewportTop, fullHeight: viewportFullHeight } = useVisualViewport();
   // Nothing behind this overlay should be scrollable while it's open — on
   // iOS this also stops the browser's own "scroll the page to reveal the
   // focused input" behavior from fighting with useVisualViewport's own
@@ -223,10 +223,16 @@ export default function AIChatOverlay({
   // janky double-scroll instead of the keyboard just sliding the input up.
   useLockBodyScroll();
 
-  // True once the visible viewport has shrunk meaningfully below the page's
-  // own height — i.e. the on-screen keyboard is up. Only really fires on
-  // mobile; desktop has no software keyboard to shrink anything.
-  const keyboardOpen = viewportHeight < window.innerHeight - 40;
+  // True once the visible viewport has shrunk meaningfully below its own
+  // fully-open baseline — i.e. the on-screen keyboard is up. Only really
+  // fires on mobile; desktop has no software keyboard to shrink anything.
+  // Deliberately compares against `viewportFullHeight` (the largest
+  // visualViewport height observed since mount), NOT `window.innerHeight`:
+  // in an iOS Home Screen (standalone) install, WebKit resizes the layout
+  // viewport itself in lockstep with the keyboard, so `innerHeight` shrinks
+  // too and this check would never trip — see useVisualViewport's own
+  // comment for why that silently broke this exact keyboard-open branch.
+  const keyboardOpen = viewportHeight < viewportFullHeight - 40;
 
   // Re-pins to the latest message on a new message AND whenever the visible
   // viewport height changes — the keyboard opening shrinks it, and without
