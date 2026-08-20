@@ -2554,6 +2554,12 @@ export async function runMigrations() {
   // the board it describes.
   await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS quick_add_kb_entry_id VARCHAR(100) REFERENCES knowledge_entries(id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS quick_add_memory_dirty BOOLEAN NOT NULL DEFAULT false`);
+  // Declutters a busy board's List/Kanban/Timeline views once Quick Add has
+  // been filing items into sections for a while. Defaults to true (per the
+  // feature's own request) rather than false like every other Quick Add
+  // column — an existing board turning Quick Add on for the first time should
+  // start decluttered, not need a second opt-in click to get there.
+  await pool.query(`ALTER TABLE lists ADD COLUMN IF NOT EXISTS quick_add_hide_empty_sections BOOLEAN NOT NULL DEFAULT true`);
 
   // Append-only placement history. Deliberately NOT read by the predictor —
   // see quickAdd/memory.ts's header for why the projection below is a separate

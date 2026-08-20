@@ -11,6 +11,9 @@ interface TaskTimelineViewProps {
   isMobile: boolean;
   onToggle: (id: number) => void;
   onRowClick: (task: Task) => void;
+  /** Drops sections with no tasks from the row list — mirrors the same
+   *  filter List/Kanban apply (see ListScreen.tsx's `visibleSections`). */
+  hideEmptySections?: boolean;
 }
 
 type Zoom = 'day' | 'week' | 'month';
@@ -142,7 +145,7 @@ function buildMinorTicks(start: Date, totalDays: number, zoom: Zoom, today: Date
   });
 }
 
-export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick }: TaskTimelineViewProps) {
+export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick, hideEmptySections }: TaskTimelineViewProps) {
   const [zoom, setZoom] = useState<Zoom>('day');
   const [containerWidth, setContainerWidth] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -183,10 +186,12 @@ export default function TaskTimelineView({ list, isMobile, onToggle, onRowClick 
     return () => ro.disconnect();
   }, []);
 
-  const rows: TimelineRow[] = useMemo(() => list.sections.flatMap(s => [
-    { kind: 'section', id: s.id, label: s.label, emoji: s.emoji } as const,
-    ...s.tasks.map(t => ({ kind: 'task', id: `t_${t.id}`, task: t } as const)),
-  ]), [list.sections]);
+  const rows: TimelineRow[] = useMemo(() => list.sections
+    .filter(s => !hideEmptySections || s.tasks.length > 0)
+    .flatMap(s => [
+      { kind: 'section', id: s.id, label: s.label, emoji: s.emoji } as const,
+      ...s.tasks.map(t => ({ kind: 'task', id: `t_${t.id}`, task: t } as const)),
+    ]), [list.sections, hideEmptySections]);
 
   const allTasks = useMemo(() => list.sections.flatMap(s => s.tasks), [list.sections]);
 

@@ -18,6 +18,7 @@ import { isItemSharedWith } from '../itemShares';
 import { objectAccessCondition, workspaceMembersJoin } from '../objectPolicy';
 import { syncInlineLinksForText } from '../graph/inlineLinks';
 import { enqueueEmbedding } from '../knowledge/queue';
+import { getBaseForWorkspace } from '../knowledgeBase/entries';
 import { recordPlacement, getMemoryStats } from '../quickAdd/memory';
 import { suggestSections } from '../quickAdd/predict';
 import { ensureBubble, syncBubble } from '../quickAdd/kbBubble';
@@ -57,6 +58,7 @@ interface ListRow {
   archived_at?: string | null;
   quick_add_enabled?: boolean;
   quick_add_kb_entry_id?: string | null;
+  quick_add_hide_empty_sections?: boolean;
 }
 
 interface SectionRow {
@@ -179,6 +181,7 @@ function sanitizeList(
     archivedAt:   list.archived_at ?? null,
     quickAddEnabled: list.quick_add_enabled ?? false,
     quickAddEntryId: list.quick_add_kb_entry_id ?? null,
+    quickAddHideEmptySections: list.quick_add_hide_empty_sections ?? true,
     sections,
     stagedTasks,
     ...(linkedProgress !== undefined ? { linkedProgress } : {}),
@@ -789,7 +792,7 @@ router.put('/:listId/share', async (req: Request, res: Response) => {
 router.put('/:listId', async (req: Request, res: Response) => {
   try {
     const { listId } = req.params;
-    const { name, emoji, color, colorBg, subtitle, position, isPublic, folderId, cascade, viewMode, quickAddEnabled } = req.body as {
+    const { name, emoji, color, colorBg, subtitle, position, isPublic, folderId, cascade, viewMode, quickAddEnabled, quickAddHideEmptySections } = req.body as {
       name?: string;
       emoji?: string;
       color?: string;
@@ -801,9 +804,11 @@ router.put('/:listId', async (req: Request, res: Response) => {
       cascade?: boolean;
       viewMode?: string;
       quickAddEnabled?: boolean;
+      quickAddHideEmptySections?: boolean;
     };
     const validViewMode = viewMode === 'list' || viewMode === 'kanban' || viewMode === 'timeline' ? viewMode : null;
     const validQuickAdd = typeof quickAddEnabled === 'boolean' ? quickAddEnabled : null;
+    const validHideEmptySections = typeof quickAddHideEmptySections === 'boolean' ? quickAddHideEmptySections : null;
 
     const existing = await query<ListRow>('SELECT user_id, workspace_id, folder_id, name FROM lists WHERE id = $1', [listId]);
     if (existing.rows.length === 0) {
@@ -817,6 +822,21 @@ router.put('/:listId', async (req: Request, res: Response) => {
     if (!isOwner && !isAdmin) {
       res.status(403).json({ error: 'Permission denied' });
       return;
+    }
+
+    // Quick Add leans entirely on the workspace's Knowledge Base (its
+    // suggestions live in the board's KB bubble — see quickAdd/kbBubble.ts),
+    // so turning it on without one would silently produce a feature with
+    // nowhere to keep what it learns. The client is expected to offer
+    // creating a base first (ItemSettingsModal), but this is the real gate —
+    // never trust a boolean flag from the request body alone.
+    if (validQuickAdd === true) {
+      const targetWorkspaceId = existing.rows[0].workspace_id;
+      const base = targetWorkspaceId ? await getBaseForWorkspace(targetWorkspaceId) : null;
+      if (!base) {
+        res.status(400).json({ error: 'quick_add_requires_knowledge_base' });
+        return;
+      }
     }
 
     // Optimistic concurrency (B4): the version check is folded directly into
@@ -847,7 +867,7 @@ router.put('/:listId', async (req: Request, res: Response) => {
     }
 
     const updateParams: unknown[] = [name ?? null, emoji ?? null, color ?? null, colorBg ?? null, subtitle ?? null, position ?? null, isPublic ?? null, listId,
-      updateFolderId, folderId ?? null, validViewMode, validQuickAdd];
+      updateFolderId, folderId ?? null, validViewMode, validQuickAdd, validHideEmptySections];
     const versionClause = versionGuardSql(updateParams, expectedVersion);
     const updateSql =
       `UPDATE lists
@@ -860,7 +880,8 @@ router.put('/:listId', async (req: Request, res: Response) => {
            is_public = COALESCE($7, is_public),
            folder_id = CASE WHEN $9 THEN $10 ELSE folder_id END,
            view_mode = COALESCE($11, view_mode),
-           quick_add_enabled = COALESCE($12, quick_add_enabled)
+           quick_add_enabled = COALESCE($12, quick_add_enabled),
+           quick_add_hide_empty_sections = COALESCE($13, quick_add_hide_empty_sections)
        WHERE id = $8${versionClause}
        RETURNING *`;
 

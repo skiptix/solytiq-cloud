@@ -197,8 +197,25 @@ export default function QuickAddBar({
       onDragOver={(e) => { if (draggingFromSection) { e.preventDefault(); setTrayHover(true); } }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTrayHover(false); }}
       onDrop={(e) => { if (draggingFromSection) { e.preventDefault(); setTrayHover(false); onDropIntoTray(); } }}
-      style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+      style={{
+        display: 'flex', flexDirection: 'column', gap: 10,
+        padding: '12px 14px 14px',
+        borderRadius: 16,
+        background: 'linear-gradient(155deg, var(--color-surface-tint) 0%, var(--color-white) 55%)',
+        border: '1.5px solid var(--color-purple-tint-6)',
+        boxShadow: '0 10px 30px rgba(var(--color-primary-rgb), 0.10)',
+        position: 'relative',
+      }}
     >
+      {/* A small featured label — this is the board's front door, so it earns
+          more visual weight than a plain input field would get. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 2 }}>
+        <Icon name="bolt" size={13} color="var(--color-primary)" />
+        <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--color-primary)' }}>
+          Quick Add
+        </span>
+      </div>
+
       {/* Input */}
       <div style={{ position: 'relative' }}>
         <motion.div
@@ -229,8 +246,12 @@ export default function QuickAddBar({
             if (e.key === 'Escape') { setValue(''); (e.target as HTMLInputElement).blur(); }
           }}
           placeholder={isMobile ? 'Add new item…' : 'Add new item — it lands below, then move it where it belongs'}
-          animate={{ paddingRight: hasText ? 48 : 16, outlineColor: focused ? 'rgba(var(--color-primary-rgb), 0.18)' : 'rgba(var(--color-primary-rgb), 0)' }}
-          transition={{ outlineColor: { duration: 0.2 }, paddingRight: { duration: 0.18 } }}
+          animate={{
+            paddingRight: hasText ? 48 : 16,
+            outlineColor: focused ? 'rgba(var(--color-primary-rgb), 0.18)' : 'rgba(var(--color-primary-rgb), 0)',
+            boxShadow: focused ? '0 0 0 4px rgba(var(--color-primary-rgb), 0.12)' : '0 1px 2px rgba(var(--color-black-rgb), 0.05)',
+          }}
+          transition={{ outlineColor: { duration: 0.2 }, paddingRight: { duration: 0.18 }, boxShadow: { duration: 0.2 } }}
           style={{
             width: '100%', background: 'var(--color-white)', border: 'none', borderRadius: 10,
             paddingTop: 13, paddingBottom: 13, paddingLeft: 42,
