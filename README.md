@@ -138,6 +138,7 @@ When running the frontend separately, point it at the backend with `VITE_API_URL
 | `PORT` | No | Public host port / backend listen port | `3001` (backend) / `80` (Docker) |
 | `OPENROUTER_API_KEY` | No | Enables the AI assistant via OpenRouter | — |
 | `OPENROUTER_MODEL` | No | AI Model (e.g., `openai/gpt-4o-mini`) | `openai/gpt-4o-mini` |
+| `NUKE_SKIP_RESTART` | No | Set to `true` to stop the admin Nuke action from calling `process.exit(0)` at the end — only needed when running the backend without a process supervisor that would otherwise bring it back up | — |
 
 The backend refuses to start in `NODE_ENV=production` if `JWT_SECRET` is the default placeholder.
 
@@ -157,7 +158,7 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **Two distinct notions of "public":**
   1. `is_public` on lists/folders/timelines = **in-app visibility to workspace members**.
   2. `share_enabled` + `share_token` = **anonymous read-only link** for anyone on the internet (no login), optionally password-protected and/or time-limited.
-- **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
+- **Real-time via a cursor-based delta-sync engine over SSE** — `sync_log` (`BIGSERIAL seq`) is a transactional outbox: `AFTER INSERT/UPDATE/DELETE` triggers on every synced table append a row and `pg_notify` a compact descriptor. A dispatcher LISTENs and pushes a cursor-tagged frame over `/api/events`. The frontend then pulls authoritative changes via `GET /api/sync/delta?since=` and applies deltas without a full reload. There is no WebSocket server.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
 - **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
@@ -169,6 +170,9 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **File Uploads** — Handled by `multer`. Max upload size: 200 MB (multer config), Nginx proxy limit: 210 MB. Each user has a 15 GB storage quota.
 - **Security** — IDOR prevention using verified JWT `userId`, strict file path traversal checks, `bcryptjs` for password and share-link hashing, and transaction-based quota checks. Avoid using synchronous I/O operations (like `fs.readFileSync`) in Express route handlers to prevent blocking the Node.js event loop.
 - **Rate Limiting** — Configured in three tiers (`apiLimiter` for general API, `authLimiter` for logins/2FA, and `setupLimiter` for registration/nuke endpoints). The `apiLimiter` is automatically applied to all routes mounted under `/api/` in `backend/src/index.ts`.
+- **Templates** — The `templates` table captures a user-owned, workspace-agnostic snapshot of a list's or timeline's full structure (including recursive sublists and relative dates) for later instantiation.
+- **Admin API is scoped** — Instance-wide credentials (admin API keys) carry a `scopes` array to restrict route access, and operations targeting user-owned content require an explicit, validated `ownerId`.
+- **Admin Nuke** — A total, self-restarting instance reset that truncates tables, deletes files, and broadcasts a global SSE frame to clear client-side storage.
 - **Testing** — Vitest is the standard for both frontend and backend suites. To run tests, navigate to their respective directories and run `npm install && npm run test`.
 
 ---
