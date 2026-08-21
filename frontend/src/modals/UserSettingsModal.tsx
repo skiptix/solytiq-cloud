@@ -1013,7 +1013,7 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
               <MobileConnectionsSection />
 
               <div style={{ marginTop: 28 }}>
-                {sectionLabel('iOS Home Screen App')}
+                {sectionLabel('Home Screen App')}
                 <HomeScreenConnectionsSection />
               </div>
             </MotionIn>
@@ -1860,7 +1860,7 @@ function HomeScreenConnectionsSection() {
               Solytiq Cloud on your Home Screen
             </div>
             <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-tertiary)', lineHeight: 1.5, marginTop: 3 }}>
-              Devices where you've added this site to your iOS Home Screen (Share → Add to Home Screen) and opened it as a standalone app appear here. This isn't a separate login — removing an entry just forgets it; it'll reappear next time you open that icon.
+              Devices where you've installed this app and opened it in its own window appear here — on iOS via Share → Add to Home Screen, on a Mac via Safari's Share/File → Add to Dock, or via the Install icon in Chrome/Edge's address bar. This isn't a separate login — removing an entry just forgets it; it'll reappear next time you open that icon.
             </div>
           </div>
         </div>
