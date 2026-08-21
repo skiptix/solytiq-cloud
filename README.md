@@ -27,7 +27,7 @@
 - 📂 **Folders & Lists** — Deeply nestable folders and smart lists with custom emojis, colors, and progress tracking.
 - 🗺️ **GPS Tracks & Routing** — Upload, analyze, and map GPX/FIT files directly within your workspace.
 - 📈 **Visual Timelines** — Track project milestones and plan your schedule chronologically.
-- ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via Server-Sent Events.
+- ⚡ **Real-time Sync (SSE)** — A cursor-based delta-sync engine pushes live updates instantly across all devices via Server-Sent Events.
 - 🔒 **Enhanced Security** — Built-in TOTP 2FA support, JWT-based authentication, and hardened security headers.
 - 🤖 **AI Assistant & MCP Server** — A floating AI chat powered by OpenRouter, plus an integrated Model Context Protocol (MCP) server for external AI agents (like Claude) to securely interact with your workspace via OAuth 2.1.
 - 📎 **Cloud File Sharing** — Securely share files (max upload size: 200 MB, Nginx proxy limit: 210 MB) with password protection, expiry dates, and public links.
@@ -157,9 +157,11 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **Two distinct notions of "public":**
   1. `is_public` on lists/folders/timelines = **in-app visibility to workspace members**.
   2. `share_enabled` + `share_token` = **anonymous read-only link** for anyone on the internet (no login), optionally password-protected and/or time-limited.
-- **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
+- **Real-time via a cursor-based delta-sync engine over SSE** — `sync_log` (`BIGSERIAL seq`) is a transactional outbox: `AFTER INSERT/UPDATE/DELETE` triggers on every synced table append a row and `pg_notify` a compact descriptor. `backend/src/syncLog.ts` LISTENs, resolves the audience, and pushes a cursor-tagged frame over `/api/events`. The frame is a nudge only; `GET /api/sync/bootstrap` (full state + cursor) and `GET /api/sync/delta?since=` (changes after the cursor) are authoritative. `frontend/src/store/useSyncStore.ts` owns the cursor and applies deltas into `useAppStore` without a full reload. There is no WebSocket server.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
+- **Admin API is scoped** — `admin_api_keys` are instance-wide credentials (created by admins, hashed, revocable) that carry a `scopes` JSONB array. `routes/adminReadApi.ts` gates each route behind a scope. Beyond `read`, it supports full create/update/delete on behalf of any user via an explicit, validated `ownerId`.
+- **Admin Nuke is a total, self-restarting instance reset** — `DELETE /api/admin/nuke` discovers every table in the `public` schema and `TRUNCATE`s all of them in one statement, deletes every file under `UPLOAD_DIR`, regenerates the setup token, broadcasts a dedicated `event: nuke` SSE frame to every client, and calls `process.exit(0)` to trigger a clean container restart.
 - **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
 - **MCP Server** — Model Context Protocol server over Streamable HTTP. It exposes the shared tool registry to external agents (e.g. the Claude MCP connector) with bearer tokens minted via an OAuth 2.1 connector flow.
 - **Shared AI Tool Registry** — `backend/src/aiTools.ts` uses JSON-Schema specs and secure, user-scoped SQL handlers to prevent prompt injection.
