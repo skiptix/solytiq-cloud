@@ -27,7 +27,7 @@
 - 📂 **Folders & Lists** — Deeply nestable folders and smart lists with custom emojis, colors, and progress tracking.
 - 🗺️ **GPS Tracks & Routing** — Upload, analyze, and map GPX/FIT files directly within your workspace.
 - 📈 **Visual Timelines** — Track project milestones and plan your schedule chronologically.
-- ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via Server-Sent Events.
+- ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via Server-Sent Events using a lightweight cursor-based delta-sync engine.
 - 🔒 **Enhanced Security** — Built-in TOTP 2FA support, JWT-based authentication, and hardened security headers.
 - 🤖 **AI Assistant & MCP Server** — A floating AI chat powered by OpenRouter, plus an integrated Model Context Protocol (MCP) server for external AI agents (like Claude) to securely interact with your workspace via OAuth 2.1.
 - 📎 **Cloud File Sharing** — Securely share files (max upload size: 200 MB, Nginx proxy limit: 210 MB) with password protection, expiry dates, and public links.
@@ -157,7 +157,7 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **Two distinct notions of "public":**
   1. `is_public` on lists/folders/timelines = **in-app visibility to workspace members**.
   2. `share_enabled` + `share_token` = **anonymous read-only link** for anyone on the internet (no login), optionally password-protected and/or time-limited.
-- **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
+- **Real-time via SSE** — A cursor-based delta-sync engine broadcasts exact mutation payloads over `/api/events`; the frontend applies deltas to its local state without a full reload. There is no WebSocket server.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
 - **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
@@ -169,6 +169,7 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **File Uploads** — Handled by `multer`. Max upload size: 200 MB (multer config), Nginx proxy limit: 210 MB. Each user has a 15 GB storage quota.
 - **Security** — IDOR prevention using verified JWT `userId`, strict file path traversal checks, `bcryptjs` for password and share-link hashing, and transaction-based quota checks. Avoid using synchronous I/O operations (like `fs.readFileSync`) in Express route handlers to prevent blocking the Node.js event loop.
 - **Rate Limiting** — Configured in three tiers (`apiLimiter` for general API, `authLimiter` for logins/2FA, and `setupLimiter` for registration/nuke endpoints). The `apiLimiter` is automatically applied to all routes mounted under `/api/` in `backend/src/index.ts`.
+- **Admin Nuke** — `DELETE /api/admin/nuke` is a total, self-restarting instance reset that truncates tables, deletes files, and broadcasts a global SSE frame to clear client-side storage.
 - **Testing** — Vitest is the standard for both frontend and backend suites. To run tests, navigate to their respective directories and run `npm install && npm run test`.
 
 ---
