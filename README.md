@@ -35,6 +35,7 @@
 - 📅 **CalDAV Server** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing meetings.
 - 🗑️ **Trash & Restore** — Comprehensive protection against accidental deletions with a 30-day recovery window.
 - 📋 **Templates** — Capture any list or timeline as a reusable template, keeping relative dates and recursive sublist structures intact.
+- ⚙️ **Automation Hub** — Create flow-chart style, per-workspace automations. Trigger actions (like HTTP requests or isolated-vm code execution) on schedule or when tasks/lists complete.
 
 ---
 
@@ -63,7 +64,7 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 - **Maps:** [Leaflet](https://leafletjs.com/) for rendering GPS tracks
 
 ### Backend
-- **Runtime:** [Node.js 22](https://nodejs.org/) (Alpine-based)
+- **Runtime:** [Node.js 22](https://nodejs.org/) (Alpine-based) + `isolated-vm` (for secure automation code execution)
 - **Framework:** [Express 4](https://expressjs.com/)
 - **Database:** [PostgreSQL 16](https://www.postgresql.org/)
 - **Auth:** JWT + [otplib](https://github.com/yeoju/otplib) (TOTP 2FA) + bcryptjs
