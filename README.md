@@ -145,31 +145,82 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 
 ---
 
+
 ## 🏗️ Architecture & Core Concepts
 
-- **Version Number** — On every deploy / release, update the version string in `frontend/src/components/Sidebar.tsx`. Use semantic versioning.
-- **Migrations in code, not files** — `runMigrations()` in `index.ts` uses guards and idempotent data heals/seeds.
-- **No ORM** — Raw SQL keeps queries explicit and avoids N+1 pitfalls; use `JOIN` freely. When doing bulk database inserts into PostgreSQL using a dynamic parameter array (e.g. `$1, $2...`), remember to chunk the parameters so you do not exceed PostgreSQL's maximum parameter limit (65535).
+- **Migrations in code, not files** — `runMigrations()` in `index.ts` uses `IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` guards and idempotent data heals/seeds. Always append new migrations there.
+- **No ORM** — Raw SQL keeps queries explicit and avoids N+1 pitfalls; use `JOIN` freely.
 - **Zustand over Redux** — Minimal boilerplate; each store is a standalone module. Stores call the API client directly; components call store actions.
 - **Soft delete** — Deleted tasks, lists, folders, and timelines go to their respective `trash*` tables (JSONB payload) with a 30-day `expires_at`. The live tables have no `deleted_at` column.
-- **Task IDs are BIGINT** — Generated client-side as `Date.now()` (milliseconds). Handled as numbers in TypeScript. Use secure integer generation like `crypto.randomInt()` instead of string-based UUIDs like `crypto.randomUUID()` when generating new IDs for these fields. Per-user FK scoping prevents cross-user collisions.
-- **Workspaces scope everything** — Lists, folders, tasks, and timelines carry a `workspace_id`. Every user gets an auto-seeded private "Personal" workspace. Workspace `visibility` plus `workspace_members` govern who can see shared content in-app.
+- **Task IDs are BIGINT** — Generated client-side as `Date.now()` (milliseconds). Per-user FK scoping prevents cross-user collisions; avoid relying on global uniqueness.
+- **Workspaces scope everything** — Lists, folders, tasks, and timelines carry a `workspace_id`. Every user gets an auto-seeded private "Personal" workspace. Workspace `visibility` (`private｜public`) plus `workspace_members` govern who can see shared content in-app.
 - **Two distinct notions of "public":**
   1. `is_public` on lists/folders/timelines = **in-app visibility to workspace members**.
-  2. `share_enabled` + `share_token` = **anonymous read-only link** for anyone on the internet (no login), optionally password-protected and/or time-limited.
-- **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
+  2. `share_enabled` + `share_token` = **anonymous read-only link** for anyone on the internet (no login), optionally password-protected and/or time-limited. These are independent — enabling one does not enable the other.
+- **Real-time via a cursor-based delta-sync engine over SSE** — `sync_log` (`BIGSERIAL seq`) is a transactional outbox: `AFTER INSERT/UPDATE/DELETE` triggers on every synced table (see `runMigrations()`) append a row and `pg_notify` a compact descriptor. `backend/src/syncLog.ts` LISTENs, resolves the audience (workspace members + owner + public contributors), and pushes a cursor-tagged frame over `/api/events` via `broadcastToUsers` (`sse.ts`) — this is what makes a collaborator's edit appear live on every device that can see it, not just the author's. The frame is a nudge only; `GET /api/sync/bootstrap` (full state + cursor) and `GET /api/sync/delta?since=` (changes after the cursor, re-serialized fresh and scoped to the requesting user — the real access boundary) are authoritative. `frontend/src/store/useSyncStore.ts` owns the cursor and applies deltas into `useAppStore` (`applyDeltas`/`hydrateFromSnapshot`) without a full reload. Live by default; `VITE_SYNC_ENGINE=0` reverts to the legacy full/slice-reload loader (`useAppStore.loadFromApi`) as an instant rollback. No WebSocket server, no Redis — a single in-process dispatcher, deliberately isolated so a Redis backplane could replace it later without touching call sites.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
-- **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
-- **MCP Server** — Model Context Protocol server over Streamable HTTP. It exposes the shared tool registry to external agents (e.g. the Claude MCP connector) with bearer tokens minted via an OAuth 2.1 connector flow.
-- **Shared AI Tool Registry** — `backend/src/aiTools.ts` uses JSON-Schema specs and secure, user-scoped SQL handlers to prevent prompt injection.
-- **Mobile Responsiveness** — Every new component must work correctly on mobile (≥ 390px, e.g. iPhone 15 Pro) with mobile as an adaptive layer on top of desktop.
-- **Task Source Duality** — Tasks have a source duality (`'dash'` or `'list'`) which dictates the appropriate frontend store actions to use (`updateDashTask` vs `updateListTask`).
-- **Sublists & Linked Lists** — Created by having a list task link to another list via `linkedListId` and `linkedListType` properties.
-- **File Uploads** — Handled by `multer`. Max upload size: 200 MB (multer config), Nginx proxy limit: 210 MB. Each user has a 15 GB storage quota.
-- **Security** — IDOR prevention using verified JWT `userId`, strict file path traversal checks, `bcryptjs` for password and share-link hashing, and transaction-based quota checks. Avoid using synchronous I/O operations (like `fs.readFileSync`) in Express route handlers to prevent blocking the Node.js event loop.
-- **Rate Limiting** — Configured in three tiers (`apiLimiter` for general API, `authLimiter` for logins/2FA, and `setupLimiter` for registration/nuke endpoints). The `apiLimiter` is automatically applied to all routes mounted under `/api/` in `backend/src/index.ts`.
-- **Testing** — Vitest is the standard for both frontend and backend suites. To run tests, navigate to their respective directories and run `npm install && npm run test`.
+- **Admin API is scoped** — `admin_api_keys` are instance-wide credentials (created by admins, hashed, revocable) that carry a `scopes` JSONB array. `routes/adminReadApi.ts` (mounted at `/api/admin-read`) gates each route behind a scope from `ADMIN_API_SCOPES` in `adminApiKey.ts` (`read`, `users`, `workspaces`, `folders`, `lists`, `timelines`, `meetings`); the creation wizard (`modals/AdminApiKeyWizard.tsx`) toggles them. Beyond `read` (the export), it supports full create/update/delete for those resources on behalf of any user — the target owner comes from an explicit, validated `ownerId` (defaulting to the key creator), never trusted blindly. Add new scopes to `ADMIN_API_SCOPES` and `ADMIN_API_FEATURES` together.
+- **Admin Nuke is a total, self-restarting instance reset** — `DELETE /api/admin/nuke` (`routes/admin.ts`, admin-only + password re-check) discovers every table in the `public` schema via `pg_tables` (never a hardcoded list — a fixed list silently stops covering new tables as the schema grows) and `TRUNCATE`s all of them in one statement, deletes every file under `UPLOAD_DIR` (shared files, task/milestone attachments, GPS/FIT tracks all live flatly there), regenerates the setup token, then broadcasts a dedicated `event: nuke` SSE frame to **every** connected client of **every** user (`broadcastToUsers`'s sibling `broadcastNukeToAll` in `sse.ts` — a `TRUNCATE` doesn't fire row-level triggers, so this bypasses the normal sync_log pipeline entirely) telling each tab to clear its storage and land on `/setup` immediately, rather than waiting for its next API call to 401. It then calls `process.exit(0)` after a short delay so Docker Compose's `restart: unless-stopped` policy relaunches a fully clean process — the only way to guarantee no in-memory state (the SSE registry, rate-limiter counters, the sync dispatcher's LISTEN connection) survives. Set `NUKE_SKIP_RESTART=true` to opt out when running without a process supervisor that will bring the process back up.
+
+---
+
+## Build & Scripts
+
+### Frontend
+
+```bash
+cd frontend
+npm run dev       # Vite HMR dev server (localhost:5173)
+npm run build     # tsc -b && vite build → dist/
+npm run lint      # ESLint (flat config, TypeScript + React hooks)
+npm run preview   # Serve the built dist/
+npm test          # vitest run
+```
+
+### Backend
+
+```bash
+cd backend
+npm run dev       # ts-node-dev --respawn src/index.ts (port 3001)
+npm run build     # tsc → dist/
+npm run start     # node dist/index.js (production)
+npm test          # vitest run
+```
+
+### Docker
+
+```bash
+docker compose up --build       # Full stack
+docker compose up --build backend  # Rebuild only backend
+docker compose logs -f backend  # Stream backend logs
+```
+
+
+---
+
+## Tests
+
+A **Vitest** suite exists (`npm test` in both `backend/` and `frontend/`). Coverage is currently minimal — the only committed backend tests are GPX parsing tests in `backend/src/__tests__/gpx.test.ts` with `.gpx` fixtures. There are no frontend tests yet. Vitest is the standard for new tests in both packages; add backend tests under `src/__tests__/`. Beyond automated tests, verify manually:
+- Backend: `curl` or a REST client against `http://localhost:3001`
+- Frontend: run the dev server and test in browser
+
+
+---
+
+## Security Notes
+
+These issues were identified and fixed (see `security_report.md`). Do not regress them:
+
+1. **IDOR** — All DB queries must filter by `user_id = $userId` extracted from the verified JWT, never from request body/params alone. Workspace-scoped reads must additionally honor membership/visibility (see `workspaceUtil.ts`).
+2. **JWT_SECRET** — Must be a strong random secret. Backend exits in production if it is the placeholder default. `token_version` allows mass-invalidating tokens.
+3. **Rate limiting** — Auth, 2FA, setup, and destructive endpoints have tighter limits. Do not remove these.
+4. **File path traversal** — Use `path.resolve` / `path.join` carefully when serving files (shared files, attachments, GPS files). Validate that the resolved path stays within its upload dir.
+5. **Profile image uploads** — Validate MIME type and file extension server-side before saving.
+6. **Password hashing** — Always use `bcryptjs` for account passwords AND share-link passwords. Never log or return hashes.
+7. **Race conditions** — Storage quota checks must be done inside a transaction or with `SELECT ... FOR UPDATE` to prevent over-quota uploads under concurrent load.
+8. **Public share endpoints** — `/api/share/*` are intentionally unauthenticated. They must only ever expose data when the relevant `share_enabled`/`is_public` flag is set, must enforce password + expiry, and must never leak owner-only fields (hashes, internal IDs, private sibling data).
+
 
 ---
 
