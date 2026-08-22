@@ -27,7 +27,9 @@
 - 📂 **Folders & Lists** — Deeply nestable folders and smart lists with custom emojis, colors, and progress tracking.
 - 🗺️ **GPS Tracks & Routing** — Upload, analyze, and map GPX/FIT files directly within your workspace.
 - 📈 **Visual Timelines** — Track project milestones and plan your schedule chronologically.
-- ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via Server-Sent Events.
+- ⚡ **Real-time Sync (SSE)** — A cursor-based delta-sync engine over SSE ensures mutations broadcast changes without full reloads.
+- 🔌 **Apps Registry** — A plugin system allowing admins to dynamically install or uninstall optional features (like GPS Routes, Cloud File Sharing) without altering the core codebase.
+- ⚡ **Automation Hub** — Executes user-supplied JavaScript using the 'isolated-vm' library for secure sandboxing, deliberately avoiding Node's built-in 'vm' module due to security vulnerabilities.
 - 🔒 **Enhanced Security** — Built-in TOTP 2FA support, JWT-based authentication, and hardened security headers.
 - 🤖 **AI Assistant & MCP Server** — A floating AI chat powered by OpenRouter, plus an integrated Model Context Protocol (MCP) server for external AI agents (like Claude) to securely interact with your workspace via OAuth 2.1.
 - 📎 **Cloud File Sharing** — Securely share files (max upload size: 200 MB, Nginx proxy limit: 210 MB) with password protection, expiry dates, and public links.
@@ -157,7 +159,7 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **Two distinct notions of "public":**
   1. `is_public` on lists/folders/timelines = **in-app visibility to workspace members**.
   2. `share_enabled` + `share_token` = **anonymous read-only link** for anyone on the internet (no login), optionally password-protected and/or time-limited.
-- **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
+- **Real-time via a cursor-based delta-sync engine over SSE** — `sync_log` acts as a transactional outbox over `/api/events`. This authoritative delta engine applies changes directly into the Zustand store without a full reload. There is no WebSocket server.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
 - **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
