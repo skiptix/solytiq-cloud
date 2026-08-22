@@ -27,9 +27,12 @@
 - 📂 **Folders & Lists** — Deeply nestable folders and smart lists with custom emojis, colors, and progress tracking.
 - 🗺️ **GPS Tracks & Routing** — Upload, analyze, and map GPX/FIT files directly within your workspace.
 - 📈 **Visual Timelines** — Track project milestones and plan your schedule chronologically.
-- ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via Server-Sent Events.
+- ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices using a cursor-based delta-sync engine over SSE (via a `sync_log` outbox), avoiding full reloads.
 - 🔒 **Enhanced Security** — Built-in TOTP 2FA support, JWT-based authentication, and hardened security headers.
 - 🤖 **AI Assistant & MCP Server** — A floating AI chat powered by OpenRouter, plus an integrated Model Context Protocol (MCP) server for external AI agents (like Claude) to securely interact with your workspace via OAuth 2.1.
+- 🤖 **Inline AI Assist** — AI capabilities within Notes & Markdown pages.
+- ⚙️ **Automation Hub** — Executes user-supplied JavaScript automations using secure `isolated-vm` sandboxing.
+- 🔌 **Apps Registry** — Dynamically install or uninstall optional features (like GPS Routes and Cloud File Sharing) via an admin plugin system.
 - 📎 **Cloud File Sharing** — Securely share files (max upload size: 200 MB, Nginx proxy limit: 210 MB) with password protection, expiry dates, and public links.
 - 👥 **Multi-User & Admin** — Full member management with 15 GB per-user storage quotas and admin-controlled permissions.
 - 📅 **CalDAV Server** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing meetings.
@@ -152,13 +155,17 @@ The GPS route planner calls public upstreams (Overpass for POIs, Valhalla for ro
 - **No ORM** — Raw SQL keeps queries explicit and avoids N+1 pitfalls; use `JOIN` freely. When doing bulk database inserts into PostgreSQL using a dynamic parameter array (e.g. `$1, $2...`), remember to chunk the parameters so you do not exceed PostgreSQL's maximum parameter limit (65535).
 - **Zustand over Redux** — Minimal boilerplate; each store is a standalone module. Stores call the API client directly; components call store actions.
 - **Soft delete** — Deleted tasks, lists, folders, and timelines go to their respective `trash*` tables (JSONB payload) with a 30-day `expires_at`. The live tables have no `deleted_at` column.
-- **Task IDs are BIGINT** — Generated client-side as `Date.now()` (milliseconds). Handled as numbers in TypeScript. Use secure integer generation like `crypto.randomInt()` instead of string-based UUIDs like `crypto.randomUUID()` when generating new IDs for these fields. Per-user FK scoping prevents cross-user collisions.
+- **Task IDs are BIGINT** — Generated client-side as `Date.now()` (milliseconds). Handled as numbers in TypeScript. Per-user FK scoping prevents cross-user collisions.
 - **Workspaces scope everything** — Lists, folders, tasks, and timelines carry a `workspace_id`. Every user gets an auto-seeded private "Personal" workspace. Workspace `visibility` plus `workspace_members` govern who can see shared content in-app.
 - **Two distinct notions of "public":**
   1. `is_public` on lists/folders/timelines = **in-app visibility to workspace members**.
   2. `share_enabled` + `share_token` = **anonymous read-only link** for anyone on the internet (no login), optionally password-protected and/or time-limited.
-- **Real-time via SSE** — Mutations broadcast refresh signals over `/api/events`; the frontend reloads affected slices. There is no WebSocket server.
+- **Real-time via a cursor-based delta-sync engine over SSE** — `sync_log` outbox logs mutations, and a dispatcher broadcasts a cursor over `/api/events`. The frontend applies deltas via `/api/sync/delta` without a full reload. There is no WebSocket server.
 - **AI via OpenRouter** — The AI endpoint is a thin proxy. Model and enabled state live in `app_settings` so admins can change them without redeployment. Chat sessions and uploaded files expire after 30 days.
+- **Inline AI Assist** — An Ask AI button in note editors calls `POST /api/ai/chat` directly with item context, without a dedicated backend endpoint.
+- **Automation Hub** — Executes user-supplied JavaScript using the secure `isolated-vm` library for sandboxing.
+- **Apps Registry** — Admin-installable catalog plugin system (`backend/src/appsRegistry.ts`) to dynamically enable optional features (e.g., GPS Routes, Cloud File Sharing).
+- **Admin Nuke** — Total self-restarting instance reset (`DELETE /api/admin/nuke`) that truncates tables, deletes files, and broadcasts a global SSE frame. Set `NUKE_SKIP_RESTART=true` to skip the auto-restart.
 - **GPS route state is versioned** — `gps_files.route_state` is `GpsRouteStateV1`; bump the version and migrate the shape if its structure changes.
 - **CalDAV Server** — Built-in read/write CalDAV server (a focused subset of RFC 4791 / WebDAV). It lets Apple Calendar, Thunderbird, etc. subscribe to everything on the Calendar page via HTTP Basic auth with generated app passwords.
 - **MCP Server** — Model Context Protocol server over Streamable HTTP. It exposes the shared tool registry to external agents (e.g. the Claude MCP connector) with bearer tokens minted via an OAuth 2.1 connector flow.
