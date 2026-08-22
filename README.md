@@ -29,12 +29,17 @@
 - 📈 **Visual Timelines** — Track project milestones and plan your schedule chronologically.
 - ⚡ **Real-time Sync (SSE)** — Changes sync instantly across all devices via Server-Sent Events.
 - 🔒 **Enhanced Security** — Built-in TOTP 2FA support, JWT-based authentication, and hardened security headers.
-- 🤖 **AI Assistant & MCP Server** — A floating AI chat powered by OpenRouter, plus an integrated Model Context Protocol (MCP) server for external AI agents (like Claude) to securely interact with your workspace via OAuth 2.1.
+- 🤖 **AI Assistant & MCP Server** — A floating AI chat powered by OpenRouter (with Inline AI Assist in note editors), plus an integrated Model Context Protocol (MCP) server for external AI agents (like Claude) to securely interact with your workspace via OAuth 2.1.
 - 📎 **Cloud File Sharing** — Securely share files (max upload size: 200 MB, Nginx proxy limit: 210 MB) with password protection, expiry dates, and public links.
-- 👥 **Multi-User & Admin** — Full member management with 15 GB per-user storage quotas and admin-controlled permissions.
+- 👥 **Multi-User & Admin** — Full member management with 15 GB per-user storage quotas, admin-controlled permissions, and an Admin Nuke feature for total instance resets.
 - 📅 **CalDAV Server** — Built-in CalDAV support allowing native integration with external calendar apps (Apple Calendar, Thunderbird, etc.) for viewing milestones/tasks and managing meetings.
-- 🗑️ **Trash & Restore** — Comprehensive protection against accidental deletions with a 30-day recovery window.
+- 🗑️ **Trash & Restore** — Comprehensive protection against accidental deletions with a 30-day recovery window (soft delete to trash tables with a JSONB payload).
 - 📋 **Templates** — Capture any list or timeline as a reusable template, keeping relative dates and recursive sublist structures intact.
+- 🔌 **Apps Registry** — Admin-installable plugin system (GPS, Files, MCP, Automations) to dynamically enable optional features.
+- ⚡ **Automation Hub** — Securely execute user-supplied JavaScript inside an `isolated-vm` sandbox, utilizing linear V1 graphs and eval-free token syntax for parameters.
+
+- 🌍 **Two Notions of Public** — Distinct controls for in-app workspace visibility (`is_public`) versus anonymous read-only links (`share_enabled`).
+- 👁️ **Shared View Modes** — Public lists can be configured to display as a List, Kanban board, or Timeline, independently of the owner's preferred view.
 
 ---
 
@@ -70,6 +75,7 @@ Solytiq Cloud is built on a specific aesthetic foundation designed to reduce cog
 - **File Handling:** Multer (with disk storage)
 - **AI Integration:** [OpenRouter API](https://openrouter.ai/) + [@modelcontextprotocol/sdk](https://github.com/modelcontextprotocol/sdk) (MCP server + OAuth 2.1)
 - **Data Parsing:** GPX & FIT file processing (`fast-xml-parser`, `fit-file-parser`), and PDF/spreadsheet data extraction (`pdf-parse`, `xlsx`)
+- **Execution Sandbox:** `isolated-vm` (for secure Automation Hub sandboxing)
 
 ---
 
