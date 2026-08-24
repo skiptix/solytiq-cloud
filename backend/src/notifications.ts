@@ -23,6 +23,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { query } from './db';
 import { sendEmail } from './email/resendClient';
 import { buildNotificationEmail } from './email/templates';
+import { sendPushForNotification } from './push/send';
 
 export type NotificationType =
   | 'workspace_added'
@@ -35,7 +36,14 @@ export type NotificationType =
   | 'agent_run_complete'
   | 'agent_proposal'
   | 'agent_change'
-  | 'meeting_reminder';
+  | 'meeting_reminder'
+  // Collaboration activity on a shared item — see collaborators.ts. These fan
+  // out to everyone invited to (or tagged on) the board/page/timeline, which is
+  // a much wider audience than the targeted types above, so they are the ones
+  // that most need the collapse-by-entity behaviour in push/send.ts.
+  | 'item_added'
+  | 'milestone_changed'
+  | 'page_edited';
 
 // ---------------------------------------------------------------------------
 // Email notifications (via Resend) — an additive channel on top of the
@@ -65,6 +73,12 @@ export const DEFAULT_EMAIL_PREFS: Record<NotificationType, boolean> = {
   agent_run_complete: false,
   agent_proposal: false,
   agent_change: false,
+  // Activity types are the highest-volume notifications in the app — a busy
+  // board can produce dozens a day. Email is the wrong medium for that, so they
+  // default OFF here while defaulting ON for push (see DEFAULT_PUSH_PREFS).
+  item_added: false,
+  milestone_changed: false,
+  page_edited: false,
 };
 
 /** Per-type extra filter beyond the recipient's on/off preference — e.g. a
@@ -184,10 +198,27 @@ export async function createNotification(input: CreateNotificationInput): Promis
         input.dedupeKey ?? null,
       ]
     );
-    // Only a genuinely NEW row (not a dedupe no-op) should ever email — a
-    // repeat overdue-deadline sweep hitting the ON CONFLICT DO NOTHING branch
-    // must not re-send mail every hour just because it re-ran the insert.
-    if ((inserted.rowCount ?? 0) > 0) void maybeSendEmail(input);
+    // Only a genuinely NEW row (not a dedupe no-op) should ever email or push
+    // — a repeat overdue-deadline sweep hitting the ON CONFLICT DO NOTHING
+    // branch must not re-send mail (or re-buzz a phone) every hour just because
+    // it re-ran the insert. Push rides this exact hook rather than getting its
+    // own call sites, so every present and future NotificationType reaches a
+    // device by construction.
+    if ((inserted.rowCount ?? 0) > 0) {
+      void maybeSendEmail(input);
+      void sendPushForNotification({
+        userId:        input.userId,
+        actorId:       input.actorId ?? null,
+        type:          input.type,
+        title:         input.title,
+        body:          input.body ?? null,
+        entityType:    input.entityType ?? null,
+        entityId:      input.entityId ?? null,
+        workspaceId:   input.workspaceId ?? null,
+        data:          input.data,
+        notificationId: id,
+      });
+    }
   } catch (err) {
     nerr('createNotification failed', input.type, input.userId, err);
   }

@@ -16,6 +16,8 @@ import useNotificationsStore from './store/useNotificationsStore';
 import useSharedItemsStore from './store/useSharedItemsStore';
 import { apiCheckSetupRequired, apiPingHomescreenConnection, connectSSE, disconnectSSE, setUnauthorizedHandler } from './api/client';
 import { isHomeScreenApp, getOrCreateInstallId, detectHomeScreenDevice } from './utils/homescreen';
+import usePushStore from './store/usePushStore';
+import PushPermissionPrompt from './components/PushPermissionPrompt';
 
 // Delta-sync engine is on by default; set VITE_SYNC_ENGINE=0 to fall back to the
 // classic full/slice-reload loader (instant rollback without a redeploy).
@@ -472,6 +474,30 @@ function AppLayout() {
   const activeGpsFileId = location.pathname.startsWith('/gps') ? new URLSearchParams(location.search).get('file') ?? undefined : undefined;
   const activeMarkdownListId = location.pathname.startsWith('/markdown-list/') ? location.pathname.split('/markdown-list/')[1] : undefined;
 
+  // A tap on a delivered notification wakes the service worker, which focuses
+  // this window and posts the target route here rather than hard-loading it —
+  // so the SPA routes with its own router (and marks the notification read)
+  // instead of throwing away in-flight state. See frontend/public/sw.js.
+  const currentUserId = useAuthStore((s) => s.userId);
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; url?: string; notificationId?: string | null } | undefined;
+      if (data?.type !== 'notification-click' || !data.url) return;
+      navigate(data.url);
+      if (data.notificationId) void useNotificationsStore.getState().markRead(data.notificationId);
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [navigate]);
+
+  // The one-shot permission pre-prompt. `shouldShowPrompt` reads store state
+  // that init() populates, so this only becomes true once we actually know the
+  // platform supports push and the OS hasn't already answered — never on the
+  // first render, and never on a platform where it couldn't succeed.
+  const showPushPrompt = usePushStore((s) => s.shouldShowPrompt(currentUserId));
+  const [pushPromptClosed, setPushPromptClosed] = useState(false);
+
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {/* Sprint 03, Phase 3 — skip link. The very first focusable element in
@@ -621,6 +647,10 @@ function AppLayout() {
         </PopIn>
       )}
 
+      {showPushPrompt && !pushPromptClosed && currentUserId && (
+        <PushPermissionPrompt userId={currentUserId} onClose={() => setPushPromptClosed(true)} />
+      )}
+
       {workspacesLoaded && workspaces.length === 0 && !location.pathname.startsWith('/settings') && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 450, backdropFilter: 'blur(10px)', background: 'rgba(var(--color-surface-tint-rgb), 0.65)', pointerEvents: 'all' }} />
@@ -671,6 +701,18 @@ export default function App() {
   // (covers the Home Screen icon being reopened after being backgrounded), so
   // Account Settings → Mobile can list these installs alongside native app
   // devices. A no-op on a regular browser tab.
+  // Push notifications — register the service worker, read the current OS
+  // permission, and silently re-subscribe when it is already granted (which
+  // also repairs a subscription the browser rotated or one bound to a VAPID key
+  // this instance no longer has). Never asks for permission: that needs a user
+  // gesture, and PushPermissionPrompt owns it. Runs on every platform, not just
+  // standalone — desktop Chrome/Edge/Firefox support push in a normal tab.
+  const initPush = usePushStore((s) => s.init);
+  useEffect(() => {
+    if (!loggedIn) return;
+    void initPush();
+  }, [loggedIn, initPush]);
+
   useEffect(() => {
     if (!loggedIn || !isHomeScreenApp()) return;
     const installId = getOrCreateInstallId();

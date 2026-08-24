@@ -54,6 +54,8 @@ interface UserRow {
   last_route: string | null;
   email_notification_prefs: Record<string, boolean>;
   meeting_reminder_lead_minutes: number;
+  push_enabled: boolean;
+  push_notification_prefs: Record<string, boolean>;
 }
 
 function sanitizeUser(user: UserRow) {
@@ -70,6 +72,11 @@ function sanitizeUser(user: UserRow) {
     lastRoute:                 user.last_route ?? null,
     emailNotificationPrefs:    user.email_notification_prefs ?? {},
     meetingReminderLeadMinutes: user.meeting_reminder_lead_minutes ?? 30,
+    // `push_enabled` is the master switch; `pushNotificationPrefs` is the same
+    // sparse-override convention as the email map (absent type ⇒ the default in
+    // push/send.ts's DEFAULT_PUSH_PREFS).
+    pushEnabled:               user.push_enabled ?? true,
+    pushNotificationPrefs:     user.push_notification_prefs ?? {},
   };
 }
 
@@ -588,7 +595,12 @@ const EMAIL_PREF_TYPES = new Set([
   'workspace_added', 'item_invite', 'meeting_invite', 'item_tagged', 'mention',
   'automation_run', 'meeting_reminder', 'deadline_overdue',
   'agent_run_complete', 'agent_proposal', 'agent_change',
+  'item_added', 'milestone_changed', 'page_edited',
 ]);
+// Push accepts the same set of types — one allow-list, so a new
+// NotificationType can never end up configurable on one channel and silently
+// rejected on the other.
+const PUSH_PREF_TYPES = EMAIL_PREF_TYPES;
 const ALLOWED_REMINDER_LEAD_MINUTES = new Set([0, 15, 30, 60, 120]);
 
 // PUT /api/auth/email-notifications — save this user's per-type email
@@ -649,6 +661,71 @@ router.put('/email-notifications', authenticate, async (req: Request, res: Respo
     res.json({ user: sanitizeUser(result.rows[0]) });
   } catch (err) {
     console.error('email-notifications update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/auth/push-notifications — save this user's push preferences: the
+// master on/off switch and/or the sparse per-type override map. Either field
+// may be omitted to leave it unchanged, exactly like /email-notifications.
+//
+// This is the "disable" control the Notifications settings tab drives. It is
+// deliberately SEPARATE from unsubscribing a device: turning push off here
+// stops delivery instantly for every device at once and survives a reinstall,
+// whereas revoking the browser subscription only silences the one device and
+// is re-created the next time the app asks. A user who wants quiet wants the
+// former.
+router.put('/push-notifications', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { enabled, prefs } = req.body as { enabled?: unknown; prefs?: unknown };
+
+    let enabledValue: boolean | null = null;
+    if (enabled !== undefined) {
+      if (typeof enabled !== 'boolean') {
+        res.status(400).json({ error: 'enabled must be a boolean' });
+        return;
+      }
+      enabledValue = enabled;
+    }
+
+    let prefsJson: string | null = null;
+    if (prefs !== undefined) {
+      if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs)) {
+        res.status(400).json({ error: 'prefs must be an object' });
+        return;
+      }
+      const entries = Object.entries(prefs as Record<string, unknown>);
+      if (entries.length > PUSH_PREF_TYPES.size) {
+        res.status(400).json({ error: 'Too many preference entries' });
+        return;
+      }
+      for (const [type, v] of entries) {
+        if (!PUSH_PREF_TYPES.has(type)) {
+          res.status(400).json({ error: `Unknown notification type: ${type}` });
+          return;
+        }
+        if (typeof v !== 'boolean') {
+          res.status(400).json({ error: 'Invalid preference value' });
+          return;
+        }
+      }
+      prefsJson = JSON.stringify(prefs);
+    }
+
+    const result = await query<UserRow>(
+      `UPDATE users SET
+         push_enabled = COALESCE($1::boolean, push_enabled),
+         push_notification_prefs = COALESCE($2::jsonb, push_notification_prefs)
+       WHERE id = $3 RETURNING *`,
+      [enabledValue, prefsJson, req.userId]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    res.json({ user: sanitizeUser(result.rows[0]) });
+  } catch (err) {
+    console.error('push-notifications update error:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

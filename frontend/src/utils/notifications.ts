@@ -75,6 +75,15 @@ export function notificationVisual(n: AppNotification): NotificationVisual {
     }
     case 'deadline_overdue':
       return { icon: 'event_busy', color: 'var(--color-error)', bg: 'var(--color-error-bg)' };
+    // Collaboration activity on a shared board / page / timeline. Each gets the
+    // icon of the thing that actually changed, so a glance down the feed reads
+    // as "what happened", not just "something happened".
+    case 'item_added':
+      return { icon: 'add_task', color: 'var(--color-primary)', bg: 'var(--color-surface-tint)' };
+    case 'page_edited':
+      return { icon: 'edit_document', color: 'var(--color-primary)', bg: 'var(--color-surface-tint)' };
+    case 'milestone_changed':
+      return { icon: 'flag', color: 'var(--color-blue-mid-7)', bg: 'var(--color-blue-pale-2)' };
     case 'agent_run_complete':
     case 'agent_proposal':
     case 'agent_change':

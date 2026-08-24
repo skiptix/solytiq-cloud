@@ -17,6 +17,7 @@ import { createListTask, updateListTaskFields, deleteTaskRow } from './lists';
 import { UPLOAD_DIR } from './files';
 import type { MutationActor } from '../automationEngine';
 import { notifyNewMentions } from '../mentions';
+import { notifyItemActivity, PAGE_EDIT_COALESCE_SECONDS } from '../collaborators';
 import { itemShareExists, isItemSharedWith, deleteItemShares } from '../itemShares';
 import { syncInlineLinksForBlocks } from '../graph/inlineLinks';
 import { consumeAssetTicket } from '../assetTickets';
@@ -300,6 +301,27 @@ async function pruneUnreferencedImages(exec: QueryExec, markdownListId: string, 
 // optimistic-concurrency state).
 // ---------------------------------------------------------------------------
 
+/**
+ * Tell this page's collaborators it was edited.
+ *
+ * Both content-write paths (the manual-edit PUT and mutateMarkdownListBlocks)
+ * call this, so an AI edit and a typed one notify identically. Coalesced over a
+ * quarter-hour window per (page, editor): a person writing a document produces
+ * a save every few seconds, and one notification per save would make this
+ * feature something people switch off rather than something they rely on.
+ */
+function notifyPageEdited(markdownListId: string, name: string, actorId: string): void {
+  void notifyItemActivity({
+    itemType: 'markdownList',
+    itemId: markdownListId,
+    actorId,
+    type: 'page_edited',
+    title: `edited "${name}"`,
+    body: 'The page has new changes.',
+    coalesceSeconds: PAGE_EDIT_COALESCE_SECONDS,
+  });
+}
+
 export async function mutateMarkdownListBlocks(
   userId: string,
   markdownListId: string,
@@ -357,6 +379,7 @@ export async function mutateMarkdownListBlocks(
   });
   await syncInlineLinksForBlocks({ entityType: 'markdownList', entityId: markdownListId }, result.rows[0] ? normalizeContent((result.rows[0] as unknown as MarkdownListRow).content).blocks : [], userId);
   await enqueueEmbedding('markdownList', markdownListId, existing.rows[0].workspace_id);
+  notifyPageEdited(markdownListId, hydrated.name, userId);
   return { ok: true, markdownList: hydrated };
 }
 
@@ -614,6 +637,7 @@ router.put('/:id', authenticate, async (req: Request, res: Response) => {
       });
       await syncInlineLinksForBlocks({ entityType: 'markdownList', entityId: id }, normalizeContent((result.rows[0] as unknown as MarkdownListRow).content).blocks, req.userId!);
       await enqueueEmbedding('markdownList', id, row.workspace_id);
+      notifyPageEdited(id, hydrated.name, req.userId!);
     }
   } catch (err) {
     werr('markdown-lists PUT error:', err);

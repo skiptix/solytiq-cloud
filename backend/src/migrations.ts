@@ -898,6 +898,61 @@ export async function runMigrations() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS homescreen_connections_user_idx ON homescreen_connections(user_id)`);
 
+  // ── Web Push (iOS Home Screen / installed PWA notifications) ─────────────
+  // One row per *push subscription*, which is NOT the same thing as a
+  // homescreen_connections row: a subscription is minted by the browser's
+  // push service and is keyed on its own opaque `endpoint` URL, survives
+  // independently of our locally-persisted install id, and is revoked by the
+  // push service (410 Gone) rather than by us. `install_id` is carried only
+  // as a label so Account Settings can line a subscription up with the Home
+  // Screen install it came from — deliberately no FK, since a subscription
+  // is still perfectly valid after its tracked install row is forgotten.
+  //
+  // p256dh/auth are the subscription's own public encryption material, sent
+  // by the browser in plaintext and useless without the endpoint — they are
+  // not a user secret, so unlike the VAPID private key below they are stored
+  // as-is.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      endpoint      TEXT NOT NULL UNIQUE,
+      p256dh        TEXT NOT NULL,
+      auth          TEXT NOT NULL,
+      install_id    VARCHAR(100),
+      device_name   VARCHAR(255) NOT NULL DEFAULT 'Home Screen App',
+      os_version    VARCHAR(255),
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_used_at  TIMESTAMPTZ,
+      last_error    TEXT,
+      failure_count INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions(user_id)`);
+
+  // Per-user push preferences. Deliberately TWO settings, not one map:
+  //   • push_enabled  — the master switch the Notifications tab shows first.
+  //     Off means "never push me", regardless of any per-type entry, so a
+  //     user who wants silence flips one control rather than eleven.
+  //   • push_notification_prefs — sparse per-type overrides (same convention
+  //     as email_notification_prefs / keyboard_shortcuts; a type absent here
+  //     falls back to push/send.ts's DEFAULT_PUSH_PREFS).
+  // Unlike email — which defaults almost entirely OFF because an inbox is
+  // someone else's space — push defaults ON per type: the device only ever
+  // receives anything at all once the user has explicitly granted iOS
+  // permission, which is itself the opt-in.
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS push_enabled BOOLEAN NOT NULL DEFAULT true`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS push_notification_prefs JSONB NOT NULL DEFAULT '{}'::jsonb`);
+
+  // The instance's VAPID keypair identifies THIS server to Apple/Google/
+  // Mozilla's push services. It is generated once on first boot (see
+  // push/vapid.ts) rather than being an env var, so a self-hosted instance
+  // needs no extra configuration to get working push — and it must stay
+  // stable afterwards, because every existing subscription is bound to the
+  // public key it was created with. The private half is encrypted at rest
+  // with the same AES-256-GCM helper the Resend API key uses.
+  await pool.query(`INSERT INTO app_settings (key, value) VALUES ('push_enabled', 'true') ON CONFLICT (key) DO NOTHING`);
+
   // ── Templates ────────────────────────────────────────────────────────────
   // User-owned, workspace-agnostic snapshots of a list's or timeline's full
   // structure (sections/tasks incl. nested sublists, or milestones), reusable
