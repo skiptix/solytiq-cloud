@@ -11,6 +11,7 @@ import useAuthStore from '../store/useAuthStore';
 import useUserPrefsStore from '../store/useUserPrefsStore';
 import useShortcutsStore from '../store/useShortcutsStore';
 import useAiMemoryStore from '../store/useAiMemoryStore';
+import usePushStore from '../store/usePushStore';
 import { SHORTCUT_DEFS, bindingFor, comboFromEvent, formatCombo, isReservedCombo } from '../shortcuts/registry';
 import {
   apiUpdateProfile,
@@ -673,9 +674,12 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
             </MotionIn>
             )}
 
-            {/* ── NOTIFICATIONS (email) ── */}
+            {/* ── NOTIFICATIONS (push, then email) ── */}
             {activeTab === 'notifications' && (
             <MotionIn initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.34, delay: 0.05, ease: EASE_SETTLE }}>
+              {sectionLabel('Push Notifications')}
+              <PushNotificationsSection />
+              <div style={{ height: 26 }} />
               {sectionLabel('Email Notifications')}
               <EmailNotificationsSection />
             </MotionIn>
@@ -1496,6 +1500,238 @@ interface EmailNotificationSettings {
   leadMinutes: number;
 }
 const DEFAULT_EMAIL_NOTIFICATION_SETTINGS: EmailNotificationSettings = { prefs: {}, leadMinutes: 30 };
+
+// ── Push notifications ───────────────────────────────────────────────────────
+// Mirrors the email section's shape deliberately (same card, same toggle, same
+// optimistic-with-rollback save), because they are the same idea on two
+// channels and looking alike is what makes that obvious. The differences are
+// all real ones: push has an OS permission the app does not control, a
+// per-device registration, and a master switch.
+//
+// Every type defaults ON here (see push/send.ts's DEFAULT_PUSH_PREFS), unlike
+// email — granting the OS permission IS the opt-in, so the two low-signal
+// exceptions are the only ones listed as off by default.
+const DEFAULT_OFF_PUSH_TYPES = new Set(['agent_run_complete', 'agent_change']);
+const PUSH_NOTIFICATION_DEFS: { id: string; label: string; description: string; icon: string }[] = [
+  { id: 'mention', label: 'Mentions & tags', description: 'Someone @-mentions you in a note, or tags you on an item.', icon: 'alternate_email' },
+  { id: 'item_added', label: 'New items', description: 'An item is added to a board you share.', icon: 'add_task' },
+  { id: 'page_edited', label: 'Page edits', description: 'A markdown page you share is edited.', icon: 'edit_document' },
+  { id: 'milestone_changed', label: 'Milestone changes', description: 'A milestone is added or updated on a timeline you share.', icon: 'flag' },
+  { id: 'item_invite', label: 'Item invitations', description: "You're invited to a board, page, timeline or folder.", icon: 'person_add' },
+  { id: 'workspace_added', label: 'Workspace invitations', description: "You're added to a workspace.", icon: 'group_add' },
+  { id: 'deadline_overdue', label: 'Overdue deadlines', description: 'A task you own or are tagged on passes its deadline.', icon: 'event_busy' },
+  { id: 'meeting_invite', label: 'Meeting invitations', description: "You're invited to a meeting.", icon: 'event' },
+  { id: 'meeting_reminder', label: 'Meeting reminders', description: 'A meeting on your calendar is about to start.', icon: 'notifications_active' },
+  { id: 'automation_run', label: 'Automation failures', description: 'An automation you own fails to run.', icon: 'bolt' },
+  { id: 'agent_proposal', label: 'Agent proposals', description: 'An AI agent needs you to approve an action.', icon: 'smart_toy' },
+];
+
+function PushNotificationsSection() {
+  const supported = usePushStore(s => s.supported);
+  const needsInstall = usePushStore(s => s.needsInstall);
+  const permission = usePushStore(s => s.permission);
+  const subscribed = usePushStore(s => s.subscribed);
+  const enabled = usePushStore(s => s.enabled);
+  const prefs = usePushStore(s => s.prefs);
+  const devices = usePushStore(s => s.devices);
+  const busy = usePushStore(s => s.busy);
+  const enablePush = usePushStore(s => s.enablePush);
+  const disableThisDevice = usePushStore(s => s.disableThisDevice);
+  const setEnabled = usePushStore(s => s.setEnabled);
+  const setPref = usePushStore(s => s.setPref);
+  const removeDevice = usePushStore(s => s.removeDevice);
+  const sendTest = usePushStore(s => s.sendTest);
+  const loadSettings = usePushStore(s => s.loadSettings);
+  const loadDevices = usePushStore(s => s.loadDevices);
+
+  const [testState, setTestState] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
+
+  // Server-held state (the master switch, the per-type map, the device list)
+  // isn't loaded at app start — only this panel needs it, so it is fetched when
+  // the panel mounts. The store's own `init()` already covered the local,
+  // browser-side facts (permission, subscription).
+  useEffect(() => {
+    void loadSettings();
+    void loadDevices();
+  }, [loadSettings, loadDevices]);
+
+  const isEnabled = (id: string) => prefs[id] ?? !DEFAULT_OFF_PUSH_TYPES.has(id);
+
+  const runTest = async () => {
+    setTestState('sending');
+    const r = await sendTest();
+    setTestState(r.ok ? 'sent' : 'failed');
+    setTimeout(() => setTestState('idle'), 3000);
+  };
+
+  // Four mutually exclusive states, each needing a different thing said. Kept
+  // as one derived value rather than nested ternaries in the markup so the
+  // "which case is this" question has exactly one answer.
+  const status: 'unsupported' | 'needs-install' | 'denied' | 'off' | 'on' =
+    !supported ? 'unsupported'
+    : needsInstall ? 'needs-install'
+    : permission === 'denied' ? 'denied'
+    : permission !== 'granted' || !subscribed ? 'off'
+    : 'on';
+
+  const statusCopy: Record<typeof status, { icon: string; title: string; body: string }> = {
+    unsupported: {
+      icon: 'notifications_off',
+      title: 'Not available in this browser',
+      body: "This browser doesn't support push notifications. The in-app bell and email still work as usual.",
+    },
+    'needs-install': {
+      icon: 'ios_share',
+      title: 'Add Solytiq Cloud to your Home Screen',
+      body: 'On iPhone and iPad, notifications are only available once the app is installed. Tap Share, then "Add to Home Screen", and open it from that icon.',
+    },
+    denied: {
+      icon: 'notifications_off',
+      title: 'Blocked in system settings',
+      body: 'Notifications were declined for this device. Your device only asks once — re-allow them in the Settings app under Notifications → Solytiq Cloud.',
+    },
+    off: {
+      icon: 'notifications',
+      title: 'Notifications are off on this device',
+      body: 'Turn them on to get alerts on your lock screen the moment something needs you, even when the app is closed.',
+    },
+    on: {
+      icon: 'notifications_active',
+      title: 'This device is receiving notifications',
+      body: 'Choose below which ones reach your phone. Everything still appears in the in-app bell either way.',
+    },
+  };
+  const copy = statusCopy[status];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Status + primary action */}
+      <div style={{ ...card, padding: '14px 18px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: status === 'on' ? 'var(--color-surface-tint)' : 'var(--color-surface-tint-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name={copy.icon} size={19} color={status === 'on' ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>{copy.title}</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12.5, color: 'var(--color-text-tertiary)', lineHeight: 1.5, marginTop: 3 }}>{copy.body}</div>
+
+            {status === 'off' && (
+              <MotionButton
+                onClick={() => { void enablePush(); }}
+                disabled={busy}
+                whileHover={busy ? undefined : { opacity: 0.92 }}
+                style={{ marginTop: 11, padding: '9px 16px', borderRadius: 10, border: 'none', background: 'var(--color-primary)', color: 'var(--color-white)', fontFamily: 'var(--font-heading)', fontSize: 13, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}
+              >
+                {busy ? 'Turning on…' : 'Turn on notifications'}
+              </MotionButton>
+            )}
+            {status === 'on' && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 11 }}>
+                <MotionButton
+                  onClick={() => { void runTest(); }}
+                  disabled={testState === 'sending'}
+                  whileHover={{ background: 'var(--color-surface-tint-4)' }}
+                  style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: 'var(--color-surface-tint)', color: 'var(--color-primary)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  {testState === 'sending' ? 'Sending…' : testState === 'sent' ? 'Sent ✓' : testState === 'failed' ? "Couldn't send" : 'Send a test'}
+                </MotionButton>
+                <MotionButton
+                  onClick={() => { void disableThisDevice(); }}
+                  whileHover={{ background: 'var(--color-surface-tint-2)' }}
+                  style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: 'transparent', color: 'var(--color-text-tertiary)', fontFamily: 'var(--font-heading)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Stop on this device
+                </MotionButton>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Master switch. Distinct from "stop on this device" above: this is
+          account-level and silences every device at once, including ones added
+          later, which is what someone asking to "disable notifications" means. */}
+      <div style={{ ...card }}>
+        <div style={rowStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <Icon name="phonelink_ring" size={17} color="var(--color-text-tertiary)" />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>Push notifications</div>
+              <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                Turn off to stop notifications on every one of your devices at once.
+              </div>
+            </div>
+          </div>
+          <MotionButton
+            onClick={() => { void setEnabled(!enabled); }}
+            title={enabled ? 'Turn off' : 'Turn on'}
+            style={{ width: 38, height: 22, borderRadius: 9999, border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}
+            animate={{ background: enabled ? 'var(--color-primary)' : 'var(--color-border-alt)' }}
+            transition={{ duration: 0.15 }}
+          >
+            <MotionIn animate={{ left: enabled ? 18 : 2 }} transition={{ duration: 0.15 }} style={{ position: 'absolute', top: 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.2)' }} />
+          </MotionButton>
+        </div>
+      </div>
+
+      {/* Per-type toggles. Dimmed rather than hidden while the master switch is
+          off, so the user can still see and pre-set what they'd get. */}
+      <div style={{ ...card, opacity: enabled ? 1 : 0.5, pointerEvents: enabled ? 'auto' : 'none' }}>
+        {PUSH_NOTIFICATION_DEFS.map((def, i) => {
+          const on = isEnabled(def.id);
+          return (
+            <div key={def.id} style={{ ...rowStyle, borderTop: i === 0 ? 'none' : '1px solid var(--color-surface-tint-2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                <Icon name={def.icon} size={17} color="var(--color-text-tertiary)" />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>{def.label}</div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>{def.description}</div>
+                </div>
+              </div>
+              <MotionButton
+                onClick={() => { void setPref(def.id, !on); }}
+                title={on ? 'Turn off' : 'Turn on'}
+                style={{ width: 38, height: 22, borderRadius: 9999, border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}
+                animate={{ background: on ? 'var(--color-primary)' : 'var(--color-border-alt)' }}
+                transition={{ duration: 0.15 }}
+              >
+                <MotionIn animate={{ left: on ? 18 : 2 }} transition={{ duration: 0.15 }} style={{ position: 'absolute', top: 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.2)' }} />
+              </MotionButton>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Registered devices */}
+      {devices.length > 0 && (
+        <div style={{ ...card }}>
+          {devices.map((d, i) => (
+            <div key={d.id} style={{ ...rowStyle, borderTop: i === 0 ? 'none' : '1px solid var(--color-surface-tint-2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <Icon name="smartphone" size={17} color="var(--color-text-tertiary)" />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>{d.deviceName}</div>
+                  <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                    {d.osVersion ? `${d.osVersion} · ` : ''}
+                    {d.lastUsedAt ? `last notified ${new Date(d.lastUsedAt).toLocaleDateString()}` : 'no notifications yet'}
+                  </div>
+                </div>
+              </div>
+              <MotionButton
+                onClick={() => { void removeDevice(d.id); }}
+                title="Remove this device"
+                whileHover={{ background: 'var(--color-error-bg)' }}
+                style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+              >
+                <Icon name="close" size={16} color="var(--color-text-tertiary)" />
+              </MotionButton>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function EmailNotificationsSection() {
   const token = useAuthStore(s => s.token);

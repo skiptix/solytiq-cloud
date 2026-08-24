@@ -12,6 +12,7 @@ import { resolveFolderPlacement } from './folders';
 import { snapshotTimelineToTrash } from '../trashUtil';
 import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestrictConflict } from '../visibility';
 import { notifyNewMentions } from '../mentions';
+import { notifyItemActivity, MILESTONE_COALESCE_SECONDS } from '../collaborators';
 import { isItemSharedWith, deleteItemShares } from '../itemShares';
 import { objectAccessCondition, workspaceMembersJoin } from '../objectPolicy';
 import { syncInlineLinksForText } from '../graph/inlineLinks';
@@ -789,6 +790,18 @@ router.post('/:timelineId/milestones', async (req: Request, res: Response) => {
 
     res.status(201).json({ milestone: sanitizeMilestone(result.rows[0]) });
     broadcastToUser(req.userId!, 'timelines');
+
+    // A new milestone is a discrete event, so it is NOT coalesced — unlike an
+    // edit to an existing one, where dragging a date around produces a burst.
+    void notifyItemActivity({
+      itemType: 'timeline',
+      itemId: timelineId,
+      actorId: req.userId!,
+      type: 'milestone_changed',
+      title: 'added a milestone',
+      body: title,
+      data: { timelineId, milestoneId, milestoneTitle: title, action: 'created' },
+    });
   } catch (err) {
     werr('milestones POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -889,6 +902,21 @@ router.put('/milestones/:milestoneId', async (req: Request, res: Response) => {
     const savedMilestone = result.rows[0];
     res.json({ milestone: sanitizeMilestone(savedMilestone) });
     broadcastToUser(req.userId!, 'timelines');
+
+    // Coalesced per MILESTONE, not per timeline: editing one milestone's date
+    // repeatedly is one event, but editing a second milestone minutes later is
+    // genuinely a second one and should still surface.
+    void notifyItemActivity({
+      itemType: 'timeline',
+      itemId: savedMilestone.timeline_id,
+      actorId: req.userId!,
+      type: 'milestone_changed',
+      title: 'updated a milestone',
+      body: savedMilestone.title,
+      data: { timelineId: savedMilestone.timeline_id, milestoneId, milestoneTitle: savedMilestone.title, action: 'updated' },
+      coalesceSeconds: MILESTONE_COALESCE_SECONDS,
+      coalesceScope: milestoneId,
+    });
 
     // @-mention notifications for a changed milestone note (description).
     if (updateDescription && savedMilestone.description !== ownerCheck.rows[0].before_description) {

@@ -214,6 +214,8 @@ type SessionUserPayload = {
   lastRoute?: string | null;
   emailNotificationPrefs?: Record<string, boolean>;
   meetingReminderLeadMinutes?: number;
+  pushEnabled?: boolean;
+  pushNotificationPrefs?: Record<string, boolean>;
 };
 
 /** Sign in an ADDITIONAL account while one is already active. Same endpoint and
@@ -332,6 +334,9 @@ export const apiUpdateShortcuts = (shortcuts: Record<string, { key?: string; ena
 
 export const apiUpdateEmailNotificationPrefs = (data: { prefs?: Record<string, boolean>; meetingReminderLeadMinutes?: number }) =>
   apiFetch<{ user: SessionUserPayload }>('/auth/email-notifications', { method: 'PUT', body: JSON.stringify(data) });
+
+export const apiUpdatePushNotificationPrefs = (data: { enabled?: boolean; prefs?: Record<string, boolean> }) =>
+  apiFetch<{ user: SessionUserPayload }>('/auth/push-notifications', { method: 'PUT', body: JSON.stringify(data) });
 
 export const apiUpdateLastRoute = (route: string) =>
   apiFetch<{ ok: boolean }>('/auth/last-route', { method: 'PUT', body: JSON.stringify({ route }) });
@@ -1219,7 +1224,7 @@ export interface NotificationActor {
 }
 export interface AppNotification {
   id: string;
-  type: 'workspace_added' | 'item_invite' | 'meeting_invite' | 'item_tagged' | 'mention' | 'automation_run' | 'deadline_overdue' | 'meeting_reminder' | string;
+  type: 'workspace_added' | 'item_invite' | 'meeting_invite' | 'item_tagged' | 'mention' | 'automation_run' | 'deadline_overdue' | 'meeting_reminder' | 'item_added' | 'milestone_changed' | 'page_edited' | string;
   actorId: string | null;
   actor: NotificationActor | null;
   title: string;
@@ -1249,6 +1254,33 @@ export const apiDismissNotification = (id: string) =>
   apiFetch<{ ok: boolean }>(`/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const apiClearNotifications = () =>
   apiFetch<{ ok: boolean }>('/notifications', { method: 'DELETE' });
+
+// ─── Web Push (iOS Home Screen / installed PWA notifications) ─────────────────
+// The device-facing half of the notification system: the same rows the feed
+// above serves are also delivered to a registered device. See utils/push.ts for
+// the browser-side subscription dance and backend/src/push/ for delivery.
+export interface PushDevice {
+  id: string;
+  deviceName: string;
+  osVersion: string | null;
+  installId: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+export const apiGetPushPublicKey = () =>
+  apiFetch<{ publicKey: string | null; configured: boolean }>('/push/public-key');
+export const apiSubscribePush = (
+  subscription: { endpoint: string; keys: { p256dh: string; auth: string } },
+  device: { deviceName?: string; osVersion?: string | null; installId?: string | null },
+) => apiFetch<{ subscription: { id: string } }>('/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription, device }) });
+export const apiUnsubscribePush = (endpoint: string) =>
+  apiFetch<{ ok: boolean }>('/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) });
+export const apiGetPushDevices = () =>
+  apiFetch<{ subscriptions: PushDevice[] }>('/push/subscriptions');
+export const apiDeletePushDevice = (id: string) =>
+  apiFetch<{ ok: boolean }>(`/push/subscriptions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const apiSendTestPush = () =>
+  apiFetch<{ ok: boolean; delivered: number }>('/push/test', { method: 'POST' });
 
 // ─── Task tags (users tagged onto an item) ─────────────────────────────────────
 export interface TaskTag {

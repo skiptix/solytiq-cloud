@@ -14,6 +14,7 @@ import { getPrivateAncestors, buildPromoteConflict, promoteAncestors, buildRestr
 import type { MutationActor } from '../automationEngine';
 import { recordTaskChanges } from '../taskChangeLog';
 import { notifyNewMentions } from '../mentions';
+import { notifyItemActivity } from '../collaborators';
 import { isItemSharedWith } from '../itemShares';
 import { objectAccessCondition, workspaceMembersJoin } from '../objectPolicy';
 import { syncInlineLinksForText } from '../graph/inlineLinks';
@@ -1356,6 +1357,30 @@ export async function createListTask(
       },
       list: { id: listId, name: listName },
     }, actor).catch((e) => werr('fireTrigger task_created failed:', e));
+  }
+
+  // Tell everyone involved with this board that an item appeared on it. Hooked
+  // HERE rather than in the POST route because this function is the single
+  // choke point every creation path funnels through — the HTTP route, Quick
+  // Add, the AI tool registry, an Automation Hub `create_task` action — so no
+  // present or future call site has to remember to notify.
+  //
+  // A sublist's linking task is skipped: creating a sublist already surfaces as
+  // the sublist itself, and notifying for the placeholder task that carries it
+  // would report the same event twice.
+  if (!fields.linkedListId) {
+    void notifyItemActivity({
+      itemType: 'list',
+      itemId: listId,
+      // An automation's writes are attributed to no one — there is no person to
+      // name, and borrowing the automation owner's identity would misreport who
+      // did it. The notification still goes out; it just reads as a system event.
+      actorId: actor.type === 'user' ? actor.userId : null,
+      type: 'item_added',
+      title: `added an item to "${listName}"`,
+      body: task.title,
+      data: { listId, taskId: String(task.id), sectionId, taskTitle: task.title },
+    });
   }
 
   return { task, workspaceId: itemWorkspaceId };
