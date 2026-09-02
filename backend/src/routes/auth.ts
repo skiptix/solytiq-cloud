@@ -56,6 +56,7 @@ interface UserRow {
   meeting_reminder_lead_minutes: number;
   push_enabled: boolean;
   push_notification_prefs: Record<string, boolean>;
+  ai_voice_mode: string | null;
 }
 
 function sanitizeUser(user: UserRow) {
@@ -77,6 +78,10 @@ function sanitizeUser(user: UserRow) {
     // push/send.ts's DEFAULT_PUSH_PREFS).
     pushEnabled:               user.push_enabled ?? true,
     pushNotificationPrefs:     user.push_notification_prefs ?? {},
+    // null ⇒ "follow the platform default" (voice-only on mobile, hybrid on
+    // desktop), NOT "off" — see the migration's comment for why an explicit
+    // value is only ever written when the user actually picks one.
+    aiVoiceMode:               user.ai_voice_mode ?? null,
   };
 }
 
@@ -539,6 +544,35 @@ router.put('/profile-image', authenticate, async (req: Request, res: Response) =
 // PUT /api/auth/shortcuts — save this user's keyboard shortcut customizations.
 // Body is a sparse map of actionId -> { key?, enabled? }; only overrides from the
 // frontend's default registry are stored, so new shortcuts added later need no migration.
+// PUT /api/auth/ai-voice-mode — how Sol's input surface behaves for this user.
+// `null` clears the stored choice and returns the account to the per-platform
+// default (voice-only on mobile, hybrid on desktop) rather than turning voice
+// off — "off" is not one of the modes; a user who doesn't want the assistant
+// at all hides the bubble (Account Settings → AI) or an admin disables it.
+const AI_VOICE_MODES = new Set(['hybrid', 'voice']);
+
+router.put('/ai-voice-mode', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { mode } = req.body as { mode?: unknown };
+    if (mode !== null && (typeof mode !== 'string' || !AI_VOICE_MODES.has(mode))) {
+      res.status(400).json({ error: "mode must be 'hybrid', 'voice', or null" });
+      return;
+    }
+    const result = await query<UserRow>(
+      `UPDATE users SET ai_voice_mode = $1 WHERE id = $2 RETURNING *`,
+      [mode ?? null, req.userId]
+    );
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    res.json({ user: sanitizeUser(result.rows[0]) });
+  } catch (err) {
+    console.error('ai voice mode update error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 router.put('/shortcuts', authenticate, async (req: Request, res: Response) => {
   try {
     const { shortcuts } = req.body as { shortcuts?: unknown };

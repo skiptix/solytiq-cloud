@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { useEffect, useCallback, useRef, useState, lazy, Suspense } from 'react';
 import { AnimatePresence, motion } from '@/components/animate-ui/motion';
 import { DURATION, EASE_SETTLE } from '@/components/animate-ui/motionTokens';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -7,6 +7,7 @@ import useAIStore, {
   buildContext,
   buildSystemPrompt,
   buildTools,
+  resolveVoiceMode,
   type AIChatMessage,
 } from '../../store/useAIStore';
 import useAppStore, {
@@ -69,6 +70,10 @@ import Spinner from '@/components/animate-ui/Spinner';
 // opens it — lazy-loaded so every page's initial chunk only pays for the
 // small always-visible badge, not the whole chat surface.
 const AIChatOverlay = lazy(() => import('./AIChatOverlay'));
+// Voice mode drags in MediaRecorder plumbing, an analyser-driven waveform and
+// a second overlay. Lazy for the same reason the chat surface is: a user who
+// never opens Sol should not pay for either in their initial chunk.
+const VoiceOverlay = lazy(() => import('./VoiceOverlay'));
 
 interface ToolCall {
   id: string;
@@ -118,6 +123,7 @@ export default function AIAssistant() {
   const {
     isOpen,
     settings,
+    voiceMode: storedVoiceMode,
     messages,
     isThinking,
     settingsLoaded,
@@ -134,6 +140,7 @@ export default function AIAssistant() {
     addUploadedFile,
     removeUploadedFile,
     clearUploadedFiles,
+    setVoiceMode,
   } = useAIStore();
 
   const appStore = useAppStore();
@@ -141,8 +148,23 @@ export default function AIAssistant() {
   const workspaceStore = useWorkspaceStore();
   const navigate = useNavigate();
   const thinkingIdRef = useRef<string | null>(null);
+  // See `voiceOnly` below — a one-session escape from voice-only mode when the
+  // device genuinely can't record. Reset on close so the next open honours the
+  // user's real setting again.
+  const [forceTextThisSession, setForceTextThisSession] = useState(false);
+  // Set when Sol was opened by the "Talk to Sol" shortcut, so the surface can
+  // start listening the moment it mounts. Without it the shortcut would only
+  // open the panel and the user would still have to reach for the mic — two
+  // gestures for a shortcut whose entire purpose is to remove one.
+  const [autoListen, setAutoListen] = useState(false);
   // Names of tools handled by the shared backend registry (executed via /api/ai/execute).
   const backendToolNamesRef = useRef<Set<string>>(new Set());
+
+  // The stored choice lives on the user row, so it arrives with the auth
+  // payload — mirrored into the AI store here rather than read from auth at
+  // every use site, keeping "how does Sol behave" in one store.
+  const authVoiceMode = useAuthStore((s) => s.aiVoiceMode);
+  useEffect(() => { setVoiceMode(authVoiceMode ?? null); }, [authVoiceMode, setVoiceMode]);
 
   // Load AI settings once
   useEffect(() => {
@@ -156,8 +178,10 @@ export default function AIAssistant() {
   const handleToggle = useCallback(async () => {
     if (isOpen) {
       setOpen(false);
+      setAutoListen(false);
       return;
     }
+    setForceTextThisSession(false);
     // A blocking dialog open anywhere means Sol doesn't open on top of it —
     // relevant mainly on mobile, where the badge itself still hides for one
     // (see hideBubble below); on desktop the badge stays visible but sits
@@ -174,6 +198,18 @@ export default function AIAssistant() {
         .catch(() => {});
     }
   }, [isOpen, blockingDialogCount, settings.enabled, userId, setOpen, clearHistory, setCurrentSessionId]);
+
+  // "Talk to Sol" — opens the assistant already listening. Fires the same
+  // `handleToggle` a badge tap does, so session creation and the blocking-
+  // dialog guard behave identically however Sol was opened.
+  useEffect(() => {
+    const onShortcut = () => {
+      setAutoListen(true);
+      if (!useAIStore.getState().isOpen) void handleToggle();
+    };
+    window.addEventListener('shortcut:talk-to-sol', onShortcut);
+    return () => window.removeEventListener('shortcut:talk-to-sol', onShortcut);
+  }, [handleToggle]);
 
   // ── Tool execution ────────────────────────────────────────────
   const executeTool = useCallback(
@@ -920,9 +956,14 @@ export default function AIAssistant() {
   );
 
   // ── Send message ─────────────────────────────────────────────
+  //
+  // Returns the assistant's final reply text. Voice mode needs that value to
+  // speak it, and returning it is strictly better than having the voice
+  // overlay watch the message list for a new entry: the reply to THIS turn is
+  // unambiguous here and merely inferred there.
   const handleSend = useCallback(
-    async (text: string) => {
-      if (!settings.enabled) return;
+    async (text: string, opts?: { voice?: boolean }): Promise<string> => {
+      if (!settings.enabled) return '';
 
       const sessionId = useAIStore.getState().currentSessionId;
       const currentFiles = useAIStore.getState().uploadedFiles;
@@ -966,7 +1007,11 @@ export default function AIAssistant() {
         const glossary = useKnowledgeBaseStore.getState().entries.map(e => ({ term: e.term, aliases: e.aliases, summary: e.summary }));
         const skills = useAiSkillsStore.getState().enabledSkills;
         const memory = useAiMemoryStore.getState().entries;
-        const systemPrompt = buildSystemPrompt(ctx, username || 'User', wsInfo, wsId, glossary, skills, memory);
+        // The ONLY difference a spoken turn makes to the model: an addendum
+        // telling it the reply will be heard rather than read. Same tools,
+        // same skills, same memory, same everything else — which is what
+        // makes voice mode fully capable rather than a reduced one.
+        const systemPrompt = buildSystemPrompt(ctx, username || 'User', wsInfo, wsId, glossary, skills, memory, opts?.voice);
 
         // Build API messages from history (last 20 + current)
         const history = useAIStore
@@ -1077,6 +1122,7 @@ export default function AIAssistant() {
         removeMessage(thinkingId);
         addMessage(finalMsg);
         apiSaveAIMessage('assistant', finalContent, sessionId, actionSummary ? { actionSummary } : undefined).catch(() => {});
+        return finalContent;
       } catch (err) {
         removeMessage(thinkingIdRef.current ?? thinkingId);
         const errContent = err instanceof Error && err.message.includes('disabled')
@@ -1093,6 +1139,9 @@ export default function AIAssistant() {
           error: true,
           createdAt: new Date().toISOString(),
         });
+        // Returned, not swallowed: in voice mode this is spoken, because
+        // silence after a question is indistinguishable from a broken app.
+        return errContent;
       } finally {
         setThinking(false);
         thinkingIdRef.current = null;
@@ -1106,6 +1155,26 @@ export default function AIAssistant() {
     clearHistory();
     await apiClearAIHistory().catch(() => {});
   }, [clearHistory]);
+
+  // Which surface this open uses. `resolveVoiceMode` holds the platform rule
+  // (mobile ⇒ voice-only, desktop ⇒ hybrid) in one place; everything else here
+  // is the reasons that rule can be overridden for a single session.
+  //
+  //  - `settings.voiceEnabled` false ⇒ voice is off instance-wide or there's
+  //    no OpenRouter key. Falling back to text is the only sane outcome; a
+  //    mobile user must not get an orb that can never work.
+  //  - `forceTextThisSession` is set by the voice overlay's own rescue button
+  //    when the browser can't record or the mic was denied. Session-scoped on
+  //    purpose: it's a workaround for right now, not a preference change, so
+  //    it must not quietly rewrite what the user chose in Settings.
+  const voiceOnly = settings.voiceEnabled
+    && !forceTextThisSession
+    && resolveVoiceMode(storedVoiceMode, isMobile) === 'voice';
+
+  // The most recent completed assistant message — what hybrid mode speaks back
+  // after a dictated turn.
+  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isThinking);
+  const lastReply = lastAssistant ? { id: lastAssistant.id, content: lastAssistant.content } : null;
 
   // Don't render if AI is disabled
   if (!settings.enabled) return null;
@@ -1138,20 +1207,38 @@ export default function AIAssistant() {
               </div>
             }
           >
-            <AIChatOverlay
-              key="ai-chat-overlay"
-              isMobile={isMobile}
-              messages={messages}
-              isThinking={isThinking}
-              contextView={ctx.view}
-              onSend={handleSend}
-              onClose={() => setOpen(false)}
-              onClearHistory={handleClearHistory}
-              uploadedFiles={uploadedFiles}
-              onAddFile={addUploadedFile}
-              onRemoveFile={removeUploadedFile}
-              sessionId={useAIStore.getState().currentSessionId}
-            />
+            {voiceOnly ? (
+              <VoiceOverlay
+                key="ai-voice-overlay"
+                isMobile={isMobile}
+                sessionId={useAIStore.getState().currentSessionId}
+                voiceName={settings.voiceName}
+                onTurn={(t) => handleSend(t, { voice: true })}
+                autoListen={autoListen}
+                onAutoListenHandled={() => setAutoListen(false)}
+                onClose={() => { setAutoListen(false); setOpen(false); }}
+                onFallbackToText={() => setForceTextThisSession(true)}
+              />
+            ) : (
+              <AIChatOverlay
+                key="ai-chat-overlay"
+                isMobile={isMobile}
+                messages={messages}
+                isThinking={isThinking}
+                contextView={ctx.view}
+                onSend={handleSend}
+                onClose={() => { setAutoListen(false); setOpen(false); }}
+                onClearHistory={handleClearHistory}
+                uploadedFiles={uploadedFiles}
+                onAddFile={addUploadedFile}
+                onRemoveFile={removeUploadedFile}
+                sessionId={useAIStore.getState().currentSessionId}
+                voiceEnabled={settings.voiceEnabled}
+                lastReply={lastReply}
+                autoListen={autoListen}
+                onAutoListenHandled={() => setAutoListen(false)}
+              />
+            )}
           </Suspense>
         )}
       </AnimatePresence>

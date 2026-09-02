@@ -6,7 +6,8 @@ import { extractTextFromBuffer, MAX_TEXT_CHARS } from '../fileText';
 import { getOpenRouterToolDefs, executeAiTool } from '../aiTools';
 import { listSkills } from '../aiSkills/skills';
 import { listMemory, removeMemory, clearMemory } from '../aiMemory';
-import { AI_FILE_UPLOAD_MAX_BYTES } from '../uploadLimits';
+import { AI_FILE_UPLOAD_MAX_BYTES, AI_VOICE_UPLOAD_MAX_BYTES } from '../uploadLimits';
+import { getVoiceSettings, transcribeAudio, synthesizeSpeech, audioFormatFromMime, VoiceError } from '../aiVoice';
 
 const router = Router();
 
@@ -26,9 +27,16 @@ router.get('/settings', authenticate, async (_req: Request, res: Response) => {
     );
     const s: Record<string, string> = {};
     for (const row of result.rows) s[row.key] = row.value;
+    // `voiceEnabled` folds two independent facts into the one boolean the
+    // client actually needs: the admin toggle, AND whether a key exists at
+    // all. Without the key the audio endpoints cannot work, so reporting
+    // voice as available would only produce a mic button that always fails.
+    const voice = await getVoiceSettings();
     res.json({
       enabled: s['ai_assistant_enabled'] !== 'false',
       model: s['ai_model'] ?? process.env.OPENROUTER_MODEL ?? 'openai/gpt-4o-mini',
+      voiceEnabled: voice.enabled && !!process.env.OPENROUTER_API_KEY,
+      voiceName: voice.ttsVoice,
     });
   } catch (err) {
     console.error('ai/settings GET error:', err);
@@ -465,6 +473,129 @@ router.post('/execute', authenticate, async (req: Request, res: Response) => {
   } catch (err) {
     console.error('ai/execute POST error:', err);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Voice Mode ────────────────────────────────────────────────────────────
+// Two thin proxies onto OpenRouter's audio endpoints, mirroring what
+// `/chat` already does for completions: the API key never leaves the server,
+// the model/voice come from admin settings, and usage is metered. See
+// `aiVoice.ts` for why voice is server-side rather than Web Speech API.
+
+// Recordings are transcribed and thrown away — never persisted, never written
+// to disk. memoryStorage is the enforcement of that, not just the default.
+const voiceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: AI_VOICE_UPLOAD_MAX_BYTES, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    // Reject a non-audio upload at the multer boundary rather than after
+    // buffering it — `audioFormatFromMime` is the same allow-list the
+    // transcription call itself uses, so the two can't drift apart.
+    if (audioFormatFromMime(file.mimetype)) cb(null, true);
+    else cb(new Error('Unsupported audio format'));
+  },
+});
+
+/** Shared guard: voice needs the assistant enabled, voice enabled, and a key. */
+async function requireVoice(res: Response): Promise<Awaited<ReturnType<typeof getVoiceSettings>> | null> {
+  const settingsResult = await query<{ key: string; value: string }>(
+    "SELECT value FROM app_settings WHERE key = 'ai_assistant_enabled'"
+  );
+  if (settingsResult.rows[0]?.value === 'false') {
+    res.status(403).json({ error: 'AI assistant is disabled' });
+    return null;
+  }
+  const voice = await getVoiceSettings();
+  if (!voice.enabled) {
+    res.status(403).json({ error: 'Voice mode is disabled' });
+    return null;
+  }
+  if (!process.env.OPENROUTER_API_KEY) {
+    res.status(503).json({ error: 'OPENROUTER_API_KEY is not configured' });
+    return null;
+  }
+  return voice;
+}
+
+function sendVoiceError(res: Response, err: unknown, label: string) {
+  if (err instanceof VoiceError) {
+    res.status(err.status).json({ error: err.message });
+    return;
+  }
+  console.error(`${label} error:`, err);
+  res.status(500).json({ error: 'Internal server error' });
+}
+
+// POST /api/ai/transcribe — multipart `audio`, returns { text }
+router.post('/transcribe', authenticate, voiceUpload.single('audio'), async (req: Request, res: Response) => {
+  try {
+    const voice = await requireVoice(res);
+    if (!voice) return;
+    if (!req.file) {
+      res.status(400).json({ error: 'audio file is required' });
+      return;
+    }
+    const language = typeof req.body?.language === 'string' && /^[a-z]{2}$/i.test(req.body.language)
+      ? req.body.language.toLowerCase()
+      : undefined;
+
+    const { text, seconds } = await transcribeAudio(req.file.buffer, req.file.mimetype, {
+      model: voice.sttModel,
+      language,
+    });
+
+    // Metered on the same table as chat so one Usage view covers the whole
+    // assistant. Audio is duration-priced upstream, so seconds is what there
+    // is to record — carried in total_tokens rather than inventing a column.
+    query(
+      `INSERT INTO ai_usage (user_id, session_id, model, prompt_tokens, completion_tokens, total_tokens)
+       VALUES ($1, $2, $3, 0, 0, $4)`,
+      [req.userId, typeof req.body?.sessionId === 'string' ? req.body.sessionId : null, voice.sttModel, Math.round(seconds ?? 0)]
+    ).catch(() => {});
+
+    res.json({ text });
+  } catch (err) {
+    sendVoiceError(res, err, 'ai/transcribe');
+  }
+});
+
+// POST /api/ai/speak — { text } → binary audio
+router.post('/speak', authenticate, async (req: Request, res: Response) => {
+  try {
+    const voice = await requireVoice(res);
+    if (!voice) return;
+    const { text, sessionId } = req.body as { text?: unknown; sessionId?: unknown };
+    if (typeof text !== 'string' || !text.trim()) {
+      res.status(400).json({ error: 'text is required' });
+      return;
+    }
+    // Bound the INPUT independently of prepareSpeechText's own output cap: a
+    // caller could otherwise hand us a megabyte of prose that gets stripped
+    // down to nothing, having already cost the transfer and the parse.
+    if (text.length > 20000) {
+      res.status(400).json({ error: 'text is too long to speak' });
+      return;
+    }
+
+    const { audio, contentType } = await synthesizeSpeech(text, {
+      model: voice.ttsModel,
+      voice: voice.ttsVoice,
+    });
+
+    query(
+      `INSERT INTO ai_usage (user_id, session_id, model, prompt_tokens, completion_tokens, total_tokens)
+       VALUES ($1, $2, $3, $4, 0, $4)`,
+      [req.userId, typeof sessionId === 'string' ? sessionId : null, voice.ttsModel, text.length]
+    ).catch(() => {});
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', String(audio.length));
+    // Synthesized speech is per-request and per-user; never let a proxy or
+    // the browser hold on to it.
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(audio);
+  } catch (err) {
+    sendVoiceError(res, err, 'ai/speak');
   }
 });
 

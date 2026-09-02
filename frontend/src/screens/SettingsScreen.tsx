@@ -244,6 +244,12 @@ export default function SettingsScreen() {
   const { setSettings: setAISettings } = useAIStore();
   const [aiEnabled, setAiEnabled] = useState(true);
   const [aiModel, setAiModel] = useState('openai/gpt-4o-mini');
+  // Sol Voice Mode. Defaults mirror aiVoice.ts's VOICE_DEFAULTS so the form
+  // shows what the backend would actually use before anything is saved.
+  const [aiVoiceEnabled, setAiVoiceEnabled] = useState(true);
+  const [aiTtsModel, setAiTtsModel] = useState('hexgrad/kokoro-82m');
+  const [aiTtsVoice, setAiTtsVoice] = useState('af_heart');
+  const [aiSttModel, setAiSttModel] = useState('openai/gpt-4o-mini-transcribe');
   const [aiSaving, setAiSaving] = useState(false);
   const [aiSaved, setAiSaved] = useState(false);
   const [aiLoaded, setAiLoaded] = useState(false);
@@ -317,6 +323,10 @@ export default function SettingsScreen() {
         setResendApiKeyHint(res.settings['resend_api_key_hint'] ?? '');
         setResendFromEmail(res.settings['resend_from_email'] ?? '');
         setResendFromName(res.settings['resend_from_name'] || 'Solytiq Cloud');
+        setAiVoiceEnabled(res.settings['ai_voice_enabled'] !== 'false');
+        setAiTtsModel(res.settings['ai_tts_model'] || 'hexgrad/kokoro-82m');
+        setAiTtsVoice(res.settings['ai_tts_voice'] || 'af_heart');
+        setAiSttModel(res.settings['ai_stt_model'] || 'openai/gpt-4o-mini-transcribe');
       })
       .catch(() => setQuotaGb('15'));
   }, [isAdmin]);
@@ -371,8 +381,15 @@ export default function SettingsScreen() {
     setAiSaving(true);
     setAiSaved(false);
     try {
-      await apiUpdateAppSettingsAI({ aiAssistantEnabled: aiEnabled, aiModel });
-      setAISettings({ enabled: aiEnabled, model: aiModel });
+      await apiUpdateAppSettingsAI({
+        aiAssistantEnabled: aiEnabled, aiModel,
+        aiVoiceEnabled, aiTtsModel, aiTtsVoice, aiSttModel,
+      });
+      // `voiceEnabled` here is what the ADMIN just chose; whether voice is
+      // truly usable also depends on the server having a key, which only the
+      // server can answer — so the next apiGetAISettings() refresh is the
+      // authority, not this optimistic write.
+      setAISettings({ ...useAIStore.getState().settings, enabled: aiEnabled, model: aiModel, voiceEnabled: aiVoiceEnabled });
       setAiSaved(true);
       setTimeout(() => setAiSaved(false), 2500);
     } catch (e) {
@@ -1037,6 +1054,69 @@ export default function SettingsScreen() {
                         Requires <code style={{ background: 'var(--color-surface-tint-2)', padding: '1px 5px', borderRadius: 4 }}>OPENROUTER_API_KEY</code> set in your environment.
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                {/* ── Voice Mode ──
+                    Rides the same OPENROUTER_API_KEY as chat, so there is
+                    nothing to switch ON — the toggle exists to switch it OFF
+                    (a voice assistant makes far more calls than a text one).
+                    Models/voice are settings rather than env vars for the
+                    same reason `ai_model` above is: changing Sol's voice
+                    should not need a redeploy. */}
+                <div style={card}>
+                  <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                      <div>
+                        <div style={{ fontFamily: 'var(--font-heading)', fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)' }}>Voice Mode</div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                          Let users talk to Sol and hear it answer. Each user chooses hybrid or voice-only in their own settings; mobile defaults to voice-only.
+                        </div>
+                      </div>
+                      <MotionButton
+                        onClick={() => { setAiVoiceEnabled(v => !v); setAiSaved(false); }}
+                        title={aiVoiceEnabled ? 'Disable voice mode' : 'Enable voice mode'}
+                        style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', position: 'relative', flexShrink: 0 }}
+                        animate={{ background: aiVoiceEnabled ? 'var(--color-primary)' : 'var(--color-border)' }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <motion.span
+                          animate={{ left: aiVoiceEnabled ? 22 : 2 }}
+                          transition={{ duration: 0.2 }}
+                          style={{ position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 4px rgba(var(--color-black-rgb), 0.2)' }}
+                        />
+                      </MotionButton>
+                    </div>
+
+                    {aiVoiceEnabled && (
+                      <>
+                        <div style={{ height: 1, background: 'var(--color-surface-tint-2)' }} />
+                        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
+                          {([
+                            { label: 'Voice (TTS) model', value: aiTtsModel, set: setAiTtsModel, hint: 'hexgrad/kokoro-82m' },
+                            { label: 'Voice', value: aiTtsVoice, set: setAiTtsVoice, hint: 'af_heart' },
+                            { label: 'Transcription (STT) model', value: aiSttModel, set: setAiSttModel, hint: 'openai/gpt-4o-mini-transcribe' },
+                          ] as const).map(f => (
+                            <div key={f.label}>
+                              <div style={{ fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 600, color: 'var(--color-text-quaternary)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 6 }}>{f.label}</div>
+                              <input
+                                value={f.value}
+                                onChange={e => { f.set(e.target.value); setAiSaved(false); }}
+                                placeholder={f.hint}
+                                style={{
+                                  width: '100%', boxSizing: 'border-box', padding: '9px 12px', borderRadius: 10,
+                                  border: '1.5px solid var(--color-border)', background: 'var(--color-surface-neutral)',
+                                  fontFamily: 'var(--font-body)', fontSize: 13, color: 'var(--color-text-primary)', outline: 'none',
+                                }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)' }}>
+                          Any OpenRouter audio model works. Defaults are <code style={{ background: 'var(--color-surface-tint-2)', padding: '1px 5px', borderRadius: 4 }}>hexgrad/kokoro-82m</code> with the female voice <code style={{ background: 'var(--color-surface-tint-2)', padding: '1px 5px', borderRadius: 4 }}>af_heart</code> — the cheapest speech on the platform. Leave a field blank to keep the default. Kokoro also offers af_bella, af_nova, af_sarah and af_sky.
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AppState, AIFile, Task, MarkdownBlock, AiMemoryEntry } from '../types';
+import type { AppState, AIFile, Task, MarkdownBlock, AiMemoryEntry, VoiceMode } from '../types';
 import useGraphStore from './useGraphStore';
 import useWorkspaceStore from './useWorkspaceStore';
 import useMarkdownListsStore from './useMarkdownListsStore';
@@ -17,6 +17,33 @@ export interface AIChatMessage {
 export interface AISettings {
   enabled: boolean;
   model: string;
+  /** Voice mode is usable: the admin toggle is on AND the instance has an
+   *  OpenRouter key. Folded server-side into one flag because a mic button
+   *  that always fails is worse than no mic button. */
+  voiceEnabled: boolean;
+  /** The configured TTS voice id, shown in Settings so a user can see which
+   *  voice they'll hear without an admin telling them. */
+  voiceName?: string;
+}
+
+/**
+ * Resolves the voice mode actually in effect.
+ *
+ * `stored` is the user's explicit choice, or `null` for "follow the platform
+ * default" — which is what a fresh account has. The default is per-DEVICE,
+ * deliberately: a phone is held to your face and typing on it is the worst
+ * input it has, so voice-only is right there; a desktop has a keyboard, so
+ * hybrid is right there. Resolving at read time rather than storing a value
+ * at signup is what lets ONE account be voice-first on the phone and
+ * text-first on the laptop — storing it would freeze whichever device
+ * happened to create the account into a preference that follows the user
+ * everywhere. An explicit choice, once made, applies on every device, because
+ * that is what choosing means.
+ *
+ * Pure and unit-tested — this is the one place the platform rule lives.
+ */
+export function resolveVoiceMode(stored: VoiceMode | null | undefined, isMobile: boolean): VoiceMode {
+  return stored ?? (isMobile ? 'voice' : 'hybrid');
 }
 
 interface AIStore {
@@ -27,6 +54,16 @@ interface AIStore {
   settingsLoaded: boolean;
   currentSessionId: string | null;
   uploadedFiles: AIFile[];
+  /** The user's explicit voice-mode choice, or null for the per-platform
+   *  default. Mirrors `users.ai_voice_mode`; hydrated from the auth payload on
+   *  login so it is correct on the very first render, before any fetch. */
+  voiceMode: VoiceMode | null;
+  /** True while the voice overlay is capturing microphone audio. Lives in the
+   *  store rather than the overlay so the bubble/badge can reflect it too. */
+  isListening: boolean;
+  /** True while a synthesized reply is playing back. */
+  isSpeaking: boolean;
+
   /** Count of currently-open mobile full-screen dialogs (e.g. the item detail
    *  dialog) that the floating AI bubble would otherwise float on top of.
    *  A counter, not a boolean, so two overlapping dialogs don't let the first
@@ -49,16 +86,22 @@ interface AIStore {
   clearUploadedFiles: () => void;
   openBlockingDialog: () => void;
   closeBlockingDialog: () => void;
+  setVoiceMode: (m: VoiceMode | null) => void;
+  setListening: (v: boolean) => void;
+  setSpeaking: (v: boolean) => void;
 }
 
 const useAIStore = create<AIStore>()((set) => ({
   isOpen: false,
-  settings: { enabled: true, model: 'openai/gpt-4o-mini' },
+  settings: { enabled: true, model: 'openai/gpt-4o-mini', voiceEnabled: false },
   messages: [],
   isThinking: false,
   settingsLoaded: false,
   currentSessionId: null,
   uploadedFiles: [],
+  voiceMode: null,
+  isListening: false,
+  isSpeaking: false,
   blockingDialogCount: 0,
 
   setOpen: (open) => set({ isOpen: open }),
@@ -79,6 +122,9 @@ const useAIStore = create<AIStore>()((set) => ({
   clearUploadedFiles: () => set({ uploadedFiles: [] }),
   openBlockingDialog: () => set((s) => ({ blockingDialogCount: s.blockingDialogCount + 1 })),
   closeBlockingDialog: () => set((s) => ({ blockingDialogCount: Math.max(0, s.blockingDialogCount - 1) })),
+  setVoiceMode: (voiceMode) => set({ voiceMode }),
+  setListening: (isListening) => set({ isListening }),
+  setSpeaking: (isSpeaking) => set({ isSpeaking }),
 }));
 
 // ── Context building ──────────────────────────────────────────────
@@ -346,7 +392,9 @@ export function buildSystemPrompt(
   currentWorkspaceId?: string | null,
   glossary?: GlossaryHint[],
   skills?: SkillHint[],
-  memory?: AiMemoryEntry[]
+  memory?: AiMemoryEntry[],
+  /** True when this turn will be SPOKEN aloud rather than read. */
+  voice?: boolean
 ): string {
   const today = toIso(new Date());
   const tlProgress = ctx.view === 'timeline'
@@ -406,6 +454,25 @@ export function buildSystemPrompt(
       }`
     : '';
 
+  // Voice turns are the same assistant with the same tools — only the
+  // OUTPUT medium differs, so this is an addendum rather than a second
+  // prompt. It has to exist at all because the default prompt's habits
+  // (Markdown, bullet lists, ID strings, "see the table below") are actively
+  // hostile to a text-to-speech engine: `prepareSpeechText` strips the
+  // syntax, but nothing can rescue a reply whose *structure* was a table.
+  // Keeping this to a short addendum is deliberate — a separate voice prompt
+  // would be a second copy of every guideline above, guaranteed to drift.
+  const voiceNote = voice
+    ? `\n\nVOICE MODE — this conversation is spoken aloud. Your reply is read by a text-to-speech engine and heard, never seen:
+- Answer in 1-3 short sentences. Someone listening cannot skim; length is the single biggest thing that makes a spoken assistant tiring to use.
+- Write plain spoken prose. No Markdown, no bullet lists, no tables, no headings, no code blocks, no emoji — they are read out literally or stripped, and either way they waste the listener's time.
+- Never read an ID, URL, or file path aloud. Say the NAME of a board, task, or page. If you genuinely need the user to see something, say so and tell them where it is.
+- When you list several things, say them as a sentence ("You've got three due today: the tax return, the client call, and the invoice") rather than as an enumerated list.
+- Ask at most one question per turn, and put it last so it's the thing they answer.
+- You still have every tool and skill you have in text mode; use them exactly as you normally would. Just report the OUTCOME conversationally rather than narrating each step.
+- The user is speaking through speech recognition, so expect the odd misheard word. If a request is nearly-but-not-quite sensible, act on the most plausible reading and say which reading you took, rather than asking them to repeat themselves.`
+    : '';
+
   return `You are Sol, a helpful AI assistant embedded in Solytiq Cloud, a personal productivity and task management app.
 
 Current user: ${username}
@@ -442,7 +509,7 @@ Guidelines:
 - TIMELINE IDs: Always use exact timeline_id strings from available_timelines. Milestone IDs come from the milestones array in the current context.
 - LONG-TERM MEMORY: Any MEMORY entries above are durable facts about ${username} that already ride in every conversation — treat them as known, don't ask about them again. Call add_memory when the user tells you to remember something, or a clearly durable preference comes up naturally (keep it to one short fact per call, and don't duplicate one already listed). Call remove_memory(memory_id) when the user says to forget something or a saved fact goes stale. Do NOT save one-off task details already tracked elsewhere (tasks/lists/notes) — memory is only for things that should color every future chat.
 - PAST CONVERSATIONS: search_chat_history looks across the user's OTHER past chat sessions (not this one). Call it ONLY when the user explicitly references an earlier conversation — e.g. "what did I ask you before", "did we talk about this already", "what did you tell me last time". Never call it speculatively; most turns have nothing to do with past chats, and it costs extra tokens for no benefit when the answer is already in front of you.
-- If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}${graphNote}${glossaryNote}${skillsNote}${memoryNote}`;
+- If the user asks something outside your capabilities, explain politely what you can do instead${sublistNote}${graphNote}${glossaryNote}${skillsNote}${memoryNote}${voiceNote}`;
 }
 
 // ── Tool definitions ────────────────────────────────────────────────

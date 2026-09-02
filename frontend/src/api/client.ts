@@ -1,4 +1,4 @@
-import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationOwnerEntityType, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent, TaskChangeLogEntry, EntityLink, ResolvedLink, LinkTypeDef, GraphPayload, GraphCanvas, GraphCanvasLayout, AgentRun, AgentProposal, AgentPolicy, AgentMode, EntityIndexEntry, KnowledgeBase, KnowledgeEntry, KnowledgeSuggestion, KnowledgeLookupResult, AiSkill, AiSkillFile, AiSkillHint, AiMemoryEntry, QuickAddSuggestion } from '../types';
+import type { Task, List, Folder, Timeline, Milestone, Meeting, MeetingRecurrenceRule, UpcomingMilestone, TrashedTask, TrashedFolder, SharedFile, TaskAttachment, MilestoneAttachment, Workspace, WorkspaceMember, AIFile, GpsFile, GpsTrackData, GpsTrackPoint, GpsRouteStateV1, GapMode, NamedPinInput, OverpassPoi, Template, TemplateListNode, TemplateTimelineNode, Automation, AutomationOwnerEntityType, AutomationGraph, AutomationRun, AutomationRunResult, TriggerTypeDef, ActionTypeDef, MarkdownList, MarkdownListContent, TaskChangeLogEntry, EntityLink, ResolvedLink, LinkTypeDef, GraphPayload, GraphCanvas, GraphCanvasLayout, AgentRun, AgentProposal, AgentPolicy, AgentMode, EntityIndexEntry, KnowledgeBase, KnowledgeEntry, KnowledgeSuggestion, KnowledgeLookupResult, AiSkill, AiSkillFile, AiSkillHint, AiMemoryEntry, QuickAddSuggestion, VoiceMode } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '/api';
 
@@ -168,14 +168,14 @@ export const apiRequestSetupToken = () =>
   apiFetch<{ ok: boolean }>('/auth/request-setup-token', { method: 'POST' });
 
 export const apiRegister = (username: string, email: string, password: string, setupToken?: string) =>
-  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; token_version?: number; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>; lastRoute?: string | null } }>(
+  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; token_version?: number; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>; lastRoute?: string | null; aiVoiceMode?: VoiceMode | null } }>(
     '/auth/register', { method: 'POST', body: JSON.stringify({ username, email, password, setupToken }) }
   );
 
 export const apiLogin = (username: string, password: string) =>
   apiFetch<{
     token?: string;
-    user?: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>; lastRoute?: string | null };
+    user?: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>; lastRoute?: string | null; aiVoiceMode?: VoiceMode | null };
     requires2FA?: boolean;
     pendingToken?: string;
   }>('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
@@ -193,7 +193,7 @@ export const api2FADisable = (code: string, currentPassword: string) =>
   apiFetch<{ success: boolean }>('/auth/2fa/disable', { method: 'POST', body: JSON.stringify({ code, currentPassword }) });
 
 export const api2FAVerify = (pendingToken: string, code: string) =>
-  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>; lastRoute?: string | null } }>(
+  apiFetch<{ token: string; user: { id: string; username: string; email: string; fullName: string; isAdmin?: boolean; profileImage?: string | null; totpEnabled?: boolean; keyboardShortcuts?: Record<string, { key?: string; enabled?: boolean }>; lastRoute?: string | null; aiVoiceMode?: VoiceMode | null } }>(
     '/auth/2fa/verify', { method: 'POST', body: JSON.stringify({ pendingToken, code }) }
   );
 
@@ -216,6 +216,7 @@ type SessionUserPayload = {
   meetingReminderLeadMinutes?: number;
   pushEnabled?: boolean;
   pushNotificationPrefs?: Record<string, boolean>;
+  aiVoiceMode?: VoiceMode | null;
 };
 
 /** Sign in an ADDITIONAL account while one is already active. Same endpoint and
@@ -912,8 +913,73 @@ export async function apiDownloadMilestoneAttachment(milestoneId: string, attach
 }
 
 // AI Assistant
-export const apiGetAISettings = () =>
-  apiFetch<{ enabled: boolean; model: string }>('/ai/settings');
+// Normalized here rather than at each call site: `voiceEnabled` is absent on
+// an older backend, and "absent" must resolve to false (no voice) exactly
+// once, not at three independent `setSettings(data)` callers.
+export const apiGetAISettings = async (): Promise<{ enabled: boolean; model: string; voiceEnabled: boolean; voiceName?: string }> => {
+  const d = await apiFetch<{ enabled: boolean; model: string; voiceEnabled?: boolean; voiceName?: string }>('/ai/settings');
+  return { ...d, voiceEnabled: d.voiceEnabled === true };
+};
+
+// ── Voice Mode ──────────────────────────────────────────────────────────────
+// Both directions go through the backend so the OpenRouter key never reaches
+// the browser — the same reason `/ai/chat` is a proxy. See aiVoice.ts for why
+// this isn't the browser's own Web Speech API.
+
+/** Persists how Sol's input surface behaves for this account. `null` clears
+ *  the choice and returns to the per-platform default. */
+export const apiSetAiVoiceMode = (mode: VoiceMode | null) =>
+  apiFetch<{ user: SessionUserPayload }>('/auth/ai-voice-mode', {
+    method: 'PUT',
+    body: JSON.stringify({ mode }),
+  });
+
+/**
+ * Uploads one recorded utterance and returns its transcript.
+ *
+ * Deliberately NOT routed through `apiFetch`: that helper sets a JSON
+ * content-type and stringifies the body, and a multipart upload must let the
+ * browser set its own `Content-Type` boundary. The blob's own `type` is sent
+ * as the filename extension hint too, because `MediaRecorder` produces webm
+ * on Chrome/Android and mp4 on Safari/iOS and the server maps both.
+ */
+export async function apiTranscribeAudio(blob: Blob, sessionId?: string | null): Promise<string> {
+  const form = new FormData();
+  form.append('audio', blob, `speech.${(blob.type.split(';')[0].split('/')[1] || 'webm')}`);
+  if (sessionId) form.append('sessionId', sessionId);
+
+  const res = await fetch(`${BASE_URL}/ai/transcribe`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken() ?? ''}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const msg = await res.json().catch(() => null) as { error?: string } | null;
+    throw new Error(msg?.error ?? `Transcription failed (${res.status})`);
+  }
+  const data = await res.json() as { text: string };
+  return data.text;
+}
+
+/**
+ * Synthesizes speech and returns a playable object URL.
+ *
+ * The caller OWNS the returned URL and must `URL.revokeObjectURL` it once the
+ * clip has finished — a voice conversation mints one of these per turn, so
+ * leaking them would grow unbounded across a long session.
+ */
+export async function apiSpeakText(text: string, sessionId?: string | null): Promise<string> {
+  const res = await fetch(`${BASE_URL}/ai/speak`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${getToken() ?? ''}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, sessionId }),
+  });
+  if (!res.ok) {
+    const msg = await res.json().catch(() => null) as { error?: string } | null;
+    throw new Error(msg?.error ?? `Speech synthesis failed (${res.status})`);
+  }
+  return URL.createObjectURL(await res.blob());
+}
 
 export const apiAIChat = (messages: unknown[], tools?: unknown[], sessionId?: string | null) =>
   apiFetch<{
@@ -1148,7 +1214,7 @@ export const apiDeleteMemoryEntry = (id: string) =>
 export const apiClearMemory = () =>
   apiFetch<{ success: boolean; cleared: number }>('/ai/memory', { method: 'DELETE' });
 
-export const apiUpdateAppSettingsAI = (data: { aiAssistantEnabled?: boolean; aiModel?: string }) =>
+export const apiUpdateAppSettingsAI = (data: { aiAssistantEnabled?: boolean; aiModel?: string; aiVoiceEnabled?: boolean; aiTtsModel?: string; aiTtsVoice?: string; aiSttModel?: string }) =>
   apiFetch<{ settings: Record<string, string> }>('/admin/settings', {
     method: 'PUT',
     body: JSON.stringify(data),

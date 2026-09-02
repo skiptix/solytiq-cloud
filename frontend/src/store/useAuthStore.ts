@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { apiLogin, apiRegister, apiVerifySessionToken, apiUpdateLastRoute } from '../api/client';
+import { apiLogin, apiRegister, apiVerifySessionToken, apiUpdateLastRoute, apiSetAiVoiceMode } from '../api/client';
 import useUserPrefsStore from './useUserPrefsStore';
 import useShortcutsStore from './useShortcutsStore';
 import useNotificationsStore from './useNotificationsStore';
@@ -56,7 +56,7 @@ function rememberAccount(token: string, user: AuthUser): void {
 
 const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       adminRegistered: false,
       loggedIn: false,
       userId: null,
@@ -68,6 +68,7 @@ const useAuthStore = create<AuthState>()(
       token: null,
       totpEnabled: false,
       lastRoute: null,
+      aiVoiceMode: null,
 
       register: async ({ username, email, password, setupToken }) => {
         const data = await apiRegister(username, email, password, setupToken);
@@ -84,6 +85,7 @@ const useAuthStore = create<AuthState>()(
           totpEnabled: false,
           token: data.token,
           lastRoute: data.user.lastRoute ?? null,
+          aiVoiceMode: data.user.aiVoiceMode ?? null,
         });
         useShortcutsStore.getState().hydrate(data.user.keyboardShortcuts);
         rememberAccount(data.token, data.user as AuthUser);
@@ -106,6 +108,7 @@ const useAuthStore = create<AuthState>()(
             totpEnabled: data.user.totpEnabled ?? false,
             token: data.token,
             lastRoute: data.user.lastRoute ?? null,
+            aiVoiceMode: data.user.aiVoiceMode ?? null,
           });
           useShortcutsStore.getState().hydrate(data.user.keyboardShortcuts);
           rememberAccount(data.token, data.user as AuthUser);
@@ -129,6 +132,7 @@ const useAuthStore = create<AuthState>()(
           totpEnabled: user.totpEnabled ?? false,
           token,
           lastRoute: user.lastRoute ?? null,
+          aiVoiceMode: user.aiVoiceMode ?? null,
         });
         useShortcutsStore.getState().hydrate(user.keyboardShortcuts);
         rememberAccount(token, user);
@@ -174,6 +178,7 @@ const useAuthStore = create<AuthState>()(
           totpEnabled: user.totpEnabled ?? false,
           token: stored.token,
           lastRoute: user.lastRoute ?? null,
+          aiVoiceMode: user.aiVoiceMode ?? null,
         });
         useShortcutsStore.getState().hydrate(user.keyboardShortcuts);
         // Refresh the vault entry from the server's answer, correcting any
@@ -193,6 +198,23 @@ const useAuthStore = create<AuthState>()(
 
       setTotpEnabled: (enabled: boolean) => {
         set({ totpEnabled: enabled });
+      },
+
+      // Optimistic then authoritative: the toggle flips instantly (this is a
+      // UI mode, and waiting on a round trip to change what a radio button
+      // looks like is worse than a rare rollback), then the server's own
+      // sanitized value wins. On failure the previous value is restored, so a
+      // dropped request can't leave the UI claiming a mode the server
+      // disagrees with.
+      setAiVoiceMode: async (mode) => {
+        const previous = get().aiVoiceMode;
+        set({ aiVoiceMode: mode });
+        try {
+          const { user } = await apiSetAiVoiceMode(mode);
+          set({ aiVoiceMode: user.aiVoiceMode ?? null });
+        } catch {
+          set({ aiVoiceMode: previous });
+        }
       },
 
       signOut: () => {
@@ -218,6 +240,7 @@ const useAuthStore = create<AuthState>()(
           totpEnabled: false,
           token: null,
           lastRoute: null,
+          aiVoiceMode: null,
         });
       },
 

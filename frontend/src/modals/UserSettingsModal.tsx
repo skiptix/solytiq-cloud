@@ -12,6 +12,8 @@ import useUserPrefsStore from '../store/useUserPrefsStore';
 import useShortcutsStore from '../store/useShortcutsStore';
 import useAiMemoryStore from '../store/useAiMemoryStore';
 import usePushStore from '../store/usePushStore';
+import useAIStore, { resolveVoiceMode } from '../store/useAIStore';
+import type { VoiceMode } from '../types';
 import { SHORTCUT_DEFS, bindingFor, comboFromEvent, formatCombo, isReservedCombo } from '../shortcuts/registry';
 import {
   apiUpdateProfile,
@@ -1001,6 +1003,11 @@ export default function UserSettingsModal({ onClose }: UserSettingsModalProps) {
               {sectionLabel('AI Assistant')}
               <AiAssistantSection />
 
+              <div style={{ marginTop: 28 }}>
+                {sectionLabel('Talking to Sol')}
+                <VoiceModeSection />
+              </div>
+
               {mcpVisible && (
                 <div style={{ marginTop: 28 }}>
                   {sectionLabel('Claude MCP')}
@@ -1333,6 +1340,101 @@ function AiAssistantSection() {
         >
           <MotionIn animate={{ left: bubbleVisible ? 18 : 2 }} transition={{ duration: 0.15 }} style={{ position: 'absolute', top: 2, width: 18, height: 18, borderRadius: '50%', background: 'var(--color-white)', boxShadow: '0 1px 3px rgba(var(--color-black-rgb), 0.2)' }} />
         </MotionButton>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * How Sol takes input for THIS account.
+ *
+ * Three options, not two, because "follow this device" is a genuinely
+ * different answer from either mode — it is what lets one account be
+ * voice-first on a phone and text-first on a laptop, and it is the default
+ * precisely because that is what most people want without being asked. Picking
+ * hybrid or voice-only explicitly makes the choice stick on every device,
+ * which is what choosing should mean.
+ */
+function VoiceModeSection() {
+  const isMobile = useMobile();
+  const stored = useAuthStore(s => s.aiVoiceMode);
+  const setAiVoiceMode = useAuthStore(s => s.setAiVoiceMode);
+  const voiceEnabled = useAIStore(s => s.settings.voiceEnabled);
+  const voiceName = useAIStore(s => s.settings.voiceName);
+
+  // An admin has voice switched off (or the instance has no OpenRouter key).
+  // Showing a picker whose every option does nothing is worse than showing
+  // nothing, so this section simply says why instead.
+  if (!voiceEnabled) {
+    return (
+      <div style={card}>
+        <div style={{ ...rowStyle, gap: 10 }}>
+          <Icon name="mic_off" size={17} color="var(--color-text-tertiary)" />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>Voice mode unavailable</div>
+            <div style={{ fontFamily: 'var(--font-body)', fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+              Talking to Sol is turned off on this instance. Ask an admin to enable it in Settings → AI.
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const effective = resolveVoiceMode(stored, isMobile);
+  const options: Array<{ value: VoiceMode | null; icon: string; label: string; desc: string }> = [
+    {
+      value: null,
+      icon: 'devices',
+      label: 'Match my device',
+      desc: `Voice-only on phones, typing with a mic button on computers. Right now that means ${effective === 'voice' ? 'voice-only' : 'hybrid'}.`,
+    },
+    {
+      value: 'hybrid',
+      icon: 'keyboard_voice',
+      label: 'Hybrid',
+      desc: 'Type as usual, with a microphone button to dictate. Sol answers out loud when you spoke.',
+    },
+    {
+      value: 'voice',
+      icon: 'graphic_eq',
+      label: 'Voice only',
+      desc: `Tap Sol and talk — a waveform, no keyboard. ${voiceName ? `Sol replies in the ${voiceName} voice.` : 'Sol replies out loud.'}`,
+    },
+  ];
+
+  return (
+    <div style={card}>
+      <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {options.map(o => {
+          const selected = (stored ?? null) === o.value;
+          return (
+            <MotionButton
+              key={o.label}
+              onClick={() => { void setAiVoiceMode(o.value); }}
+              animate={{
+                borderColor: selected ? 'var(--color-primary)' : 'var(--color-border)',
+                background: selected ? 'var(--color-purple-pale-14)' : 'var(--color-surface-neutral)',
+              }}
+              transition={{ duration: 0.15 }}
+              style={{
+                display: 'flex', alignItems: 'flex-start', gap: 11, width: '100%', textAlign: 'left',
+                padding: '11px 13px', borderRadius: 11, cursor: 'pointer',
+                borderWidth: 1.5, borderStyle: 'solid',
+              }}
+            >
+              <Icon name={o.icon} size={18} color={selected ? 'var(--color-primary)' : 'var(--color-text-tertiary)'} />
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontFamily: 'var(--font-heading)', fontSize: 13.5, fontWeight: 600, color: 'var(--color-text-primary)' }}>{o.label}</span>
+                <span style={{ display: 'block', fontFamily: 'var(--font-body)', fontSize: 12, lineHeight: 1.45, color: 'var(--color-text-tertiary)', marginTop: 2 }}>{o.desc}</span>
+              </span>
+              {selected && <Icon name="check_circle" size={17} color="var(--color-primary)" />}
+            </MotionButton>
+          );
+        })}
+        <div style={{ fontFamily: 'var(--font-body)', fontSize: 11.5, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+          Sol can do everything by voice that it can do by typing — every tool, skill and Knowledge Base lookup works the same way.
+        </div>
       </div>
     </div>
   );

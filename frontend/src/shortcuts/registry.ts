@@ -30,6 +30,7 @@ export const SHORTCUT_DEFS: ShortcutDef[] = [
   { id: 'toggle-sidebar', label: 'Collapse sidebar', description: 'Collapse or expand the sidebar.', defaultKey: 'mod+b', scope: 'global', scopeLabel: 'Anywhere' },
   { id: 'open-settings', label: 'Open account settings', description: 'Open your account settings.', defaultKey: 'mod+,', scope: 'global', scopeLabel: 'Anywhere' },
   { id: 'create-list', label: 'New board', description: 'Open the wizard to create a new board.', defaultKey: 'l', scope: 'global', scopeLabel: 'Anywhere' },
+  { id: 'talk-to-sol', label: 'Talk to Sol', description: 'Open the AI assistant and start listening straight away — voice-only mode, or the microphone in the composer.', defaultKey: 'v', scope: 'global', scopeLabel: 'Anywhere' },
   { id: 'create-folder', label: 'New folder', description: 'Start creating a new folder in the sidebar.', defaultKey: 'f', scope: 'global', scopeLabel: 'Anywhere' },
   { id: 'create-workspace', label: 'New workspace', description: 'Open the wizard to create a new workspace.', defaultKey: 'w', scope: 'global', scopeLabel: 'Anywhere' },
   { id: 'open-knowledge', label: 'Open Knowledge', description: "Open this workspace's Knowledge Base.", defaultKey: 'k', scope: 'global', scopeLabel: 'Anywhere' },

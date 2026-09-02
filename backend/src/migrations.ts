@@ -953,6 +953,32 @@ export async function runMigrations() {
   // with the same AES-256-GCM helper the Resend API key uses.
   await pool.query(`INSERT INTO app_settings (key, value) VALUES ('push_enabled', 'true') ON CONFLICT (key) DO NOTHING`);
 
+  // ── Sol Voice Mode ───────────────────────────────────────────────────────
+  // `users.ai_voice_mode` is how the assistant's input surface behaves for
+  // this account: 'hybrid' (text composer with a mic button) or 'voice'
+  // (voice-only — an orb and a waveform, no text input at all).
+  //
+  // NULLABLE ON PURPOSE, and NULL is not "off" — it means "follow the
+  // platform default", which is voice-only on a phone and hybrid on a
+  // desktop. Storing a resolved value at signup instead would freeze
+  // whichever device the account was created on into a preference that then
+  // follows the user onto every other device: sign up on a laptop and your
+  // phone silently loses the mobile default forever. A user who picks a mode
+  // explicitly writes a real value here and it applies everywhere, which is
+  // exactly what an explicit choice should do. The per-platform resolution
+  // lives in one place client-side (`resolveVoiceMode` in useAIStore.ts).
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_voice_mode VARCHAR(16)`);
+
+  // Voice models/voice id are admin settings rather than env vars, matching
+  // `ai_model` next door — an operator changes Sol's voice without a redeploy.
+  // Seeded with the defaults in aiVoice.ts's VOICE_DEFAULTS; `ai_voice_enabled`
+  // exists to turn the feature OFF (it rides the OPENROUTER_API_KEY the
+  // assistant already needs, so there is nothing to switch ON).
+  await pool.query(`INSERT INTO app_settings (key, value) VALUES ('ai_voice_enabled', 'true') ON CONFLICT (key) DO NOTHING`);
+  await pool.query(`INSERT INTO app_settings (key, value) VALUES ('ai_tts_model', 'hexgrad/kokoro-82m') ON CONFLICT (key) DO NOTHING`);
+  await pool.query(`INSERT INTO app_settings (key, value) VALUES ('ai_tts_voice', 'af_heart') ON CONFLICT (key) DO NOTHING`);
+  await pool.query(`INSERT INTO app_settings (key, value) VALUES ('ai_stt_model', 'openai/gpt-4o-mini-transcribe') ON CONFLICT (key) DO NOTHING`);
+
   // ── Templates ────────────────────────────────────────────────────────────
   // User-owned, workspace-agnostic snapshots of a list's or timeline's full
   // structure (sections/tasks incl. nested sublists, or milestones), reusable

@@ -9,6 +9,8 @@ import Spinner from '@/components/animate-ui/Spinner';
 import MotionButton from '../animate-ui/MotionButton';
 import MotionIn from '../animate-ui/MotionIn';
 import { useAIFileUpload, formatFileSize, fileIcon, FILE_INPUT_ACCEPT } from './useAIFileUpload';
+import useVoiceSession, { isVoiceSupported } from './useVoiceSession';
+import VoiceWaveform from './VoiceWaveform';
 import { useVisualViewport } from '../../hooks/useVisualViewport';
 import { useLockBodyScroll } from '../../hooks/useLockBodyScroll';
 
@@ -24,6 +26,16 @@ interface Props {
   onRemoveFile: (id: string) => void;
   sessionId: string | null;
   isMobile: boolean;
+  /** Hybrid mode's microphone. False hides it entirely rather than showing a
+   *  button that can only fail (voice disabled by the admin, or no key). */
+  voiceEnabled: boolean;
+  /** The assistant's last reply, so a turn that was SPOKEN can be spoken back.
+   *  Passed rather than read from `messages` because "the reply to the message
+   *  I just dictated" is not something the message list can express. */
+  lastReply: { id: string; content: string } | null;
+  /** Opened via the "Talk to Sol" shortcut — start dictating on mount. */
+  autoListen?: boolean;
+  onAutoListenHandled?: () => void;
 }
 
 function ThinkingDots() {
@@ -203,6 +215,7 @@ function AssistantMessage({ msg }: { msg: AIChatMessage }) {
 export default function AIChatOverlay({
   messages, isThinking, contextView, onSend, onClose, onClearHistory,
   uploadedFiles, onAddFile, onRemoveFile, sessionId, isMobile,
+  voiceEnabled, lastReply, autoListen, onAutoListenHandled,
 }: Props) {
   const [input, setInput] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -242,6 +255,68 @@ export default function AIChatOverlay({
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, viewportHeight]);
+
+  // ── Hybrid voice ──────────────────────────────────────────────────────
+  // The mic DICTATES into the composer rather than sending straight off: in a
+  // text conversation you can see what was heard, and speech recognition gets
+  // names and jargon wrong often enough that silently sending a misheard
+  // instruction to an assistant with write access is not a trade worth making.
+  // Reviewing before send is the whole point of hybrid; voice-only mode, where
+  // there's nothing to review on, is a separate surface.
+  //
+  // A turn STARTED by voice gets its reply spoken back — that's the "talk with
+  // it" half. A typed turn stays silent, so the mode doesn't start talking at
+  // someone who never asked it to.
+  const [voiceSupported] = useState(() => isVoiceSupported());
+  const spokenTurnRef = useRef(false);
+  const lastSpokenIdRef = useRef<string | null>(null);
+
+  // Returns nothing, so the hook stays silent and simply returns to idle —
+  // dictation fills the box, it doesn't start a turn.
+  const handleDictated = useCallback((text: string) => {
+    spokenTurnRef.current = true;
+    // Append rather than replace: dictating after typing half a sentence
+    // should extend it, not silently discard what's already there.
+    setInput((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text));
+    inputRef.current?.focus();
+  }, []);
+
+  const voice = useVoiceSession({ onTranscript: handleDictated, sessionId });
+
+  const micUsable = voiceEnabled && voiceSupported && !voice.permissionDenied;
+  const recording = voice.phase === 'listening' || voice.phase === 'requesting';
+  const transcribing = voice.phase === 'transcribing';
+
+  // Speak the reply to a dictated turn, exactly once per message. Keyed on the
+  // message id rather than on content: two identical replies in a row are a
+  // real thing an assistant says, and content-keying would swallow the second.
+  useEffect(() => {
+    if (!micUsable || !lastReply || !spokenTurnRef.current) return;
+    if (lastSpokenIdRef.current === lastReply.id) return;
+    lastSpokenIdRef.current = lastReply.id;
+    spokenTurnRef.current = false;
+    void voice.speak(lastReply.content);
+    // `voice`'s members are stable useCallbacks; depending on the object
+    // itself would re-fire this on every phase change mid-playback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastReply, micUsable]);
+
+  const handleMicTap = useCallback(() => {
+    if (voice.phase === 'listening') void voice.stopListening();
+    else if (voice.phase === 'speaking') voice.cancel();
+    else if (voice.phase === 'idle') void voice.startListening();
+  }, [voice]);
+
+  // Same one-gesture contract as the voice overlay's: the shortcut opens Sol
+  // AND starts the mic, rather than opening it and waiting for a second tap.
+  const autoListenDone = useRef(false);
+  useEffect(() => {
+    if (!autoListen || autoListenDone.current || !micUsable) return;
+    autoListenDone.current = true;
+    onAutoListenHandled?.();
+    void voice.startListening();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoListen, micUsable]);
 
   const handleSend = useCallback(() => {
     const text = input.trim();
@@ -526,26 +601,78 @@ export default function AIChatOverlay({
               >
                 <Icon name="attach_file" size={17} color="var(--color-accent-purple-light)" />
               </button>
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Message Sol…"
-                rows={1}
-                disabled={isThinking}
-                style={{
-                  flex: 1, fontFamily: 'var(--font-body)', fontSize: 14.5, color: 'var(--color-text-primary)',
-                  background: 'transparent', border: 'none', outline: 'none', resize: 'none',
-                  lineHeight: 1.4, maxHeight: 90, overflowY: 'auto', padding: '7px 2px',
-                  opacity: isThinking ? 0.5 : 1,
-                }}
-                onInput={(e) => {
-                  const t = e.currentTarget;
-                  t.style.height = 'auto';
-                  t.style.height = `${Math.min(t.scrollHeight, 90)}px`;
-                }}
-              />
+              {/* While recording, the waveform TAKES THE COMPOSER'S PLACE
+                  rather than appearing beside it: it's the only unambiguous
+                  way to show that the mic is live, and there is nothing
+                  useful to type at someone mid-sentence anyway. */}
+              {recording ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 0, padding: '4px 2px' }}>
+                  <VoiceWaveform
+                    analyserRef={voice.analyserRef}
+                    levelRef={voice.levelRef}
+                    active={voice.phase === 'listening'}
+                    bars={isMobile ? 16 : 22}
+                    width={isMobile ? 150 : 220}
+                    height={28}
+                    color="var(--color-accent-purple-light)"
+                  />
+                </div>
+              ) : (
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    // Clearing the box abandons the dictated draft, so the
+                    // next reply shouldn't be spoken at someone who has since
+                    // decided to type instead.
+                    if (!e.target.value.trim()) spokenTurnRef.current = false;
+                  }}
+                  onKeyDown={handleKeyDown}
+                  placeholder={transcribing ? 'Transcribing…' : 'Message Sol…'}
+                  rows={1}
+                  disabled={isThinking || transcribing}
+                  style={{
+                    flex: 1, fontFamily: 'var(--font-body)', fontSize: 14.5, color: 'var(--color-text-primary)',
+                    background: 'transparent', border: 'none', outline: 'none', resize: 'none',
+                    lineHeight: 1.4, maxHeight: 90, overflowY: 'auto', padding: '7px 2px',
+                    opacity: isThinking ? 0.5 : 1,
+                  }}
+                  onInput={(e) => {
+                    const t = e.currentTarget;
+                    t.style.height = 'auto';
+                    t.style.height = `${Math.min(t.scrollHeight, 90)}px`;
+                  }}
+                />
+              )}
+
+              {micUsable && (
+                <MotionButton
+                  onClick={handleMicTap}
+                  disabled={isThinking || transcribing}
+                  title={recording ? 'Stop recording' : voice.phase === 'speaking' ? 'Stop playback' : 'Speak to Sol'}
+                  aria-label={recording ? 'Stop recording' : 'Speak to Sol'}
+                  animate={{
+                    background: recording ? 'var(--color-error)' : 'transparent',
+                    scale: recording ? 1.04 : 1,
+                  }}
+                  transition={{ duration: 0.16 }}
+                  style={{
+                    width: 32, height: 32, borderRadius: '50%', flexShrink: 0, border: 'none',
+                    cursor: isThinking || transcribing ? 'not-allowed' : 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    opacity: isThinking || transcribing ? 0.4 : 1,
+                  }}
+                >
+                  {transcribing
+                    ? <Spinner size={14} thickness={2} durationMs={600} />
+                    : <Icon
+                        name={recording ? 'stop' : voice.phase === 'speaking' ? 'volume_up' : 'mic'}
+                        size={17}
+                        color={recording ? 'var(--color-white)' : 'var(--color-accent-purple-light)'}
+                      />}
+                </MotionButton>
+              )}
               <MotionButton
                 onClick={handleSend}
                 disabled={!input.trim() || isThinking}

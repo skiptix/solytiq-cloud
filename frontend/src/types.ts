@@ -768,7 +768,15 @@ export interface AuthUser {
   emailNotificationPrefs?: Record<string, boolean>;
   /** Minutes before a meeting to email a reminder; 0 = reminders off. */
   meetingReminderLeadMinutes?: number;
+  /** How Sol's input surface behaves for this account. `null`/absent means
+   *  "follow the platform default" — voice-only on mobile, hybrid on desktop
+   *  — NOT "off". See `resolveVoiceMode` in useAIStore.ts. */
+  aiVoiceMode?: VoiceMode | null;
 }
+
+/** Sol's two input surfaces. `hybrid` is the text composer with a mic button;
+ *  `voice` is voice-only — an orb and a waveform, no text input at all. */
+export type VoiceMode = 'hybrid' | 'voice';
 
 export interface AuthState {
   adminRegistered: boolean;
@@ -786,12 +794,18 @@ export interface AuthState {
    *  the app opens in a new tab, on desktop and mobile alike, instead of
    *  always defaulting to the dashboard. */
   lastRoute: string | null;
+  /** Sol's input surface for this account: `'hybrid'`, `'voice'`, or null to
+   *  follow the per-platform default. Mirrors `users.ai_voice_mode`. */
+  aiVoiceMode: VoiceMode | null;
   register: (creds: { username: string; email: string; password: string; setupToken?: string }) => Promise<void>;
   signIn: (username: string, password: string) => Promise<boolean>;
   signOut: () => void;
   setProfile: (data: { username?: string; email?: string; fullName?: string; profileImage?: string | null }) => void;
   setAuthFromToken: (token: string, user: AuthUser) => void;
   setTotpEnabled: (enabled: boolean) => void;
+  /** Persists the voice-mode choice and mirrors it into local state. `null`
+   *  restores the per-platform default. */
+  setAiVoiceMode: (mode: VoiceMode | null) => Promise<void>;
   /** Record the current in-app path as the "resume here" target — updates
    *  local state immediately (so a new tab opened right after benefits
    *  without a network round trip) and best-effort persists it server-side,
