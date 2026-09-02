@@ -448,12 +448,21 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
   try {
     const {
       storageQuotaPerUser, aiAssistantEnabled, aiModel, twoFAFeatureEnabled, mcpEnabled, mobileAppEnabled,
+      aiVoiceEnabled, aiTtsModel, aiTtsVoice, aiSttModel,
       knowledgeSearchEnabled, embeddingBaseUrl, embeddingModel, embeddingMonthlyTokenBudget,
       resendEnabled, resendApiKey, resendFromEmail, resendFromName,
     } = req.body as {
       storageQuotaPerUser?: number;
       aiAssistantEnabled?: boolean;
       aiModel?: string;
+      /** Sol Voice Mode — see aiVoice.ts. Blank strings are ignored rather
+       *  than stored, so clearing a field in the UI falls back to the
+       *  VOICE_DEFAULTS constant instead of writing an empty model id that
+       *  every subsequent request would fail on. */
+      aiVoiceEnabled?: boolean;
+      aiTtsModel?: string;
+      aiTtsVoice?: string;
+      aiSttModel?: string;
       twoFAFeatureEnabled?: boolean;
       mcpEnabled?: boolean;
       mobileAppEnabled?: boolean;
@@ -489,6 +498,26 @@ router.put('/settings', authenticate, requireAdmin, async (req: Request, res: Re
          ON CONFLICT (key) DO UPDATE SET value = $1`,
         [aiModel.trim()]
       );
+    }
+    if (aiVoiceEnabled !== undefined) {
+      await query(
+        `INSERT INTO app_settings (key, value) VALUES ('ai_voice_enabled', $1)
+         ON CONFLICT (key) DO UPDATE SET value = $1`,
+        [aiVoiceEnabled ? 'true' : 'false']
+      );
+    }
+    for (const [key, value] of [
+      ['ai_tts_model', aiTtsModel],
+      ['ai_tts_voice', aiTtsVoice],
+      ['ai_stt_model', aiSttModel],
+    ] as const) {
+      if (value !== undefined && value.trim()) {
+        await query(
+          `INSERT INTO app_settings (key, value) VALUES ($1, $2)
+           ON CONFLICT (key) DO UPDATE SET value = $2`,
+          [key, value.trim()]
+        );
+      }
     }
     if (twoFAFeatureEnabled !== undefined) {
       await query(

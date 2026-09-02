@@ -45,3 +45,10 @@ export const MARKDOWN_IMAGE_MAX_BYTES = envBytes('MARKDOWN_IMAGE_MAX_BYTES', 15 
 /** ai.ts AI-chat file upload — memoryStorage, never written to disk (see
  *  storageQuota.ts), so this bounds request memory, not disk quota. */
 export const AI_FILE_UPLOAD_MAX_BYTES = envBytes('AI_FILE_UPLOAD_MAX_BYTES', 25 * MB);
+
+/** ai.ts voice-mode recording upload — memoryStorage, transcribed and
+ *  discarded, never written to disk. A single conversational utterance is a
+ *  few hundred KB at Opus bitrates; 10MB is generous headroom for a long
+ *  dictation on a browser that fell back to a fatter codec, while still
+ *  bounding what one request can hold in memory. */
+export const AI_VOICE_UPLOAD_MAX_BYTES = envBytes('AI_VOICE_UPLOAD_MAX_BYTES', 10 * MB);
